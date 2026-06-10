@@ -1,20 +1,21 @@
 <?php
 // ============================================================
 //  includes/db.php  —  Connexion PDO centralisée
-//  Compatible XAMPP (localhost) et Railway (MYSQL_URL)
 // ============================================================
 
-// Railway fournit MYSQL_URL sous la forme :
-// mysql://user:password@host:port/database
-$mysql_url = getenv('MYSQL_URL');
+function env(string $key, string $default = ''): string {
+    return $_ENV[$key] ?? $_SERVER[$key] ?? getenv($key) ?: $default;
+}
+
+$mysql_url = env('MYSQL_URL');
 
 if ($mysql_url) {
     $parts = parse_url($mysql_url);
-    define('DB_HOST',    $parts['host']);
-    define('DB_PORT',    $parts['port'] ?? 3306);
-    define('DB_NAME',    ltrim($parts['path'], '/'));
-    define('DB_USER',    $parts['user']);
-    define('DB_PASS',    $parts['pass']);
+    define('DB_HOST', $parts['host']);
+    define('DB_PORT', (string)($parts['port'] ?? 3306));
+    define('DB_NAME', ltrim($parts['path'] ?? '/stockapp', '/'));
+    define('DB_USER', $parts['user'] ?? 'root');
+    define('DB_PASS', $parts['pass'] ?? '');
 } else {
     define('DB_HOST', 'localhost');
     define('DB_PORT', '3306');
@@ -26,7 +27,7 @@ if ($mysql_url) {
 define('DB_CHARSET', 'utf8mb4');
 define('APP_NAME',    'DigiStock');
 define('APP_VERSION', '1.0.0');
-define('APP_URL',     getenv('APP_URL') ?: 'https://stockapp-production-e306.up.railway.app');
+define('APP_URL',     env('APP_URL', 'https://stockapp-production-e306.up.railway.app'));
 define('APP_TIMEZONE','Africa/Abidjan');
 
 date_default_timezone_set(APP_TIMEZONE);
@@ -46,7 +47,7 @@ function get_db(): PDO {
         } catch (PDOException $e) {
             error_log('DB connection failed: ' . $e->getMessage());
             http_response_code(500);
-            die('<div style="font-family:Arial;padding:40px;max-width:500px;margin:60px auto;border-left:4px solid #e74c3c;background:#fff;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.1)"><h2 style="color:#e74c3c">Erreur de connexion BDD</h2><p><b>Erreur :</b> ' . htmlspecialchars($e->getMessage()) . '</p></div>');
+            die('<div style="font-family:Arial;padding:40px;color:#e74c3c"><h2>Erreur DB</h2><p>' . htmlspecialchars($e->getMessage()) . '</p></div>');
         }
     }
     return $pdo;
