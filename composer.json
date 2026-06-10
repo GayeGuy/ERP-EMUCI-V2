@@ -11,6 +11,10 @@
             "advisories": {
                 "block": false
             }
+        },
+        "platform-check": false,
+        "platform": {
+            "php": "8.2.0"
         }
     },
     "extra": {
