@@ -1,19 +1,32 @@
 <?php
 // ============================================================
 //  includes/db.php  —  Connexion PDO centralisée
-//  Compatible XAMPP (localhost) et Railway (variables env)
+//  Compatible XAMPP (localhost) et Railway (MYSQL_URL)
 // ============================================================
 
-define('DB_HOST',    getenv('MYSQLHOST')     ?: 'localhost');
-define('DB_NAME',    getenv('MYSQLDATABASE') ?: 'stockapp');
-define('DB_USER',    getenv('MYSQLUSER')     ?: 'root');
-define('DB_PASS',    getenv('MYSQLPASSWORD') ?: '');
-define('DB_PORT',    getenv('MYSQLPORT')     ?: '3306');
-define('DB_CHARSET', 'utf8mb4');
+// Railway fournit MYSQL_URL sous la forme :
+// mysql://user:password@host:port/database
+$mysql_url = getenv('MYSQL_URL');
 
+if ($mysql_url) {
+    $parts = parse_url($mysql_url);
+    define('DB_HOST',    $parts['host']);
+    define('DB_PORT',    $parts['port'] ?? 3306);
+    define('DB_NAME',    ltrim($parts['path'], '/'));
+    define('DB_USER',    $parts['user']);
+    define('DB_PASS',    $parts['pass']);
+} else {
+    define('DB_HOST', 'localhost');
+    define('DB_PORT', '3306');
+    define('DB_NAME', 'stockapp');
+    define('DB_USER', 'root');
+    define('DB_PASS', '');
+}
+
+define('DB_CHARSET', 'utf8mb4');
 define('APP_NAME',    'DigiStock');
 define('APP_VERSION', '1.0.0');
-define('APP_URL',     getenv('APP_URL') ?: 'http://stockapp-production-e306.up.railway.app');
+define('APP_URL',     getenv('APP_URL') ?: 'https://stockapp-production-e306.up.railway.app');
 define('APP_TIMEZONE','Africa/Abidjan');
 
 date_default_timezone_set(APP_TIMEZONE);
