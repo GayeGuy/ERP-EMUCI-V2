@@ -13,7 +13,7 @@ define('DB_CHARSET', 'utf8mb4');
 
 define('APP_NAME',    'DigiStock');
 define('APP_VERSION', '1.0.0');
-define('APP_URL',     getenv('APP_URL') ?: 'http://localhost/stockapp');
+define('APP_URL',     getenv('APP_URL') ?: 'http://stockapp-production-e306.up.railway.app');
 define('APP_TIMEZONE','Africa/Abidjan');
 
 date_default_timezone_set(APP_TIMEZONE);
