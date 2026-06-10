@@ -3,20 +3,20 @@
 //  includes/db.php  —  Connexion PDO centralisée
 // ============================================================
 
-function env(string $key, string $default = ''): string {
-    return $_ENV[$key] ?? $_SERVER[$key] ?? getenv($key) ?: $default;
-}
+// Lire les variables d'environnement Railway
+$mysql_url = getenv('MYSQL_URL') 
+          ?: ($_ENV['MYSQL_URL'] ?? null)
+          ?: ($_SERVER['MYSQL_URL'] ?? null);
 
-$mysql_url = env('MYSQL_URL');
-
-if ($mysql_url) {
+if ($mysql_url && $mysql_url !== 'NOT SET') {
     $parts = parse_url($mysql_url);
     define('DB_HOST', $parts['host']);
     define('DB_PORT', (string)($parts['port'] ?? 3306));
-    define('DB_NAME', ltrim($parts['path'] ?? '/stockapp', '/'));
+    define('DB_NAME', ltrim($parts['path'] ?? '/railway', '/'));
     define('DB_USER', $parts['user'] ?? 'root');
-    define('DB_PASS', $parts['pass'] ?? '');
+    define('DB_PASS', urldecode($parts['pass'] ?? ''));
 } else {
+    // Fallback XAMPP local
     define('DB_HOST', 'localhost');
     define('DB_PORT', '3306');
     define('DB_NAME', 'stockapp');
@@ -27,7 +27,7 @@ if ($mysql_url) {
 define('DB_CHARSET', 'utf8mb4');
 define('APP_NAME',    'DigiStock');
 define('APP_VERSION', '1.0.0');
-define('APP_URL',     env('APP_URL', 'https://stockapp-production-e306.up.railway.app'));
+define('APP_URL',     'https://stockapp-production-e306.up.railway.app');
 define('APP_TIMEZONE','Africa/Abidjan');
 
 date_default_timezone_set(APP_TIMEZONE);

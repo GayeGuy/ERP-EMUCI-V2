@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
 
 # Activer les variables d'environnement en PHP
 RUN echo "variables_order = EGPCS" >> /usr/local/etc/php/php.ini \
-    && echo "register_argc_argv = On" >> /usr/local/etc/php/php.ini
+    && echo "auto_prepend_file =" >> /usr/local/etc/php/php.ini
 
 # Installer Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
@@ -27,4 +27,5 @@ RUN composer install --optimize-autoloader --no-dev --no-interaction --ignore-pl
 
 EXPOSE 8080
 
-CMD ["php", "-S", "0.0.0.0:8080", "-t", "/var/www/html"]
+# Utiliser un script de démarrage qui exporte les variables
+CMD ["/bin/sh", "-c", "php -d variables_order=EGPCS -S 0.0.0.0:8080 -t /var/www/html"]
