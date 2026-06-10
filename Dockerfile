@@ -11,6 +11,10 @@ RUN apt-get update && apt-get install -y \
         exif fileinfo opcache \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Activer les variables d'environnement en PHP
+RUN echo "variables_order = EGPCS" >> /usr/local/etc/php/php.ini \
+    && echo "register_argc_argv = On" >> /usr/local/etc/php/php.ini
+
 # Installer Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 
