@@ -1,0 +1,1108 @@
+<?php
+// ============================================================
+//  pages/operations/point_journalier.php
+// ============================================================
+require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/session.php';
+require_once __DIR__ . '/../../includes/audit.php';
+require_once __DIR__ . '/../../includes/helpers.php';
+require_once __DIR__ . '/../../includes/notifications.php';
+
+require_auth();
+
+$user        = current_user();
+$page_title  = 'Point Journalier';
+$active_page = 'operations';
+
+// Types véhicules
+$types_v = db_fetch_all("SELECT * FROM op_types_vehicule ORDER BY ordre");
+$types_map = array_column($types_v, null, 'id');
+
+// Sites accessibles
+$sites_list = db_fetch_all("SELECT id,nom,type FROM sites WHERE actif=1 AND type NOT IN ('entrepot') ORDER BY nom");
+
+// ── AJAX
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
+    header('Content-Type: application/json');
+    $action = $_POST['action'] ?? '';
+
+    // ── SAUVEGARDER POINT
+    if ($action === 'save_point') {
+        $site_id    = (int)($_POST['site_id']    ?? 0);
+        $date_point = trim($_POST['date_point']  ?? date('Y-m-d'));
+        $type_point = trim($_POST['type_point']  ?? 'final');
+        $nb_vp      = (int)($_POST['nb_vp']      ?? 0);
+        $nb_camion  = (int)($_POST['nb_camion']  ?? 0);
+        $nb_semi    = (int)($_POST['nb_semi']    ?? 0);
+        $nb_moto    = (int)($_POST['nb_moto']    ?? 0);
+        $riv_endomm = (int)($_POST['rivets_endommages'] ?? 0);
+        $np_conc    = (int)($_POST['non_poses_concessionnaires'] ?? 0);
+        $np_usag    = (int)($_POST['non_poses_usagers'] ?? 0);
+        $heures     = (float)($_POST['nb_heures'] ?? 8);
+        $obs        = trim($_POST['observations'] ?? '');
+        $films_data = json_decode($_POST['films_data'] ?? '[]', true);
+
+        if (!$site_id || !$date_point) json_response(false, 'Site et date obligatoires.');
+
+        // Calculs automatiques
+        $total_engins  = $nb_vp + $nb_camion + $nb_semi + $nb_moto;
+        $total_plaques = ($nb_vp * 2) + ($nb_camion * 2) + ($nb_semi * 1) + ($nb_moto * 1);
+        $rivets_util   = ($nb_vp * 4) + ($nb_camion * 4) + ($nb_semi * 2) + ($nb_moto * 2);
+        $moy_prod      = $heures > 0 ? round($total_engins / $heures, 1) : 0;
+
+        // Vérifier stock rivets
+        $stock_rivets = (int)db_fetch_value(
+            "SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=?", [$site_id]
+        ) ?? 0;
+        $total_rivets_sortis = $rivets_util + $riv_endomm;
+        if ($stock_rivets < $total_rivets_sortis)
+            json_response(false, "Stock rivets insuffisant sur ce site. Disponible : $stock_rivets, Nécessaire : $total_rivets_sortis");
+
+        db_begin();
+        try {
+            // Insérer ou mettre à jour le point
+            $existing = db_fetch_one(
+                "SELECT id FROM op_points_journaliers WHERE site_id=? AND date_point=? AND type_point=?",
+                [$site_id, $date_point, $type_point]
+            );
+
+            if ($existing) {
+                $point_id = $existing['id'];
+                db_query("UPDATE op_points_journaliers SET
+                    nb_vp=?,nb_camion=?,nb_semi=?,nb_moto=?,
+                    total_engins=?,total_plaques=?,moyenne_prod=?,
+                    rivets_utilises=?,rivets_endommages=?,
+                    non_poses_concessionnaires=?,non_poses_usagers=?,
+                    nb_heures_travail=?,observations=?,updated_at=NOW()
+                    WHERE id=?",
+                    [$nb_vp,$nb_camion,$nb_semi,$nb_moto,
+                     $total_engins,$total_plaques,$moy_prod,
+                     $rivets_util,$riv_endomm,$np_conc,$np_usag,$heures,$obs,$point_id]);
+                // Supprimer anciens films
+                db_query("DELETE FROM op_films_utilises WHERE point_id=?", [$point_id]);
+            } else {
+                db_query("INSERT INTO op_points_journaliers
+                    (site_id,date_point,type_point,nb_vp,nb_camion,nb_semi,nb_moto,
+                     total_engins,total_plaques,moyenne_prod,rivets_utilises,rivets_endommages,
+                     non_poses_concessionnaires,non_poses_usagers,nb_heures_travail,observations,created_by)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    [$site_id,$date_point,$type_point,$nb_vp,$nb_camion,$nb_semi,$nb_moto,
+                     $total_engins,$total_plaques,$moy_prod,$rivets_util,$riv_endomm,
+                     $np_conc,$np_usag,$heures,$obs,$user['id']]);
+                $point_id = (int)db_last_id();
+            }
+
+            // Déduire rivets du stock site
+            db_query("INSERT INTO op_stock_rivets (site_id,quantite) VALUES (?,GREATEST(0,?-?))
+                      ON DUPLICATE KEY UPDATE quantite=GREATEST(0,quantite-?)",
+                [$site_id, $stock_rivets, $total_rivets_sortis, $total_rivets_sortis]);
+
+            // Traiter films par bobine
+            $films_detail = [];
+            foreach ($films_data as $fd) {
+                $bobine_id    = (int)($fd['bobine_id'] ?? 0);
+                $tv_id = max(1, (int)($fd['type_vehicule_id'] ?? 1));
+                $f_util       = (int)($fd['films_utilises'] ?? 0);
+                $f_endomm     = (int)($fd['films_endommages'] ?? 0);
+                if (!$bobine_id || ($f_util + $f_endomm) === 0) continue;
+
+                $bobine = db_fetch_one("SELECT * FROM op_bobines WHERE id=?", [$bobine_id]);
+                if (!$bobine) continue;
+
+                $total_sortis = $f_util + $f_endomm;
+                if ($bobine['films_restants'] < $total_sortis)
+                    throw new Exception("Bobine {$bobine['numero']} : stock insuffisant ({$bobine['films_restants']} restants, {$total_sortis} demandés).");
+
+                db_query("INSERT INTO op_films_utilises (point_id,bobine_id,type_vehicule_id,films_utilises,films_endommages)
+                          VALUES (?,?,?,?,?)", [$point_id, $bobine_id, $tv_id, $f_util, $f_endomm]);
+
+                // Mettre à jour la bobine
+                $new_restants = $bobine['films_restants'] - $total_sortis;
+                $new_statut   = $new_restants <= 0 ? 'epuisee' : 'en_cours';
+                db_query("UPDATE op_bobines SET
+                          films_utilises=films_utilises+?,
+                          films_endommages=films_endommages+?,
+                          films_restants=?,
+                          statut=?,
+                          date_ouverture=COALESCE(date_ouverture,?)
+                          WHERE id=?",
+                    [$f_util, $f_endomm, $new_restants, $new_statut, $date_point, $bobine_id]);
+
+                $films_detail[] = "Bobine {$bobine['numero']} : $f_util utilisés, $f_endomm endommagés";
+            }
+
+            audit_log($user['id'], 'CREATE', 'operations', $point_id,
+                "Point journalier $type_point — Site:$site_id — $date_point — $total_engins engins");
+            db_commit();
+            json_response(true, "Point enregistré. $total_engins engins, $total_plaques plaques, $rivets_util rivets déduits.", [
+                'point_id'     => $point_id,
+                'total_engins' => $total_engins,
+                'total_plaques'=> $total_plaques,
+                'rivets_util'  => $rivets_util,
+                'moy_prod'     => $moy_prod,
+                'films_detail' => $films_detail,
+            ]);
+        } catch (Exception $e) {
+            db_rollback();
+            json_response(false, 'Erreur : ' . $e->getMessage());
+        }
+    }
+
+    // ── CHARGER BOBINES D'UN SITE
+    if ($action === 'get_bobines_site') {
+        $site_id = (int)($_POST['site_id'] ?? 0);
+        // Uniquement les bobines EN UTILISATION pour le PJ
+        $rows = db_fetch_all(
+            "SELECT b.id, b.numero, b.type_code, b.serie, b.films_restants, b.stock_systeme,
+                     b.statut, tv.libelle AS type_vehicule
+             FROM op_bobines b
+             LEFT JOIN op_types_vehicule tv ON tv.id=b.type_vehicule_id
+             WHERE b.site_id=? AND b.statut='en_cours'
+             ORDER BY b.serie, b.numero ASC",
+            [$site_id]
+        );
+        json_response(true, '', $rows);
+    }
+
+    // ── GET POINT EXISTANT
+    if ($action === 'get_point') {
+        $site_id    = (int)($_POST['site_id']   ?? 0);
+        $date_point = trim($_POST['date_point'] ?? '');
+        $type_point = trim($_POST['type_point'] ?? 'final');
+        $point = db_fetch_one(
+            "SELECT p.*, CONCAT(u.prenom,' ',u.nom) AS agent
+             FROM op_points_journaliers p
+             LEFT JOIN users u ON u.id=p.created_by
+             WHERE p.site_id=? AND p.date_point=? AND p.type_point=?",
+            [$site_id, $date_point, $type_point]
+        );
+        if (!$point) json_response(false, 'Aucun point pour cette date.');
+        $point['films'] = db_fetch_all(
+            "SELECT fu.*, b.numero AS bobine_num, b.type_code, tv.libelle AS type_veh
+             FROM op_films_utilises fu
+             JOIN op_bobines b ON b.id=fu.bobine_id
+             JOIN op_types_vehicule tv ON tv.id=fu.type_vehicule_id
+             WHERE fu.point_id=?", [$point['id']]
+        );
+        json_response(true, '', $point);
+    }
+
+    // ── STOCK RIVETS SITE
+    if ($action === 'get_stock_rivets') {
+        $site_id = (int)($_POST['site_id'] ?? 0);
+        $stock = (int)db_fetch_value("SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=?", [$site_id]);
+        json_response(true, '', ['stock' => $stock]);
+    }
+
+    // ── VALIDER POINT
+    if ($action === 'load_point') {
+        $point_id = (int)($_POST['point_id'] ?? 0);
+        $point = db_fetch_one("SELECT * FROM op_points_journaliers WHERE id=?", [$point_id]);
+        if (!$point) json_response(false, 'Point introuvable.');
+        json_response(true, '', ['point' => $point]);
+    }
+
+    // Coordinateur valide ses points 9h/13h
+    if ($action === 'valider_point_coord') {
+        $point_id = (int)($_POST['point_id'] ?? 0);
+        $point = db_fetch_one("SELECT * FROM op_points_journaliers WHERE id=?", [$point_id]);
+        if (!$point) json_response(false, 'Point introuvable.');
+        if (($point['created_by'] ?? 0) != $user['id']) json_response(false, 'Accès refusé.');
+        if ($point['statut'] !== 'brouillon') json_response(false, 'Ce point ne peut plus être modifié.');
+        db_query("UPDATE op_points_journaliers SET statut='valide', validated_by=?, validated_at=NOW() WHERE id=?",
+            [$user['id'], $point_id]);
+        json_response(true, 'Point validé avec succès.');
+    }
+
+    // Coordinateur soumet le point 18h au superviseur
+    if ($action === 'soumettre_point') {
+        $point_id = (int)($_POST['point_id'] ?? 0);
+        $point = db_fetch_one("SELECT * FROM op_points_journaliers WHERE id=?", [$point_id]);
+        if (!$point) json_response(false, 'Point introuvable.');
+        if (($point['created_by'] ?? 0) != $user['id']) json_response(false, 'Accès refusé.');
+        if ($point['statut'] !== 'brouillon') json_response(false, 'Ce point a déjà été soumis.');
+        if (($point['type_point'] ?? '') !== 'point_18h') json_response(false, 'Seul le point 18h peut être soumis au superviseur.');
+        db_query("UPDATE op_points_journaliers SET statut='en_attente_validation' WHERE id=?", [$point_id]);
+        // Notifier le superviseur
+        $notif_targets = db_fetch_all(
+            "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug IN ('admin','superadmin','superviseur_operation') AND u.actif=1"
+        );
+        foreach ($notif_targets as $t) {
+            db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
+                [$t['id'], 'info', '📋 Point 18h à valider',
+                 "Le coordinateur {$user['prenom']} {$user['nom']} a soumis son point journalier 18h pour validation."]);
+        }
+        json_response(true, 'Point soumis au superviseur pour validation.');
+    }
+
+    if ($action === 'valider_point') {
+        $point_id = (int)($_POST['point_id'] ?? 0);
+        db_query("UPDATE op_points_journaliers SET statut='valide',validated_by=?,validated_at=NOW() WHERE id=?",
+            [$user['id'], $point_id]);
+        audit_log($user['id'], 'UPDATE', 'operations', $point_id, "Validation point journalier #$point_id");
+        json_response(true, 'Point validé.');
+    }
+
+    json_response(false, 'Action inconnue.');
+}
+
+// ── LISTE DES POINTS
+$role_slug_pj = current_user()['role_slug'] ?? '';
+// Coordinateur : forcé sur son site
+if ($role_slug_pj === 'coordinateur_site' && $user['site_id']) {
+    $f_site = (int)$user['site_id'];
+} else {
+    // Superviseur et autres : peuvent voir tous les sites
+    $f_site = (int)($_GET['site'] ?? 0);
+}
+$f_mois = trim($_GET['mois'] ?? date('Y-m'));
+
+$points = db_fetch_all(
+    "SELECT p.*, s.nom AS site_nom,
+            p.created_by AS agent_id,
+            CONCAT(u.prenom,' ',u.nom) AS agent
+     FROM op_points_journaliers p
+     JOIN sites s ON s.id=p.site_id
+     LEFT JOIN users u ON u.id=p.created_by
+     WHERE DATE_FORMAT(p.date_point,'%Y-%m')=?
+       AND (? = 0 OR p.site_id=?)
+     ORDER BY p.date_point DESC, p.type_point DESC",
+    [$f_mois, $f_site, $f_site]
+);
+
+// Stock rivets par site
+// Chips rivets : coordinateur voit seulement son site
+if ($role_slug_pj === 'coordinateur_site' && $user['site_id']) {
+    $stock_rivets_all = db_fetch_all("SELECT sr.*, s.nom FROM op_stock_rivets sr JOIN sites s ON s.id=sr.site_id WHERE sr.site_id=?", [(int)$user['site_id']]);
+} else {
+    $stock_rivets_all = db_fetch_all("SELECT sr.*, s.nom FROM op_stock_rivets sr JOIN sites s ON s.id=sr.site_id");
+}
+
+// Vérifier si le coordinateur est autorisé à travailler aujourd'hui
+$stock_bloque = false;
+$validation_matin = null;
+if ($role_slug_pj === 'coordinateur_site' && $user['site_id']) {
+    $validation_matin = db_fetch_one(
+        "SELECT * FROM validations_stock_matin WHERE site_id=? AND date_validation=?",
+        [(int)$user['site_id'], date('Y-m-d')]
+    );
+    // Bloqué si statut = refuse, ou si aucune validation aujourd'hui mais des écarts existent
+    if ($validation_matin && $validation_matin['statut'] === 'refuse') {
+        $stock_bloque = true;
+    }
+}
+
+include __DIR__ . '/../../templates/header.php';
+?>
+<style>
+/* ── POINT FORM ── */
+.point-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.veh-card{background:white;border:1.5px solid var(--border);border-radius:12px;padding:18px;transition:border-color .2s}
+.veh-card:hover{border-color:var(--blue-mid,#1a56a0)}
+.veh-card .vc-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.veh-card .vc-icon{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.veh-card .vc-title{font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;color:var(--navy)}
+.veh-card .vc-sub{font-size:11.5px;color:var(--muted)}
+.veh-card .vc-badges{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.badge-info{background:#e3f2fd;color:#1565c0;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600}
+.nb-input{width:100%;padding:12px;text-align:center;font-family:'Montserrat',sans-serif;font-size:24px;font-weight:800;border:2px solid var(--border);border-radius:10px;outline:none;color:var(--navy)}
+.nb-input:focus{border-color:var(--blue-mid,#1a56a0);box-shadow:0 0 0 3px rgba(26,86,160,.1)}
+.nb-input::-webkit-inner-spin-button{opacity:1;transform:scale(1.5)}
+
+/* ── CALCUL TEMPS RÉEL ── */
+.calc-panel{background:linear-gradient(135deg,#0a1628,#0f2d5c);color:white;border-radius:14px;padding:20px;margin-bottom:20px;position:sticky;top:72px;z-index:10}
+.calc-panel h3{font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;opacity:.8;margin-bottom:12px}
+.calc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.calc-item .cv{font-family:'Montserrat',sans-serif;font-size:26px;font-weight:900;color:white}
+.calc-item .cl{font-size:11px;opacity:.6;margin-top:2px}
+.calc-item.warn .cv{color:#ffa726}
+.calc-item.danger .cv{color:#ef5350}
+.calc-item.success .cv{color:#66bb6a}
+
+/* ── FILMS SECTION ── */
+.film-serie{background:white;border:1px solid var(--border);border-radius:12px;margin-bottom:12px;overflow:hidden}
+.film-serie-header{padding:12px 16px;background:var(--lighter);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:pointer}
+.film-serie-header h4{font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700}
+.film-serie-body{padding:14px 16px;display:none}
+.film-serie-body.open{display:block}
+.bobine-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.bobine-row:last-child{border-bottom:none}
+.bobine-num{font-family:monospace;font-weight:700;font-size:12px;color:var(--navy);min-width:120px}
+.bobine-restant{font-size:11px;color:var(--muted)}
+.bobine-input{width:72px;padding:6px;border:1.5px solid var(--border);border-radius:7px;text-align:center;font-size:13px;font-family:'Montserrat',sans-serif;font-weight:700;outline:none}
+.bobine-input:focus{border-color:var(--blue-mid,#1a56a0)}
+
+/* ── TABLEAU POINTS ── */
+.point-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.point-badge.final{background:#e3f2fd;color:#1565c0}
+.point-badge.intermediaire{background:#fff3e0;color:#e65100}
+.point-badge.valide{background:#e8f5e9;color:#2e7d32}
+.point-badge.en_attente_validation{background:#dbeafe;color:#1d4ed8}
+.point-badge.suivi{background:#f1f5f9;color:#475569}
+
+.modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(10,22,40,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:white;border-radius:16px;max-width:95vw;max-height:95vh;overflow-y:auto;animation:mIn .25s cubic-bezier(.22,1,.36,1)}
+@keyframes mIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+.mhdr{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:white;z-index:10}
+.mhdr h3{font-family:'Montserrat',sans-serif;font-size:17px;font-weight:700}
+.mclose{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:none;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
+.mbody{padding:24px}
+.mfoot{padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;background:white}
+
+/* ── APERÇU POINT ── */
+.point-preview{font-family:'Montserrat',sans-serif;background:#0a1628;color:white;border-radius:12px;padding:24px;margin-bottom:20px}
+.point-preview h2{font-size:16px;font-weight:800;margin-bottom:4px;text-align:center}
+.point-preview .pp-date{text-align:center;opacity:.7;font-size:12px;margin-bottom:18px}
+.point-preview .pp-section{margin-bottom:14px}
+.point-preview .pp-title{font-size:11px;font-weight:700;opacity:.6;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
+.point-preview .pp-row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+.point-preview .pp-total{display:flex;justify-content:space-between;font-size:15px;font-weight:800;padding:8px 0;border-top:2px solid rgba(255,255,255,.2);margin-top:6px}
+.point-preview .pp-stat{background:rgba(255,255,255,.08);border-radius:8px;padding:10px 14px;text-align:center}
+.point-preview .pp-stat .psv{font-size:24px;font-weight:900}
+.point-preview .pp-stat .psl{font-size:10px;opacity:.6;margin-top:2px}
+@media(max-width:900px){.point-grid{grid-template-columns:1fr}.calc-grid{grid-template-columns:repeat(2,1fr)}}
+</style>
+
+<!-- HEADER BAR -->
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <form method="GET" style="display:flex;gap:8px">
+      <?php if($role_slug_pj !== 'coordinateur_site'): ?>
+      <select name="site" class="fsel" onchange="this.form.submit()"
+              style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;cursor:pointer;outline:none;font-family:'DM Sans',sans-serif">
+        <option value="0">Tous les sites</option>
+        <?php foreach($sites_list as $s): ?>
+        <option value="<?= $s['id'] ?>" <?= $f_site===$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
+        <?php endforeach; ?>
+      </select>
+      <?php else: ?>
+      <span style="padding:9px 14px;background:var(--lighter);border-radius:9px;font-size:13px;font-weight:600;color:var(--navy)">
+        📍 <?= h(db_fetch_value("SELECT nom FROM sites WHERE id=?", [$f_site]) ?? 'Mon site') ?>
+      </span>
+      <?php endif; ?>
+      <input type="month" name="mois" value="<?= h($f_mois) ?>" onchange="this.form.submit()"
+             style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none">
+    </form>
+  </div>
+  <?php if(in_array($role_slug_pj, ['coordinateur_site','admin','superadmin'])): ?>
+  <?php if($stock_bloque): ?>
+  <button class="btn btn-secondary" disabled style="opacity:.5;cursor:not-allowed">🔒 Activité bloquée</button>
+  <?php else: ?>
+  <button class="btn btn-primary" onclick="openPointForm()">+ Nouveau point journalier</button>
+  <?php endif; ?>
+  <?php endif; ?>
+</div>
+
+<?php if($stock_bloque && $validation_matin): ?>
+<?php
+// Charger les corrections demandées pour ce site/date
+$corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_id'])
+    ? db_fetch_all(
+        "SELECT dc.*, b.numero, b.type_code
+         FROM demandes_correction_saisie dc
+         JOIN op_bobines b ON b.id=dc.bobine_id
+         WHERE dc.site_id=? AND dc.date_cible=? AND dc.statut='en_attente'
+         ORDER BY b.serie, b.numero",
+        [(int)$user['site_id'], date('Y-m-d')]
+      )
+    : [];
+?>
+<div style="background:#fee2e2;border:2px solid #fca5a5;border-radius:16px;padding:20px 24px;margin-bottom:20px">
+  <div style="display:flex;align-items:flex-start;gap:16px">
+    <div style="font-size:40px;flex-shrink:0">🔒</div>
+    <div style="flex:1">
+      <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:#991b1b;margin-bottom:4px">Activité bloquée par le gestionnaire stock bobines</div>
+      <div style="font-size:13px;color:#991b1b">Votre stock présente des écarts non résolus. Vous ne pouvez pas saisir de point journalier aujourd'hui.</div>
+      <?php if($validation_matin['commentaire']): ?>
+      <div style="margin-top:8px;font-size:13px;color:#7f1d1d">💬 Motif GSB : <strong><?= h($validation_matin['commentaire']) ?></strong></div>
+      <?php endif; ?>
+    </div>
+  </div>
+
+  <?php if(!empty($corrections_demandees)): ?>
+  <div style="margin-top:16px;background:white;border-radius:12px;overflow:hidden;border:1.5px solid #fca5a5">
+    <div style="padding:10px 16px;background:#fef2f2;border-bottom:1px solid #fca5a5;font-size:13px;font-weight:700;color:#991b1b">
+      ⚠️ Corrections à apporter sur <?= count($corrections_demandees) ?> bobine(s)
+    </div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="background:#fff5f5">
+          <th style="padding:8px 14px;text-align:left;font-size:11px;color:#7f1d1d;font-weight:700">BOBINE</th>
+          <th style="padding:8px 14px;text-align:center;font-size:11px;color:#7f1d1d;font-weight:700">FILMS DÉCLARÉS (PJ)</th>
+          <th style="padding:8px 14px;text-align:center;font-size:11px;color:#7f1d1d;font-weight:700">FILMS EMUCI</th>
+          <th style="padding:8px 14px;text-align:center;font-size:11px;color:#7f1d1d;font-weight:700">ÉCART</th>
+          <th style="padding:8px 14px;font-size:11px;color:#7f1d1d;font-weight:700">NOTE DU GSB</th>
+        </tr>
+      </thead>
+      <tbody>
+      <?php foreach($corrections_demandees as $corr):
+        $ecart_col = $corr['ecart'] < 0 ? '#e74c3c' : '#f39c12';
+      ?>
+        <tr style="border-top:1px solid #fecaca">
+          <td style="padding:9px 14px;font-family:monospace;font-weight:700;color:#0d1f35">
+            <?= h($corr['numero']) ?>
+            <span style="font-size:10px;color:#6b7280;margin-left:4px"><?= h($corr['type_code']) ?></span>
+          </td>
+          <td style="padding:9px 14px;text-align:center;font-weight:700"><?= $corr['films_pj'] ?></td>
+          <td style="padding:9px 14px;text-align:center;font-weight:700"><?= $corr['films_emuci'] ?></td>
+          <td style="padding:9px 14px;text-align:center;font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:<?= $ecart_col ?>">
+            <?= $corr['ecart'] > 0 ? '+' : '' ?><?= $corr['ecart'] ?> films
+          </td>
+          <td style="padding:9px 14px;font-size:12px;color:#6b7280"><?= h($corr['notes_gsb'] ?? '—') ?></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+    <div style="padding:10px 16px;font-size:12px;color:#991b1b;background:#fef2f2;border-top:1px solid #fca5a5">
+      Contactez votre gestionnaire stock bobines pour corriger ces saisies et débloquer votre activité.
+    </div>
+  </div>
+  <?php else: ?>
+  <div style="margin-top:10px;font-size:12px;color:#991b1b">Contactez votre gestionnaire stock bobines pour débloquer votre activité.</div>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+
+<?php if(!$stock_bloque && $validation_matin && $validation_matin['statut']==='autorise_ecart'): ?>
+<div style="background:#fef3c7;border:2px solid #fcd34d;border-radius:14px;padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
+  <div style="font-size:24px">⚠️</div>
+  <div>
+    <div style="font-size:14px;font-weight:700;color:#92400e">Écart autorisé par le gestionnaire</div>
+    <div style="font-size:12px;color:#92400e;margin-top:2px">Commentaire : <?= h($validation_matin['commentaire']) ?></div>
+  </div>
+</div>
+<?php endif; ?>
+
+<!-- STOCK RIVETS RAPIDE -->
+<?php if(!empty($stock_rivets_all)): ?>
+<div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap">
+  <?php foreach($stock_rivets_all as $sr): ?>
+  <div style="padding:6px 14px;background:white;border:1px solid var(--border);border-radius:20px;font-size:12.5px;display:flex;align-items:center;gap:6px">
+    🔩 <strong><?= h($sr['nom']) ?></strong> :
+    <span style="font-family:'Montserrat',sans-serif;font-weight:800;color:<?= $sr['quantite']<100 ? 'var(--danger)' : ($sr['quantite']<500 ? 'var(--warning)' : 'var(--navy)') ?>">
+      <?= fmt_number($sr['quantite']) ?>
+    </span> rivets
+  </div>
+  <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
+<!-- LISTE DES POINTS -->
+<div class="card">
+  <div class="card-header">
+    <h3>📋 Points journaliers <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= count($points) ?>)</span></h3>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr>
+        <th>Date</th><th>Site</th><th>Point</th>
+        <th style="text-align:center">VP</th><th style="text-align:center">Cam.</th>
+        <th style="text-align:center">Semi</th><th style="text-align:center">Moto</th>
+        <th style="text-align:center">Engins</th><th style="text-align:center">Plaques</th>
+        <th style="text-align:center">Moy.</th><th style="text-align:center">Rivets</th>
+        <th>Statut</th><th>Agent</th><th>Actions</th>
+      </tr></thead>
+      <tbody>
+      <?php if(empty($points)): ?>
+        <tr><td colspan="14" style="text-align:center;padding:40px;color:var(--muted)">Aucun point ce mois.</td></tr>
+      <?php else: foreach($points as $p): ?>
+        <tr>
+          <td style="font-weight:600;white-space:nowrap"><?= fmt_date($p['date_point'],'d/m/Y') ?></td>
+          <td style="font-size:13px"><?= h($p['site_nom']) ?></td>
+          <td><span class="point-badge <?= $p['type_point'] ?>"><?= ['point_9h'=>'🕘 9h','point_13h'=>'🕐 13h','point_18h'=>'🕕 18h ✅','final'=>'Final','intermediaire'=>'Intermédiaire'][$p['type_point']] ?? h($p['type_point']) ?></span></td>
+          <td style="text-align:center;font-weight:700"><?= $p['nb_vp'] ?></td>
+          <td style="text-align:center;font-weight:700"><?= $p['nb_camion'] ?></td>
+          <td style="text-align:center;font-weight:700"><?= $p['nb_semi'] ?></td>
+          <td style="text-align:center;font-weight:700"><?= $p['nb_moto'] ?></td>
+          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:16px;color:var(--navy)"><?= $p['total_engins'] ?></td>
+          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:16px;color:var(--blue-mid,#1a56a0)"><?= $p['total_plaques'] ?></td>
+          <td style="text-align:center;font-size:12px"><?= $p['moyenne_prod'] ?> V/H</td>
+          <td style="text-align:center;font-size:12.5px">🔩 <?= $p['rivets_utilises'] ?><?= $p['rivets_endommages']>0?' ⚠️'.$p['rivets_endommages']:'' ?></td>
+          <td><span class="point-badge <?= $p['statut'] ?>"><?= ['valide'=>'✅ Validé','brouillon'=>'⏳ Brouillon','en_attente_validation'=>'📤 En attente superviseur','suivi'=>'📊 Suivi'][$p['statut']] ?? $p['statut'] ?></span></td>
+          <td style="font-size:12px"><?= h($p['agent']??'—') ?></td>
+          <td style="white-space:nowrap;display:flex;gap:4px">
+            <button class="btn btn-secondary btn-sm" onclick="viewPoint(<?= $p['id'] ?>)" title="Aperçu">👁</button>
+            <button class="btn btn-secondary btn-sm" onclick="printPoint(<?= $p['id'] ?>)" title="Imprimer">🖨️</button>
+            <?php if($p['statut']==='brouillon' && ($p['agent_id']??0)==$user['id']): ?>
+            <?php if(($p['type_point']??'')==='point_18h'): ?>
+            <button class="btn btn-primary btn-sm" onclick="soumettrePoint(<?= $p['id'] ?>)" title="Soumettre au superviseur">📤</button>
+            <?php else: ?>
+            <button class="btn btn-success btn-sm" onclick="validerPointCoord(<?= $p['id'] ?>)" title="Valider définitivement">✅</button>
+            <?php endif; ?>
+            <button class="btn btn-secondary btn-sm" onclick="editPoint(<?= $p['id'] ?>)" title="Modifier" style="background:var(--blue-pale,#e8f4f9);color:var(--blue)">✏️</button>
+            <?php endif; ?>
+            <?php if(in_array($p['statut'],['brouillon','en_attente_validation']) && ($p['type_point']??'')==='point_18h' && in_array($role_slug_pj,['admin','superadmin','superviseur_operation'])): ?>
+            <button class="btn btn-success btn-sm" onclick="validerPoint(<?= $p['id'] ?>)" title="Valider le point 18h">✅</button>
+            <?php endif; ?>
+          </td>
+        </tr>
+      <?php endforeach; endif; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ═════════ MODAL SAISIE POINT ═════════ -->
+<div class="modal-overlay" id="mPoint">
+  <div class="modal" style="width:900px">
+    <div class="mhdr">
+      <h3>📝 Nouveau point journalier</h3>
+      <button class="mclose" onclick="document.getElementById('mPoint').classList.remove('open')">✕</button>
+    </div>
+    <div class="mbody">
+      <div id="pAlert"></div>
+
+      <!-- Panneau calcul temps réel -->
+      <div class="calc-panel">
+        <h3>Calcul en temps réel</h3>
+        <div class="calc-grid">
+          <div class="calc-item"><div class="cv" id="c-engins">0</div><div class="cl">Total Engins</div></div>
+          <div class="calc-item"><div class="cv" id="c-plaques">0</div><div class="cl">Total Plaques</div></div>
+          <div class="calc-item" id="c-rivets-wrap"><div class="cv" id="c-rivets">0</div><div class="cl">Rivets nécessaires</div></div>
+          <div class="calc-item"><div class="cv" id="c-moy">0</div><div class="cl">Moy. V/H</div></div>
+        </div>
+        <div style="margin-top:10px;font-size:12px;opacity:.6" id="c-stock-info"></div>
+      </div>
+
+      <!-- Infos générales -->
+      <div class="form-row cols-3" style="margin-bottom:16px">
+        <div class="form-group"><label>Site *</label>
+          <?php if($role_slug_pj === 'coordinateur_site' && $user['site_id']): ?>
+          <input type="hidden" id="p-site" value="<?= (int)$user['site_id'] ?>">
+          <div class="form-control" style="background:var(--lighter);color:var(--navy);font-weight:600;cursor:default">
+            📍 <?= h(db_fetch_value("SELECT nom FROM sites WHERE id=?",[(int)$user['site_id']]) ?? '') ?>
+          </div>
+          <?php else: ?>
+          <select class="form-control" id="p-site" onchange="loadStockRivets();loadBobines()">
+            <option value="">— Sélectionner —</option>
+            <?php foreach($sites_list as $s): ?>
+            <option value="<?= $s['id'] ?>"><?= h($s['nom']) ?></option>
+            <?php endforeach; ?>
+          </select>
+          <?php endif; ?>
+        </div>
+        <div class="form-group"><label>Date</label>
+          <input type="date" class="form-control" id="p-date" value="<?= date('Y-m-d') ?>">
+        </div>
+        <div class="form-group"><label>Type de point</label>
+          <select class="form-control" id="p-type" onchange="onTypePointChange(this.value)">
+            <option value="point_9h">🕘 Point 9h — Suivi matinée</option>
+            <option value="point_13h">🕐 Point 13h — Suivi mi-journée</option>
+            <option value="point_18h" selected>🕕 Point 18h — Fin de journée ✅ (validation)</option>
+          </select>
+          <div id="type-info" style="margin-top:6px;font-size:12px;padding:8px 12px;border-radius:8px;background:#d1fae5;color:#065f46;font-weight:600">
+            ✅ Ce point sera envoyé en validation au superviseur.
+          </div>
+        </div>
+      </div>
+
+      <!-- Véhicules posés -->
+      <h4 style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;margin-bottom:14px;color:var(--navy)">🚗 Véhicules posés</h4>
+      <div class="point-grid" style="margin-bottom:20px">
+        <?php
+        $veh_icons = ['VP'=>'🚗','CAM'=>'🚛','SEMI'=>'🚚','MOTO'=>'🏍️'];
+        $veh_colors= ['VP'=>'#e3f2fd','CAM'=>'#e8f5e9','SEMI'=>'#fff3e0','MOTO'=>'#fce4ec'];
+        foreach($types_v as $tv):
+        ?>
+        <div class="veh-card">
+          <div class="vc-header">
+            <div class="vc-icon" style="background:<?= $veh_colors[$tv['code']] ?>"><?= $veh_icons[$tv['code']] ?></div>
+            <div>
+              <div class="vc-title"><?= h($tv['libelle']) ?></div>
+              <div class="vc-sub">Série bobine : <?= $tv['serie_bobine'] ?>xxx</div>
+            </div>
+          </div>
+          <div class="vc-badges">
+            <span class="badge-info">🪪 <?= $tv['nb_plaques'] ?> plaque(s)</span>
+            <span class="badge-info">🔩 <?= $tv['nb_rivets'] ?> rivets</span>
+            <span class="badge-info">🎞️ <?= $tv['nb_plaques'] ?> film(s)</span>
+          </div>
+          <input type="number" class="nb-input" id="nb-<?= $tv['code'] ?>"
+                 min="0" value="0" placeholder="0"
+                 data-plaques="<?= $tv['nb_plaques'] ?>"
+                 data-rivets="<?= $tv['nb_rivets'] ?>"
+                 data-serie="<?= $tv['serie_bobine'] ?>"
+                 data-tvid="<?= $tv['id'] ?>"
+                 oninput="recalcule();autoFilmsFromVeh('<?= $tv['code'] ?>',<?= $tv['id'] ?>,'<?= $tv['serie_bobine'] ?>')">
+        </div>
+        <?php endforeach; ?>
+      </div>
+
+      <!-- Heures travail + rivets endommagés -->
+      <div class="form-row cols-3" style="margin-bottom:20px">
+        <div class="form-group"><label>⏱ Heures de travail</label>
+          <input type="number" class="form-control" id="p-heures" value="8" min="0" max="24" step="0.5" oninput="recalcule()">
+        </div>
+        <div class="form-group"><label>🔩 Rivets endommagés</label>
+          <input type="number" class="form-control" id="p-riv-endomm" min="0" value="0" oninput="recalcule()">
+        </div>
+        <div class="form-group"><label>Stock rivets site</label>
+          <input type="text" class="form-control" id="p-stock-rivets" disabled style="font-weight:700;color:var(--navy)">
+        </div>
+      </div>
+
+      <!-- Films utilisés par bobine -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+        <h4 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700;color:var(--navy)">🎞️ Films utilisés par bobine</h4>
+        <span style="font-size:11px;color:var(--muted)">Uniquement les bobines en utilisation</span>
+      </div>
+      <div id="films-container">
+        <div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">Chargement des bobines...</div>
+      </div>
+
+      <!-- Véhicules non posés -->
+      <h4 style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;margin:20px 0 14px;color:var(--navy)">🚫 Véhicules non posés</h4>
+      <div class="form-row cols-2" style="margin-bottom:16px">
+        <div class="form-group"><label>Concessionnaires</label>
+          <input type="number" class="form-control" id="p-np-conc" min="0" value="0">
+        </div>
+        <div class="form-group"><label>Usagers</label>
+          <input type="number" class="form-control" id="p-np-usag" min="0" value="0">
+        </div>
+      </div>
+
+      <div class="form-group"><label>Observations / NB</label>
+        <textarea class="form-control" id="p-obs" rows="3" placeholder="Erreur carte grise, remarques…"></textarea>
+      </div>
+
+      <!-- Aperçu en temps réel -->
+      <div class="point-preview" id="point-preview" style="display:none">
+        <h2 id="prev-titre">Point Final</h2>
+        <div class="pp-date" id="prev-date"></div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px" id="prev-stats"></div>
+        <div class="pp-section">
+          <div class="pp-title">Total Immatriculation</div>
+          <div id="prev-detail"></div>
+          <div class="pp-total"><span>TOTAL ENGINS</span><span id="prev-engins">0</span></div>
+          <div class="pp-total" style="border-top:none;margin-top:0;padding-top:0"><span>TOTAL PLAQUES</span><span id="prev-plaques">0</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="btn btn-secondary" onclick="document.getElementById('mPoint').classList.remove('open')">Annuler</button>
+      <button class="btn btn-secondary" onclick="togglePreview()">👁 Aperçu</button>
+      <button class="btn btn-primary" id="btn-save-point" onclick="savePoint()">💾 Enregistrer le point</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL DETAIL POINT -->
+<div class="modal-overlay" id="mDetail">
+  <div class="modal" style="width:700px">
+    <div class="mhdr"><h3>📊 Détail du point</h3>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-secondary btn-sm" onclick="window.print()" title="Imprimer">🖨️ Imprimer</button>
+        <button class="mclose" onclick="document.getElementById('mDetail').classList.remove('open')">✕</button>
+      </div>
+    </div>
+    <div class="mbody" id="detail-body"></div>
+  </div>
+</div>
+
+<script>
+const TYPES_V = <?= json_encode(array_values($types_v)) ?>;
+const SERIES  = {VP:'A',CAM:'B',SEMI:'C',MOTO:'D'};
+let bobinesCache = {};
+let stockRivets  = 0;
+let previewOpen  = false;
+
+// ── OUVRIR FORMULAIRE
+function onTypePointChange(type){
+  const info=document.getElementById('type-info');
+  if(!info)return;
+  const msgs={'point_9h':'📊 Suivi uniquement — non envoyé en validation.','point_13h':'📊 Suivi uniquement — non envoyé en validation.','point_18h':'✅ Ce point sera envoyé en validation au superviseur.'};
+  const colors={'point_9h':'#dbeafe','point_13h':'#dbeafe','point_18h':'#d1fae5'};
+  const textColors={'point_9h':'#1d4ed8','point_13h':'#1d4ed8','point_18h':'#065f46'};
+  info.textContent=msgs[type]||'';
+  info.style.background=colors[type]||'#f8f9fa';
+  info.style.color=textColors[type]||'#333';
+}
+function openPointForm(){
+  resetPointForm();
+  document.getElementById('mPoint').classList.add('open');
+  <?php if($role_slug_pj === 'coordinateur_site' && $user['site_id']): ?>
+  // Coordinateur : site déjà fixé, charger automatiquement
+  loadStockRivets();
+  loadBobines();
+  <?php endif; ?>
+}
+function resetPointForm(){
+  TYPES_V.forEach(tv=>{ const el=document.getElementById('nb-'+tv.code); if(el) el.value=0; });
+  <?php if($role_slug_pj !== 'coordinateur_site'): ?>
+  document.getElementById('p-site').value='';
+  <?php endif; ?>
+  ['p-obs'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('p-date').value='<?= date('Y-m-d') ?>';
+  document.getElementById('p-type').value='final';
+  document.getElementById('p-heures').value='8';
+  document.getElementById('p-riv-endomm').value='0';
+  document.getElementById('p-np-conc').value='0';
+  document.getElementById('p-np-usag').value='0';
+  document.getElementById('p-stock-rivets').value='';
+  document.getElementById('films-container').innerHTML='<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px"><?= $role_slug_pj === 'coordinateur_site' ? 'Chargement...' : 'Sélectionnez un site pour charger les bobines disponibles.' ?></div>';
+  document.getElementById('pAlert').innerHTML='';
+  document.getElementById('point-preview').style.display='none';
+  bobinesCache={}; stockRivets=0;
+  recalcule();
+}
+
+// ── CALCUL TEMPS RÉEL
+function recalcule(){
+  let engins=0,plaques=0,rivets=0;
+  TYPES_V.forEach(tv=>{
+    const n=parseInt(document.getElementById('nb-'+tv.code)?.value||0);
+    engins  += n;
+    plaques += n * tv.nb_plaques;
+    rivets  += n * tv.nb_rivets;
+  });
+  const rivEndomm = parseInt(document.getElementById('p-riv-endomm')?.value||0);
+  const heures    = parseFloat(document.getElementById('p-heures')?.value||8);
+  const moy       = heures>0 ? (engins/heures).toFixed(1) : 0;
+  const totalRivets = rivets + rivEndomm;
+
+  document.getElementById('c-engins').textContent=engins;
+  document.getElementById('c-plaques').textContent=plaques;
+  document.getElementById('c-rivets').textContent=totalRivets;
+  document.getElementById('c-moy').textContent=moy+' V/H';
+
+  // Alerte rivets
+  const rw = document.getElementById('c-rivets-wrap');
+  const si = document.getElementById('c-stock-info');
+  if(stockRivets>0){
+    rw.className = 'calc-item '+(totalRivets>stockRivets?'danger':totalRivets>stockRivets*0.8?'warn':'success');
+    si.textContent = `Stock rivets disponible : ${stockRivets} | Nécessaires : ${totalRivets}${totalRivets>stockRivets?' ⚠️ INSUFFISANT':''}`;
+  }
+
+  if(previewOpen) updatePreview(engins,plaques,moy);
+}
+
+// ── CHARGER STOCK RIVETS
+function loadStockRivets(){
+  const sid=document.getElementById('p-site').value;
+  if(!sid) return;
+  ap({action:'get_stock_rivets',site_id:sid}).then(d=>{
+    stockRivets=d.data.stock||0;
+    document.getElementById('p-stock-rivets').value=stockRivets.toLocaleString('fr-FR')+' rivets';
+    document.getElementById('p-stock-rivets').style.color=stockRivets<200?'var(--danger)':stockRivets<1000?'var(--warning)':'var(--navy)';
+    recalcule();
+  });
+}
+
+// ── CHARGER BOBINES DU SITE
+let bobinesEnCours = []; // toutes les bobines en utilisation du site
+
+async function loadBobines(){
+  const sid=document.getElementById('p-site').value;
+  const fc=document.getElementById('films-container');
+  if(!sid){fc.innerHTML='<div style="text-align:center;color:var(--muted);padding:20px">Sélectionnez un site.</div>';return;}
+  fc.innerHTML='<div style="text-align:center;color:var(--muted);padding:20px">⏳ Chargement...</div>';
+  const d = await ap({action:'get_bobines_site',site_id:sid});
+  bobinesCache={};
+  bobinesEnCours = d.data||[];
+  bobinesEnCours.forEach(b=>bobinesCache[b.id]=b);
+
+  if(!bobinesEnCours.length){
+    fc.innerHTML='<div style="text-align:center;color:var(--muted);padding:24px;background:var(--lighter);border-radius:10px">⚠️ Aucune bobine en utilisation sur ce site.</div>';
+    return;
+  }
+  // Afficher 1 ligne de saisie par défaut (la première bobine)
+  renderBobinesRows([bobinesEnCours[0].id]);
+}
+
+function renderBobinesRows(selectedIds){
+  const fc=document.getElementById('films-container');
+  const rows = selectedIds.map((bid,i)=>buildBobineRow(bid,i)).join('');
+  fc.innerHTML=`
+    <div id="bobine-rows">${rows}</div>
+    <button type="button" onclick="addBobineRow()"
+      style="margin-top:10px;width:100%;padding:10px;border:2px dashed var(--border);border-radius:10px;
+             background:none;color:var(--primary);font-weight:600;font-size:13px;cursor:pointer">
+      + Ajouter une bobine
+    </button>`;
+}
+
+function buildBobineRow(selectedBobineId, idx){
+  const opts = bobinesEnCours.map(b=>
+    `<option value="${b.id}" ${b.id==selectedBobineId?'selected':''}>${b.numero} — ${b.films_restants} films restants</option>`
+  ).join('');
+  const b = bobinesCache[selectedBobineId]||{};
+  return `
+    <div class="bobine-saisie-row" id="bsrow-${idx}" style="
+      display:grid;grid-template-columns:1fr 120px 120px 40px;gap:10px;
+      align-items:center;background:var(--lighter);border-radius:12px;
+      padding:12px 14px;margin-bottom:8px;border:1.5px solid var(--border)">
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Bobine en utilisation</label>
+        <select class="form-control" id="bsel-${idx}" onchange="onBobineChange(${idx})" style="margin-top:4px">
+          ${opts}
+        </select>
+        <div id="binfo-${idx}" style="font-size:11px;color:var(--muted);margin-top:3px">
+          ${b.films_restants||0} films restants · ${b.type_code||''}
+        </div>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px">Films utilisés</label>
+        <input type="number" class="form-control" id="butil-${idx}" min="0"
+               max="${b.films_restants||500}" value="0"
+               oninput="updateBobineRestants(${idx})" style="margin-top:4px;text-align:center;font-size:16px;font-weight:700">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--danger);text-transform:uppercase;letter-spacing:.5px">Endommagés</label>
+        <input type="number" class="form-control" id="bendomm-${idx}" min="0" value="0"
+               oninput="updateBobineRestants(${idx})"
+               style="margin-top:4px;text-align:center;border-color:var(--danger)">
+      </div>
+      <div style="text-align:center;margin-top:18px">
+        ${idx>0?`<button type="button" onclick="removeBobineRow(${idx})"
+          style="background:none;border:none;color:var(--danger);font-size:20px;cursor:pointer;padding:4px">✕</button>`:''}
+      </div>
+    </div>`;
+}
+
+let nbBobineRows=1;
+function addBobineRow(){
+  // Trouver une bobine pas encore sélectionnée
+  const usedIds = getSelectedBobineIds();
+  const nextB = bobinesEnCours.find(b=>!usedIds.includes(String(b.id)));
+  if(!nextB){alert('Toutes les bobines en utilisation sont déjà ajoutées.');return;}
+  const container=document.getElementById('bobine-rows');
+  const div=document.createElement('div');
+  div.innerHTML=buildBobineRow(nextB.id, nbBobineRows);
+  container.appendChild(div.firstElementChild);
+  nbBobineRows++;
+}
+
+function removeBobineRow(idx){
+  const el=document.getElementById('bsrow-'+idx);
+  if(el) el.remove();
+  recalcule();
+}
+
+function onBobineChange(idx){
+  const bid=document.getElementById('bsel-'+idx).value;
+  const b=bobinesCache[bid]||{};
+  document.getElementById('binfo-'+idx).textContent=`${b.films_restants||0} films restants · ${b.type_code||''}`;
+  document.getElementById('butil-'+idx).max=b.films_restants||500;
+  updateBobineRestants(idx);
+}
+
+function updateBobineRestants(idx){
+  const bid=document.getElementById('bsel-'+idx)?.value;
+  const b=bobinesCache[bid]||{films_restants:0};
+  const util=parseInt(document.getElementById('butil-'+idx)?.value||0);
+  const endomm=parseInt(document.getElementById('bendomm-'+idx)?.value||0);
+  const restants=b.films_restants-(util+endomm);
+  const info=document.getElementById('binfo-'+idx);
+  if(info){
+    info.textContent=`${Math.max(0,restants)} films restants · ${b.type_code||''}`;
+    info.style.color=restants<0?'var(--danger)':restants<50?'var(--warning)':'var(--muted)';
+  }
+  recalcule();
+}
+
+function getSelectedBobineIds(){
+  return Array.from(document.querySelectorAll('[id^="bsel-"]')).map(s=>s.value);
+}
+
+function getBobinesData(){
+  const rows=[];
+  document.querySelectorAll('[id^="bsrow-"]').forEach(row=>{
+    const idx=row.id.replace('bsrow-','');
+    const bid=document.getElementById('bsel-'+idx)?.value;
+    const util=parseInt(document.getElementById('butil-'+idx)?.value||0);
+    const endomm=parseInt(document.getElementById('bendomm-'+idx)?.value||0);
+    if(bid&&(util+endomm)>0) rows.push({bobine_id:bid,films_utilises:util,films_endommages:endomm,type_vehicule_id:1});
+  });
+  return rows;
+}
+
+function toggleSerie(id){
+  const el=document.getElementById(id);
+  el.classList.toggle('open');
+}
+
+function checkBobineStock(bid){
+  const util=parseInt(document.getElementById('bu-'+bid)?.value||0);
+  const endomm=parseInt(document.getElementById('be-'+bid)?.value||0);
+  const bobine=bobinesCache[bid];
+  if(!bobine) return;
+  const restants=bobine.films_restants-(util+endomm);
+  const el=document.getElementById('brest-'+bid);
+  if(el){ el.textContent=Math.max(0,restants); el.style.color=restants<0?'var(--danger)':restants<50?'var(--warning)':'var(--navy)'; }
+}
+
+// ── AUTO-REMPLIR FILMS selon nb véhicules
+function autoFilmsFromVeh(code,tvId,serie){
+  const nb=parseInt(document.getElementById('nb-'+code)?.value||0);
+  // Trouver la bobine en cours pour cette série
+  const sid=document.getElementById('p-site').value; if(!sid) return;
+  const bobinesDispos=Object.values(bobinesCache).filter(b=>b.serie===serie&&b.films_restants>0);
+  if(!bobinesDispos.length) return;
+  // Prendre la bobine en cours en premier
+  const bobine=bobinesDispos.find(b=>b.statut==='en_cours')||bobinesDispos[0];
+  const films=nb; // 1 film par véhicule par plaque → déjà géré dans le nb_plaques
+  const input=document.getElementById('bu-'+bobine.id);
+  if(input){ input.value=films; checkBobineStock(bobine.id); }
+  // Ouvrir la série correspondante
+  const el=document.getElementById('serie-'+serie);
+  if(el&&!el.classList.contains('open')) el.classList.add('open');
+}
+
+// ── APERÇU
+function togglePreview(){
+  previewOpen=!previewOpen;
+  document.getElementById('point-preview').style.display=previewOpen?'block':'none';
+  if(previewOpen) recalcule();
+}
+function updatePreview(engins,plaques,moy){
+  const date=document.getElementById('p-date').value;
+  const type=document.getElementById('p-type').value;
+  const pSiteEl=document.getElementById('p-site');
+  const site=pSiteEl.tagName==='SELECT'?(pSiteEl.options[pSiteEl.selectedIndex]?.text||''):(pSiteEl.closest('.form-group')?.querySelector('div')?.textContent?.trim()||'<?= $role_slug_pj==='coordinateur_site'?h(db_fetch_value("SELECT nom FROM sites WHERE id=?",[(int)($user['site_id']??0)])??""):"" ?>');
+  document.getElementById('prev-titre').textContent=(type==='final'?'Point Final':'Point Intermédiaire')+' — '+site;
+  document.getElementById('prev-date').textContent='Date : '+new Date(date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
+  const rivets=(parseInt(document.getElementById('c-rivets').textContent)||0);
+  document.getElementById('prev-stats').innerHTML=[
+    ['🚗',document.getElementById('nb-VP')?.value||0,'VP'],
+    ['🚛',document.getElementById('nb-CAM')?.value||0,'Camion'],
+    ['🚚',document.getElementById('nb-SEMI')?.value||0,'Semi'],
+    ['🏍️',document.getElementById('nb-MOTO')?.value||0,'Moto'],
+  ].map(([i,v,l])=>`<div class="pp-stat"><div class="psv">${v}</div><div class="psl">${i} ${l}</div></div>`).join('');
+  const detail=TYPES_V.map(tv=>{
+    const n=parseInt(document.getElementById('nb-'+tv.code)?.value||0);
+    return n>0?`<div class="pp-row"><span>• ${tv.libelle}</span><span>${n}</span></div>`:'';
+  }).join('');
+  document.getElementById('prev-detail').innerHTML=detail;
+  document.getElementById('prev-engins').textContent=engins;
+  document.getElementById('prev-plaques').textContent=plaques;
+}
+
+// ── SAUVEGARDER
+function savePoint(){
+  const site_id=document.getElementById('p-site').value;
+  if(!site_id){document.getElementById('pAlert').innerHTML='<div class="alert alert-danger">Sélectionnez un site.</div>';return;}
+  const btn=document.getElementById('btn-save-point');
+  btn.disabled=true; btn.textContent='Enregistrement…';
+
+  // Collecter films depuis le nouveau sélecteur dynamique
+  const films_data = getBobinesData();
+
+  ap({
+    action:'save_point', site_id,
+    date_point:  document.getElementById('p-date').value,
+    type_point:  document.getElementById('p-type').value,
+    nb_vp:       document.getElementById('nb-VP').value,
+    nb_camion:   document.getElementById('nb-CAM').value,
+    nb_semi:     document.getElementById('nb-SEMI').value,
+    nb_moto:     document.getElementById('nb-MOTO').value,
+    rivets_endommages: document.getElementById('p-riv-endomm').value,
+    non_poses_concessionnaires: document.getElementById('p-np-conc').value,
+    non_poses_usagers: document.getElementById('p-np-usag').value,
+    nb_heures:   document.getElementById('p-heures').value,
+    observations:document.getElementById('p-obs').value,
+    films_data:  JSON.stringify(films_data),
+  }).then(d=>{
+    btn.disabled=false; btn.textContent='💾 Enregistrer le point';
+    if(d.success){
+      toast(d.message,'success');
+      document.getElementById('mPoint').classList.remove('open');
+      setTimeout(()=>location.reload(),900);
+    } else {
+      document.getElementById('pAlert').innerHTML=`<div class="alert alert-danger">${d.message}</div>`;
+    }
+  });
+}
+
+// ── VOIR DÉTAIL POINT
+function viewPoint(id){
+  document.getElementById('mDetail').classList.add('open');
+  document.getElementById('detail-body').innerHTML='<div style="text-align:center;padding:40px;color:var(--muted)">Chargement…</div>';
+  // Trouver dans la liste
+  const pts=<?= json_encode(array_values($points)) ?>;
+  const p=pts.find(x=>x.id==id); if(!p){document.getElementById('detail-body').innerHTML='Introuvable.';return;}
+  document.getElementById('detail-body').innerHTML=`
+    <div class="point-preview">
+      <h2>Point ${p.type_point==='point_18h'?'Final':'Intermédiaire'} — ${p.site_nom}</h2>
+      <div class="pp-date">Date : ${new Date(p.date_point).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'})}</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
+        ${[['🚗',p.nb_vp,'VP'],['🚛',p.nb_camion,'Camion'],['🚚',p.nb_semi,'Semi'],['🏍️',p.nb_moto,'Moto']]
+          .map(([i,v,l])=>`<div class="pp-stat"><div class="psv">${v}</div><div class="psl">${i} ${l}</div></div>`).join('')}
+      </div>
+      <div class="pp-section">
+        <div class="pp-title">Total Immatriculation</div>
+        ${p.nb_vp>0?`<div class="pp-row"><span>• Véhicule Particulier</span><span>${p.nb_vp}</span></div>`:''}
+        ${p.nb_camion>0?`<div class="pp-row"><span>• Camion</span><span>${p.nb_camion}</span></div>`:''}
+        ${p.nb_semi>0?`<div class="pp-row"><span>• Semi-remorque</span><span>${p.nb_semi}</span></div>`:''}
+        ${p.nb_moto>0?`<div class="pp-row"><span>• Moto</span><span>${p.nb_moto}</span></div>`:''}
+        <div class="pp-total"><span>TOTAL ENGINS</span><span>${p.total_engins}</span></div>
+        <div class="pp-total" style="border-top:none;padding-top:0;margin-top:0"><span>TOTAL PLAQUES</span><span>${p.total_plaques}</span></div>
+      </div>
+      <div class="pp-section" style="margin-top:12px">
+        <div class="pp-title">Statistiques</div>
+        <div class="pp-row"><span>#MOYENNE DE PRODUCTION</span><span>${p.moyenne_prod} V/H</span></div>
+        <div class="pp-row"><span>🔩 Rivets utilisés</span><span>${p.rivets_utilises}</span></div>
+        ${p.rivets_endommages>0?`<div class="pp-row"><span>⚠️ Rivets endommagés</span><span>${p.rivets_endommages}</span></div>`:''}
+      </div>
+      <div class="pp-section" style="margin-top:12px">
+        <div class="pp-title">Véhicules non posés</div>
+        <div class="pp-row"><span>- Concessionnaires</span><span>${String(p.non_poses_concessionnaires).padStart(2,'0')}</span></div>
+        <div class="pp-row"><span>- Usagers</span><span>${String(p.non_poses_usagers).padStart(2,'0')}</span></div>
+      </div>
+      ${p.observations?`<div class="pp-section" style="margin-top:12px"><div class="pp-title">NB</div><div style="font-size:13px;opacity:.8">${p.observations}</div></div>`:''}
+    </div>
+    <div style="text-align:center;font-size:12px;color:var(--muted)">Enregistré par ${p.agent||'—'} · ${{'valide':'✅ Validé','brouillon':'⏳ Brouillon','en_attente_validation':'📤 En attente superviseur','suivi':'📊 Suivi'}[p.statut]||p.statut}</div>`;
+}
+
+async function editPoint(id){
+  const d = await ap({action:'load_point', point_id:id});
+  if(!d.success){ alert('Erreur de chargement'); return; }
+  const p = d.data.point;
+  currentPointId = id;
+  // Remplir les champs du formulaire
+  if(document.getElementById('p-site').tagName==='SELECT')
+    document.getElementById('p-site').value = p.site_id;
+  document.getElementById('p-date').value  = p.date_point;
+  document.getElementById('p-type').value  = p.type_point;
+  document.getElementById('p-heures').value= p.nb_heures_travail||'8';
+  document.getElementById('p-riv-endomm').value = p.rivets_endommages||'0';
+  document.getElementById('p-np-conc').value    = p.non_poses_concessionnaires||'0';
+  document.getElementById('p-np-usag').value    = p.non_poses_usagers||'0';
+  document.getElementById('p-obs').value         = p.observations||'';
+  await loadStockRivets();
+  await loadBobines();
+  document.getElementById('mPoint').classList.add('open');
+}
+
+function validerPointCoord(id){
+  if(!confirm('Valider ce point ? Vous ne pourrez plus le modifier après.'))return;
+  ap({action:'valider_point_coord',point_id:id}).then(d=>{
+    toast(d.message,d.success?'success':'danger');
+    if(d.success)setTimeout(()=>location.reload(),800);
+  });
+}
+function soumettrePoint(id){
+  if(!confirm('Soumettre ce point 18h au superviseur pour validation ?'))return;
+  ap({action:'soumettre_point',point_id:id}).then(d=>{
+    toast(d.message,d.success?'success':'danger');
+    if(d.success)setTimeout(()=>location.reload(),800);
+  });
+}
+function validerPoint(id){
+  if(!confirm('Valider ce point journalier ? Cette action est définitive.'))return;
+  ap({action:'valider_point',point_id:id}).then(d=>{toast(d.message,d.success?'success':'danger');if(d.success)setTimeout(()=>location.reload(),800);});
+}
+
+function printPoint(id){viewPoint(id);setTimeout(()=>window.print(),500);}
+
+function ap(data){
+  const fd=new FormData();
+  for(const[k,v]of Object.entries(data))if(v!==undefined)fd.append(k,v);
+  return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
+}
+document.getElementById('mPoint').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');});
+document.getElementById('mDetail').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');});
+</script>
+<style>@media print{.sidebar,.topbar,.mhdr button,.mfoot{display:none!important}.modal{position:static;border:none;box-shadow:none}.point-preview{color:black!important;background:white!important}.point-preview *{color:black!important}}</style>
+
+<?php include __DIR__ . '/../../templates/footer.php'; ?>

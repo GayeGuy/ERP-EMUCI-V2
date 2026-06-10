@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(Select-String -Path \"c:\\\\xampp\\\\htdocs\\\\stockapp\\\\sql\\\\migration_stockapp_complet.sql\" -Pattern \"CREATE TABLE\" | Select-Object -First 40 | ForEach-Object { $_.Line })",
+      "PowerShell(& \"C:\\\\xampp\\\\mysql\\\\bin\\\\mysql.exe\" -u root -e \"SHOW TABLES FROM stockapp LIKE 'articles'; SHOW TABLES FROM stockapp LIKE 'commande_lignes'; SELECT VERSION\\(\\);\" 2>&1)",
+      "PowerShell(& \"C:\\\\xampp\\\\mysql\\\\bin\\\\mysql.exe\" -u root stockapp -e \"SHOW TABLES LIKE 'consommables'; DESCRIBE consommables;\" 2>&1)"
+    ]
+  }
+}

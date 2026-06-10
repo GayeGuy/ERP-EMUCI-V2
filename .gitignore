@@ -1,0 +1,30 @@
+# Dependencies
+/vendor/
+
+# Uploaded files (user content, not code)
+/uploads/fiches/*
+/uploads/bl/*
+!/uploads/fiches/.gitkeep
+!/uploads/bl/.gitkeep
+
+# Database credentials & local config
+/includes/db.php
+
+# Database dumps (may contain sensitive data)
+/database.sql
+
+# Test & install scripts
+/test_db.php
+/test_csp.php
+/install.php
+
+# OS & editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log

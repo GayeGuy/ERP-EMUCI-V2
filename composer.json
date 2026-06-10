@@ -1,0 +1,23 @@
+{
+    "require": {
+        "phpoffice/phpspreadsheet": "^1.29"
+    },
+    "config": {
+        "audit": {
+            "abandoned": "ignore"
+        },
+        "allow-plugins": {},
+        "policy": {
+            "advisories": {
+                "block": false
+            }
+        }
+    },
+    "extra": {
+        "policy": {
+            "advisories": {
+                "block": false
+            }
+        }
+    }
+}

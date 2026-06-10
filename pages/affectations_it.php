@@ -1,0 +1,162 @@
+<?php
+// ============================================================
+//  pages/affectations_it.php
+//  Gestion des sous-rôles Support IT — Admin / Superviseur IT
+// ============================================================
+require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/session.php';
+require_once __DIR__ . '/../includes/helpers.php';
+require_once __DIR__ . '/../includes/notifications.php';
+require_auth();
+
+$user      = current_user();
+$role_slug = $user['role_slug'] ?? '';
+$page_title  = 'Gestion Support IT';
+$active_page = 'support_it_gestion';
+
+if (!in_array($role_slug, ['admin','superadmin','superviseur_it'])) {
+    http_response_code(403); include __DIR__.'/../templates/403.php'; exit;
+}
+
+$sous_roles_dispo = [
+    'maintenance'           => ['icon'=>'🔧','label'=>'Maintenance','desc'=>'Interventions équipements, rapport journalier'],
+    'controleur_production' => ['icon'=>'📋','label'=>'Contrôleur Production','desc'=>'Import OptoPlate & OptoTrace, Point EMUCI'],
+    'gestionnaire_bobines'  => ['icon'=>'🎞️','label'=>'Gestionnaire Bobines','desc'=>'Validation stock matin, suivi bobines coordinateurs'],
+];
+
+// ── AJAX
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
+    header('Content-Type: application/json');
+    $action = $_POST['action'] ?? '';
+
+    if ($action === 'toggle') {
+        $user_id   = (int)($_POST['user_id'] ?? 0);
+        $sous_role = trim($_POST['sous_role'] ?? '');
+        $actif     = (int)($_POST['actif'] ?? 0);
+
+        if (!isset($sous_roles_dispo[$sous_role])) json_response(false,'Sous-rôle invalide.');
+        $support = db_fetch_one("SELECT u.id, CONCAT(u.prenom,' ',u.nom) AS nom FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=? AND r.slug='support_it' AND u.actif=1", [$user_id]);
+        if (!$support) json_response(false,'Compte Support IT introuvable.');
+
+        if ($actif) {
+            db_query("INSERT INTO support_it_roles (user_id,sous_role,actif,affecte_par) VALUES (?,?,1,?)
+                      ON DUPLICATE KEY UPDATE actif=1, affecte_par=?",
+                [$user_id, $sous_role, $user['id'], $user['id']]);
+            // Invalider le cache session si c'est l'utilisateur lui-même
+            $label = $sous_roles_dispo[$sous_role]['label'];
+            json_response(true, "Sous-rôle '$label' affecté à {$support['nom']}.");
+        } else {
+            db_query("UPDATE support_it_roles SET actif=0 WHERE user_id=? AND sous_role=?", [$user_id, $sous_role]);
+            json_response(true, "Sous-rôle retiré.");
+        }
+    }
+    json_response(false,'Action inconnue.');
+}
+
+// ── DONNÉES
+$supports = db_fetch_all(
+    "SELECT u.id, u.prenom, u.nom, u.email, s.nom AS site_nom
+     FROM users u JOIN roles r ON r.id=u.role_id
+     LEFT JOIN sites s ON s.id=u.site_id
+     WHERE r.slug='support_it' AND u.actif=1 ORDER BY u.nom"
+);
+
+// Sous-rôles actifs par user
+$sr_actifs = db_fetch_all("SELECT user_id, sous_role FROM support_it_roles WHERE actif=1");
+$sr_map = [];
+foreach ($sr_actifs as $sr) $sr_map[$sr['user_id']][$sr['sous_role']] = true;
+
+include __DIR__ . '/../templates/header.php';
+?>
+<style>
+.sit-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:20px}
+.sit-card{background:white;border-radius:16px;border:1px solid var(--border);overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.sit-head{background:var(--navy);padding:16px 20px;display:flex;align-items:center;gap:12px}
+.sit-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#1b75bc,#00aeef);display:flex;align-items:center;justify-content:center;font-weight:800;color:white;font-size:15px;flex-shrink:0}
+.sit-name{color:white;font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700}
+.sit-sub{color:#94c2d4;font-size:11px;margin-top:2px}
+.sit-body{padding:16px 20px}
+.sr-row{display:grid;grid-template-columns:32px 1fr auto;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.sr-row:last-child{border-bottom:none}
+.sr-icon{font-size:20px;text-align:center}
+.sr-label{font-size:13px;font-weight:600;color:var(--navy)}
+.sr-desc{font-size:11px;color:var(--muted);margin-top:2px}
+.toggle-wrap{position:relative;width:44px;height:24px;cursor:pointer;flex-shrink:0}
+.toggle-wrap input{opacity:0;width:0;height:0;position:absolute}
+.toggle-track{position:absolute;inset:0;background:#ccc;border-radius:12px;transition:.2s}
+.toggle-thumb{position:absolute;top:3px;left:3px;width:18px;height:18px;background:white;border-radius:50%;transition:.2s;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+.toggle-wrap input:checked ~ .toggle-track{background:var(--blue)}
+.toggle-wrap input:checked ~ .toggle-thumb{transform:translateX(20px)}
+.badge-sr{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:var(--primary-l);color:var(--primary)}
+</style>
+
+<div style="margin-bottom:20px">
+  <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">💻 Gestion des Support IT</h2>
+  <p style="font-size:13px;color:var(--muted);margin-top:4px">Affectez un ou plusieurs sous-rôles à chaque compte Support IT. Les droits sont mis à jour immédiatement.</p>
+</div>
+
+<?php if(empty($supports)): ?>
+<div class="card"><div class="card-body" style="text-align:center;padding:60px;color:var(--muted)">
+  <div style="font-size:48px;margin-bottom:16px">💻</div>
+  <div style="font-size:15px;font-weight:600;margin-bottom:8px">Aucun compte Support IT actif</div>
+  <div style="font-size:13px">Créez des comptes avec le profil "Support IT" depuis l'administration.</div>
+</div></div>
+<?php else: ?>
+<div class="sit-grid">
+  <?php foreach($supports as $sup):
+    $initiales = strtoupper(substr($sup['prenom'],0,1).substr($sup['nom'],0,1));
+    $actifs = $sr_map[$sup['id']] ?? [];
+    $nb_actifs = count($actifs);
+  ?>
+  <div class="sit-card">
+    <div class="sit-head">
+      <div class="sit-avatar"><?= $initiales ?></div>
+      <div style="flex:1">
+        <div class="sit-name"><?= h($sup['prenom'].' '.$sup['nom']) ?></div>
+        <div class="sit-sub">
+          <?= $sup['site_nom'] ? h($sup['site_nom']) : 'Multi-sites' ?>
+          <?php if($nb_actifs>0): ?>
+          · <span style="color:#27ae60;font-weight:700"><?= $nb_actifs ?> sous-rôle(s) actif(s)</span>
+          <?php else: ?>
+          · <span style="color:#e74c3c">Aucun sous-rôle — accès limité</span>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
+    <div class="sit-body">
+      <?php foreach($sous_roles_dispo as $sr_key => $sr_info):
+        $checked = !empty($actifs[$sr_key]);
+      ?>
+      <div class="sr-row">
+        <div class="sr-icon"><?= $sr_info['icon'] ?></div>
+        <div>
+          <div class="sr-label"><?= $sr_info['label'] ?></div>
+          <div class="sr-desc"><?= $sr_info['desc'] ?></div>
+        </div>
+        <label class="toggle-wrap">
+          <input type="checkbox" <?= $checked?'checked':'' ?>
+                 onchange="toggle(<?= $sup['id'] ?>,'<?= $sr_key ?>',this.checked)">
+          <span class="toggle-track"></span>
+          <span class="toggle-thumb"></span>
+        </label>
+      </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+  <?php endforeach; ?>
+</div>
+<?php endif; ?>
+
+<script>
+function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
+function toast(m,t='success'){const el=document.createElement('div');el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white;box-shadow:0 4px 20px rgba(0,0,0,.15)`;el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),3000);}
+
+function toggle(userId, sousRole, actif){
+  ap({action:'toggle',user_id:userId,sous_role:sousRole,actif:actif?1:0}).then(d=>{
+    if(d.success) toast(d.message);
+    else { toast(d.message,'error'); location.reload(); }
+  });
+}
+</script>
+
+<?php include __DIR__.'/../templates/footer.php'; ?>

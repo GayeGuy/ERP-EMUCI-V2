@@ -1,0 +1,16 @@
+# stockapp/.htaccess
+Options -Indexes
+
+RewriteEngine On
+RewriteRule ^$ index.php [L]
+
+# Bloquer accès aux dossiers sensibles
+RewriteRule ^includes/  - [F,L]
+RewriteRule ^templates/ - [F,L]
+RewriteRule ^cron/      - [F,L]
+RewriteRule ^vendor/    - [F,L]
+
+<IfModule mod_headers.c>
+  Header always unset Content-Security-Policy
+  Header always set Content-Security-Policy "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;"
+</IfModule>
