@@ -3,20 +3,19 @@
 //  includes/db.php  —  Connexion PDO centralisée
 // ============================================================
 
-// Lire les variables d'environnement Railway
-$mysql_url = getenv('MYSQL_URL') 
-          ?: ($_ENV['MYSQL_URL'] ?? null)
-          ?: ($_SERVER['MYSQL_URL'] ?? null);
+// Détecter Railway vs XAMPP
+$is_railway = (isset($_SERVER['HTTP_HOST']) && strpos($_SERVER['HTTP_HOST'], 'railway.app') !== false)
+           || file_exists('/.dockerenv');
 
-if ($mysql_url && $mysql_url !== 'NOT SET') {
-    $parts = parse_url($mysql_url);
-    define('DB_HOST', $parts['host']);
-    define('DB_PORT', (string)($parts['port'] ?? 3306));
-    define('DB_NAME', ltrim($parts['path'] ?? '/railway', '/'));
-    define('DB_USER', $parts['user'] ?? 'root');
-    define('DB_PASS', urldecode($parts['pass'] ?? ''));
+if ($is_railway) {
+    // Connexion Railway MySQL
+    define('DB_HOST', 'acela.proxy.rlwy.net');
+    define('DB_PORT', '49572');
+    define('DB_NAME', 'railway');
+    define('DB_USER', 'root');
+    define('DB_PASS', 'dctOextClDwvWwIEsnUULQoRaxXVlerq');
 } else {
-    // Fallback XAMPP local
+    // Connexion XAMPP locale
     define('DB_HOST', 'localhost');
     define('DB_PORT', '3306');
     define('DB_NAME', 'stockapp');
@@ -27,7 +26,10 @@ if ($mysql_url && $mysql_url !== 'NOT SET') {
 define('DB_CHARSET', 'utf8mb4');
 define('APP_NAME',    'DigiStock');
 define('APP_VERSION', '1.0.0');
-define('APP_URL',     'https://stockapp-production-e306.up.railway.app');
+$is_railway_url = file_exists('/.dockerenv');
+define('APP_URL', $is_railway_url 
+    ? 'https://stockapp-production-e306.up.railway.app' 
+    : 'http://localhost/stockapp');
 define('APP_TIMEZONE','Africa/Abidjan');
 
 date_default_timezone_set(APP_TIMEZONE);
