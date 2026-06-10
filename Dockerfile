@@ -21,6 +21,6 @@ COPY . .
 # Installer les dépendances PHP
 RUN composer install --optimize-autoloader --no-dev --no-interaction --ignore-platform-reqs
 
-EXPOSE 80
+EXPOSE 8080
 
-CMD ["php", "-S", "0.0.0.0:80", "-t", "/var/www/html"]
+CMD ["php", "-S", "0.0.0.0:8080", "-t", "/var/www/html"]
