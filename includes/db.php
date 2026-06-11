@@ -27,9 +27,7 @@ define('DB_CHARSET', 'utf8mb4');
 define('APP_NAME',    'DigiStock');
 define('APP_VERSION', '1.0.0');
 $is_railway_url = file_exists('/.dockerenv');
-define('APP_URL', $is_railway_url 
-    ? 'https://stockapp-production-e306.up.railway.app' 
-    : 'http://localhost/stockapp');
+define('APP_URL', 'https://stockapp-production-e306.up.railway.app');
 define('APP_TIMEZONE','Africa/Abidjan');
 
 date_default_timezone_set(APP_TIMEZONE);
