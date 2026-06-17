@@ -3,38 +3,43 @@ $secret = $_GET['secret'] ?? '';
 if ($secret !== 'emuci2026import') die('Accès refusé');
 require_once __DIR__ . '/includes/db.php';
 $db = get_db();
+$db->exec("SET FOREIGN_KEY_CHECKS=0");
 
-// Ajouter la colonne nom_emuci à sites
-$alters = [
-    "ALTER TABLE `sites` ADD COLUMN `nom_emuci` varchar(255) DEFAULT NULL AFTER `nom`",
-    "ALTER TABLE `sites` ADD COLUMN `mobile` tinyint(1) DEFAULT 0",
-    "ALTER TABLE `sites` ADD COLUMN `latitude` decimal(10,8) DEFAULT NULL",
-    "ALTER TABLE `sites` ADD COLUMN `longitude` decimal(11,8) DEFAULT NULL",
-    "ALTER TABLE `sites` ADD COLUMN `date_debut_mission` date DEFAULT NULL",
-    "ALTER TABLE `sites` ADD COLUMN `date_fin_mission` date DEFAULT NULL",
-    "ALTER TABLE `sites` ADD COLUMN `option_caisse` tinyint(1) DEFAULT 0",
-];
+// Recréer import_optotrace avec toutes les colonnes
+$db->exec("DROP TABLE IF EXISTS `import_optotrace`");
+$db->exec("CREATE TABLE `import_optotrace` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `session_id` int(10) UNSIGNED DEFAULT NULL,
+  `site_id` int(10) UNSIGNED DEFAULT NULL,
+  `site_nom_emuci` varchar(255) DEFAULT NULL,
+  `date_import` date DEFAULT NULL,
+  `keyname` varchar(100) DEFAULT NULL,
+  `quantity` int(11) DEFAULT 0,
+  `state` int(11) DEFAULT NULL,
+  `numero_chassis` varchar(100) DEFAULT NULL,
+  `numero_plaque` varchar(50) DEFAULT NULL,
+  `type_vehicule` varchar(50) DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-$success = 0; $errors = [];
-foreach ($alters as $sql) {
-    try {
-        $db->exec($sql);
-        $success++;
-    } catch(PDOException $e) {
-        $msg = $e->getMessage();
-        if (strpos($msg, 'Duplicate') !== false || strpos($msg, 'already exists') !== false) {
-            $success++;
-        } else {
-            $errors[] = $msg;
-        }
-    }
-}
+// Recréer import_optoplate avec toutes les colonnes
+$db->exec("DROP TABLE IF EXISTS `import_optoplate`");
+$db->exec("CREATE TABLE `import_optoplate` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `session_id` int(10) UNSIGNED DEFAULT NULL,
+  `site_id` int(10) UNSIGNED DEFAULT NULL,
+  `site_nom_emuci` varchar(255) DEFAULT NULL,
+  `date_import` date DEFAULT NULL,
+  `statut_plaque` varchar(50) DEFAULT NULL,
+  `numero_plaque` varchar(50) DEFAULT NULL,
+  `numero_chassis` varchar(100) DEFAULT NULL,
+  `type_vehicule` varchar(50) DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-echo "<h2>✅ $success colonnes ajoutées à sites</h2>";
-if ($errors) {
-    echo "<ul>";
-    foreach($errors as $e) echo "<li>".htmlspecialchars($e)."</li>";
-    echo "</ul>";
-}
+$db->exec("SET FOREIGN_KEY_CHECKS=1");
+echo "✅ import_optotrace et import_optoplate recréées!";
 echo "<p><b>SUPPRIMEZ ce fichier!</b></p>";
 ?>
