@@ -5,29 +5,26 @@ require_once __DIR__ . '/includes/db.php';
 $db = get_db();
 $db->exec("SET FOREIGN_KEY_CHECKS=0");
 
-// Supprimer et recréer commandes_bobines avec toutes les colonnes
-$db->exec("DROP TABLE IF EXISTS `commandes_bobines`");
-$db->exec("CREATE TABLE `commandes_bobines` (
+$db->exec("DROP TABLE IF EXISTS `commande_lignes`");
+$db->exec("CREATE TABLE `commande_lignes` (
   `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-  `numero` varchar(50) NOT NULL,
-  `site_id` int(10) UNSIGNED NOT NULL,
-  `type_bobine` varchar(20) DEFAULT NULL,
-  `libelle_type` varchar(255) DEFAULT NULL,
-  `statut` enum('en_attente','validee','livree','refusee','annulee') NOT NULL DEFAULT 'en_attente',
-  `notes` text DEFAULT NULL,
-  `demande_par` int(10) UNSIGNED DEFAULT NULL,
-  `superviseur_id` int(10) UNSIGNED DEFAULT NULL,
-  `gsb_id` int(10) UNSIGNED DEFAULT NULL,
-  `traite_par` int(10) UNSIGNED DEFAULT NULL,
-  `traite_at` datetime DEFAULT NULL,
-  `bobine_id` int(10) UNSIGNED DEFAULT NULL,
-  `motif_refus` text DEFAULT NULL,
-  `checked` tinyint(1) DEFAULT 0,
+  `commande_id` int(10) UNSIGNED NOT NULL,
+  `article_id` int(10) UNSIGNED DEFAULT NULL,
+  `distribution_id` int(10) UNSIGNED DEFAULT NULL,
+  `type_article` enum('consommable','bobine','pmma','rivet','equipement','autre') NOT NULL DEFAULT 'consommable',
+  `libelle` varchar(255) NOT NULL,
+  `quantite` int(10) UNSIGNED NOT NULL DEFAULT 1,
+  `unite` varchar(30) DEFAULT 'unité',
+  `prix_unitaire` int(11) DEFAULT 0,
+  `quantite_livree` int(10) UNSIGNED DEFAULT NULL,
+  `motif_ecart` text DEFAULT NULL,
+  `statut_ligne` enum('en_attente','valide','modifie','rejete') NOT NULL DEFAULT 'en_attente',
+  `motif_rejet` text DEFAULT NULL,
   `created_at` datetime DEFAULT current_timestamp(),
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
 $db->exec("SET FOREIGN_KEY_CHECKS=1");
-echo "✅ commandes_bobines recréée avec toutes les colonnes!";
+echo "✅ commande_lignes recréée!";
 echo "<p><b>SUPPRIMEZ ce fichier!</b></p>";
 ?>
