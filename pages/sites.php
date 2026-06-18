@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $old = db_fetch_one("SELECT * FROM sites WHERE id=?", [$id]);
         db_query("UPDATE sites SET nom=?,type=?,option_caisse=?,adresse=?,ville=?,responsable_id=?,actif=? WHERE id=?",
             [$nom, $type, $opt_caisse, $adresse, $ville, $resp_id, $actif, $id]);
-        audit_log($user['id'], 'UPDATE', 'sites', $id, "Modification site {$old['code']}", $old);
+        audit_log($user['id'], 'UPDATE', 'sites', $id, "Modification site {$old['code']}");
         json_response(true, 'Site mis à jour.');
     }
 
@@ -89,29 +89,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
         if ($decision === 'lier') {
             if (!$site_id) json_response(false,'Site DigiStock obligatoire.');
-            db_query("UPDATE sites SET nom_emuci=? WHERE id=?", [$inconnu['nom_emuci'], $site_id]);
-            db_query("UPDATE emuci_sites_inconnus SET statut='lie',site_id_lie=?,traite_par=?,traite_at=NOW() WHERE id=?",
-                [$site_id,$user['id'],$inconnu_id]);
+            $nom_emuci = $inconnu['nom_emuci'];
+            db_query("UPDATE sites SET nom_emuci=?, nom=? WHERE id=?", [$nom_emuci, $nom_emuci, $site_id]);
+            // Marquer TOUTES les occurrences du même nom EMUCI comme liées
+            db_query("UPDATE emuci_sites_inconnus SET statut='lie',site_id_lie=?,traite_par=?,traite_at=NOW() WHERE nom_emuci=?",
+                [$site_id,$user['id'],$nom_emuci]);
+            // Mettre à jour les imports existants qui avaient ce site sans site_id
+            db_query("UPDATE import_optoplate SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$site_id,$nom_emuci]);
+            db_query("UPDATE import_optotrace  SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$site_id,$nom_emuci]);
             $nom = db_fetch_value("SELECT nom FROM sites WHERE id=?",[$site_id]);
-            audit_log($user['id'],'UPDATE','sites',$site_id,"Mapping EMUCI '{$inconnu['nom_emuci']}' → '$nom'");
-            json_response(true,"Site lié. Les prochains imports reconnaîtront '{$inconnu['nom_emuci']}'.");
+            audit_log($user['id'],'UPDATE','sites',$site_id,"Mapping EMUCI '$nom_emuci' → '$nom'");
+            json_response(true,"Site lié. Tous les imports avec '$nom_emuci' ont été mis à jour.");
         }
 
         if ($decision === 'creer') {
             $nom_nouveau = trim($_POST['nom_nouveau'] ?? '') ?: $inconnu['nom_emuci'];
             $type_nouveau= trim($_POST['type_nouveau']?? 'pose');
-            $code_nouveau= strtoupper(substr(preg_replace('/[^A-Z0-9]/','',$inconnu['nom_emuci']),0,6));
-            // S'assurer que le code est unique
+            $nom_emuci   = $inconnu['nom_emuci'];
+            $code_nouveau= strtoupper(substr(preg_replace('/[^A-Z0-9]/','',$nom_emuci),0,6));
             $base = $code_nouveau; $suffix = 1;
             while (db_fetch_value("SELECT COUNT(*) FROM sites WHERE code=?",[$code_nouveau]) > 0)
                 $code_nouveau = $base . $suffix++;
             db_query("INSERT INTO sites (code,nom,type,nom_emuci,actif) VALUES (?,?,?,?,1)",
-                [$code_nouveau,$nom_nouveau,$type_nouveau,$inconnu['nom_emuci']]);
+                [$code_nouveau,$nom_nouveau,$type_nouveau,$nom_emuci]);
             $new_id = (int)db_last_id();
-            db_query("UPDATE emuci_sites_inconnus SET statut='cree',site_id_lie=?,traite_par=?,traite_at=NOW() WHERE id=?",
-                [$new_id,$user['id'],$inconnu_id]);
-            audit_log($user['id'],'CREATE','sites',$new_id,"Création depuis EMUCI '{$inconnu['nom_emuci']}'");
-            json_response(true,"Site '$nom_nouveau' créé et mappé.",$new_id);
+            // Marquer TOUTES les occurrences du même nom EMUCI
+            db_query("UPDATE emuci_sites_inconnus SET statut='cree',site_id_lie=?,traite_par=?,traite_at=NOW() WHERE nom_emuci=?",
+                [$new_id,$user['id'],$nom_emuci]);
+            // Mettre à jour les imports existants
+            db_query("UPDATE import_optoplate SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$new_id,$nom_emuci]);
+            db_query("UPDATE import_optotrace  SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$new_id,$nom_emuci]);
+            audit_log($user['id'],'CREATE','sites',$new_id,"Création depuis EMUCI '$nom_emuci'");
+            json_response(true,"Site '$nom_nouveau' créé. Tous les imports avec '$nom_emuci' ont été mis à jour.");
         }
 
         json_response(false,'Décision invalide.');

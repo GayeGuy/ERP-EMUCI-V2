@@ -72,6 +72,18 @@ $m = '';
 safe_exec($db, "ALTER TABLE `sites` ADD COLUMN `nom_emuci` varchar(150) DEFAULT NULL", $m);
 $results[] = "sites.nom_emuci : $m";
 
+// ── emuci_sites_inconnus — dédupliquer + UNIQUE sur nom_emuci ────────────────
+// Garder uniquement la dernière occurrence par nom_emuci
+$m = '';
+safe_exec($db, "DELETE t1 FROM emuci_sites_inconnus t1
+    INNER JOIN emuci_sites_inconnus t2
+    WHERE t1.nom_emuci = t2.nom_emuci AND t1.id < t2.id", $m);
+$results[] = "emuci_sites_inconnus dédupliqué : $m";
+
+$m = '';
+safe_exec($db, "ALTER TABLE emuci_sites_inconnus ADD UNIQUE KEY uq_nom_emuci (nom_emuci)", $m);
+$results[] = "emuci_sites_inconnus UNIQUE(nom_emuci) : $m";
+
 // ── emuci_sites_inconnus — renommer nom_site → nom_emuci + ajouter type_import ──
 $m = '';
 safe_exec($db, "ALTER TABLE `emuci_sites_inconnus` CHANGE COLUMN `nom_site` `nom_emuci` varchar(255) NOT NULL", $m);
