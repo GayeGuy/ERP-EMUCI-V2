@@ -87,5 +87,12 @@ foreach ($db->query("SHOW COLUMNS FROM `import_optotrace`") as $c) echo $c['Fiel
 echo "\n--- Colonnes réelles dans 'import_optoplate' ---\n";
 foreach ($db->query("SHOW COLUMNS FROM `import_optoplate`") as $c) echo $c['Field'] . "\n";
 
+echo "\n--- Colonnes réelles dans 'emuci_sites_inconnus' ---\n";
+try {
+    foreach ($db->query("SHOW COLUMNS FROM `emuci_sites_inconnus`") as $c) echo $c['Field'] . "\n";
+} catch (PDOException $e) {
+    echo "❌ Table introuvable : " . $e->getMessage() . "\n";
+}
+
 echo "</pre>";
 echo "<p><b>SUPPRIMEZ ce fichier!</b></p>";
