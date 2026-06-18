@@ -68,6 +68,12 @@ foreach ($cols_optoplate as $col => $def) {
 }
 $results[] = "✅ import_optoplate — colonnes vérifiées/ajoutées";
 
+// ============================================================
+// sites — colonnes manquantes
+// ============================================================
+add_col_if_missing($db, 'sites', 'nom_emuci', "varchar(150) DEFAULT NULL");
+$results[] = "✅ sites — colonne nom_emuci vérifiée/ajoutée";
+
 $db->exec("SET FOREIGN_KEY_CHECKS=1");
 
 foreach ($results as $r) echo "<p>$r</p>";
