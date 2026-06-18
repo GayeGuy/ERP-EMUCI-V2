@@ -181,27 +181,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
     $date_import = trim($_POST['date_import'] ?? date('Y-m-d'));
 
     if (empty($_FILES['fichier_optoplate']) || $_FILES['fichier_optoplate']['error'] !== UPLOAD_ERR_OK) {
-        $msg_optoplate = ['type'=>'danger','text'=>'Veuillez sélectionner un fichier CSV valide.'];
+        $msg_optoplate = ['type'=>'danger','text'=>'Veuillez sélectionner un fichier CSV ou XLSX valide.'];
     } else {
         $tmp = $_FILES['fichier_optoplate']['tmp_name'];
         $ext = strtolower(pathinfo($_FILES['fichier_optoplate']['name'], PATHINFO_EXTENSION));
 
-        if ($ext !== 'csv') {
-            $msg_optoplate = ['type'=>'danger','text'=>'Format invalide. Utilisez un fichier .csv (exporté depuis OptoPlate).'];
+        if (!in_array($ext, ['csv', 'xlsx', 'xls'])) {
+            $msg_optoplate = ['type'=>'danger','text'=>'Format invalide. Utilisez un fichier .csv ou .xlsx (exporté depuis OptoPlate).'];
         } else {
             $session_id = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
                 mt_rand(0,0xffff),mt_rand(0,0xffff),mt_rand(0,0xffff),
                 mt_rand(0,0x0fff)|0x4000,mt_rand(0,0x3fff)|0x8000,
                 mt_rand(0,0xffff),mt_rand(0,0xffff),mt_rand(0,0xffff));
 
-            // Lire CSV avec séparateur ;
-            $handle = fopen($tmp, 'r');
-            $headers_raw = fgetcsv($handle, 0, ';');
-            if (!$headers_raw) {
-                $msg_optoplate = ['type'=>'danger','text'=>'Fichier CSV vide ou invalide.'];
+            // Lire les lignes selon le format
+            $all_rows = [];
+            if ($ext === 'csv') {
+                $handle = fopen($tmp, 'r');
+                $headers_raw = fgetcsv($handle, 0, ';');
+                if ($headers_raw) {
+                    while (($row = fgetcsv($handle, 0, ';')) !== false) {
+                        $all_rows[] = $row;
+                    }
+                }
+                fclose($handle);
+                $headers = $headers_raw ? array_map(fn($h) => trim($h, "\"\xEF\xBB\xBF"), $headers_raw) : [];
             } else {
-                // Normaliser les headers
-                $headers = array_map(fn($h) => trim($h, "\"\xEF\xBB\xBF"), $headers_raw);
+                $autoload = __DIR__ . '/../vendor/autoload.php';
+                if (!file_exists($autoload)) {
+                    $msg_optoplate = ['type'=>'danger','text'=>'PhpSpreadsheet non installé. Exécutez : composer require phpoffice/phpspreadsheet'];
+                    $headers = [];
+                } else {
+                    require_once $autoload;
+                    $tmp_dest = sys_get_temp_dir().'/optoplate_'.uniqid().'.'.$ext;
+                    move_uploaded_file($tmp, $tmp_dest);
+                    $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmp_dest);
+                    $sheet = $spreadsheet->getActiveSheet();
+                    $rows_raw = $sheet->toArray(null, true, true, false);
+                    @unlink($tmp_dest);
+                    $headers_raw = $rows_raw[0] ?? [];
+                    $headers = array_map('trim', $headers_raw);
+                    $all_rows = array_slice($rows_raw, 1);
+                }
+            }
+
+            if (empty($headers)) {
+                $msg_optoplate = ['type'=>'danger','text'=>'Fichier vide ou invalide.'];
+            } else {
                 $col = array_flip($headers);
 
                 // Colonnes requises
@@ -209,7 +235,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                 $missing = array_filter($required, fn($r) => !isset($col[$r]));
                 if ($missing) {
                     $msg_optoplate = ['type'=>'danger','text'=>'Colonnes manquantes : '.implode(', ', $missing)];
-                    fclose($handle);
                 } else {
                     $nb_ok = 0; $nb_err = 0; $sites_inconnus = [];
 
@@ -220,9 +245,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                     // Supprimer import du même jour
                     db_query("DELETE FROM import_optoplate WHERE date_import=?", [$date_import]);
 
-                    while (($row = fgetcsv($handle, 0, ';')) !== false) {
+                    foreach ($all_rows as $row) {
                         if (count($row) < 5) continue;
-                        $get = fn($k) => trim($row[$col[$k] ?? -1] ?? '');
+                        $get = fn($k) => trim((string)($row[$col[$k] ?? -1] ?? ''));
 
                         $date_install = $get("Date d'installation") ?: null;
                         $immat        = $get("Numéro d'immatriculation");
@@ -252,7 +277,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         );
                         $nb_ok++;
                     }
-                    fclose($handle);
 
                     db_query("UPDATE import_sessions_emuci SET statut='termine',nb_lignes_optoplate=?,nb_erreurs=? WHERE id=?",
                         [$nb_ok,$nb_err,$session_id]);
