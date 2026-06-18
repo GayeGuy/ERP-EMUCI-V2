@@ -12,8 +12,8 @@ function safe_exec(PDO $db, string $sql, string &$msg): void {
         $msg = "✅ OK";
     } catch (PDOException $e) {
         $code = $e->getCode();
-        // 1060 = duplicate column, 1091 = can't drop non-existing — ignorés
-        if (in_array($code, ['42S21','42000']) || strpos($e->getMessage(),'1060') !== false) {
+        // 1060 = duplicate column name — ignoré
+        if ($code === '42S21' || strpos($e->getMessage(),'1060') !== false) {
             $msg = "ℹ️ déjà OK";
         } else {
             $msg = "❌ " . $e->getMessage();
