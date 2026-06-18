@@ -61,7 +61,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                    AND pj.date_point=?
                    AND pj.type_point='point_18h'
                    AND pj.statut='valide'
-                 GROUP BY fu.bobine_id",
+                 GROUP BY fu.bobine_id, b.numero, b.type_code, b.format, b.serie,
+                          b.stock_systeme, b.films_restants, b.statut, pj.id, pj.type_point",
                 [$site_id, $date]
             );
 
@@ -73,12 +74,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                             SUM(fu.films_endommages) AS films_endommages,
                             b.numero, b.type_code, b.format, b.serie,
                             b.stock_systeme, b.films_restants, b.statut,
-                            pj.id AS point_id, pj.type_point
+                            ANY_VALUE(pj.id) AS point_id, ANY_VALUE(pj.type_point) AS type_point
                      FROM op_films_utilises fu
                      JOIN op_points_journaliers pj ON pj.id = fu.point_id
                      JOIN op_bobines b ON b.id = fu.bobine_id
                      WHERE pj.site_id=? AND pj.date_point=? AND pj.statut='valide'
-                     GROUP BY fu.bobine_id",
+                     GROUP BY fu.bobine_id, b.numero, b.type_code, b.format, b.serie,
+                              b.stock_systeme, b.films_restants, b.statut",
                     [$site_id, $date]
                 );
             }
@@ -91,11 +93,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                             0 AS films_endommages,
                             b.numero, b.type_code, b.format, b.serie,
                             b.stock_systeme, b.films_restants, b.statut,
-                            cb.stock_avant
+                            MAX(cb.stock_avant) AS stock_avant
                      FROM consommations_bobines cb
                      JOIN op_bobines b ON b.id = cb.bobine_id
                      WHERE cb.site_id=? AND cb.date_conso=?
-                     GROUP BY cb.bobine_id",
+                     GROUP BY cb.bobine_id, b.numero, b.type_code, b.format, b.serie,
+                              b.stock_systeme, b.films_restants, b.statut",
                     [$site_id, $date]
                 );
             }
