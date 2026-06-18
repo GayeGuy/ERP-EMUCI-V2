@@ -3,35 +3,34 @@ $secret = $_GET['secret'] ?? '';
 if ($secret !== 'emuci2026import') die('Accès refusé');
 require_once __DIR__ . '/includes/db.php';
 $db = get_db();
-$db->exec("SET FOREIGN_KEY_CHECKS=0");
 
 $results = [];
 
-// Helper : ajouter une colonne si elle n'existe pas
-function add_col_if_missing(PDO $db, string $table, string $col, string $def): void {
+function safe_exec(PDO $db, string $sql, string &$msg): void {
     try {
-        $db->exec("ALTER TABLE `$table` ADD COLUMN `$col` $def");
+        $db->exec($sql);
+        $msg = "✅ OK";
     } catch (PDOException $e) {
-        // 1060 = Duplicate column name — colonne déjà présente, on ignore
-        if (strpos($e->getMessage(), '1060') === false) throw $e;
+        $code = $e->getCode();
+        // 1060 = duplicate column, 1091 = can't drop non-existing — ignorés
+        if (in_array($code, ['42S21','42000']) || strpos($e->getMessage(),'1060') !== false) {
+            $msg = "ℹ️ déjà OK";
+        } else {
+            $msg = "❌ " . $e->getMessage();
+        }
     }
 }
 
-// ============================================================
-// Corriger import_session_id INT → VARCHAR(36) sur les deux tables
-// ============================================================
+$db->exec("SET FOREIGN_KEY_CHECKS=0");
+
+// ── import_session_id INT → VARCHAR(36) ───────────────────────
 foreach (['import_optotrace', 'import_optoplate'] as $tbl) {
-    try {
-        $db->exec("ALTER TABLE `$tbl` MODIFY COLUMN `import_session_id` varchar(36) DEFAULT NULL");
-        $results[] = "✅ $tbl.import_session_id converti en VARCHAR(36)";
-    } catch (PDOException $e) {
-        $results[] = "ℹ️ $tbl.import_session_id : " . $e->getMessage();
-    }
+    $m = '';
+    safe_exec($db, "ALTER TABLE `$tbl` MODIFY COLUMN `import_session_id` varchar(36) DEFAULT NULL", $m);
+    $results[] = "$tbl.import_session_id → varchar(36) : $m";
 }
 
-// ============================================================
-// import_optotrace — colonnes manquantes
-// ============================================================
+// ── import_optotrace — colonnes manquantes ────────────────────
 $cols_optotrace = [
     'batch'       => "varchar(100) DEFAULT NULL",
     'project'     => "varchar(100) DEFAULT NULL",
@@ -46,13 +45,12 @@ $cols_optotrace = [
     'importe_par' => "int(10) UNSIGNED DEFAULT NULL",
 ];
 foreach ($cols_optotrace as $col => $def) {
-    add_col_if_missing($db, 'import_optotrace', $col, $def);
+    $m = '';
+    safe_exec($db, "ALTER TABLE `import_optotrace` ADD COLUMN `$col` $def", $m);
+    $results[] = "import_optotrace.$col : $m";
 }
-$results[] = "✅ import_optotrace — colonnes vérifiées/ajoutées";
 
-// ============================================================
-// import_optoplate — colonnes manquantes
-// ============================================================
+// ── import_optoplate — colonnes manquantes ────────────────────
 $cols_optoplate = [
     'date_installation' => "datetime     DEFAULT NULL",
     'numero_dossier'    => "varchar(50)  DEFAULT NULL",
@@ -64,18 +62,19 @@ $cols_optoplate = [
     'importe_par'       => "int(10) UNSIGNED DEFAULT NULL",
 ];
 foreach ($cols_optoplate as $col => $def) {
-    add_col_if_missing($db, 'import_optoplate', $col, $def);
+    $m = '';
+    safe_exec($db, "ALTER TABLE `import_optoplate` ADD COLUMN `$col` $def", $m);
+    $results[] = "import_optoplate.$col : $m";
 }
-$results[] = "✅ import_optoplate — colonnes vérifiées/ajoutées";
 
-// ============================================================
-// sites — colonnes manquantes
-// ============================================================
-add_col_if_missing($db, 'sites', 'nom_emuci', "varchar(150) DEFAULT NULL");
-$results[] = "✅ sites — colonne nom_emuci vérifiée/ajoutée";
+// ── sites — nom_emuci ─────────────────────────────────────────
+$m = '';
+safe_exec($db, "ALTER TABLE `sites` ADD COLUMN `nom_emuci` varchar(150) DEFAULT NULL", $m);
+$results[] = "sites.nom_emuci : $m";
 
 $db->exec("SET FOREIGN_KEY_CHECKS=1");
 
-foreach ($results as $r) echo "<p>$r</p>";
+echo "<pre style='font-family:monospace;font-size:14px;padding:20px'>";
+foreach ($results as $r) echo $r . "\n";
+echo "</pre>";
 echo "<p><b>SUPPRIMEZ ce fichier!</b></p>";
-?>
