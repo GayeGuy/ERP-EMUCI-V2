@@ -22,7 +22,7 @@ function add_col_if_missing(PDO $db, string $table, string $col, string $def): v
 // ============================================================
 foreach (['import_optotrace', 'import_optoplate'] as $tbl) {
     try {
-        $db->exec("ALTER TABLE `$tbl` MODIFY COLUMN `import_session_id` varchar(36) NOT NULL DEFAULT ''");
+        $db->exec("ALTER TABLE `$tbl` MODIFY COLUMN `import_session_id` varchar(36) DEFAULT NULL");
         $results[] = "✅ $tbl.import_session_id converti en VARCHAR(36)";
     } catch (PDOException $e) {
         $results[] = "ℹ️ $tbl.import_session_id : " . $e->getMessage();
