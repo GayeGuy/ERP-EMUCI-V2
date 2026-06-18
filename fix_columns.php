@@ -76,5 +76,16 @@ $db->exec("SET FOREIGN_KEY_CHECKS=1");
 
 echo "<pre style='font-family:monospace;font-size:14px;padding:20px'>";
 foreach ($results as $r) echo $r . "\n";
+
+// Diagnostic : lister les colonnes réelles des tables concernées
+echo "\n--- Colonnes réelles dans 'sites' ---\n";
+foreach ($db->query("SHOW COLUMNS FROM `sites`") as $c) echo $c['Field'] . "\n";
+
+echo "\n--- Colonnes réelles dans 'import_optotrace' ---\n";
+foreach ($db->query("SHOW COLUMNS FROM `import_optotrace`") as $c) echo $c['Field'] . "\n";
+
+echo "\n--- Colonnes réelles dans 'import_optoplate' ---\n";
+foreach ($db->query("SHOW COLUMNS FROM `import_optoplate`") as $c) echo $c['Field'] . "\n";
+
 echo "</pre>";
 echo "<p><b>SUPPRIMEZ ce fichier!</b></p>";
