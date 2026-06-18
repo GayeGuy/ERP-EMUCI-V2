@@ -72,6 +72,15 @@ $m = '';
 safe_exec($db, "ALTER TABLE `sites` ADD COLUMN `nom_emuci` varchar(150) DEFAULT NULL", $m);
 $results[] = "sites.nom_emuci : $m";
 
+// ── emuci_sites_inconnus — renommer nom_site → nom_emuci + ajouter type_import ──
+$m = '';
+safe_exec($db, "ALTER TABLE `emuci_sites_inconnus` CHANGE COLUMN `nom_site` `nom_emuci` varchar(255) NOT NULL", $m);
+$results[] = "emuci_sites_inconnus.nom_site → nom_emuci : $m";
+
+$m = '';
+safe_exec($db, "ALTER TABLE `emuci_sites_inconnus` ADD COLUMN `type_import` varchar(20) DEFAULT NULL", $m);
+$results[] = "emuci_sites_inconnus.type_import : $m";
+
 $db->exec("SET FOREIGN_KEY_CHECKS=1");
 
 echo "<pre style='font-family:monospace;font-size:14px;padding:20px'>";
