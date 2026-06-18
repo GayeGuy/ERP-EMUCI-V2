@@ -378,12 +378,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         $quantity   = (int)$get('quantity');  // films restants
                         $type_trace = $get('type');
                         $state      = (int)$get('state');
-                        $first_use  = $get('first')     ?: null;
-                        $last_use   = $get('last')      ?: null;
+                        $parse_dt   = fn($v) => ($v && strtotime($v) !== false) ? date('Y-m-d H:i:s', strtotime($v)) : null;
+                        $first_use  = $parse_dt($get('first'));
+                        $last_use   = $parse_dt($get('last'));
                         $site_nom   = $get('site');
-                        $sended_on  = $get('sendedOn')  ?: null;
-                        $received_on = $get('receivedOn') ?: null;
-                        $canceled_on = $get('canceledOn') ?: null;
+                        $sended_on  = $parse_dt($get('sendedOn'));
+                        $received_on = $parse_dt($get('receivedOn'));
+                        $canceled_on = $parse_dt($get('canceledOn'));
 
                         if (!$keyname) { $nb_err++; continue; }
 
