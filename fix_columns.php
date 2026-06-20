@@ -276,6 +276,11 @@ safe_exec($db,
      NOT NULL DEFAULT 'article'", $m);
 $results[] = "commande_lignes.type_article ENUM : $m";
 
+// distribution_id existe sur Railway mais pas localement — s'assurer qu'il est nullable
+$m = '';
+safe_exec($db, "ALTER TABLE `commande_lignes` MODIFY COLUMN `distribution_id` INT UNSIGNED DEFAULT NULL", $m);
+$results[] = "commande_lignes.distribution_id nullable : $m";
+
 // ── op_stock_rivets — ajouter type_rivet ─────────────────────
 $m = '';
 safe_exec($db, "ALTER TABLE `op_stock_rivets` ADD COLUMN `type_rivet` varchar(20) NOT NULL DEFAULT 'gonflable'", $m);
