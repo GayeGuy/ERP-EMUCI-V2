@@ -124,7 +124,7 @@ safe_exec($db,
      WHERE b.site_id IS NULL", $m);
 $results[] = "op_bobines.site_id mis à jour depuis import_optotrace : $m";
 
-// ── op_types_bobines — créer si absente + insérer données ─────
+// ── op_types_bobines — créer si absente ───────────────────────
 $m = '';
 safe_exec($db, "CREATE TABLE IF NOT EXISTS `op_types_bobines` (
   `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -132,10 +132,20 @@ safe_exec($db, "CREATE TABLE IF NOT EXISTS `op_types_bobines` (
   `libelle` varchar(150) NOT NULL,
   `serie` char(4) NOT NULL,
   `actif` tinyint(1) DEFAULT 1,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_code` (`code`)
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", $m);
 $results[] = "op_types_bobines (CREATE IF NOT EXISTS) : $m";
+
+// ── Dédupliquer op_types_bobines (garder le plus petit id par code) ──
+$m = '';
+safe_exec($db, "DELETE t1 FROM op_types_bobines t1
+    JOIN op_types_bobines t2 ON t1.code = t2.code AND t1.id > t2.id", $m);
+$results[] = "op_types_bobines dédupliqué : $m";
+
+// ── Ajouter UNIQUE KEY sur code ────────────────────────────────
+$m = '';
+safe_exec($db, "ALTER TABLE op_types_bobines ADD UNIQUE KEY uq_type_code (code)", $m);
+$results[] = "op_types_bobines UNIQUE(code) : $m";
 
 $types_data = [
     ['A001','Format Auto, version Privee','A'],
