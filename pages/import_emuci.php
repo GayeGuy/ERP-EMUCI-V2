@@ -236,6 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                 if ($missing) {
                     $msg_optoplate = ['type'=>'danger','text'=>'Colonnes manquantes : '.implode(', ', $missing)];
                 } else {
+                    set_time_limit(0);
                     $nb_ok = 0; $nb_err = 0; $sites_inconnus = [];
 
                     // Créer session
@@ -245,6 +246,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                     // Supprimer import du même jour
                     db_query("DELETE FROM import_optoplate WHERE date_import=?", [$date_import]);
 
+                    db_begin();
                     foreach ($all_rows as $row) {
                         if (count($row) < 5) continue;
                         $get = fn($k) => trim((string)($row[$col[$k] ?? -1] ?? ''));
@@ -277,6 +279,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         );
                         $nb_ok++;
                     }
+
+                    db_commit();
 
                     db_query("UPDATE import_sessions_emuci SET statut='termine',nb_lignes_optoplate=?,nb_erreurs=? WHERE id=?",
                         [$nb_ok,$nb_err,$session_id]);
@@ -353,6 +357,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                     if ($missing) throw new Exception('Colonnes manquantes : '.implode(', ', $missing).
                         '. Colonnes détectées : '.implode(', ', array_filter($headers)));
 
+                    set_time_limit(0);
+
                     // Créer session
                     db_query("INSERT INTO import_sessions_emuci (id,date_import,type_import,statut,importe_par) VALUES (?,?,'optotrace','en_cours',?)",
                         [$session_id, $date_import, $user['id']]);
@@ -362,6 +368,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
 
                     $nb_ok = 0; $nb_err = 0; $nb_stock_maj = 0; $sites_inconnus = [];
 
+                    db_begin();
                     for ($i = 1; $i < count($rows); $i++) {
                         $row = $rows[$i];
                         // Helper : lire une colonne par nom, retourner '' si absente
@@ -489,6 +496,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
 
                         $nb_ok++;
                     }
+
+                    db_commit();
 
                     db_query("UPDATE import_sessions_emuci SET statut='termine',nb_lignes_optotrace=?,nb_erreurs=? WHERE id=?",
                         [$nb_ok, $nb_err, $session_id]);
