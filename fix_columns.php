@@ -229,6 +229,31 @@ safe_exec($db, "CREATE TABLE IF NOT EXISTS `distribution_lignes` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", $m);
 $results[] = "distribution_lignes (CREATE IF NOT EXISTS) : $m";
 
+// ── distributions_site — colonnes manquantes ─────────────────
+foreach ([
+    'recu_at'  => "datetime DEFAULT NULL",
+    'recu_par' => "int(10) UNSIGNED DEFAULT NULL",
+    'expedie_at' => "datetime DEFAULT NULL",
+    'fichier_bl' => "varchar(255) DEFAULT NULL",
+    'notes'    => "text DEFAULT NULL",
+    'created_by' => "int(10) UNSIGNED DEFAULT NULL",
+] as $col => $def) {
+    $m = '';
+    safe_exec($db, "ALTER TABLE `distributions_site` ADD COLUMN `$col` $def", $m);
+    $results[] = "distributions_site.$col : $m";
+}
+
+// ── distribution_lignes — colonnes manquantes ─────────────────
+foreach ([
+    'commande_ligne_id' => "int(10) UNSIGNED DEFAULT NULL",
+    'quantite_recue'    => "int(11) DEFAULT 0",
+    'unite'             => "varchar(20) DEFAULT 'unite'",
+] as $col => $def) {
+    $m = '';
+    safe_exec($db, "ALTER TABLE `distribution_lignes` ADD COLUMN `$col` $def", $m);
+    $results[] = "distribution_lignes.$col : $m";
+}
+
 // ── Normaliser valeurs statut invalides (vides / legacy) ─────
 foreach ([
     'commandes'           => 'en_attente',
