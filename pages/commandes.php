@@ -289,6 +289,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     [$cmd['site_id'], $type_rivet, (int)$lr['qte'], (int)$lr['qte']]
                 );
             }
+
+            // Mettre à jour stock PMMA (+)
+            $lignes_pmma = db_fetch_all(
+                "SELECT cl.libelle, cl.quantite_livree AS qte
+                 FROM commande_lignes cl
+                 WHERE cl.commande_id=? AND cl.type_article='pmma' AND cl.quantite_livree > 0",
+                [$cmd_id]
+            );
+            foreach ($lignes_pmma as $lr) {
+                // libelle = 'PMMA TYPE_X' → type_pmma = 'TYPE_X'
+                $type_pmma = trim(preg_replace('/^PMMA\s*/i', '', $lr['libelle']));
+                if ($type_pmma) {
+                    db_query(
+                        "INSERT INTO stock_pmma_site (site_id, type_pmma, quantite) VALUES (?,?,?)
+                         ON DUPLICATE KEY UPDATE quantite = quantite + ?",
+                        [$cmd['site_id'], $type_pmma, (int)$lr['qte'], (int)$lr['qte']]
+                    );
+                }
+            }
             audit_log($user['id'],'UPDATE','commandes',$cmd_id,"Réception confirmée par coordinateur");
             db_commit();
             json_response(true,'Réception confirmée. Stock site mis à jour. ✅');

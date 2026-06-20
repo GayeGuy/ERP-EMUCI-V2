@@ -301,6 +301,19 @@ safe_exec($db,
      NOT NULL DEFAULT 'article'", $m);
 $results[] = "commande_lignes.type_article ENUM : $m";
 
+// ── stock_pmma_site — créer si absente + UNIQUE KEY ──────────
+safe_exec($db, "CREATE TABLE IF NOT EXISTS `stock_pmma_site` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `site_id` int(10) UNSIGNED NOT NULL,
+  `type_pmma` varchar(50) DEFAULT 'Standard',
+  `quantite` int(10) UNSIGNED NOT NULL DEFAULT 0,
+  `seuil_alerte` int(10) UNSIGNED DEFAULT 10,
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_site_type` (`site_id`,`type_pmma`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", $m);
+$results[] = "stock_pmma_site (CREATE IF NOT EXISTS) : $m";
+
 // distribution_id existe sur Railway mais pas localement — s'assurer qu'il est nullable
 $m = '';
 safe_exec($db, "ALTER TABLE `commande_lignes` MODIFY COLUMN `distribution_id` INT UNSIGNED DEFAULT NULL", $m);
