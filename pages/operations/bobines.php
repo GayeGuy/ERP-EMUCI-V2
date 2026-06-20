@@ -180,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
 
     // ── DEMANDER UTILISATION (coordinateur → GSB)
     if ($action==='demander_utilisation') {
-        require_permission('bobines','can_update');
+        if (!$is_coord) json_response(false,'Réservé au coordinateur de site.');
         $id    = (int)($_POST['id'] ?? 0);
         $motif = trim($_POST['motif'] ?? '');
         if (!$motif) json_response(false,'Le motif est obligatoire pour une demande d\'utilisation.');
@@ -905,16 +905,14 @@ endif;
             <td><?= h($b['site_nom']??'—') ?></td>
             <td style="text-align:center;font-weight:700"><?= fmt_number($b['stock_systeme']) ?></td>
             <td style="text-align:center">
-              <?php if(can('bobines','can_update')): ?>
               <?php if($is_coord): ?>
-              <!-- Coordinateur : demande d'utilisation -->
+              <!-- Coordinateur : demande d'utilisation (pas besoin de can_update) -->
               <button class="btn btn-primary btn-sm" onclick="demanderUtilisation(<?= $b['id'] ?>, '<?= h($b['numero']) ?>')">
                 ▶️ Demander utilisation
               </button>
-              <?php else: ?>
+              <?php elseif(can('bobines','can_update')): ?>
               <!-- Admin/Superviseur/GSB : changement direct -->
               <button class="btn btn-primary btn-sm" onclick="changerStatut(<?= $b['id'] ?>,'en_cours')" title="Mettre en utilisation">▶️ Mettre en utilisation</button>
-              <?php endif; ?>
               <?php endif; ?>
             </td>
           </tr>
