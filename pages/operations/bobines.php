@@ -443,7 +443,7 @@ $coord_types = db_fetch_all("SELECT DISTINCT type_code FROM op_bobines WHERE sit
     <option value="en_cours" <?= $f_statut==='en_cours'?'selected':'' ?>>▶️ En utilisation</option>
     <option value="en_stock" <?= $f_statut==='en_stock'?'selected':'' ?>>📦 En stock</option>
     <option value="epuisee"  <?= $f_statut==='epuisee'?'selected':'' ?>>❌ Épuisées</option>
-    <option value="retiree"  <?= $f_statut==='retiree'?'selected':'' ?>>✅ Terminées</option>
+    <option value="retiree"  <?= $f_statut==='retiree'?'selected':'' ?>>🔄 Retirées</option>
   </select>
 
   <select name="type" onchange="this.form.submit()"
@@ -520,7 +520,7 @@ $coord_types = db_fetch_all("SELECT DISTINCT type_code FROM op_bobines WHERE sit
         </td>
         <td style="text-align:center">
           <span class="bstat bstat-<?= $b['statut'] ?>">
-            <?= ['en_cours'=>'▶️ En utilisation','en_stock'=>'📦 En stock','epuisee'=>'❌ Épuisée','retiree'=>'✅ Terminée','perdue'=>'⚠️ Perdue'][$b['statut']] ?? h($b['statut']) ?>
+            <?= ['en_cours'=>'▶️ En utilisation','en_stock'=>'📦 En stock','epuisee'=>'❌ Épuisée','retiree'=>'🔄 Retirée','perdue'=>'⚠️ Perdue'][$b['statut']] ?? h($b['statut']) ?>
           </span>
         </td>
       </tr>
@@ -563,7 +563,7 @@ endif;
 <div class="bob-kpi" style="grid-template-columns:repeat(6,1fr)">
   <div class="bk" style="border-left:3px solid var(--blue)"><div class="bk-icon">▶️</div><div><div class="bk-val" style="color:var(--blue)"><?= $stats_map['en_cours']['n']??0 ?></div><div class="bk-label">En utilisation</div></div></div>
   <div class="bk" style="border-left:3px solid var(--success)"><div class="bk-icon">📦</div><div><div class="bk-val" style="color:var(--success)"><?= $stats_map['en_stock']['n']??0 ?></div><div class="bk-label">En stock</div></div></div>
-  <div class="bk" style="border-left:3px solid #9e9e9e"><div class="bk-icon">✅</div><div><div class="bk-val" style="color:#9e9e9e"><?= $stats_map['retiree']['n']??0 ?></div><div class="bk-label">Terminées</div></div></div>
+  <div class="bk" style="border-left:3px solid #9e9e9e"><div class="bk-icon">🔄</div><div><div class="bk-val" style="color:#9e9e9e"><?= $stats_map['retiree']['n']??0 ?></div><div class="bk-label">Retirées</div></div></div>
   <div class="bk" style="border-left:3px solid #e65100"><div class="bk-icon">❌</div><div><div class="bk-val" style="color:#e65100"><?= $stats_map['perdue']['n']??0 ?></div><div class="bk-label">Perdues</div></div></div>
   <div class="bk"><div class="bk-icon">📉</div><div><div class="bk-val" style="color:var(--danger)"><?= $conso_today ?></div><div class="bk-label">Films conso. aujourd'hui</div></div></div>
   <div class="bk" style="<?= $nb_ecarts_ouverts>0?'border-color:var(--danger)':'' ?>">
@@ -580,7 +580,7 @@ endif;
   <button class="tab-btn active" onclick="showTab('liste',this)">📋 Toutes les bobines</button>
   <button class="tab-btn" onclick="showTab('en_cours',this)">▶️ En utilisation <span style="background:var(--blue);color:white;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px"><?= $stats_map['en_cours']['n']??0 ?></span></button>
   <button class="tab-btn" onclick="showTab('en_stock',this)">📦 En stock <span style="background:var(--success);color:white;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px"><?= $stats_map['en_stock']['n']??0 ?></span></button>
-  <button class="tab-btn" onclick="showTab('retiree',this)">✅ Terminées</button>
+  <button class="tab-btn" onclick="showTab('retiree',this)">🔄 Retirées</button>
   <button class="tab-btn" onclick="showTab('perdue',this)">❌ Perdues <?= ($stats_map['perdue']['n']??0)>0?"<span style='background:#e65100;color:white;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px'>".($stats_map['perdue']['n']??0)."</span>":'' ?></button>
   <button class="tab-btn" onclick="showTab('ecarts',this)" id="tabEcartsBtn">
     ⚠️ Écarts <?= $nb_ecarts_ouverts>0?"<span style='background:var(--danger);color:white;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px'>$nb_ecarts_ouverts</span>":'' ?>
@@ -934,7 +934,7 @@ endif;
   );
   ?>
   <div class="card">
-    <div class="card-header"><h3>✅ Bobines terminées <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= count($bobines_retirees) ?>)</span></h3></div>
+    <div class="card-header"><h3>🔄 Bobines retirées <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= count($bobines_retirees) ?>)</span></h3></div>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Numéro</th><th>Type</th><th>Site</th><th style="text-align:center">Films utilisés</th><th>Statut</th></tr></thead>
