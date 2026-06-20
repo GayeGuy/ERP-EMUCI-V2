@@ -198,10 +198,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         // Notifier les GSB
         $gsb_users = db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='gestionnaire_stock_bobines' AND u.actif=1");
         foreach($gsb_users as $gsb) {
-            db_query("INSERT INTO notifications (user_id,type,titre,message,ref_table,ref_id) VALUES (?,?,?,?,?,?)",
-                [$gsb['id'],'demande_bobine','Demande utilisation bobine',
-                 "Le coordinateur {$user['prenom']} {$user['nom']} demande l'utilisation de la bobine {$bob['numero']} ({$bob['site_nom']}). Motif : $motif",
-                 'demandes_bobines',$dem_id]);
+            db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                [$gsb['id'],'info','🎞️ Demande utilisation bobine',
+                 "{$user['prenom']} {$user['nom']} demande l'utilisation de la bobine {$bob['numero']} ({$bob['site_nom']}). Motif : $motif",
+                 'bobines.php']);
         }
         audit_log($user['id'],'CREATE','demandes_bobines',$dem_id,"Demande utilisation bobine {$bob['numero']} — $motif");
         json_response(true,'Demande envoyée. En attente de validation du gestionnaire stock bobines.');
@@ -226,11 +226,11 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
                 db_query("UPDATE op_bobines SET statut='en_cours' WHERE id=?",[$dem['bobine_id']]);
             }
             // Notifier le coordinateur
-            db_query("INSERT INTO notifications (user_id,type,titre,message,ref_table,ref_id) VALUES (?,?,?,?,?,?)",
-                [$dem['demande_par'],'demande_bobine',
-                 $decision==='approuvee'?'Demande approuvée':'Demande refusée',
+            db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                [$dem['demande_par'],'info',
+                 $decision==='approuvee'?'🎞️ Demande bobine approuvée':'🎞️ Demande bobine refusée',
                  "Votre demande pour la bobine {$dem['bobine_num']} a été ".($decision==='approuvee'?'approuvée ✅':'refusée ❌').". Motif : $motif_rep",
-                 'demandes_bobines',$dem_id]);
+                 'bobines.php']);
             audit_log($user['id'],'UPDATE','demandes_bobines',$dem_id,"$decision bobine {$dem['bobine_num']} — $motif_rep");
             db_commit();
             json_response(true,$decision==='approuvee'?'Demande approuvée. Bobine mise en utilisation.':'Demande refusée.');
