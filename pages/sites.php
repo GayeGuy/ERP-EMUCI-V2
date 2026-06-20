@@ -97,9 +97,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             // Mettre à jour les imports existants qui avaient ce site sans site_id
             db_query("UPDATE import_optoplate SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$site_id,$nom_emuci]);
             db_query("UPDATE import_optotrace  SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$site_id,$nom_emuci]);
+            // Mettre à jour les bobines op_bobines qui n'avaient pas de site_id
+            db_query("UPDATE op_bobines b
+                      JOIN import_optotrace ot ON ot.keyname = b.numero AND ot.site_nom_emuci = ?
+                      SET b.site_id = ?
+                      WHERE b.site_id IS NULL", [$nom_emuci, $site_id]);
             $nom = db_fetch_value("SELECT nom FROM sites WHERE id=?",[$site_id]);
             audit_log($user['id'],'UPDATE','sites',$site_id,"Mapping EMUCI '$nom_emuci' → '$nom'");
-            json_response(true,"Site lié. Tous les imports avec '$nom_emuci' ont été mis à jour.");
+            json_response(true,"Site lié. Tous les imports et bobines avec '$nom_emuci' ont été mis à jour.");
         }
 
         if ($decision === 'creer') {
@@ -119,8 +124,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             // Mettre à jour les imports existants
             db_query("UPDATE import_optoplate SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$new_id,$nom_emuci]);
             db_query("UPDATE import_optotrace  SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$new_id,$nom_emuci]);
+            // Mettre à jour les bobines op_bobines qui n'avaient pas de site_id
+            db_query("UPDATE op_bobines b
+                      JOIN import_optotrace ot ON ot.keyname = b.numero AND ot.site_nom_emuci = ?
+                      SET b.site_id = ?
+                      WHERE b.site_id IS NULL", [$nom_emuci, $new_id]);
             audit_log($user['id'],'CREATE','sites',$new_id,"Création depuis EMUCI '$nom_emuci'");
-            json_response(true,"Site '$nom_nouveau' créé. Tous les imports avec '$nom_emuci' ont été mis à jour.");
+            json_response(true,"Site '$nom_nouveau' créé. Tous les imports et bobines avec '$nom_emuci' ont été mis à jour.");
         }
 
         json_response(false,'Décision invalide.');
