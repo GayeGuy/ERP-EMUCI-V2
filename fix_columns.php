@@ -185,6 +185,17 @@ foreach ($types_data as [$code,$libelle,$serie]) {
 }
 $results[] = "op_types_bobines — $nb_types types insérés (INSERT IGNORE)";
 
+// ── commandes — colonnes manquantes ──────────────────────────
+foreach ([
+    'valide_par'         => "int(10) UNSIGNED DEFAULT NULL",
+    'valide_at'          => "datetime DEFAULT NULL",
+    'motif_rejet_global' => "text DEFAULT NULL",
+] as $col => $def) {
+    $m = '';
+    safe_exec($db, "ALTER TABLE `commandes` ADD COLUMN `$col` $def", $m);
+    $results[] = "commandes.$col : $m";
+}
+
 // ── op_stock_rivets — ajouter type_rivet ─────────────────────
 $m = '';
 safe_exec($db, "ALTER TABLE `op_stock_rivets` ADD COLUMN `type_rivet` varchar(20) NOT NULL DEFAULT 'gonflable'", $m);
