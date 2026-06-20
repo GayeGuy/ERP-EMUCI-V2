@@ -251,11 +251,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             db_query("UPDATE distribution_lignes dl JOIN distributions_site ds ON ds.id=dl.distribution_id
                       SET dl.statut='livre', ds.statut='livre', ds.recu_at=NOW(), ds.recu_par=?
                       WHERE ds.commande_id=?",[$user['id'],$cmd_id]);
-            // Mettre à jour stock site (+)
+            // Mettre à jour stock site — articles classiques (+)
             $lignes_rec = db_fetch_all(
                 "SELECT cl.article_id, cl.quantite_livree AS qte
                  FROM commande_lignes cl
-                 WHERE cl.commande_id=? AND cl.article_id IS NOT NULL AND cl.quantite_livree > 0",
+                 WHERE cl.commande_id=? AND cl.type_article != 'rivet'
+                   AND cl.article_id IS NOT NULL AND cl.quantite_livree > 0",
                 [$cmd_id]
             );
             foreach ($lignes_rec as $lr) {
@@ -271,6 +272,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                         [$lr['article_id'],$cmd['site_id'],$lr['qte'],$lr['qte']]
                     );
                 }
+            }
+
+            // Mettre à jour stock rivets (+)
+            $lignes_rivets = db_fetch_all(
+                "SELECT cl.libelle, cl.quantite_livree AS qte
+                 FROM commande_lignes cl
+                 WHERE cl.commande_id=? AND cl.type_article='rivet' AND cl.quantite_livree > 0",
+                [$cmd_id]
+            );
+            foreach ($lignes_rivets as $lr) {
+                $type_rivet = (stripos($lr['libelle'], 'clat') !== false) ? 'eclate' : 'gonflable';
+                db_query(
+                    "INSERT INTO op_stock_rivets (site_id, type_rivet, quantite) VALUES (?,?,?)
+                     ON DUPLICATE KEY UPDATE quantite = quantite + ?",
+                    [$cmd['site_id'], $type_rivet, (int)$lr['qte'], (int)$lr['qte']]
+                );
             }
             audit_log($user['id'],'UPDATE','commandes',$cmd_id,"Réception confirmée par coordinateur");
             db_commit();
