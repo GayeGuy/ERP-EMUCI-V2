@@ -196,6 +196,42 @@ foreach ([
     $results[] = "commandes.$col : $m";
 }
 
+// ── Corriger ENUMs statut des tables commandes/distributions ──
+$m = '';
+safe_exec($db,
+    "ALTER TABLE `commandes` MODIFY COLUMN `statut`
+     ENUM('en_attente','en_attente_livraison','en_cours_livraison','livre','recu','rejete','annule')
+     NOT NULL DEFAULT 'en_attente'", $m);
+$results[] = "commandes.statut ENUM : $m";
+
+$m = '';
+safe_exec($db,
+    "ALTER TABLE `distributions_site` MODIFY COLUMN `statut`
+     ENUM('en_cours_livraison','livre','annule')
+     DEFAULT 'en_cours_livraison'", $m);
+$results[] = "distributions_site.statut ENUM : $m";
+
+$m = '';
+safe_exec($db,
+    "ALTER TABLE `distribution_lignes` MODIFY COLUMN `statut`
+     ENUM('en_cours_livraison','livre','litige')
+     DEFAULT 'en_cours_livraison'", $m);
+$results[] = "distribution_lignes.statut ENUM : $m";
+
+$m = '';
+safe_exec($db,
+    "ALTER TABLE `commande_lignes` MODIFY COLUMN `statut_ligne`
+     ENUM('en_attente','valide','modifie','rejete')
+     NOT NULL DEFAULT 'en_attente'", $m);
+$results[] = "commande_lignes.statut_ligne ENUM : $m";
+
+$m = '';
+safe_exec($db,
+    "ALTER TABLE `commande_lignes` MODIFY COLUMN `type_article`
+     ENUM('article','consommable','bobine','pmma','rivet','equipement','autre')
+     NOT NULL DEFAULT 'article'", $m);
+$results[] = "commande_lignes.type_article ENUM : $m";
+
 // ── op_stock_rivets — ajouter type_rivet ─────────────────────
 $m = '';
 safe_exec($db, "ALTER TABLE `op_stock_rivets` ADD COLUMN `type_rivet` varchar(20) NOT NULL DEFAULT 'gonflable'", $m);
@@ -254,6 +290,24 @@ try {
 } catch (PDOException $e) {
     echo "❌ Table introuvable : " . $e->getMessage() . "\n";
 }
+
+echo "\n--- ENUM statut dans 'commande_lignes' ---\n";
+try {
+    foreach ($db->query("SHOW COLUMNS FROM `commande_lignes`") as $c)
+        echo "{$c['Field']} | {$c['Type']}\n";
+} catch (PDOException $e) { echo "❌ " . $e->getMessage() . "\n"; }
+
+echo "\n--- ENUM statut dans 'distributions_site' ---\n";
+try {
+    foreach ($db->query("SHOW COLUMNS FROM `distributions_site` WHERE Field='statut'") as $c)
+        echo "{$c['Field']} | {$c['Type']}\n";
+} catch (PDOException $e) { echo "❌ " . $e->getMessage() . "\n"; }
+
+echo "\n--- ENUM statut dans 'distribution_lignes' ---\n";
+try {
+    foreach ($db->query("SHOW COLUMNS FROM `distribution_lignes` WHERE Field='statut'") as $c)
+        echo "{$c['Field']} | {$c['Type']}\n";
+} catch (PDOException $e) { echo "❌ " . $e->getMessage() . "\n"; }
 
 echo "\n--- op_types_bobines : contenu ---\n";
 try {
