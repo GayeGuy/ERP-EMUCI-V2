@@ -121,7 +121,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             );
             foreach ($coords as $c) {
                 db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
-                    [$c['id'],'success',"✅ Commande {$cmd['numero_commande']} validée",
+                    [$c['id'],'info',"✅ Commande {$cmd['numero_commande']} validée",
                      "Votre commande a été validée par le superviseur et est en cours de préparation."]);
             }
             $gests = db_fetch_all(
@@ -158,7 +158,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             );
             foreach ($coords as $c) {
                 db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
-                    [$c['id'],'danger',"❌ Commande {$cmd['numero_commande']} rejetée","Motif : $motif"]);
+                    [$c['id'],'info',"❌ Commande {$cmd['numero_commande']} rejetée","Motif : $motif"]);
             }
             audit_log($user['id'],'UPDATE','commandes',$cmd_id,"Commande rejetée : $motif");
             db_commit();
