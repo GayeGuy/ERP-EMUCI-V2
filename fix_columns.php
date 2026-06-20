@@ -93,15 +93,21 @@ $m = '';
 safe_exec($db, "ALTER TABLE `emuci_sites_inconnus` ADD COLUMN `type_import` varchar(20) DEFAULT NULL", $m);
 $results[] = "emuci_sites_inconnus.type_import : $m";
 
-// ── Corriger statut en_stock → en_cours pour bobines avec site_id ────────────
+// ── Corriger statuts bobines selon quantité réelle ───────────────
+// en_cours = partiellement consommée (films_restants < qte_initiale)
+// en_stock = bobine pleine (films_restants >= qte_initiale)
+// epuisee  = vide (films_restants = 0)
 $m = '';
 safe_exec($db,
     "UPDATE op_bobines
-     SET statut = 'en_cours'
+     SET statut = CASE
+         WHEN films_restants = 0 THEN 'epuisee'
+         WHEN films_restants < COALESCE(qte_initiale, 500) THEN 'en_cours'
+         ELSE 'en_stock'
+     END
      WHERE site_id IS NOT NULL
-       AND statut = 'en_stock'
-       AND films_restants > 0", $m);
-$results[] = "op_bobines statut en_stock → en_cours : $m";
+       AND statut NOT IN ('retiree','perdue')", $m);
+$results[] = "op_bobines statuts recalculés (en_stock/en_cours/epuisee) : $m";
 
 // ── Mettre à jour site_id dans op_bobines depuis import_optotrace ────────────
 $m = '';
@@ -209,6 +215,39 @@ try {
     foreach ($db->query("SHOW COLUMNS FROM `emuci_sites_inconnus`") as $c) echo $c['Field'] . "\n";
 } catch (PDOException $e) {
     echo "❌ Table introuvable : " . $e->getMessage() . "\n";
+}
+
+echo "\n--- op_types_bobines : contenu ---\n";
+try {
+    $rows = $db->query("SELECT id,code,libelle,serie,actif FROM op_types_bobines ORDER BY serie,code")->fetchAll(PDO::FETCH_ASSOC);
+    if (empty($rows)) {
+        echo "⚠️ TABLE VIDE — aucun type trouvé\n";
+    } else {
+        foreach ($rows as $r) echo "{$r['id']} | {$r['code']} | {$r['libelle']} | série={$r['serie']} | actif={$r['actif']}\n";
+    }
+} catch (PDOException $e) {
+    echo "❌ Erreur : " . $e->getMessage() . "\n";
+}
+
+echo "\n--- op_bobines : répartition des statuts ---\n";
+try {
+    foreach ($db->query("SELECT statut, COUNT(*) AS n FROM op_bobines GROUP BY statut ORDER BY statut") as $r)
+        echo "{$r['statut']} : {$r['n']}\n";
+} catch (PDOException $e) {
+    echo "❌ " . $e->getMessage() . "\n";
+}
+
+echo "\n--- op_bobines : en_stock vs en_cours vs pleine ---\n";
+try {
+    $r = $db->query("SELECT
+        COUNT(*) AS total,
+        SUM(films_restants = 0) AS vides,
+        SUM(films_restants > 0 AND films_restants < COALESCE(qte_initiale,500)) AS partielles,
+        SUM(films_restants >= COALESCE(qte_initiale,500)) AS pleines
+    FROM op_bobines WHERE site_id IS NOT NULL AND statut NOT IN ('retiree','perdue')")->fetch(PDO::FETCH_ASSOC);
+    echo "Total avec site : {$r['total']} | Vides(épuisées): {$r['vides']} | Partielles(en_cours): {$r['partielles']} | Pleines(en_stock): {$r['pleines']}\n";
+} catch (PDOException $e) {
+    echo "❌ " . $e->getMessage() . "\n";
 }
 
 echo "</pre>";
