@@ -56,11 +56,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             );
             $cmd_id = (int)db_last_id();
             foreach ($lignes as $l) {
+                $raw_id = $l['article_id'] ?? null;
+                $art_id = ($raw_id !== null && is_numeric($raw_id)) ? (int)$raw_id : null;
                 db_query(
                     "INSERT INTO commande_lignes
                      (commande_id,type_article,article_id,libelle,quantite,unite,prix_unitaire,statut_ligne)
                      VALUES (?,?,?,?,?,?,?,'en_attente')",
-                    [$cmd_id, $l['type']??'article', $l['article_id']??null,
+                    [$cmd_id, $l['type']??'article', $art_id,
                      $l['libelle']??'', (int)($l['quantite']??1), $l['unite']??'unité',
                      $voir_prix ? (int)($l['prix_unitaire']??0) : 0]
                 );
