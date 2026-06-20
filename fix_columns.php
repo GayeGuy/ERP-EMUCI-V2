@@ -118,6 +118,77 @@ safe_exec($db,
      WHERE b.site_id IS NULL", $m);
 $results[] = "op_bobines.site_id mis à jour depuis import_optotrace : $m";
 
+// ── op_types_bobines — créer si absente + insérer données ─────
+$m = '';
+safe_exec($db, "CREATE TABLE IF NOT EXISTS `op_types_bobines` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `code` varchar(20) NOT NULL,
+  `libelle` varchar(150) NOT NULL,
+  `serie` char(4) NOT NULL,
+  `actif` tinyint(1) DEFAULT 1,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", $m);
+$results[] = "op_types_bobines (CREATE IF NOT EXISTS) : $m";
+
+$types_data = [
+    ['A001','Format Auto, version Privee','A'],
+    ['A002','Format Auto, version Transport Publique','A'],
+    ['A003','Format Auto, version Institution Internationale','A'],
+    ['A004','Format Auto, version Diplomatique','A'],
+    ['A005','Format Auto, version Gouvernementale','A'],
+    ['A006','Format Auto, version Temporaire','A'],
+    ['B001','Format Carre, version Privee','B'],
+    ['B002','Format Carre, version Transport Publique','B'],
+    ['B003','Format Carre, version Institution Internationale','B'],
+    ['B004','Format Carre, version Diplomatique','B'],
+    ['B005','Format Carre, version Gouvernementale','B'],
+    ['B006','Format Carre, version Temporaire','B'],
+    ['C001','Format Moto, version Privee','C'],
+    ['C002','Format Moto, version Transport Publique','C'],
+    ['C003','Format Moto, version Institution Internationale','C'],
+    ['C004','Format Moto, version Diplomatique','C'],
+    ['C005','Format Moto, version Gouvernementale','C'],
+    ['C006','Format Moto, version Temporaire','C'],
+    ['D001','Format MotoII, version Privee','D'],
+    ['D002','Format MotoII, version Transport Publique','D'],
+    ['D003','Format MotoII, version Institution Internationale','D'],
+    ['D004','Format MotoII, version Diplomatique','D'],
+    ['D005','Format MotoII, version Gouvernementale','D'],
+    ['D006','Format MotoII, version Temporaire','D'],
+    ['WSL001','Version Pare-brise - Privee','WSL'],
+    ['WSL002','Version Pare-brise - Transport Publique','WSL'],
+    ['TL001','Version Reservoir - Privee','TL'],
+    ['TL002','Version Reservoir - Transport Publique','TL'],
+];
+$nb_types = 0;
+foreach ($types_data as [$code,$libelle,$serie]) {
+    $stmt = $db->prepare("INSERT IGNORE INTO op_types_bobines (code,libelle,serie,actif) VALUES (?,?,?,1)");
+    $stmt->execute([$code,$libelle,$serie]);
+    $nb_types += $stmt->rowCount();
+}
+$results[] = "op_types_bobines — $nb_types types insérés (INSERT IGNORE)";
+
+// ── demandes_bobines — créer si absente ───────────────────────
+$m = '';
+safe_exec($db, "CREATE TABLE IF NOT EXISTS `demandes_bobines` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `bobine_id` int(10) UNSIGNED NOT NULL,
+  `site_id` int(10) UNSIGNED NOT NULL,
+  `demande_par` int(10) UNSIGNED NOT NULL,
+  `motif` text NOT NULL,
+  `statut` enum('en_attente','approuvee','refusee') NOT NULL DEFAULT 'en_attente',
+  `traite_par` int(10) UNSIGNED DEFAULT NULL,
+  `traite_at` datetime DEFAULT NULL,
+  `motif_reponse` text DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_bobine` (`bobine_id`),
+  KEY `idx_site` (`site_id`),
+  KEY `idx_statut` (`statut`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", $m);
+$results[] = "demandes_bobines (CREATE IF NOT EXISTS) : $m";
+
 $db->exec("SET FOREIGN_KEY_CHECKS=1");
 
 echo "<pre style='font-family:monospace;font-size:14px;padding:20px'>";
