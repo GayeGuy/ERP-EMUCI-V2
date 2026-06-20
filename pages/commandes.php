@@ -1394,7 +1394,7 @@ async function confirmerLivraison(){
   if(d.success){toast(d.message,'success');fermer('Livraison');setTimeout(()=>location.reload(),800);}
   else document.getElementById('alertLivraison').innerHTML=`<div class="alert alert-danger">${d.message}</div>`;
 }
-async function receptionner(id){if(!confirm('Confirmer la réception de cette commande et mettre à jour le stock site ?'))return;const d=await ap({action:'receptionner',cmd_id:id});if(d.success){toast(d.message,'success');setTimeout(()=>location.reload(),800);}else toast(d.message,'danger');}
+async function receptionner(id){if(!confirm('Confirmer la réception de cette commande et mettre à jour le stock site ?'))return;const d=await ap({action:'receptionner',cmd_id:id});if(d.success){alert('✅ '+d.message);location.reload();}else alert('❌ '+d.message);}
 async function annuler(id){if(!confirm('Annuler cette commande ?'))return;const d=await ap({action:'annuler',cmd_id:id});if(d.success){toast(d.message,'success');setTimeout(()=>location.reload(),800);}else toast(d.message,'danger');}
 </script>
 
