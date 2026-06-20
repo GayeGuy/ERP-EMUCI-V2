@@ -480,8 +480,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                                     "INSERT INTO mouvements_bobines
                                      (bobine_id,type,quantite,stock_avant,stock_apres,motif,created_by)
                                      VALUES (?,?,?,?,?,?,?)",
-                                    [$bobine['id'],'optotrace',$diff,$old_stock,$quantity,
-                                     "Import OptoTrace $date_import",$user['id']]
+                                    [$bobine['id'],'ajustement_inventaire',$diff,$old_stock,$quantity,
+                                     "Sync OptoTrace $date_import",$user['id']]
                                 );
                                 $nb_stock_maj++;
                             }
