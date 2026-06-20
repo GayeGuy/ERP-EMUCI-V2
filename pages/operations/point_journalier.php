@@ -35,7 +35,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $nb_camion  = (int)($_POST['nb_camion']  ?? 0);
         $nb_semi    = (int)($_POST['nb_semi']    ?? 0);
         $nb_moto    = (int)($_POST['nb_moto']    ?? 0);
-        $riv_endomm = (int)($_POST['rivets_endommages'] ?? 0);
+        $riv_gonfl      = (int)($_POST['rivets_gonflables']     ?? 0);
+        $riv_gonfl_end  = (int)($_POST['rivets_gonflables_end'] ?? 0);
+        $riv_eclate     = (int)($_POST['rivets_eclates']         ?? 0);
+        $riv_eclate_end = (int)($_POST['rivets_eclates_end']    ?? 0);
+        $riv_endomm     = $riv_gonfl_end + $riv_eclate_end;
+        $total_gonfl    = $riv_gonfl  + $riv_gonfl_end;
+        $total_eclate   = $riv_eclate + $riv_eclate_end;
+        $rivets_util    = $riv_gonfl  + $riv_eclate;
         $np_conc    = (int)($_POST['non_poses_concessionnaires'] ?? 0);
         $np_usag    = (int)($_POST['non_poses_usagers'] ?? 0);
         $heures     = (float)($_POST['nb_heures'] ?? 8);
@@ -47,16 +54,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         // Calculs automatiques
         $total_engins  = $nb_vp + $nb_camion + $nb_semi + $nb_moto;
         $total_plaques = ($nb_vp * 2) + ($nb_camion * 2) + ($nb_semi * 1) + ($nb_moto * 1);
-        $rivets_util   = ($nb_vp * 4) + ($nb_camion * 4) + ($nb_semi * 2) + ($nb_moto * 2);
         $moy_prod      = $heures > 0 ? round($total_engins / $heures, 1) : 0;
 
-        // Vérifier stock rivets
-        $stock_rivets = (int)db_fetch_value(
-            "SELECT COALESCE(SUM(quantite),0) FROM op_stock_rivets WHERE site_id=?", [$site_id]
-        ) ?? 0;
-        $total_rivets_sortis = $rivets_util + $riv_endomm;
-        if ($stock_rivets < $total_rivets_sortis)
-            json_response(false, "Stock rivets insuffisant sur ce site. Disponible : $stock_rivets, Nécessaire : $total_rivets_sortis");
+        // Vérifier stock rivets par type
+        $stock_gonfl  = (int)(db_fetch_value("SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=? AND type_rivet='gonflable'", [$site_id]) ?? 0);
+        $stock_eclate = (int)(db_fetch_value("SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=? AND type_rivet='eclate'", [$site_id]) ?? 0);
+        $stock_rivets = $stock_gonfl + $stock_eclate;
+        if ($total_gonfl > $stock_gonfl)
+            json_response(false, "Stock rivets gonflables insuffisant. Disponible : $stock_gonfl, Nécessaires : $total_gonfl");
+        if ($total_eclate > $stock_eclate)
+            json_response(false, "Stock rivets éclatés insuffisant. Disponible : $stock_eclate, Nécessaires : $total_eclate");
 
         db_begin();
         try {
@@ -72,30 +79,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     nb_vp=?,nb_camion=?,nb_semi=?,nb_moto=?,
                     total_engins=?,total_plaques=?,moyenne_prod=?,
                     rivets_utilises=?,rivets_endommages=?,
+                    rivets_gonflables=?,rivets_eclates=?,
                     non_poses_concessionnaires=?,non_poses_usagers=?,
                     nb_heures_travail=?,observations=?,updated_at=NOW()
                     WHERE id=?",
                     [$nb_vp,$nb_camion,$nb_semi,$nb_moto,
                      $total_engins,$total_plaques,$moy_prod,
-                     $rivets_util,$riv_endomm,$np_conc,$np_usag,$heures,$obs,$point_id]);
+                     $rivets_util,$riv_endomm,$total_gonfl,$total_eclate,
+                     $np_conc,$np_usag,$heures,$obs,$point_id]);
                 // Supprimer anciens films
                 db_query("DELETE FROM op_films_utilises WHERE point_id=?", [$point_id]);
             } else {
                 db_query("INSERT INTO op_points_journaliers
                     (site_id,date_point,type_point,nb_vp,nb_camion,nb_semi,nb_moto,
                      total_engins,total_plaques,moyenne_prod,rivets_utilises,rivets_endommages,
+                     rivets_gonflables,rivets_eclates,
                      non_poses_concessionnaires,non_poses_usagers,nb_heures_travail,observations,created_by)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                     [$site_id,$date_point,$type_point,$nb_vp,$nb_camion,$nb_semi,$nb_moto,
                      $total_engins,$total_plaques,$moy_prod,$rivets_util,$riv_endomm,
+                     $total_gonfl,$total_eclate,
                      $np_conc,$np_usag,$heures,$obs,$user['id']]);
                 $point_id = (int)db_last_id();
             }
 
-            // Déduire rivets du stock site
-            db_query("INSERT INTO op_stock_rivets (site_id,quantite) VALUES (?,GREATEST(0,?-?))
-                      ON DUPLICATE KEY UPDATE quantite=GREATEST(0,quantite-?)",
-                [$site_id, $stock_rivets, $total_rivets_sortis, $total_rivets_sortis]);
+            // Déduire rivets du stock site par type
+            if ($total_gonfl > 0)
+                db_query("UPDATE op_stock_rivets SET quantite = GREATEST(0, quantite - ?) WHERE site_id=? AND type_rivet='gonflable'",
+                    [$total_gonfl, $site_id]);
+            if ($total_eclate > 0)
+                db_query("UPDATE op_stock_rivets SET quantite = GREATEST(0, quantite - ?) WHERE site_id=? AND type_rivet='eclate'",
+                    [$total_eclate, $site_id]);
 
             // Traiter films par bobine
             $films_detail = [];
@@ -190,8 +204,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     // ── STOCK RIVETS SITE
     if ($action === 'get_stock_rivets') {
         $site_id = (int)($_POST['site_id'] ?? 0);
-        $stock = (int)db_fetch_value("SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=?", [$site_id]);
-        json_response(true, '', ['stock' => $stock]);
+        $gonfl  = (int)(db_fetch_value("SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=? AND type_rivet='gonflable'", [$site_id]) ?? 0);
+        $eclate = (int)(db_fetch_value("SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=? AND type_rivet='eclate'", [$site_id]) ?? 0);
+        json_response(true, '', ['stock' => $gonfl + $eclate, 'gonflable' => $gonfl, 'eclate' => $eclate]);
     }
 
     // ── VALIDER POINT
@@ -477,12 +492,16 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
 <!-- STOCK RIVETS RAPIDE -->
 <?php if(!empty($stock_rivets_all)): ?>
 <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap">
-  <?php foreach($stock_rivets_all as $sr): ?>
+  <?php foreach($stock_rivets_all as $sr):
+    $label = $sr['type_rivet'] === 'eclate' ? 'Éclatés' : 'Gonflables';
+    $icon  = $sr['type_rivet'] === 'eclate' ? '🔴' : '🔵';
+    $col   = $sr['quantite']<100 ? 'var(--danger)' : ($sr['quantite']<500 ? 'var(--warning)' : 'var(--navy)');
+  ?>
   <div style="padding:6px 14px;background:white;border:1px solid var(--border);border-radius:20px;font-size:12.5px;display:flex;align-items:center;gap:6px">
-    🔩 <strong><?= h($sr['nom']) ?></strong> :
-    <span style="font-family:'Montserrat',sans-serif;font-weight:800;color:<?= $sr['quantite']<100 ? 'var(--danger)' : ($sr['quantite']<500 ? 'var(--warning)' : 'var(--navy)') ?>">
+    <?= $icon ?> <strong><?= $label ?></strong> :
+    <span style="font-family:'Montserrat',sans-serif;font-weight:800;color:<?= $col ?>">
       <?= fmt_number($sr['quantite']) ?>
-    </span> rivets
+    </span>
   </div>
   <?php endforeach; ?>
 </div>
@@ -629,18 +648,53 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
         <?php endforeach; ?>
       </div>
 
-      <!-- Heures travail + rivets endommagés -->
-      <div class="form-row cols-3" style="margin-bottom:20px">
+      <!-- Heures travail + stock rivets -->
+      <div class="form-row cols-2" style="margin-bottom:16px">
         <div class="form-group"><label>⏱ Heures de travail</label>
           <input type="number" class="form-control" id="p-heures" value="8" min="0" max="24" step="0.5" oninput="recalcule()">
         </div>
-        <div class="form-group"><label>🔩 Rivets endommagés</label>
-          <input type="number" class="form-control" id="p-riv-endomm" min="0" value="0" oninput="recalcule()">
-        </div>
         <div class="form-group"><label>Stock rivets site</label>
-          <input type="text" class="form-control" id="p-stock-rivets" disabled style="font-weight:700;color:var(--navy)">
+          <input type="text" class="form-control" id="p-stock-rivets" disabled style="font-weight:700;font-size:12px;color:var(--navy)">
         </div>
       </div>
+
+      <!-- Rivets par type -->
+      <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;margin-bottom:12px;color:var(--navy)">🔩 Consommation rivets</h4>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+        <div style="background:#e3f2fd;border-radius:12px;padding:14px;border:1.5px solid #90caf9">
+          <div style="font-size:12px;font-weight:700;color:#1565c0;margin-bottom:10px">🔵 Rivets Gonflables</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="form-group" style="margin:0">
+              <label style="font-size:11px;color:#1565c0">Posés</label>
+              <input type="number" class="form-control" id="p-gonfl-util" min="0" value="0"
+                     oninput="recalcule()" style="text-align:center;font-size:16px;font-weight:800">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label style="font-size:11px;color:#e65100">Endommagés</label>
+              <input type="number" class="form-control" id="p-gonfl-end" min="0" value="0"
+                     oninput="recalcule()" style="text-align:center;border-color:#f39c12">
+            </div>
+          </div>
+          <div id="info-gonfl" style="font-size:11px;margin-top:8px;color:#1565c0;font-weight:600">Stock: — | Sortis: 0</div>
+        </div>
+        <div style="background:#fce4ec;border-radius:12px;padding:14px;border:1.5px solid #f48fb1">
+          <div style="font-size:12px;font-weight:700;color:#880e4f;margin-bottom:10px">🔴 Rivets Éclatés</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div class="form-group" style="margin:0">
+              <label style="font-size:11px;color:#880e4f">Posés</label>
+              <input type="number" class="form-control" id="p-eclate-util" min="0" value="0"
+                     oninput="recalcule()" style="text-align:center;font-size:16px;font-weight:800">
+            </div>
+            <div class="form-group" style="margin:0">
+              <label style="font-size:11px;color:#e65100">Endommagés</label>
+              <input type="number" class="form-control" id="p-eclate-end" min="0" value="0"
+                     oninput="recalcule()" style="text-align:center;border-color:#f39c12">
+            </div>
+          </div>
+          <div id="info-eclate" style="font-size:11px;margin-top:8px;color:#880e4f;font-weight:600">Stock: — | Sortis: 0</div>
+        </div>
+      </div>
+      <input type="hidden" id="p-riv-endomm" value="0">
 
       <!-- Films utilisés par bobine -->
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
@@ -705,6 +759,8 @@ const TYPES_V = <?= json_encode(array_values($types_v)) ?>;
 const SERIES  = {VP:'A',CAM:'B',SEMI:'C',MOTO:'D'};
 let bobinesCache = {};
 let stockRivets  = 0;
+let stockGonfl   = 0;
+let stockEclate  = 0;
 let previewOpen  = false;
 
 // ── OUVRIR FORMULAIRE
@@ -736,44 +792,61 @@ function resetPointForm(){
   document.getElementById('p-date').value='<?= date('Y-m-d') ?>';
   document.getElementById('p-type').value='final';
   document.getElementById('p-heures').value='8';
-  document.getElementById('p-riv-endomm').value='0';
+  document.getElementById('p-gonfl-util').value='0';
+  document.getElementById('p-gonfl-end').value='0';
+  document.getElementById('p-eclate-util').value='0';
+  document.getElementById('p-eclate-end').value='0';
   document.getElementById('p-np-conc').value='0';
   document.getElementById('p-np-usag').value='0';
   document.getElementById('p-stock-rivets').value='';
   document.getElementById('films-container').innerHTML='<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px"><?= $role_slug_pj === 'coordinateur_site' ? 'Chargement...' : 'Sélectionnez un site pour charger les bobines disponibles.' ?></div>';
   document.getElementById('pAlert').innerHTML='';
   document.getElementById('point-preview').style.display='none';
-  bobinesCache={}; stockRivets=0;
+  bobinesCache={}; stockRivets=0; stockGonfl=0; stockEclate=0;
   recalcule();
 }
 
 // ── CALCUL TEMPS RÉEL
 function recalcule(){
-  let engins=0,plaques=0,rivets=0;
+  let engins=0,plaques=0;
   TYPES_V.forEach(tv=>{
     const n=parseInt(document.getElementById('nb-'+tv.code)?.value||0);
     engins  += n;
     plaques += n * tv.nb_plaques;
-    rivets  += n * tv.nb_rivets;
   });
-  const rivEndomm = parseInt(document.getElementById('p-riv-endomm')?.value||0);
-  const heures    = parseFloat(document.getElementById('p-heures')?.value||8);
-  const moy       = heures>0 ? (engins/heures).toFixed(1) : 0;
-  const totalRivets = rivets + rivEndomm;
+  const gonflUtil  = parseInt(document.getElementById('p-gonfl-util')?.value||0);
+  const gonflEnd   = parseInt(document.getElementById('p-gonfl-end')?.value||0);
+  const eclateUtil = parseInt(document.getElementById('p-eclate-util')?.value||0);
+  const eclateEnd  = parseInt(document.getElementById('p-eclate-end')?.value||0);
+  const totalGonfl  = gonflUtil + gonflEnd;
+  const totalEclate = eclateUtil + eclateEnd;
+  const totalRivets = totalGonfl + totalEclate;
+  const heures = parseFloat(document.getElementById('p-heures')?.value||8);
+  const moy    = heures>0 ? (engins/heures).toFixed(1) : 0;
 
   document.getElementById('c-engins').textContent=engins;
   document.getElementById('c-plaques').textContent=plaques;
   document.getElementById('c-rivets').textContent=totalRivets;
   document.getElementById('c-moy').textContent=moy+' V/H';
 
-  // Alerte rivets
-  const rw = document.getElementById('c-rivets-wrap');
-  const si = document.getElementById('c-stock-info');
-  if(stockRivets>0){
-    rw.className = 'calc-item '+(totalRivets>stockRivets?'danger':totalRivets>stockRivets*0.8?'warn':'success');
-    si.textContent = `Stock rivets disponible : ${stockRivets} | Nécessaires : ${totalRivets}${totalRivets>stockRivets?' ⚠️ INSUFFISANT':''}`;
+  // Info par type
+  const ig=document.getElementById('info-gonfl');
+  if(ig){
+    ig.textContent=`Stock: ${stockGonfl.toLocaleString('fr-FR')} | Sortis: ${totalGonfl}`;
+    ig.style.color=totalGonfl>stockGonfl?'var(--danger)':'#1565c0';
+  }
+  const ie=document.getElementById('info-eclate');
+  if(ie){
+    ie.textContent=`Stock: ${stockEclate.toLocaleString('fr-FR')} | Sortis: ${totalEclate}`;
+    ie.style.color=totalEclate>stockEclate?'var(--danger)':'#880e4f';
   }
 
+  const rw=document.getElementById('c-rivets-wrap');
+  const si=document.getElementById('c-stock-info');
+  if(stockRivets>0){
+    rw.className='calc-item '+(totalRivets>stockRivets?'danger':totalRivets>stockRivets*0.8?'warn':'success');
+    si.textContent=`Stock rivets: ${stockRivets} | Sortis: ${totalRivets}${totalRivets>stockRivets?' ⚠️ INSUFFISANT':''}`;
+  }
   if(previewOpen) updatePreview(engins,plaques,moy);
 }
 
@@ -782,8 +855,11 @@ function loadStockRivets(){
   const sid=document.getElementById('p-site').value;
   if(!sid) return;
   ap({action:'get_stock_rivets',site_id:sid}).then(d=>{
-    stockRivets=d.data.stock||0;
-    document.getElementById('p-stock-rivets').value=stockRivets.toLocaleString('fr-FR')+' rivets';
+    stockGonfl  = d.data.gonflable||0;
+    stockEclate = d.data.eclate||0;
+    stockRivets = stockGonfl + stockEclate;
+    document.getElementById('p-stock-rivets').value=
+      `🔵 ${stockGonfl.toLocaleString('fr-FR')} gonfl. | 🔴 ${stockEclate.toLocaleString('fr-FR')} écl.`;
     document.getElementById('p-stock-rivets').style.color=stockRivets<200?'var(--danger)':stockRivets<1000?'var(--warning)':'var(--navy)';
     recalcule();
   });
@@ -996,7 +1072,10 @@ function savePoint(){
     nb_camion:   document.getElementById('nb-CAM').value,
     nb_semi:     document.getElementById('nb-SEMI').value,
     nb_moto:     document.getElementById('nb-MOTO').value,
-    rivets_endommages: document.getElementById('p-riv-endomm').value,
+    rivets_gonflables:     document.getElementById('p-gonfl-util').value,
+    rivets_gonflables_end: document.getElementById('p-gonfl-end').value,
+    rivets_eclates:        document.getElementById('p-eclate-util').value,
+    rivets_eclates_end:    document.getElementById('p-eclate-end').value,
     non_poses_concessionnaires: document.getElementById('p-np-conc').value,
     non_poses_usagers: document.getElementById('p-np-usag').value,
     nb_heures:   document.getElementById('p-heures').value,

@@ -65,7 +65,8 @@ if ($role_slug === 'coordinateur_site' && $site_force) {
     $stock_bas_list = array_filter($stock_conso_site, fn($r) => $r['quantite'] <= $r['seuil_alerte']);
     $sites_par_type  = db_fetch_all("SELECT type, COUNT(*) AS nb FROM sites WHERE actif=1 GROUP BY type ORDER BY nb DESC");
     $bobines_par_site = db_fetch_all("SELECT s.nom AS site_nom, COUNT(b.id) AS nb_bobines, COALESCE(SUM(b.stock_systeme),0) AS total_films FROM sites s LEFT JOIN op_bobines b ON b.site_id=s.id AND b.statut IN ('en_cours','en_stock') WHERE s.actif=1 AND s.id=? GROUP BY s.id", [$sid]);
-    $rivets_par_site  = db_fetch_all("SELECT s.nom AS site_nom, COALESCE(SUM(sr.quantite),0) AS stock_rivets FROM sites s LEFT JOIN op_stock_rivets sr ON sr.site_id=s.id WHERE s.actif=1 AND s.id=? GROUP BY s.id, s.nom", [$sid]);
+    $rivets_par_site  = db_fetch_all("SELECT sr.type_rivet, COALESCE(sr.quantite,0) AS stock_rivets FROM op_stock_rivets sr WHERE sr.site_id=? ORDER BY sr.type_rivet", [$sid]);
+    $pj_rivets_recents = db_fetch_all("SELECT date_point, type_point, rivets_utilises, rivets_endommages, COALESCE(rivets_gonflables,0) AS rivets_gonflables, COALESCE(rivets_eclates,0) AS rivets_eclates FROM op_points_journaliers WHERE site_id=? ORDER BY date_point DESC, type_point DESC LIMIT 5", [$sid]);
     $interv_par_site  = db_fetch_all("SELECT s.nom AS site_nom, COUNT(im.id) AS nb_interv FROM sites s LEFT JOIN interventions_maintenance im ON im.site_id=s.id AND YEAR(im.date_intervention)=YEAR(CURDATE()) AND MONTH(im.date_intervention)=MONTH(CURDATE()) WHERE s.actif=1 AND s.id=? GROUP BY s.id", [$sid]);
 
 // ── MAINTENANCE INFORMATIQUE : tout filtré catégorie=informatique
@@ -690,10 +691,48 @@ include __DIR__ . '/../templates/header.php';
   <!-- RIVETS PAR SITE -->
   <div class="dash-card">
     <div class="dash-card-header">
-      <h3>🔩 Rivets en stock par site</h3>
-      <a href="<?= APP_URL ?>/pages/operations/rivets.php" style="font-size:12px;color:var(--blue-mid,#1a56a0);text-decoration:none">Voir tout →</a>
+      <h3>🔩 <?= $role_slug==='coordinateur_site' ? 'Stock & Consommation Rivets' : 'Rivets en stock par site' ?></h3>
+      <a href="<?= APP_URL ?>/pages/operations/point_journalier.php" style="font-size:12px;color:var(--blue-mid,#1a56a0);text-decoration:none">Points journaliers →</a>
     </div>
-    <?php if($role_slug === 'gestionnaire_stock'): ?>
+    <?php if($role_slug === 'coordinateur_site'): ?>
+    <!-- Coordinateur : stock par type + consommation récente -->
+    <div class="dash-card-body">
+      <?php
+        $rv_gonfl  = 0; $rv_eclate = 0;
+        foreach($rivets_par_site as $rs){ if($rs['type_rivet']==='gonflable') $rv_gonfl=$rs['stock_rivets']; else $rv_eclate=$rs['stock_rivets']; }
+      ?>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <?php foreach([['gonflable','🔵','Gonflables',$rv_gonfl,'#e3f2fd','#1565c0'],['eclate','🔴','Éclatés',$rv_eclate,'#fce4ec','#880e4f']] as [$t,$ic,$lb,$qty,$bg,$col]): ?>
+        <div style="background:<?= $bg ?>;border-radius:12px;padding:14px 16px">
+          <div style="font-size:11px;font-weight:700;color:<?= $col ?>;margin-bottom:4px"><?= $ic ?> <?= $lb ?></div>
+          <div style="font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900;color:<?= $qty<100?'#e74c3c':($qty<500?'#f39c12':$col) ?>"><?= fmt_number($qty) ?></div>
+          <div style="font-size:11px;color:<?= $col ?>;opacity:.7">en stock</div>
+        </div>
+        <?php endforeach; ?>
+      </div>
+      <?php if(!empty($pj_rivets_recents)): ?>
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Consommation récente</div>
+      <?php foreach($pj_rivets_recents as $pj):
+        $lbl=['point_9h'=>'9h','point_13h'=>'13h','point_18h'=>'18h','final'=>'Final','intermediaire'=>'Interm.'][$pj['type_point']]??$pj['type_point'];
+      ?>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <div style="color:var(--muted)"><?= fmt_date($pj['date_point'],'d/m') ?> <span style="font-size:11px;background:var(--lighter);padding:1px 6px;border-radius:8px"><?= $lbl ?></span></div>
+        <div style="display:flex;gap:10px">
+          <?php if($pj['rivets_gonflables']>0||$pj['rivets_eclates']>0): ?>
+          <span style="color:#1565c0">🔵 <?= $pj['rivets_gonflables'] ?></span>
+          <span style="color:#880e4f">🔴 <?= $pj['rivets_eclates'] ?></span>
+          <?php else: ?>
+          <span style="color:var(--muted)">🔩 <?= $pj['rivets_utilises'] ?></span>
+          <?php endif; ?>
+          <?php if($pj['rivets_endommages']>0): ?>
+          <span style="color:var(--warning)">⚠️ <?= $pj['rivets_endommages'] ?></span>
+          <?php endif; ?>
+        </div>
+      </div>
+      <?php endforeach; ?>
+      <?php endif; ?>
+    </div>
+    <?php elseif($role_slug === 'gestionnaire_stock'): ?>
     <!-- Gestionnaire : affichage en grille multi-colonnes -->
     <div class="dash-card-body">
       <?php if(empty($rivets_par_site)): ?>

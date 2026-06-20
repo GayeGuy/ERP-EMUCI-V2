@@ -356,6 +356,14 @@ safe_exec($db, "CREATE TABLE IF NOT EXISTS `demandes_bobines` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", $m);
 $results[] = "demandes_bobines (CREATE IF NOT EXISTS) : $m";
 
+// ── op_points_journaliers — colonnes per-type rivets ──────────────
+$m = '';
+safe_exec($db, "ALTER TABLE `op_points_journaliers` ADD COLUMN `rivets_gonflables` INT NOT NULL DEFAULT 0", $m);
+$results[] = "op_points_journaliers.rivets_gonflables : $m";
+$m = '';
+safe_exec($db, "ALTER TABLE `op_points_journaliers` ADD COLUMN `rivets_eclates` INT NOT NULL DEFAULT 0", $m);
+$results[] = "op_points_journaliers.rivets_eclates : $m";
+
 $db->exec("SET FOREIGN_KEY_CHECKS=1");
 
 echo "<pre style='font-family:monospace;font-size:14px;padding:20px'>";
