@@ -310,7 +310,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             }
             audit_log($user['id'],'UPDATE','commandes',$cmd_id,"Réception confirmée par coordinateur");
             db_commit();
-            json_response(true,'Réception confirmée. Stock site mis à jour. ✅');
+            $msg = sprintf(
+                'Réception confirmée ✅ | Articles: %d | Rivets: %d | PMMA: %d',
+                count($lignes_rec), count($lignes_rivets), count($lignes_pmma)
+            );
+            json_response(true, $msg);
         } catch(Exception $e){ db_rollback(); json_response(false,$e->getMessage()); }
     }
 
