@@ -407,17 +407,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
 
                         // ── Synchronisation bobine depuis OptoTrace (source de vérité)
                         $bobine = db_fetch_one(
-                            "SELECT id, films_restants, stock_systeme, site_id FROM op_bobines WHERE numero=?",
+                            "SELECT id, films_restants, stock_systeme, site_id, qte_initiale FROM op_bobines WHERE numero=?",
                             [$keyname]
                         );
-
-                        // Déduire le statut depuis state et quantity
-                        $new_statut = match(true) {
-                            $state == 7   => 'retiree',
-                            $quantity == 0 => 'epuisee',
-                            $site_id_ds !== null => 'en_cours',
-                            default        => 'en_stock',
-                        };
 
                         if (!$bobine) {
                             // ── Bobine inconnue → CRÉATION automatique
@@ -430,6 +422,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
 
                             $tv = db_fetch_one("SELECT id FROM op_types_vehicule WHERE serie_bobine=? LIMIT 1",
                                 [$serie_bobine]);
+
+                            // Nouvelle bobine : en_cours si déjà consommée, sinon en_stock
+                            $new_statut = match(true) {
+                                $state == 7    => 'retiree',
+                                $quantity == 0 => 'epuisee',
+                                $quantity < $qte_init => 'en_cours',
+                                default        => 'en_stock',
+                            };
 
                             db_query(
                                 "INSERT INTO op_bobines
@@ -454,8 +454,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         } else {
                             // ── Bobine existante → MISE À JOUR
                             $old_stock  = (int)$bobine['films_restants'];
-                            $site_upd   = $site_id_ds ?? $bobine['site_id']; // garder l'ancien site si non trouvé
+                            $qte_init   = (int)$bobine['qte_initiale'] ?: 500;
+                            $site_upd   = $site_id_ds ?? $bobine['site_id'];
                             $diff       = $quantity - $old_stock;
+
+                            // en_cours si consommée (< qte initiale), sinon en_stock
+                            $new_statut = match(true) {
+                                $state == 7    => 'retiree',
+                                $quantity == 0 => 'epuisee',
+                                $quantity < $qte_init => 'en_cours',
+                                default        => 'en_stock',
+                            };
 
                             db_query(
                                 "UPDATE op_bobines
