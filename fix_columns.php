@@ -196,33 +196,51 @@ foreach ([
     $results[] = "commandes.$col : $m";
 }
 
-// ── Corriger ENUMs statut des tables commandes/distributions ──
-// Étape 1 : passer en VARCHAR pour vider les contraintes ENUM existantes
-$enum_tables = [
-    'commandes'          => ['statut', 'en_attente'],
-    'distributions_site' => ['statut', 'en_cours_livraison'],
-    'distribution_lignes'=> ['statut', 'en_cours_livraison'],
-];
-foreach ($enum_tables as $tbl => [$col, $default]) {
+// ── Corriger ENUMs statut — créer tables manquantes si besoin ─
+safe_exec($db, "CREATE TABLE IF NOT EXISTS `distributions_site` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `numero_distribution` varchar(50) NOT NULL,
+  `commande_id` int(10) UNSIGNED DEFAULT NULL,
+  `site_id` int(10) UNSIGNED NOT NULL,
+  `date_distribution` date NOT NULL,
+  `statut` varchar(50) DEFAULT 'en_cours_livraison',
+  `notes` text DEFAULT NULL,
+  `fichier_bl` varchar(255) DEFAULT NULL,
+  `created_by` int(10) UNSIGNED DEFAULT NULL,
+  `expedie_at` datetime DEFAULT NULL,
+  `recu_at` datetime DEFAULT NULL,
+  `recu_par` int(10) UNSIGNED DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", $m);
+$results[] = "distributions_site (CREATE IF NOT EXISTS) : $m";
+
+safe_exec($db, "CREATE TABLE IF NOT EXISTS `distribution_lignes` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `distribution_id` int(10) UNSIGNED NOT NULL,
+  `article_id` int(10) UNSIGNED DEFAULT NULL,
+  `commande_ligne_id` int(10) UNSIGNED DEFAULT NULL,
+  `libelle` varchar(200) DEFAULT NULL,
+  `quantite_envoyee` int(11) DEFAULT 0,
+  `quantite_recue` int(11) DEFAULT 0,
+  `unite` varchar(20) DEFAULT 'unite',
+  `statut` varchar(50) DEFAULT 'en_cours_livraison',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", $m);
+$results[] = "distribution_lignes (CREATE IF NOT EXISTS) : $m";
+
+// ── Normaliser valeurs statut invalides (vides / legacy) ─────
+foreach ([
+    'commandes'           => 'en_attente',
+    'distributions_site'  => 'en_cours_livraison',
+    'distribution_lignes' => 'en_cours_livraison',
+] as $tbl => $default) {
     $m = '';
-    safe_exec($db, "ALTER TABLE `$tbl` MODIFY COLUMN `$col` VARCHAR(50) NOT NULL DEFAULT '$default'", $m);
-    $results[] = "$tbl.$col → VARCHAR : $m";
+    safe_exec($db, "UPDATE `$tbl` SET `statut`='$default' WHERE `statut`='' OR `statut` IS NULL", $m);
+    $results[] = "$tbl.statut nettoyage : $m";
 }
 
-// Étape 2 : normaliser les valeurs invalides (vides ou non reconnues)
-$valid_statuts = [
-    'commandes'           => "('en_attente','en_attente_livraison','en_cours_livraison','livre','recu','rejete','annule')",
-    'distributions_site'  => "('en_cours_livraison','livre','annule')",
-    'distribution_lignes' => "('en_cours_livraison','livre','litige')",
-];
-foreach ($valid_statuts as $tbl => $vals) {
-    [$col, $default] = $enum_tables[$tbl];
-    $m = '';
-    safe_exec($db, "UPDATE `$tbl` SET `$col`='$default' WHERE `$col` NOT IN $vals OR `$col`=''", $m);
-    $results[] = "$tbl.$col normalisation : $m";
-}
-
-// Étape 3 : remettre les ENUMs corrects
+// ── Appliquer les ENUMs corrects ──────────────────────────────
 $m = '';
 safe_exec($db,
     "ALTER TABLE `commandes` MODIFY COLUMN `statut`
@@ -234,14 +252,14 @@ $m = '';
 safe_exec($db,
     "ALTER TABLE `distributions_site` MODIFY COLUMN `statut`
      ENUM('en_cours_livraison','livre','annule')
-     NOT NULL DEFAULT 'en_cours_livraison'", $m);
+     DEFAULT 'en_cours_livraison'", $m);
 $results[] = "distributions_site.statut ENUM : $m";
 
 $m = '';
 safe_exec($db,
     "ALTER TABLE `distribution_lignes` MODIFY COLUMN `statut`
      ENUM('en_cours_livraison','livre','litige')
-     NOT NULL DEFAULT 'en_cours_livraison'", $m);
+     DEFAULT 'en_cours_livraison'", $m);
 $results[] = "distribution_lignes.statut ENUM : $m";
 
 $m = '';
