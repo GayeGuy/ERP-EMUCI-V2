@@ -489,6 +489,7 @@ $coord_types = db_fetch_all("SELECT DISTINCT type_code FROM op_bobines WHERE sit
         <th style="text-align:center">Films restants</th>
         <th style="text-align:center">Consommé</th>
         <th style="text-align:center">Statut</th>
+        <th style="text-align:center">Action</th>
       </tr></thead>
       <tbody>
       <?php foreach($bobines as $b):
@@ -523,6 +524,13 @@ $coord_types = db_fetch_all("SELECT DISTINCT type_code FROM op_bobines WHERE sit
             <?= ['en_cours'=>'▶️ En utilisation','en_stock'=>'📦 En stock','epuisee'=>'❌ Épuisée','retiree'=>'🔄 Retirée','perdue'=>'⚠️ Perdue'][$b['statut']] ?? h($b['statut']) ?>
           </span>
         </td>
+        <td style="text-align:center">
+          <?php if($b['statut'] === 'en_stock'): ?>
+          <button class="btn btn-primary btn-sm" onclick="demanderUtilisation(<?= $b['id'] ?>, '<?= h($b['numero']) ?>')">
+            ▶️ Demander utilisation
+          </button>
+          <?php endif; ?>
+        </td>
       </tr>
       <?php endforeach; ?>
       </tbody>
@@ -531,6 +539,19 @@ $coord_types = db_fetch_all("SELECT DISTINCT type_code FROM op_bobines WHERE sit
   <?php endif; ?>
 </div>
 
+<script>
+function demanderUtilisation(id, numero) {
+  const motif = prompt('Demande d\'utilisation de la bobine ' + numero + '.\nMotif de la demande :');
+  if (motif === null) return;
+  fetch('', {method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'XMLHttpRequest'},
+    body: 'action=demander_utilisation&id=' + id + '&motif=' + encodeURIComponent(motif)})
+    .then(r => r.json())
+    .then(d => {
+      if (d.success) { alert('✅ ' + d.message); location.reload(); }
+      else alert('❌ ' + d.message);
+    });
+}
+</script>
 <?php
 include __DIR__ . '/../../templates/footer.php';
 exit;
