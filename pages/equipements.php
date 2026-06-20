@@ -14,10 +14,13 @@ require_auth();
 
 $user      = current_user();
 $role_slug = $user['role_slug'] ?? '';
+$is_coord  = ($role_slug === 'coordinateur_site');
+$site_force= ($is_coord && ($user['site_id'] ?? 0)) ? (int)$user['site_id'] : 0;
+
 $page_title  = 'Équipements';
 $active_page = isset($_GET['categorie']) && $_GET['categorie']==='operationnel' ? 'equipements_op' : 'equipements_info';
 $f_categorie = trim($_GET['categorie'] ?? 'informatique');
-$f_site      = (int)($_GET['site'] ?? 0);
+$f_site      = $site_force ?: (int)($_GET['site'] ?? 0);
 $f_etat      = trim($_GET['etat'] ?? '');
 $f_type      = (int)($_GET['type'] ?? 0);
 $f_search    = trim($_GET['q'] ?? '');
@@ -125,13 +128,14 @@ $equipements = db_fetch_all(
 );
 
 // ── Blocs résumé par type (nomenclature)
+$blocs_site_cond = $site_force ? "AND e.site_id=$site_force" : "";
 $blocs_type = db_fetch_all(
     "SELECT n.libelle, COUNT(e.id) AS nb_total,
             SUM(CASE WHEN e.etat IN ('neuf','bon') THEN 1 ELSE 0 END) AS nb_ok,
             SUM(CASE WHEN e.etat='hs' THEN 1 ELSE 0 END) AS nb_hs,
             SUM(CASE WHEN e.statut_stock='en_stock' THEN 1 ELSE 0 END) AS nb_stock
      FROM nomenclatures n
-     LEFT JOIN equipements e ON e.nomenclature_id=n.id AND e.actif=1 AND e.categorie=?
+     LEFT JOIN equipements e ON e.nomenclature_id=n.id AND e.actif=1 AND e.categorie=? $blocs_site_cond
      WHERE n.categorie=?
      GROUP BY n.id HAVING nb_total > 0
      ORDER BY nb_total DESC",
