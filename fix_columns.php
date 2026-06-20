@@ -93,6 +93,16 @@ $m = '';
 safe_exec($db, "ALTER TABLE `emuci_sites_inconnus` ADD COLUMN `type_import` varchar(20) DEFAULT NULL", $m);
 $results[] = "emuci_sites_inconnus.type_import : $m";
 
+// ── Corriger statut en_stock → en_cours pour bobines avec site_id ────────────
+$m = '';
+safe_exec($db,
+    "UPDATE op_bobines
+     SET statut = 'en_cours'
+     WHERE site_id IS NOT NULL
+       AND statut = 'en_stock'
+       AND films_restants > 0", $m);
+$results[] = "op_bobines statut en_stock → en_cours : $m";
+
 // ── Mettre à jour site_id dans op_bobines depuis import_optotrace ────────────
 $m = '';
 safe_exec($db,
