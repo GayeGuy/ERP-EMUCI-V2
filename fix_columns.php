@@ -93,6 +93,21 @@ $m = '';
 safe_exec($db, "ALTER TABLE `emuci_sites_inconnus` ADD COLUMN `type_import` varchar(20) DEFAULT NULL", $m);
 $results[] = "emuci_sites_inconnus.type_import : $m";
 
+// ── Mettre à jour site_id dans op_bobines depuis import_optotrace ────────────
+$m = '';
+safe_exec($db,
+    "UPDATE op_bobines b
+     JOIN (
+         SELECT ot.keyname, s.id AS site_id
+         FROM import_optotrace ot
+         JOIN sites s ON s.nom_emuci = ot.site_nom_emuci
+         WHERE ot.site_nom_emuci IS NOT NULL AND s.nom_emuci IS NOT NULL
+         GROUP BY ot.keyname, s.id
+     ) mapping ON mapping.keyname = b.numero
+     SET b.site_id = mapping.site_id
+     WHERE b.site_id IS NULL", $m);
+$results[] = "op_bobines.site_id mis à jour depuis import_optotrace : $m";
+
 $db->exec("SET FOREIGN_KEY_CHECKS=1");
 
 echo "<pre style='font-family:monospace;font-size:14px;padding:20px'>";
