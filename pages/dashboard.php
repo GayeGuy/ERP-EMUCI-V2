@@ -65,7 +65,7 @@ if ($role_slug === 'coordinateur_site' && $site_force) {
     $stock_bas_list = array_filter($stock_conso_site, fn($r) => $r['quantite'] <= $r['seuil_alerte']);
     $sites_par_type  = db_fetch_all("SELECT type, COUNT(*) AS nb FROM sites WHERE actif=1 GROUP BY type ORDER BY nb DESC");
     $bobines_par_site = db_fetch_all("SELECT s.nom AS site_nom, COUNT(b.id) AS nb_bobines, COALESCE(SUM(b.stock_systeme),0) AS total_films FROM sites s LEFT JOIN op_bobines b ON b.site_id=s.id AND b.statut IN ('en_cours','en_stock') WHERE s.actif=1 AND s.id=? GROUP BY s.id", [$sid]);
-    $rivets_par_site  = db_fetch_all("SELECT s.nom AS site_nom, COALESCE(sr.quantite,0) AS stock_rivets FROM sites s LEFT JOIN op_stock_rivets sr ON sr.site_id=s.id WHERE s.actif=1 AND s.id=?", [$sid]);
+    $rivets_par_site  = db_fetch_all("SELECT s.nom AS site_nom, COALESCE(SUM(sr.quantite),0) AS stock_rivets FROM sites s LEFT JOIN op_stock_rivets sr ON sr.site_id=s.id WHERE s.actif=1 AND s.id=? GROUP BY s.id, s.nom", [$sid]);
     $interv_par_site  = db_fetch_all("SELECT s.nom AS site_nom, COUNT(im.id) AS nb_interv FROM sites s LEFT JOIN interventions_maintenance im ON im.site_id=s.id AND YEAR(im.date_intervention)=YEAR(CURDATE()) AND MONTH(im.date_intervention)=MONTH(CURDATE()) WHERE s.actif=1 AND s.id=? GROUP BY s.id", [$sid]);
 
 // ── MAINTENANCE INFORMATIQUE : tout filtré catégorie=informatique
@@ -114,7 +114,7 @@ if ($role_slug === 'coordinateur_site' && $site_force) {
     $sites_par_type  = db_fetch_all("SELECT type, COUNT(*) AS nb FROM sites WHERE actif=1 GROUP BY type ORDER BY nb DESC");
     $interv_par_site = db_fetch_all("SELECT s.nom AS site_nom, COUNT(im.id) AS nb_interv FROM sites s LEFT JOIN interventions_maintenance im ON im.site_id=s.id AND YEAR(im.date_intervention)=YEAR(CURDATE()) AND MONTH(im.date_intervention)=MONTH(CURDATE()) WHERE s.actif=1 GROUP BY s.id ORDER BY nb_interv DESC LIMIT 10");
     $bobines_par_site= db_fetch_all("SELECT s.nom AS site_nom, COUNT(b.id) AS nb_bobines, COALESCE(SUM(b.stock_systeme),0) AS total_films FROM sites s LEFT JOIN op_bobines b ON b.site_id=s.id AND b.statut IN ('en_cours','en_stock') WHERE s.actif=1 GROUP BY s.id ORDER BY nb_bobines DESC LIMIT 10");
-    $rivets_par_site = db_fetch_all("SELECT s.nom AS site_nom, COALESCE(sr.quantite,0) AS stock_rivets FROM sites s LEFT JOIN op_stock_rivets sr ON sr.site_id=s.id WHERE s.actif=1 ORDER BY stock_rivets DESC LIMIT 10");
+    $rivets_par_site = db_fetch_all("SELECT s.nom AS site_nom, COALESCE(SUM(sr.quantite),0) AS stock_rivets FROM sites s LEFT JOIN op_stock_rivets sr ON sr.site_id=s.id WHERE s.actif=1 GROUP BY s.id, s.nom ORDER BY stock_rivets DESC LIMIT 10");
     $conso_fcfa_site = db_fetch_all(
         "SELECT s.nom AS site_nom, COALESCE(SUM(lc.prix_total),0) AS montant
          FROM livraisons_consommables lc
@@ -152,7 +152,7 @@ if ($role_slug === 'coordinateur_site' && $site_force) {
     $kpi_users_actifs = (int)db_fetch_value("SELECT COUNT(*) FROM users WHERE actif=1");
     $kpi_conso_alertes= (int)db_fetch_value("SELECT COUNT(*) FROM consommables WHERE stock_global<=seuil_alerte");
     $bobines_par_site = db_fetch_all("SELECT s.nom AS site_nom, COUNT(b.id) AS nb_bobines, COALESCE(SUM(b.stock_systeme),0) AS total_films FROM sites s LEFT JOIN op_bobines b ON b.site_id=s.id AND b.statut IN ('en_cours','en_stock') WHERE s.actif=1 GROUP BY s.id ORDER BY nb_bobines DESC LIMIT 10");
-    $rivets_par_site  = db_fetch_all("SELECT s.nom AS site_nom, COALESCE(sr.quantite,0) AS stock_rivets FROM sites s LEFT JOIN op_stock_rivets sr ON sr.site_id=s.id WHERE s.actif=1 ORDER BY stock_rivets DESC LIMIT 10");
+    $rivets_par_site  = db_fetch_all("SELECT s.nom AS site_nom, COALESCE(SUM(sr.quantite),0) AS stock_rivets FROM sites s LEFT JOIN op_stock_rivets sr ON sr.site_id=s.id WHERE s.actif=1 GROUP BY s.id, s.nom ORDER BY stock_rivets DESC LIMIT 10");
     $interv_par_site  = db_fetch_all("SELECT s.nom AS site_nom, COUNT(im.id) AS nb_interv FROM sites s LEFT JOIN interventions_maintenance im ON im.site_id=s.id AND YEAR(im.date_intervention)=YEAR(CURDATE()) AND MONTH(im.date_intervention)=MONTH(CURDATE()) WHERE s.actif=1 GROUP BY s.id ORDER BY nb_interv DESC LIMIT 10");
     $equip_par_etat  = db_fetch_all("SELECT etat, COUNT(*) AS total FROM equipements WHERE actif=1 GROUP BY etat ORDER BY total DESC");
     $equip_par_type  = db_fetch_all("SELECT n.libelle, COUNT(e.id) AS total FROM equipements e JOIN nomenclatures n ON n.id=e.nomenclature_id WHERE e.actif=1 GROUP BY n.id ORDER BY total DESC LIMIT 8");

@@ -185,6 +185,23 @@ foreach ($types_data as [$code,$libelle,$serie]) {
 }
 $results[] = "op_types_bobines — $nb_types types insérés (INSERT IGNORE)";
 
+// ── op_stock_rivets — ajouter type_rivet ─────────────────────
+$m = '';
+safe_exec($db, "ALTER TABLE `op_stock_rivets` ADD COLUMN `type_rivet` varchar(20) NOT NULL DEFAULT 'gonflable'", $m);
+$results[] = "op_stock_rivets.type_rivet : $m";
+
+// Ajouter UNIQUE KEY (site_id, type_rivet) pour ON DUPLICATE KEY UPDATE
+$m = '';
+safe_exec($db, "ALTER TABLE `op_stock_rivets` ADD UNIQUE KEY uq_site_type (site_id, type_rivet)", $m);
+$results[] = "op_stock_rivets UNIQUE(site_id,type_rivet) : $m";
+
+// Créer une ligne 'eclate' pour chaque site qui a déjà une ligne 'gonflable'
+$m = '';
+safe_exec($db,
+    "INSERT IGNORE INTO op_stock_rivets (site_id, quantite, type_rivet)
+     SELECT site_id, 0, 'eclate' FROM op_stock_rivets WHERE type_rivet='gonflable'", $m);
+$results[] = "op_stock_rivets lignes éclatés créées : $m";
+
 // ── demandes_bobines — créer si absente ───────────────────────
 $m = '';
 safe_exec($db, "CREATE TABLE IF NOT EXISTS `demandes_bobines` (

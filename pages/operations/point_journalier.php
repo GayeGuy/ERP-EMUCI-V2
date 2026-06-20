@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
         // Vérifier stock rivets
         $stock_rivets = (int)db_fetch_value(
-            "SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=?", [$site_id]
+            "SELECT COALESCE(SUM(quantite),0) FROM op_stock_rivets WHERE site_id=?", [$site_id]
         ) ?? 0;
         $total_rivets_sortis = $rivets_util + $riv_endomm;
         if ($stock_rivets < $total_rivets_sortis)

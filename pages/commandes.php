@@ -401,7 +401,7 @@ if (isset($_GET['export'], $_GET['id'])) {
             case 'rivet':
                 $ctx[$l['id']] = [
                     'stock_site' => (int)(db_fetch_value(
-                        "SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=?",
+                        "SELECT COALESCE(SUM(quantite),0) FROM op_stock_rivets WHERE site_id=?",
                         [$sid]) ?? 0),
                     'derniere'   => $fn_derniere(),
                     'conso'      => $fn_conso(),
@@ -547,24 +547,34 @@ $bobines_list = db_fetch_all(
     [$_sid ?: 0, $_sid ?: 0]
 );
 
-// ── Rivets : stock site + historique (entrée unique par site)
-$rivet_data = [[
-    'id'           => 'rivets',
-    'libelle'      => 'Rivets',
-    'unite'        => 'unité',
-    'prix_unitaire'=> 0,
-    'stock_global' => (int)(db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM op_stock_rivets") ?? 0),
-    'stock_site'   => $_sid ? (int)(db_fetch_value("SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=?", [$_sid]) ?? 0) : 0,
-    'derniere'     => $_sid ? (int)(db_fetch_value(
-        "SELECT cl.quantite FROM commande_lignes cl JOIN commandes c ON c.id=cl.commande_id
-         WHERE cl.type_article='rivet' AND c.site_id=? AND c.statut NOT IN ('annule','rejete')
-         ORDER BY c.created_at DESC LIMIT 1", [$_sid]) ?? 0) : 0,
-    'conso'        => $_sid ? (int)(db_fetch_value(
-        "SELECT COALESCE(ROUND(SUM(COALESCE(cl.quantite_livree,cl.quantite))/4),0)
-         FROM commande_lignes cl JOIN commandes c ON c.id=cl.commande_id
-         WHERE cl.type_article='rivet' AND c.site_id=? AND c.statut IN ('recu','livre')
-           AND c.recu_at >= DATE_SUB(CURDATE(), INTERVAL 4 WEEK)", [$_sid]) ?? 0) : 0,
-]];
+// ── Rivets : deux types (gonflable / eclate) avec stock et historique par type
+$rivet_types = [
+    ['key' => 'gonflable', 'libelle' => 'Rivets gonflables'],
+    ['key' => 'eclate',    'libelle' => 'Rivets éclatés'],
+];
+$rivet_data = [];
+foreach ($rivet_types as $rt) {
+    $rivet_data[] = [
+        'id'           => 'rivets_' . $rt['key'],
+        'libelle'      => $rt['libelle'],
+        'unite'        => 'unité',
+        'prix_unitaire'=> 0,
+        'stock_global' => (int)(db_fetch_value(
+            "SELECT COALESCE(SUM(quantite),0) FROM op_stock_rivets WHERE type_rivet=?", [$rt['key']]) ?? 0),
+        'stock_site'   => $_sid ? (int)(db_fetch_value(
+            "SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=? AND type_rivet=?",
+            [$_sid, $rt['key']]) ?? 0) : 0,
+        'derniere'     => $_sid ? (int)(db_fetch_value(
+            "SELECT cl.quantite FROM commande_lignes cl JOIN commandes c ON c.id=cl.commande_id
+             WHERE cl.type_article='rivet' AND cl.libelle=? AND c.site_id=? AND c.statut NOT IN ('annule','rejete')
+             ORDER BY c.created_at DESC LIMIT 1", [$rt['libelle'], $_sid]) ?? 0) : 0,
+        'conso'        => $_sid ? (int)(db_fetch_value(
+            "SELECT COALESCE(ROUND(SUM(COALESCE(cl.quantite_livree,cl.quantite))/4),0)
+             FROM commande_lignes cl JOIN commandes c ON c.id=cl.commande_id
+             WHERE cl.type_article='rivet' AND cl.libelle=? AND c.site_id=? AND c.statut IN ('recu','livre')
+               AND c.recu_at >= DATE_SUB(CURDATE(), INTERVAL 4 WEEK)", [$rt['libelle'], $_sid]) ?? 0) : 0,
+    ];
+}
 
 // ── Équipements disponibles (en_stock) avec indicateur site
 $equipements_list = db_fetch_all(
