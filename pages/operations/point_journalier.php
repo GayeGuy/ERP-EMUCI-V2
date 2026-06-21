@@ -943,7 +943,6 @@ foreach($points as $p):
           <div id="info-eclate" style="font-size:11px;margin-top:8px;color:#880e4f;font-weight:600">Stock: — | Sortis: 0</div>
         </div>
       </div>
-      </div><!-- /rivets grid -->
       <input type="hidden" id="p-riv-endomm" value="0">
       </div><!-- /form-section ③ -->
 
