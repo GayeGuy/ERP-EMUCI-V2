@@ -298,9 +298,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug IN ('admin','superadmin','superviseur_operation') AND u.actif=1"
         );
         foreach ($notif_targets as $t) {
-            db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
+            db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                 [$t['id'], 'info', '📋 Point 18h à valider',
-                 "Le coordinateur {$user['prenom']} {$user['nom']} a soumis son point journalier 18h pour validation."]);
+                 "Le coordinateur {$user['prenom']} {$user['nom']} a soumis son point journalier 18h pour validation.",
+                 '/pages/operations/point_journalier.php']);
         }
         json_response(true, 'Point soumis au superviseur pour validation.');
     }
@@ -313,9 +314,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             [$user['id'], $point_id]);
         // Notifier le coordinateur
         if (!empty($point['created_by'])) {
-            db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
+            db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                 [$point['created_by'], 'info', '✅ Point journalier validé',
-                 "Votre point journalier du ".fmt_date($point['date_point'],'d/m/Y')." a été validé par le superviseur."]);
+                 "Votre point journalier du ".fmt_date($point['date_point'],'d/m/Y')." a été validé par le superviseur.",
+                 '/pages/operations/point_journalier.php']);
         }
         audit_log($user['id'], 'UPDATE', 'operations', $point_id, "Validation point journalier #$point_id");
         json_response(true, 'Point validé.');
@@ -381,9 +383,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             // Notifier le coordinateur
             $coord = db_fetch_one("SELECT u.id FROM users u WHERE u.id=?", [$point['created_by']]);
             if ($coord) {
-                db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                     [$coord['id'], 'info', '❌ Point journalier rejeté',
-                     "Votre point journalier du ".fmt_date($point['date_point'],'d/m/Y')." a été rejeté. Motif : $motif"]);
+                     "Votre point journalier du ".fmt_date($point['date_point'],'d/m/Y')." a été rejeté. Motif : $motif",
+                     '/pages/operations/point_journalier.php']);
             }
 
             audit_log($user['id'], 'UPDATE', 'operations', $point_id, "Rejet point journalier #$point_id — stock restauré");
