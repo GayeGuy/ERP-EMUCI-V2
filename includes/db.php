@@ -55,7 +55,17 @@ function get_db(): PDO {
 
 function db_query(string $sql, array $params = []): PDOStatement {
     $stmt = get_db()->prepare($sql);
-    $stmt->execute($params);
+    try {
+        $stmt->execute($params);
+    } catch (PDOException $e) {
+        // SQLSTATE classe 01xxx = warnings MySQL (ex: 01000 = truncation warning)
+        // La requête a quand même été exécutée — on logue et on continue
+        if (substr((string)$e->getCode(), 0, 2) === '01') {
+            error_log('DB warning (ignored): ' . $e->getMessage());
+        } else {
+            throw $e;
+        }
+    }
     return $stmt;
 }
 function db_fetch_all(string $sql, array $params = []): array {
