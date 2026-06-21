@@ -307,8 +307,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
     if ($action === 'valider_point') {
         $point_id = (int)($_POST['point_id'] ?? 0);
+        $point = db_fetch_one("SELECT * FROM op_points_journaliers WHERE id=?", [$point_id]);
+        if (!$point) json_response(false, 'Point introuvable.');
         db_query("UPDATE op_points_journaliers SET statut='valide',validated_by=?,validated_at=NOW() WHERE id=?",
             [$user['id'], $point_id]);
+        // Notifier le coordinateur
+        if (!empty($point['created_by'])) {
+            db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
+                [$point['created_by'], 'info', '✅ Point journalier validé',
+                 "Votre point journalier du ".fmt_date($point['date_point'],'d/m/Y')." a été validé par le superviseur."]);
+        }
         audit_log($user['id'], 'UPDATE', 'operations', $point_id, "Validation point journalier #$point_id");
         json_response(true, 'Point validé.');
     }

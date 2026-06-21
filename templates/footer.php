@@ -17,15 +17,41 @@ function readNotif(id, lien) {
     method: 'POST',
     headers: {'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},
     body: 'action=mark_read&id=' + id
-  }).then(() => { if (lien) window.location.href = '<?= APP_URL ?>' + lien; });
+  }).then(() => { if (lien) window.location.href = '<?= APP_URL ?>' + lien; else refreshNotifs(); });
 }
 function markAllRead() {
   fetch('<?= APP_URL ?>/api/notifications.php', {
     method: 'POST',
     headers: {'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},
     body: 'action=mark_all'
-  }).then(() => location.reload());
+  }).then(() => refreshNotifs());
 }
+function refreshNotifs() {
+  fetch('<?= APP_URL ?>/api/notifications.php?action=get', {
+    headers: {'X-Requested-With':'XMLHttpRequest'}
+  }).then(r=>r.json()).then(d=>{
+    if (!d.success) return;
+    const count = d.data.count || 0;
+    const badge = document.querySelector('.notif-count');
+    const btn   = document.querySelector('.notif-btn');
+    if (badge) { badge.textContent = count > 9 ? '9+' : count; badge.style.display = count > 0 ? '' : 'none'; }
+    else if (count > 0 && btn) {
+      const s = document.createElement('span');
+      s.className = 'notif-count'; s.textContent = count > 9 ? '9+' : count;
+      btn.appendChild(s);
+    }
+    const list = document.querySelector('.notif-list');
+    if (!list) return;
+    if (count === 0) { list.innerHTML = '<div class="notif-empty">✅ Aucune notification</div>'; return; }
+    list.innerHTML = d.data.data.map(n=>`
+      <div class="notif-item" onclick="readNotif(${n.id},'${(n.lien||'').replace(/'/g,"\\'")}')">
+        <div class="n-titre">${n.titre||''}</div>
+        <div class="n-date">${n.created_at||''}</div>
+      </div>`).join('');
+  }).catch(()=>{});
+}
+// Rafraîchir toutes les 60 secondes
+setInterval(refreshNotifs, 60000);
 
 // ===== SIDEBAR SCROLL RESTORE =====
 (function() {
