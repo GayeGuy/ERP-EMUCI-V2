@@ -4,6 +4,40 @@ if ($secret !== 'emuci2026import') die('Accès refusé');
 require_once __DIR__ . '/includes/db.php';
 $db = get_db();
 
+// ============================================================
+//  ACTION : reset_data — Vider les données opérationnelles
+//  URL : fix_columns.php?secret=emuci2026import&action=reset_data
+// ============================================================
+if (($_GET['action'] ?? '') === 'reset_data') {
+    $db->exec("SET FOREIGN_KEY_CHECKS=0");
+    $tables = [
+        'op_pmma_utilises'       => 'PMMA par point',
+        'op_films_utilises'      => 'Films utilisés',
+        'op_points_journaliers'  => 'Points journaliers',
+        'mouvements_bobines'     => 'Mouvements bobines',
+        'op_bobines'             => 'Bobines',
+        'import_optotrace'       => 'Import OptoTrace',
+        'import_optoplate'       => 'Import OptoPlate',
+        'validations_stock_matin'=> 'Validations stock matin',
+    ];
+    echo "<pre style='font-family:monospace;font-size:14px;padding:20px'>";
+    echo "🧹 RESET DONNÉES — " . date('d/m/Y H:i:s') . "\n\n";
+    foreach ($tables as $table => $label) {
+        try {
+            $nb = (int)$db->query("SELECT COUNT(*) FROM `$table`")->fetchColumn();
+            $db->exec("DELETE FROM `$table`");
+            $db->exec("ALTER TABLE `$table` AUTO_INCREMENT = 1");
+            echo "✅ $label ($table) — $nb ligne(s) supprimée(s)\n";
+        } catch (PDOException $e) {
+            echo "❌ $label ($table) — " . $e->getMessage() . "\n";
+        }
+    }
+    $db->exec("SET FOREIGN_KEY_CHECKS=1");
+    echo "\n✅ Reset terminé. Vous pouvez maintenant faire l'import OptoTrace.\n";
+    echo "</pre>";
+    exit;
+}
+
 $results = [];
 
 function safe_exec(PDO $db, string $sql, string &$msg): void {
