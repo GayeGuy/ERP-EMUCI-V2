@@ -896,8 +896,6 @@ foreach($points as $p):
         <?php endforeach; ?>
       </div>
 
-      </div><!-- /point-grid -->
-
       <!-- Stock rivets (info discrète) -->
       <div style="margin-top:10px;margin-bottom:20px;display:flex;align-items:center;gap:8px">
         <span style="font-size:12px;color:var(--muted)">Stock rivets :</span>
