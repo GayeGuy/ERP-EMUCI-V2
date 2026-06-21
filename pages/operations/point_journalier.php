@@ -248,6 +248,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         json_response(true, '', ['stock' => $gonfl + $eclate, 'gonflable' => $gonfl, 'eclate' => $eclate]);
     }
 
+    // ── DÉTAIL POINT (PMMA + films pour la vue détail)
+    if ($action === 'get_point_detail') {
+        $point_id = (int)($_POST['point_id'] ?? 0);
+        $pmma  = db_fetch_all("SELECT type_pmma, utilises, endommages FROM op_pmma_utilises WHERE point_id=? ORDER BY type_pmma", [$point_id]);
+        $films = db_fetch_all(
+            "SELECT b.numero AS bobine_num, b.type_code, tv.libelle AS type_veh,
+                    fu.films_utilises, fu.films_endommages
+             FROM op_films_utilises fu
+             JOIN op_bobines b ON b.id=fu.bobine_id
+             LEFT JOIN op_types_vehicule tv ON tv.id=fu.type_vehicule_id
+             WHERE fu.point_id=? ORDER BY b.numero",
+            [$point_id]
+        );
+        json_response(true, '', ['pmma' => $pmma, 'films' => $films]);
+    }
+
     // ── VALIDER POINT
     if ($action === 'load_point') {
         $point_id = (int)($_POST['point_id'] ?? 0);
@@ -1468,12 +1484,18 @@ function savePoint(){
 }
 
 // ── VOIR DÉTAIL POINT
-function viewPoint(id){
+async function viewPoint(id){
   document.getElementById('mDetail').classList.add('open');
   document.getElementById('detail-body').innerHTML='<div style="text-align:center;padding:40px;color:var(--muted)">Chargement…</div>';
   const pts=<?= json_encode(array_values($points)) ?>;
   const p=pts.find(x=>x.id==id);
   if(!p){document.getElementById('detail-body').innerHTML='Introuvable.';return;}
+  // Charger PMMA + films via AJAX
+  let pmmaList=[], filmsList=[];
+  try {
+    const det = await ap({action:'get_point_detail', point_id:id});
+    if(det.success){ pmmaList=det.data.pmma||[]; filmsList=det.data.films||[]; }
+  } catch(e){}
 
   const statutCfg={
     'valide':               {bg:'#d1fae5',col:'#065f46',icon:'✅',lbl:'Validé'},
@@ -1533,6 +1555,41 @@ function viewPoint(id){
       <div style="font-size:13px;color:#7f1d1d">${p.motif_rejet}</div>
     </div>` : '';
 
+  // Section PMMA
+  const pmmaSection = pmmaList.length>0 ? `
+    <div style="margin-bottom:20px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">🟦 PMMA consommé</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${pmmaList.map(pm=>{
+          const tot=(parseInt(pm.utilises)||0)+(parseInt(pm.endommages)||0);
+          return `<div style="display:grid;grid-template-columns:1fr 90px 90px 80px;gap:8px;align-items:center;background:#f8fafc;border-radius:8px;padding:10px 12px">
+            <div style="font-weight:600;font-size:13px;color:var(--navy)">${pm.type_pmma}</div>
+            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#1565c0">${pm.utilises}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase">Utilisés</div></div>
+            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#e65100">${pm.endommages}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase">Endommagés</div></div>
+            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800">${tot}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase">Total</div></div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>` : '';
+
+  // Section Films
+  const filmsSection = filmsList.length>0 ? `
+    <div style="margin-bottom:20px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">🎞️ Films utilisés par bobine</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${filmsList.map(f=>`
+          <div style="display:grid;grid-template-columns:40px 1fr 80px 90px 90px;gap:8px;align-items:center;background:#f8fafc;border-radius:8px;padding:10px 12px">
+            <div style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;color:#1565c0;text-align:center">#${f.bobine_num}</div>
+            <div>
+              <div style="font-size:12px;font-weight:600;color:var(--navy)">${f.type_veh||'—'}</div>
+              <div style="font-size:10px;color:var(--muted)">${f.type_code||''}</div>
+            </div>
+            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#1565c0">${f.films_utilises}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase">Utilisés</div></div>
+            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#e65100">${f.films_endommages||0}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase">Endommagés</div></div>
+          </div>`).join('')}
+      </div>
+    </div>` : '';
+
   document.getElementById('detail-body').innerHTML=`
     <!-- En-tête -->
     <div style="background:linear-gradient(135deg,#0a1628,#163566);border-radius:14px;padding:20px 24px;margin-bottom:20px;color:white">
@@ -1576,6 +1633,8 @@ function viewPoint(id){
     </div>
 
     ${rivSection}
+    ${pmmaSection}
+    ${filmsSection}
     ${npSection}
     ${obsSection}
     ${motifSection}
