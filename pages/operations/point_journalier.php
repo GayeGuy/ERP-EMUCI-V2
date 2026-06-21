@@ -1021,10 +1021,16 @@ function loadStockRivets(){
 let bobinesEnCours = []; // toutes les bobines en utilisation du site
 
 // ── PMMA
+let pmmaStockDisponible = {}; // type_pmma => quantite
+
 async function loadStockPMMA(){
   const sid = document.getElementById('p-site').value;
   const pc  = document.getElementById('pmma-container');
-  if(!sid){ pc.innerHTML='<div style="text-align:center;color:var(--muted);padding:12px;font-size:13px">Sélectionnez un site.</div>'; return; }
+  pmmaStockDisponible = {};
+  if(!sid){
+    pc.innerHTML='<div style="text-align:center;color:var(--muted);padding:12px;font-size:13px">Sélectionnez un site.</div>';
+    return;
+  }
   pc.innerHTML='<div style="text-align:center;color:var(--muted);padding:12px">⏳...</div>';
   const d = await ap({action:'get_stock_pmma', site_id:sid});
   const types = d.data || [];
@@ -1032,45 +1038,51 @@ async function loadStockPMMA(){
     pc.innerHTML='<div style="text-align:center;color:var(--muted);padding:12px;background:var(--lighter);border-radius:10px;font-size:13px">Aucun stock PMMA disponible sur ce site.</div>';
     return;
   }
-  let html='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">';
-  types.forEach(t=>{
-    const slug = t.type_pmma.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
-    html+=`
-    <div style="border:1px solid var(--border);border-radius:12px;overflow:hidden">
-      <div style="padding:10px 14px;background:#f0f9ff;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
-        <span style="font-size:18px">🪟</span>
-        <span style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:var(--navy)">${t.type_pmma}</span>
-        <span style="margin-left:auto;font-size:11px;color:var(--muted)">Stock : <strong>${t.quantite}</strong></span>
-      </div>
-      <div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div>
-          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Utilisés</label>
-          <input type="number" id="pmma-util-${slug}" data-type="${t.type_pmma}" data-kind="util"
-                 class="form-control pmma-input" min="0" max="${t.quantite}" value="0"
-                 style="font-size:13px;text-align:center">
-        </div>
-        <div>
-          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Endommagés</label>
-          <input type="number" id="pmma-end-${slug}" data-type="${t.type_pmma}" data-kind="end"
-                 class="form-control pmma-input" min="0" max="${t.quantite}" value="0"
-                 style="font-size:13px;text-align:center">
-        </div>
-      </div>
-    </div>`;
-  });
-  html+='</div>';
-  pc.innerHTML=html;
+  types.forEach(t => { pmmaStockDisponible[t.type_pmma] = t.quantite; });
+
+  let opts = types.map(t=>`<option value="${t.type_pmma}">${t.type_pmma} (stock : ${t.quantite})</option>`).join('');
+  pc.innerHTML=`
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px">
+      <select id="pmma-select" class="form-control" style="flex:1;font-size:13px">
+        <option value="">— Sélectionner un type de PMMA —</option>
+        ${opts}
+      </select>
+      <button type="button" class="btn btn-secondary" style="white-space:nowrap;font-size:13px" onclick="ajouterLignePmma()">+ Ajouter</button>
+    </div>
+    <div id="pmma-lignes"></div>`;
+}
+
+function ajouterLignePmma(){
+  const sel = document.getElementById('pmma-select');
+  const type = sel.value;
+  if(!type) return;
+  // Éviter les doublons
+  if(document.querySelector(`#pmma-lignes [data-type="${CSS.escape(type)}"]`)){
+    sel.value=''; return;
+  }
+  const stock = pmmaStockDisponible[type] ?? '?';
+  const div = document.createElement('div');
+  div.dataset.type = type;
+  div.style.cssText='display:grid;grid-template-columns:1fr 100px 100px 32px;gap:8px;align-items:center;padding:8px 10px;background:var(--lighter);border-radius:9px;margin-bottom:6px';
+  div.innerHTML=`
+    <div style="font-size:13px;font-weight:600;color:var(--navy)">🪟 ${type} <span style="font-size:11px;color:var(--muted);font-weight:400">stock : ${stock}</span></div>
+    <input type="number" data-kind="util" placeholder="Utilisés" min="0" max="${stock}" value="0"
+           class="form-control" style="font-size:13px;text-align:center">
+    <input type="number" data-kind="end" placeholder="Endom." min="0" max="${stock}" value="0"
+           class="form-control" style="font-size:13px;text-align:center">
+    <button type="button" onclick="this.closest('[data-type]').remove()"
+            style="background:#fee2e2;border:none;border-radius:7px;cursor:pointer;font-size:15px;color:#991b1b;width:32px;height:32px">✕</button>`;
+  document.getElementById('pmma-lignes').appendChild(div);
+  sel.value='';
 }
 
 function collectPmmaData(){
   const result=[];
-  const inputs = document.querySelectorAll('#pmma-container input[data-kind="util"]');
-  inputs.forEach(el=>{
-    const type_pmma = el.dataset.type;
-    const slug = type_pmma.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
-    const util   = parseInt(el.value||0);
-    const endomm = parseInt(document.getElementById('pmma-end-'+slug)?.value||0);
-    if(util>0 || endomm>0) result.push({type_pmma, utilises:util, endommages:endomm});
+  document.querySelectorAll('#pmma-lignes [data-type]').forEach(row=>{
+    const type_pmma = row.dataset.type;
+    const util   = parseInt(row.querySelector('[data-kind="util"]')?.value||0);
+    const endomm = parseInt(row.querySelector('[data-kind="end"]')?.value||0);
+    result.push({type_pmma, utilises:util, endommages:endomm});
   });
   return result;
 }
