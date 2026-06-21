@@ -23,6 +23,9 @@ function _groupes_def(): array {
             'nav' => [
                 ['label'=>'Tableau de bord','icon'=>'ph-squares-four',
                  'url'=>'pages/dashboard.php','active_keys'=>['dashboard']],
+                ['label'=>'Vue PDG','icon'=>'ph-chart-pie-slice',
+                 'url'=>'pages/pdg_overview.php','active_keys'=>['pdg_overview'],
+                 'roles_include'=>['lecteur']],
             ],
         ],
 
@@ -191,7 +194,7 @@ function get_groupes_pour_role(string $role_slug): array {
         // GSB (gestionnaire stock bobines)
         'gestionnaire_stock_bobines' => ['DASHBOARD','STOCK','BOBINES','OPERATIONS'],
         // Lecture seule
-        'lecteur'                    => ['DASHBOARD'],
+        'lecteur'                    => ['DASHBOARD','STOCK','BOBINES','OPERATIONS','RAPPORTS'],
         // Admin
         'admin'                      => $all,
         'superadmin'                 => $all,

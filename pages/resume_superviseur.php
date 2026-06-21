@@ -17,7 +17,7 @@ $role_slug = $user['role_slug'] ?? '';
 $page_title  = 'Résumé Superviseur';
 $active_page = 'resume_superviseur';
 
-if (!in_array($role_slug, ['superviseur_operation','admin','superadmin','gestionnaire_stock_bobines'])) {
+if (!in_array($role_slug, ['superviseur_operation','admin','superadmin','gestionnaire_stock_bobines','lecteur'])) {
     http_response_code(403); echo '<p style="padding:40px;color:red">Accès refusé.</p>'; exit;
 }
 
