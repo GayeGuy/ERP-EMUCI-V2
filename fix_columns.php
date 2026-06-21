@@ -398,6 +398,23 @@ $m = '';
 safe_exec($db, "ALTER TABLE `op_points_journaliers` ADD COLUMN `rivets_eclates` INT NOT NULL DEFAULT 0", $m);
 $results[] = "op_points_journaliers.rivets_eclates : $m";
 
+// ── Colonne motif_rejet (rejet superviseur) ─────────────────────
+$m = '';
+safe_exec($db, "ALTER TABLE `op_points_journaliers` ADD COLUMN `motif_rejet` TEXT DEFAULT NULL", $m);
+$results[] = "op_points_journaliers.motif_rejet : $m";
+
+// ── ENUM statut : ajouter 'rejete' ─────────────────────────────
+// 3 étapes : VARCHAR → normaliser → ENUM avec rejete
+$m = '';
+safe_exec($db, "ALTER TABLE `op_points_journaliers` MODIFY COLUMN `statut` VARCHAR(30) NOT NULL DEFAULT 'brouillon'", $m);
+$results[] = "op_points_journaliers.statut → varchar : $m";
+$m = '';
+safe_exec($db, "UPDATE `op_points_journaliers` SET statut='brouillon' WHERE statut IS NULL OR statut='' OR statut NOT IN ('brouillon','en_attente_validation','valide','suivi','rejete')", $m);
+$results[] = "op_points_journaliers.statut normalise : $m";
+$m = '';
+safe_exec($db, "ALTER TABLE `op_points_journaliers` MODIFY COLUMN `statut` ENUM('brouillon','en_attente_validation','valide','suivi','rejete') NOT NULL DEFAULT 'brouillon'", $m);
+$results[] = "op_points_journaliers.statut → ENUM+rejete : $m";
+
 $db->exec("SET FOREIGN_KEY_CHECKS=1");
 
 echo "<pre style='font-family:monospace;font-size:14px;padding:20px'>";

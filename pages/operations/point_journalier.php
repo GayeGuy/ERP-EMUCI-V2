@@ -258,6 +258,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         json_response(true, 'Point validé.');
     }
 
+    // ── REJETER POINT (superviseur) — reverse les déductions stock
+    if ($action === 'rejeter_point') {
+        if (!in_array($role_slug, ['admin','superadmin','superviseur_operation']))
+            json_response(false, 'Accès refusé.');
+        $point_id   = (int)($_POST['point_id']    ?? 0);
+        $motif      = trim($_POST['motif_rejet']  ?? '');
+        if (!$motif) json_response(false, 'Motif de rejet obligatoire.');
+        $point = db_fetch_one("SELECT * FROM op_points_journaliers WHERE id=?", [$point_id]);
+        if (!$point) json_response(false, 'Point introuvable.');
+        if (!in_array($point['statut'], ['en_attente_validation','brouillon']))
+            json_response(false, 'Ce point ne peut plus être rejeté (statut : '.$point['statut'].').');
+
+        db_begin();
+        try {
+            // Restaurer les films dans chaque bobine
+            $films = db_fetch_all(
+                "SELECT bobine_id, films_utilises, films_endommages FROM op_films_utilises WHERE point_id=?",
+                [$point_id]
+            );
+            foreach ($films as $f) {
+                $total = (int)$f['films_utilises'] + (int)$f['films_endommages'];
+                if ($total > 0) {
+                    db_query(
+                        "UPDATE op_bobines SET films_restants = films_restants + ?,
+                         statut = CASE WHEN films_restants + ? >= qte_initiale THEN 'en_stock'
+                                       WHEN films_restants + ? > 0 THEN 'en_cours'
+                                       ELSE statut END
+                         WHERE id=?",
+                        [$total, $total, $total, $f['bobine_id']]
+                    );
+                }
+            }
+
+            // Restaurer les rivets
+            $riv_gonfl  = (int)($point['rivets_gonflables'] ?? 0);
+            $riv_eclate = (int)($point['rivets_eclates']    ?? 0);
+            if ($riv_gonfl > 0)
+                db_query("UPDATE op_stock_rivets SET quantite = quantite + ? WHERE site_id=? AND type_rivet='gonflable'",
+                    [$riv_gonfl, $point['site_id']]);
+            if ($riv_eclate > 0)
+                db_query("UPDATE op_stock_rivets SET quantite = quantite + ? WHERE site_id=? AND type_rivet='eclate'",
+                    [$riv_eclate, $point['site_id']]);
+
+            // Marquer rejeté
+            db_query("UPDATE op_points_journaliers SET statut='rejete', motif_rejet=?, validated_by=?, validated_at=NOW() WHERE id=?",
+                [$motif, $user['id'], $point_id]);
+
+            // Notifier le coordinateur
+            $coord = db_fetch_one("SELECT u.id FROM users u WHERE u.id=?", [$point['created_by']]);
+            if ($coord) {
+                db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
+                    [$coord['id'], 'info', '❌ Point journalier rejeté',
+                     "Votre point journalier du ".fmt_date($point['date_point'],'d/m/Y')." a été rejeté. Motif : $motif"]);
+            }
+
+            audit_log($user['id'], 'UPDATE', 'operations', $point_id, "Rejet point journalier #$point_id — stock restauré");
+            db_commit();
+            json_response(true, 'Point rejeté. Stock films et rivets restaurés.');
+        } catch (Exception $e) {
+            db_rollback();
+            json_response(false, 'Erreur : '.$e->getMessage());
+        }
+    }
+
     json_response(false, 'Action inconnue.');
 }
 
@@ -354,6 +418,7 @@ include __DIR__ . '/../../templates/header.php';
 .point-badge.valide{background:#e8f5e9;color:#2e7d32}
 .point-badge.en_attente_validation{background:#dbeafe;color:#1d4ed8}
 .point-badge.suivi{background:#f1f5f9;color:#475569}
+.point-badge.rejete{background:#fee2e2;color:#991b1b}
 
 .modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(10,22,40,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
@@ -538,7 +603,7 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:16px;color:var(--blue-mid,#1a56a0)"><?= $p['total_plaques'] ?></td>
           <td style="text-align:center;font-size:12px"><?= $p['moyenne_prod'] ?> V/H</td>
           <td style="text-align:center;font-size:12.5px">🔩 <?= $p['rivets_utilises'] ?><?= $p['rivets_endommages']>0?' ⚠️'.$p['rivets_endommages']:'' ?></td>
-          <td><span class="point-badge <?= $p['statut'] ?>"><?= ['valide'=>'✅ Validé','brouillon'=>'⏳ Brouillon','en_attente_validation'=>'📤 En attente superviseur','suivi'=>'📊 Suivi'][$p['statut']] ?? $p['statut'] ?></span></td>
+          <td><span class="point-badge <?= $p['statut'] ?>"><?= ['valide'=>'✅ Validé','brouillon'=>'⏳ Brouillon','en_attente_validation'=>'📤 En attente superviseur','suivi'=>'📊 Suivi','rejete'=>'❌ Rejeté'][$p['statut']] ?? $p['statut'] ?></span></td>
           <td style="font-size:12px"><?= h($p['agent']??'—') ?></td>
           <td style="white-space:nowrap;display:flex;gap:4px">
             <button class="btn btn-secondary btn-sm" onclick="viewPoint(<?= $p['id'] ?>)" title="Aperçu">👁</button>
@@ -553,6 +618,7 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
             <?php endif; ?>
             <?php if(in_array($p['statut'],['brouillon','en_attente_validation']) && ($p['type_point']??'')==='point_18h' && in_array($role_slug_pj,['admin','superadmin','superviseur_operation'])): ?>
             <button class="btn btn-success btn-sm" onclick="validerPoint(<?= $p['id'] ?>)" title="Valider le point 18h">✅</button>
+            <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5" onclick="ouvrirRejet(<?= $p['id'] ?>,<?= htmlspecialchars(json_encode($p['date_point'])) ?>)" title="Rejeter et restaurer le stock">❌</button>
             <?php endif; ?>
           </td>
         </tr>
@@ -737,6 +803,31 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
       <button class="btn btn-secondary" onclick="document.getElementById('mPoint').classList.remove('open')">Annuler</button>
       <button class="btn btn-secondary" onclick="togglePreview()">👁 Aperçu</button>
       <button class="btn btn-primary" id="btn-save-point" onclick="savePoint()">💾 Enregistrer le point</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL REJET POINT -->
+<div class="modal-overlay" id="mRejet">
+  <div class="modal" style="width:480px">
+    <div class="mhdr">
+      <h3>❌ Rejeter le point journalier</h3>
+      <button class="mclose" onclick="document.getElementById('mRejet').classList.remove('open')">✕</button>
+    </div>
+    <div class="mbody">
+      <input type="hidden" id="rejet-point-id" value="">
+      <div id="rejet-info" style="background:#fee2e2;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#991b1b;font-weight:600"></div>
+      <div class="form-group">
+        <label>Motif du rejet *</label>
+        <textarea class="form-control" id="rejet-motif" rows="3" placeholder="Expliquer pourquoi le point est rejeté…"></textarea>
+      </div>
+      <div style="background:#fef3c7;border-radius:10px;padding:10px 14px;font-size:12px;color:#92400e;margin-top:12px">
+        ⚠️ Le rejet va <strong>restaurer le stock</strong> films et rivets déduits par ce point. Le coordinateur sera notifié.
+      </div>
+    </div>
+    <div class="mfoot">
+      <button class="btn btn-secondary" onclick="document.getElementById('mRejet').classList.remove('open')">Annuler</button>
+      <button class="btn" style="background:#dc2626;color:white" onclick="confirmerRejet()">❌ Confirmer le rejet</button>
     </div>
   </div>
 </div>
@@ -1173,6 +1264,24 @@ function validerPoint(id){
 }
 
 function printPoint(id){viewPoint(id);setTimeout(()=>window.print(),500);}
+
+function ouvrirRejet(id, date){
+  document.getElementById('rejet-point-id').value = id;
+  document.getElementById('rejet-info').textContent = `Point journalier du ${date} — les films et rivets déduits seront restaurés.`;
+  document.getElementById('rejet-motif').value = '';
+  document.getElementById('mRejet').classList.add('open');
+}
+function confirmerRejet(){
+  const id     = document.getElementById('rejet-point-id').value;
+  const motif  = document.getElementById('rejet-motif').value.trim();
+  if(!motif){alert('Veuillez saisir un motif de rejet.');return;}
+  ap({action:'rejeter_point', point_id:id, motif_rejet:motif}).then(d=>{
+    toast(d.message, d.success?'success':'danger');
+    document.getElementById('mRejet').classList.remove('open');
+    if(d.success) setTimeout(()=>location.reload(), 900);
+  });
+}
+document.getElementById('mRejet').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');});
 
 function ap(data){
   const fd=new FormData();
