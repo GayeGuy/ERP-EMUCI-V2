@@ -1691,7 +1691,7 @@ function validerPoint(id){
   ap({action:'valider_point',point_id:id}).then(d=>{toast(d.message,d.success?'success':'danger');if(d.success)setTimeout(()=>location.reload(),800);});
 }
 
-function printPoint(id){window.open('pages/operations/point_pdf.php?id='+id,'_blank');}
+function printPoint(id){window.open('<?= rtrim(APP_URL,'/') ?>/pages/operations/point_pdf.php?id='+id,'_blank');}
 
 function ouvrirRejet(id, date){
   document.getElementById('rejet-point-id').value = id;
