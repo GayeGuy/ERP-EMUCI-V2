@@ -1063,15 +1063,21 @@ function ajouterLignePmma(){
   const stock = pmmaStockDisponible[type] ?? '?';
   const div = document.createElement('div');
   div.dataset.type = type;
-  div.style.cssText='display:grid;grid-template-columns:1fr 100px 100px 32px;gap:8px;align-items:center;padding:8px 10px;background:var(--lighter);border-radius:9px;margin-bottom:6px';
+  div.style.cssText='display:grid;grid-template-columns:1fr 110px 110px 32px;gap:8px;align-items:end;padding:8px 10px;background:var(--lighter);border-radius:9px;margin-bottom:6px';
   div.innerHTML=`
-    <div style="font-size:13px;font-weight:600;color:var(--navy)">🪟 ${type} <span style="font-size:11px;color:var(--muted);font-weight:400">stock : ${stock}</span></div>
-    <input type="number" data-kind="util" placeholder="Utilisés" min="0" max="${stock}" value="0"
-           class="form-control" style="font-size:13px;text-align:center">
-    <input type="number" data-kind="end" placeholder="Endom." min="0" max="${stock}" value="0"
-           class="form-control" style="font-size:13px;text-align:center">
+    <div style="font-size:13px;font-weight:600;color:var(--navy);padding-bottom:2px">🪟 ${type} <span style="font-size:11px;color:var(--muted);font-weight:400">stock : ${stock}</span></div>
+    <div>
+      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Utilisés</label>
+      <input type="number" data-kind="util" min="0" max="${stock}" value="0"
+             class="form-control" style="font-size:13px;text-align:center">
+    </div>
+    <div>
+      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Endommagés</label>
+      <input type="number" data-kind="end" min="0" max="${stock}" value="0"
+             class="form-control" style="font-size:13px;text-align:center">
+    </div>
     <button type="button" onclick="this.closest('[data-type]').remove()"
-            style="background:#fee2e2;border:none;border-radius:7px;cursor:pointer;font-size:15px;color:#991b1b;width:32px;height:32px">✕</button>`;
+            style="background:#fee2e2;border:none;border-radius:7px;cursor:pointer;font-size:15px;color:#991b1b;width:32px;height:32px;margin-bottom:1px">✕</button>`;
   document.getElementById('pmma-lignes').appendChild(div);
   sel.value='';
 }
