@@ -48,6 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $heures     = (float)($_POST['nb_heures'] ?? 8);
         $obs        = trim($_POST['observations'] ?? '');
         $films_data = json_decode($_POST['films_data'] ?? '[]', true);
+        $pmma_data  = json_decode($_POST['pmma_data']  ?? '[]', true);
 
         if (!$site_id || !$date_point) json_response(false, 'Site et date obligatoires.');
 
@@ -87,8 +88,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                      $total_engins,$total_plaques,$moy_prod,
                      $rivets_util,$riv_endomm,$total_gonfl,$total_eclate,
                      $np_conc,$np_usag,$heures,$obs,$point_id]);
-                // Supprimer anciens films
+                // Supprimer anciens films et PMMA
                 db_query("DELETE FROM op_films_utilises WHERE point_id=?", [$point_id]);
+                db_query("DELETE FROM op_pmma_utilises  WHERE point_id=?", [$point_id]);
             } else {
                 db_query("INSERT INTO op_points_journaliers
                     (site_id,date_point,type_point,nb_vp,nb_camion,nb_semi,nb_moto,
@@ -110,6 +112,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             if ($total_eclate > 0)
                 db_query("UPDATE op_stock_rivets SET quantite = GREATEST(0, quantite - ?) WHERE site_id=? AND type_rivet='eclate'",
                     [$total_eclate, $site_id]);
+
+            // Traiter PMMA par type
+            $pmma_total_util   = 0;
+            $pmma_total_endomm = 0;
+            foreach ($pmma_data as $pd) {
+                $type_pmma  = trim($pd['type_pmma'] ?? '');
+                $pm_util    = (int)($pd['utilises']    ?? 0);
+                $pm_endomm  = (int)($pd['endommages']  ?? 0);
+                if (!$type_pmma || ($pm_util + $pm_endomm) === 0) continue;
+                $total_pm = $pm_util + $pm_endomm;
+                $stock_pm = (int)(db_fetch_value(
+                    "SELECT COALESCE(quantite,0) FROM stock_pmma_site WHERE site_id=? AND type_pmma=?",
+                    [$site_id, $type_pmma]
+                ) ?? 0);
+                if ($total_pm > $stock_pm)
+                    throw new Exception("Stock PMMA $type_pmma insuffisant. Disponible : $stock_pm, Nécessaire : $total_pm");
+                db_query("INSERT INTO op_pmma_utilises (point_id, type_pmma, utilises, endommages) VALUES (?,?,?,?)",
+                    [$point_id, $type_pmma, $pm_util, $pm_endomm]);
+                db_query("UPDATE stock_pmma_site SET quantite = GREATEST(0, quantite - ?) WHERE site_id=? AND type_pmma=?",
+                    [$total_pm, $site_id, $type_pmma]);
+                $pmma_total_util   += $pm_util;
+                $pmma_total_endomm += $pm_endomm;
+            }
 
             // Traiter films par bobine
             $films_detail = [];
@@ -173,6 +198,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
              LEFT JOIN op_types_vehicule tv ON tv.id=b.type_vehicule_id
              WHERE b.site_id=? AND b.statut='en_cours'
              ORDER BY b.serie, b.numero ASC",
+            [$site_id]
+        );
+        json_response(true, '', $rows);
+    }
+
+    // ── CHARGER STOCK PMMA D'UN SITE
+    if ($action === 'get_stock_pmma') {
+        $site_id = (int)($_POST['site_id'] ?? 0);
+        $rows = db_fetch_all(
+            "SELECT type_pmma, quantite FROM stock_pmma_site WHERE site_id=? AND quantite > 0 ORDER BY type_pmma",
             [$site_id]
         );
         json_response(true, '', $rows);
@@ -301,6 +336,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 db_query("UPDATE op_stock_rivets SET quantite = quantite + ? WHERE site_id=? AND type_rivet='eclate'",
                     [$riv_eclate, $point['site_id']]);
 
+            // Restaurer les PMMA
+            $pmmats = db_fetch_all("SELECT type_pmma, utilises, endommages FROM op_pmma_utilises WHERE point_id=?", [$point_id]);
+            foreach ($pmmats as $pm) {
+                $total_pm = (int)$pm['utilises'] + (int)$pm['endommages'];
+                if ($total_pm > 0) {
+                    db_query("UPDATE stock_pmma_site SET quantite = quantite + ? WHERE site_id=? AND type_pmma=?",
+                        [$total_pm, $point['site_id'], $pm['type_pmma']]);
+                }
+            }
+
             // Marquer rejeté
             db_query("UPDATE op_points_journaliers SET statut='rejete', motif_rejet=?, validated_by=?, validated_at=NOW() WHERE id=?",
                 [$motif, $user['id'], $point_id]);
@@ -315,7 +360,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
             audit_log($user['id'], 'UPDATE', 'operations', $point_id, "Rejet point journalier #$point_id — stock restauré");
             db_commit();
-            json_response(true, 'Point rejeté. Stock films et rivets restaurés.');
+            json_response(true, 'Point rejeté. Stock films, rivets et PMMA restaurés.');
         } catch (Exception $e) {
             db_rollback();
             json_response(false, 'Erreur : '.$e->getMessage());
@@ -664,7 +709,7 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
             📍 <?= h(db_fetch_value("SELECT nom FROM sites WHERE id=?",[(int)$user['site_id']]) ?? '') ?>
           </div>
           <?php else: ?>
-          <select class="form-control" id="p-site" onchange="loadStockRivets();loadBobines()">
+          <select class="form-control" id="p-site" onchange="loadStockRivets();loadBobines();loadStockPMMA()">
             <option value="">— Sélectionner —</option>
             <?php foreach($sites_list as $s): ?>
             <option value="<?= $s['id'] ?>"><?= h($s['nom']) ?></option>
@@ -766,6 +811,15 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
         </div>
       </div>
       <input type="hidden" id="p-riv-endomm" value="0">
+
+      <!-- PMMA -->
+      <div style="margin-top:20px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
+        <h4 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700;color:var(--navy)">🪟 PMMA</h4>
+        <span style="font-size:11px;color:var(--muted)">Par type de PMMA disponible sur le site</span>
+      </div>
+      <div id="pmma-container">
+        <div style="text-align:center;color:var(--muted);padding:12px;font-size:13px">Chargement du stock PMMA...</div>
+      </div>
 
       <!-- Films utilisés par bobine -->
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
@@ -877,6 +931,7 @@ function openPointForm(){
   // Coordinateur : site déjà fixé, charger automatiquement
   loadStockRivets();
   loadBobines();
+  loadStockPMMA();
   <?php endif; ?>
 }
 function resetPointForm(){
@@ -896,6 +951,7 @@ function resetPointForm(){
   document.getElementById('p-np-usag').value='0';
   document.getElementById('p-stock-rivets').value='';
   document.getElementById('films-container').innerHTML='<div style="text-align:center;color:var(--muted);padding:20px;font-size:13px"><?= $role_slug_pj === 'coordinateur_site' ? 'Chargement...' : 'Sélectionnez un site pour charger les bobines disponibles.' ?></div>';
+  document.getElementById('pmma-container').innerHTML='<div style="text-align:center;color:var(--muted);padding:12px;font-size:13px">Chargement du stock PMMA...</div>';
   document.getElementById('pAlert').innerHTML='';
   document.getElementById('point-preview').style.display='none';
   bobinesCache={}; stockRivets=0; stockGonfl=0; stockEclate=0;
@@ -963,6 +1019,61 @@ function loadStockRivets(){
 
 // ── CHARGER BOBINES DU SITE
 let bobinesEnCours = []; // toutes les bobines en utilisation du site
+
+// ── PMMA
+async function loadStockPMMA(){
+  const sid = document.getElementById('p-site').value;
+  const pc  = document.getElementById('pmma-container');
+  if(!sid){ pc.innerHTML='<div style="text-align:center;color:var(--muted);padding:12px;font-size:13px">Sélectionnez un site.</div>'; return; }
+  pc.innerHTML='<div style="text-align:center;color:var(--muted);padding:12px">⏳...</div>';
+  const d = await ap({action:'get_stock_pmma', site_id:sid});
+  const types = d.data || [];
+  if(!types.length){
+    pc.innerHTML='<div style="text-align:center;color:var(--muted);padding:12px;background:var(--lighter);border-radius:10px;font-size:13px">Aucun stock PMMA disponible sur ce site.</div>';
+    return;
+  }
+  let html='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px">';
+  types.forEach(t=>{
+    const slug = t.type_pmma.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
+    html+=`
+    <div style="border:1px solid var(--border);border-radius:12px;overflow:hidden">
+      <div style="padding:10px 14px;background:#f0f9ff;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+        <span style="font-size:18px">🪟</span>
+        <span style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:var(--navy)">${t.type_pmma}</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--muted)">Stock : <strong>${t.quantite}</strong></span>
+      </div>
+      <div style="padding:12px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div>
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Utilisés</label>
+          <input type="number" id="pmma-util-${slug}" data-type="${t.type_pmma}" data-kind="util"
+                 class="form-control pmma-input" min="0" max="${t.quantite}" value="0"
+                 style="font-size:13px;text-align:center">
+        </div>
+        <div>
+          <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:4px">Endommagés</label>
+          <input type="number" id="pmma-end-${slug}" data-type="${t.type_pmma}" data-kind="end"
+                 class="form-control pmma-input" min="0" max="${t.quantite}" value="0"
+                 style="font-size:13px;text-align:center">
+        </div>
+      </div>
+    </div>`;
+  });
+  html+='</div>';
+  pc.innerHTML=html;
+}
+
+function collectPmmaData(){
+  const result=[];
+  const inputs = document.querySelectorAll('#pmma-container input[data-kind="util"]');
+  inputs.forEach(el=>{
+    const type_pmma = el.dataset.type;
+    const slug = type_pmma.replace(/\s+/g,'_').replace(/[^a-zA-Z0-9_]/g,'');
+    const util   = parseInt(el.value||0);
+    const endomm = parseInt(document.getElementById('pmma-end-'+slug)?.value||0);
+    if(util>0 || endomm>0) result.push({type_pmma, utilises:util, endommages:endomm});
+  });
+  return result;
+}
 
 async function loadBobines(){
   const sid=document.getElementById('p-site').value;
@@ -1177,6 +1288,7 @@ function savePoint(){
     nb_heures:   document.getElementById('p-heures').value,
     observations:document.getElementById('p-obs').value,
     films_data:  JSON.stringify(films_data),
+    pmma_data:   JSON.stringify(collectPmmaData()),
   }).then(d=>{
     btn.disabled=false; btn.textContent='💾 Enregistrer le point';
     if(d.success){
@@ -1246,6 +1358,7 @@ async function editPoint(id){
   document.getElementById('p-obs').value         = p.observations||'';
   await loadStockRivets();
   await loadBobines();
+  await loadStockPMMA();
   document.getElementById('mPoint').classList.add('open');
 }
 

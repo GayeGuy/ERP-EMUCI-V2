@@ -421,6 +421,20 @@ $m = '';
 safe_exec($db, "ALTER TABLE `op_points_journaliers` MODIFY COLUMN `statut` ENUM('brouillon','en_attente_validation','valide','suivi','rejete') NOT NULL DEFAULT 'brouillon'", $m);
 $results[] = "op_points_journaliers.statut → ENUM+rejete : $m";
 
+// ── Table op_pmma_utilises (PMMA par point journalier) ──────────────
+$m = '';
+safe_exec($db, "CREATE TABLE IF NOT EXISTS `op_pmma_utilises` (
+    `id`         INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `point_id`   INT UNSIGNED NOT NULL,
+    `type_pmma`  VARCHAR(50)  NOT NULL,
+    `utilises`   INT UNSIGNED NOT NULL DEFAULT 0,
+    `endommages` INT UNSIGNED NOT NULL DEFAULT 0,
+    `created_at` DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_point_id` (`point_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", $m);
+$results[] = "op_pmma_utilises (CREATE IF NOT EXISTS) : $m";
+
 $db->exec("SET FOREIGN_KEY_CHECKS=1");
 
 echo "<pre style='font-family:monospace;font-size:14px;padding:20px'>";
