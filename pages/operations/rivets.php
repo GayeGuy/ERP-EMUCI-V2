@@ -114,21 +114,33 @@ include __DIR__ . '/../../templates/header.php';
   <div class="table-wrap">
     <?php $recap = db_fetch_all(
       "SELECT p.date_point, s.nom AS site, p.total_engins, p.rivets_utilises, p.rivets_endommages,
+              COALESCE(p.rivets_gonflables,0) AS rivets_gonflables,
+              COALESCE(p.rivets_eclates,0)    AS rivets_eclates,
               p.rivets_utilises+p.rivets_endommages AS total_sortis
        FROM op_points_journaliers p JOIN sites s ON s.id=p.site_id
+       " . ($site_force_r ? "WHERE p.site_id=$site_force_r" : "") . "
        ORDER BY p.date_point DESC LIMIT 30");
     ?>
     <table>
-      <thead><tr><th>Date</th><th>Site</th><th>Engins</th><th>Rivets utilisés</th><th>Rivets endommagés</th><th>Total sortis</th></tr></thead>
+      <thead><tr>
+        <th>Date</th>
+        <?php if(!$site_force_r): ?><th>Site</th><?php endif; ?>
+        <th>Engins</th>
+        <th style="text-align:center">🔵 Gonfl.</th>
+        <th style="text-align:center">🔴 Éclatés</th>
+        <th style="text-align:center">Endommagés</th>
+        <th style="text-align:center">Total sortis</th>
+      </tr></thead>
       <tbody>
       <?php if(empty($recap)): ?>
-        <tr><td colspan="6" style="text-align:center;padding:30px;color:var(--muted)">Aucun point journalier.</td></tr>
+        <tr><td colspan="<?= $site_force_r ? 6 : 7 ?>" style="text-align:center;padding:30px;color:var(--muted)">Aucun point journalier.</td></tr>
       <?php else: foreach($recap as $r): ?>
         <tr>
           <td><?= fmt_date($r['date_point']) ?></td>
-          <td><?= h($r['site']) ?></td>
+          <?php if(!$site_force_r): ?><td><?= h($r['site']) ?></td><?php endif; ?>
           <td style="text-align:center;font-weight:700"><?= $r['total_engins'] ?></td>
-          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:700;color:var(--navy)"><?= $r['rivets_utilises'] ?></td>
+          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:700;color:#1565c0"><?= $r['rivets_gonflables'] ?></td>
+          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:700;color:#880e4f"><?= $r['rivets_eclates'] ?></td>
           <td style="text-align:center;color:<?= $r['rivets_endommages']>0 ? 'var(--danger)' : 'var(--muted)' ?>;font-weight:600"><?= $r['rivets_endommages']?:0 ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px"><?= $r['total_sortis'] ?></td>
         </tr>
