@@ -356,13 +356,27 @@ safe_exec($db, "CREATE TABLE IF NOT EXISTS `demandes_bobines` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", $m);
 $results[] = "demandes_bobines (CREATE IF NOT EXISTS) : $m";
 
-// ── op_points_journaliers — ENUM type_point ──────────────────────
+// ── op_points_journaliers — ENUM type_point (3-step) ─────────────
 $m = '';
-safe_exec($db, "UPDATE `op_points_journaliers` SET type_point='final' WHERE type_point NOT IN ('point_9h','point_13h','point_18h','final','intermediaire')", $m);
+safe_exec($db, "ALTER TABLE `op_points_journaliers` MODIFY COLUMN `type_point` VARCHAR(30) NOT NULL DEFAULT 'final'", $m);
+$results[] = "op_points_journaliers.type_point → varchar : $m";
+$m = '';
+safe_exec($db, "UPDATE `op_points_journaliers` SET type_point='final' WHERE type_point='' OR type_point NOT IN ('point_9h','point_13h','point_18h','final','intermediaire')", $m);
 $results[] = "op_points_journaliers.type_point normalize : $m";
 $m = '';
 safe_exec($db, "ALTER TABLE `op_points_journaliers` MODIFY COLUMN `type_point` ENUM('point_9h','point_13h','point_18h','final','intermediaire') NOT NULL DEFAULT 'final'", $m);
 $results[] = "op_points_journaliers.type_point ENUM : $m";
+
+// ── op_points_journaliers — ENUM statut ──────────────────────────
+$m = '';
+safe_exec($db, "ALTER TABLE `op_points_journaliers` MODIFY COLUMN `statut` VARCHAR(30) NOT NULL DEFAULT 'brouillon'", $m);
+$results[] = "op_points_journaliers.statut → varchar : $m";
+$m = '';
+safe_exec($db, "UPDATE `op_points_journaliers` SET statut='brouillon' WHERE statut='' OR statut NOT IN ('brouillon','valide','en_attente_validation','suivi')", $m);
+$results[] = "op_points_journaliers.statut normalize : $m";
+$m = '';
+safe_exec($db, "ALTER TABLE `op_points_journaliers` MODIFY COLUMN `statut` ENUM('brouillon','valide','en_attente_validation','suivi') NOT NULL DEFAULT 'brouillon'", $m);
+$results[] = "op_points_journaliers.statut ENUM : $m";
 
 // ── op_points_journaliers — colonnes per-type rivets ──────────────
 $m = '';
