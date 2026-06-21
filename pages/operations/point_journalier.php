@@ -1066,7 +1066,7 @@ foreach($points as $p):
   <div class="modal" style="width:700px">
     <div class="mhdr"><h3>📊 Détail du point</h3>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-secondary btn-sm" onclick="window.print()" title="Imprimer">🖨️ Imprimer</button>
+        <button class="btn btn-secondary btn-sm" onclick="printPoint(currentPointId)" title="Imprimer">🖨️ Imprimer</button>
         <button class="mclose" onclick="document.getElementById('mDetail').classList.remove('open')">✕</button>
       </div>
     </div>
@@ -1691,7 +1691,7 @@ function validerPoint(id){
   ap({action:'valider_point',point_id:id}).then(d=>{toast(d.message,d.success?'success':'danger');if(d.success)setTimeout(()=>location.reload(),800);});
 }
 
-function printPoint(id){viewPoint(id);setTimeout(()=>window.print(),500);}
+function printPoint(id){window.open('pages/operations/point_pdf.php?id='+id,'_blank');}
 
 function ouvrirRejet(id, date){
   document.getElementById('rejet-point-id').value = id;
