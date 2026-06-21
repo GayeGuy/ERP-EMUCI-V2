@@ -48,13 +48,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
 }
 
 $stocks = db_fetch_all(
-    "SELECT s.id, s.nom, s.type, COALESCE(sr.quantite,0) AS quantite,
+    "SELECT s.id, s.nom, s.type,
+            sr.type_rivet,
+            COALESCE(sr.quantite,0) AS quantite,
             COALESCE((SELECT SUM(p.rivets_utilises+p.rivets_endommages)
                       FROM op_points_journaliers p
                       WHERE p.site_id=s.id AND DATE_FORMAT(p.date_point,'%Y-%m')=DATE_FORMAT(CURDATE(),'%Y-%m')),0) AS utilises_mois
      FROM sites s
-     LEFT JOIN op_stock_rivets sr ON sr.site_id=s.id
-     WHERE s.actif=1 " . ($site_force_r ? "AND s.id=$site_force_r" : "") . " ORDER BY s.nom"
+     JOIN op_stock_rivets sr ON sr.site_id=s.id
+     WHERE s.actif=1 " . ($site_force_r ? "AND s.id=$site_force_r" : "") . "
+     ORDER BY s.nom, FIELD(sr.type_rivet,'gonflable','eclate')"
 );
 
 include __DIR__ . '/../../templates/header.php';
@@ -85,20 +88,25 @@ include __DIR__ . '/../../templates/header.php';
 
 <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px">
 <?php foreach($stocks as $s):
-  $pct = $s['quantite']>0?min(100,round($s['quantite']/5000*100)):0;
+  $pct   = $s['quantite']>0 ? min(100,round($s['quantite']/5000*100)) : 0;
   $color = $s['quantite']<200 ? 'var(--danger)' : ($s['quantite']<1000 ? 'var(--warning)' : 'var(--success)');
+  $is_gonfl  = ($s['type_rivet'] === 'gonflable');
+  $icon      = $is_gonfl ? '🔵' : '🔴';
+  $type_lbl  = $is_gonfl ? 'Gonflables' : 'Éclatés';
+  $bg_header = $is_gonfl ? '#e3f2fd' : '#fce4ec';
+  $dispo_lbl = $is_gonfl ? 'rivets gonflables disponibles' : 'rivets éclatés disponibles';
 ?>
 <div style="background:white;border:1px solid var(--border);border-radius:14px;overflow:hidden">
-  <div style="padding:16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
-    <div style="font-size:28px">🔩</div>
+  <div style="padding:16px;border-bottom:1px solid var(--border);background:<?= $bg_header ?>;display:flex;align-items:center;gap:12px">
+    <div style="font-size:28px"><?= $icon ?></div>
     <div style="flex:1">
       <div style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;color:var(--navy)"><?= h($s['nom']) ?></div>
-      <div style="font-size:12px;color:var(--muted)"><?= h($s['type']) ?></div>
+      <div style="font-size:12px;color:var(--muted);font-weight:600"><?= $type_lbl ?></div>
     </div>
   </div>
   <div style="padding:16px">
     <div style="font-family:'Montserrat',sans-serif;font-size:36px;font-weight:900;color:<?= $color ?>;line-height:1"><?= fmt_number($s['quantite']) ?></div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:10px">rivets disponibles</div>
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px"><?= $dispo_lbl ?></div>
     <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:10px">
       <div style="width:<?= $pct ?>%;height:100%;background:<?= $color ?>;border-radius:3px"></div>
     </div>
