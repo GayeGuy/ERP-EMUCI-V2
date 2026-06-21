@@ -324,7 +324,13 @@ $m = '';
 safe_exec($db, "ALTER TABLE `op_stock_rivets` ADD COLUMN `type_rivet` varchar(20) NOT NULL DEFAULT 'gonflable'", $m);
 $results[] = "op_stock_rivets.type_rivet : $m";
 
-// Ajouter UNIQUE KEY (site_id, type_rivet) pour ON DUPLICATE KEY UPDATE
+// SUPPRIMER l'ancienne UNIQUE KEY uq_site (site_id seul) — elle fait que ON DUPLICATE KEY UPDATE
+// touche la ligne gonflable au lieu de créer une ligne eclate
+$m = '';
+safe_exec($db, "ALTER TABLE `op_stock_rivets` DROP INDEX `uq_site`", $m);
+$results[] = "op_stock_rivets DROP INDEX uq_site : $m";
+
+// Ajouter UNIQUE KEY (site_id, type_rivet) pour ON DUPLICATE KEY UPDATE correct par type
 $m = '';
 safe_exec($db, "ALTER TABLE `op_stock_rivets` ADD UNIQUE KEY uq_site_type (site_id, type_rivet)", $m);
 $results[] = "op_stock_rivets UNIQUE(site_id,type_rivet) : $m";
