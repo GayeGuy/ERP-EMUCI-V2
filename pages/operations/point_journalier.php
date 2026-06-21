@@ -1467,40 +1467,120 @@ function savePoint(){
 function viewPoint(id){
   document.getElementById('mDetail').classList.add('open');
   document.getElementById('detail-body').innerHTML='<div style="text-align:center;padding:40px;color:var(--muted)">Chargement…</div>';
-  // Trouver dans la liste
   const pts=<?= json_encode(array_values($points)) ?>;
-  const p=pts.find(x=>x.id==id); if(!p){document.getElementById('detail-body').innerHTML='Introuvable.';return;}
+  const p=pts.find(x=>x.id==id);
+  if(!p){document.getElementById('detail-body').innerHTML='Introuvable.';return;}
+
+  const statutCfg={
+    'valide':               {bg:'#d1fae5',col:'#065f46',icon:'✅',lbl:'Validé'},
+    'brouillon':            {bg:'#fef3c7',col:'#92400e',icon:'⏳',lbl:'Brouillon'},
+    'en_attente_validation':{bg:'#dbeafe',col:'#1d4ed8',icon:'📤',lbl:'En attente validation'},
+    'suivi':                {bg:'#f1f5f9',col:'#475569',icon:'📊',lbl:'Suivi'},
+    'rejete':               {bg:'#fee2e2',col:'#991b1b',icon:'❌',lbl:'Rejeté'},
+  };
+  const typeLbl={'point_9h':'Point 9h','point_13h':'Point 13h','point_18h':'Point 18h — Final','final':'Final','intermediaire':'Intermédiaire'};
+  const sc = statutCfg[p.statut]||{bg:'#f3f4f6',col:'#374151',icon:'·',lbl:p.statut};
+  const dateStr = new Date(p.date_point).toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'});
+
+  // Véhicules
+  const vehs=[['🚗','VP',p.nb_vp],['🚛','Camion',p.nb_camion],['🚚','Semi',p.nb_semi],['🏍️','Moto',p.nb_moto]];
+  const vehCards = vehs.map(([ic,lb,nb])=>`
+    <div style="background:${nb>0?'#e3f2fd':'#f8fafc'};border-radius:10px;padding:12px;text-align:center;border:1px solid ${nb>0?'#90caf9':'#e2e8f0'}">
+      <div style="font-size:20px">${ic}</div>
+      <div style="font-family:'Montserrat',sans-serif;font-size:20px;font-weight:900;color:${nb>0?'#1565c0':'#cbd5e1'}">${nb}</div>
+      <div style="font-size:10px;color:${nb>0?'#1565c0':'#94a3b8'};font-weight:600;text-transform:uppercase">${lb}</div>
+    </div>`).join('');
+
+  // Rivets
+  const gonfl  = parseInt(p.rivets_gonflables)||0;
+  const eclate = parseInt(p.rivets_eclates)||0;
+  const rivEnd  = parseInt(p.rivets_endommages)||0;
+  const rivSection = (gonfl+eclate+rivEnd)>0 ? `
+    <div style="margin-bottom:20px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">🔩 Rivets</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr${rivEnd>0?' 1fr':''};gap:10px">
+        ${gonfl>0?`<div style="background:#e3f2fd;border-radius:10px;padding:12px;text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#1565c0">${gonfl}</div><div style="font-size:10px;color:#1565c0;font-weight:700;text-transform:uppercase">🔵 Gonflables</div></div>`:''}
+        ${eclate>0?`<div style="background:#fce4ec;border-radius:10px;padding:12px;text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#880e4f">${eclate}</div><div style="font-size:10px;color:#880e4f;font-weight:700;text-transform:uppercase">🔴 Éclatés</div></div>`:''}
+        ${rivEnd>0?`<div style="background:#fff3e0;border-radius:10px;padding:12px;text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#e65100">${rivEnd}</div><div style="font-size:10px;color:#e65100;font-weight:700;text-transform:uppercase">⚠️ Endommagés</div></div>`:''}
+      </div>
+    </div>` : '';
+
+  // Non posés
+  const npConc = parseInt(p.non_poses_concessionnaires)||0;
+  const npUsag = parseInt(p.non_poses_usagers)||0;
+  const npSection = (npConc+npUsag)>0 ? `
+    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px;margin-bottom:20px;display:flex;gap:20px">
+      <div style="font-size:11px;font-weight:700;color:#c2410c;text-transform:uppercase;align-self:center">🚫 Non posés</div>
+      <div style="flex:1;display:flex;gap:16px">
+        ${npConc>0?`<div><span style="font-family:'Montserrat',sans-serif;font-size:18px;font-weight:800;color:#c2410c">${npConc}</span> <span style="font-size:12px;color:#9a3412">Concess.</span></div>`:''}
+        ${npUsag>0?`<div><span style="font-family:'Montserrat',sans-serif;font-size:18px;font-weight:800;color:#c2410c">${npUsag}</span> <span style="font-size:12px;color:#9a3412">Usagers</span></div>`:''}
+      </div>
+    </div>` : '';
+
+  const obsSection = p.observations ? `
+    <div style="background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:20px;border-left:3px solid #94a3b8">
+      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Observations</div>
+      <div style="font-size:13px;color:var(--navy)">${p.observations}</div>
+    </div>` : '';
+
+  const motifSection = p.motif_rejet ? `
+    <div style="background:#fee2e2;border-radius:10px;padding:14px;margin-bottom:20px;border-left:3px solid #ef4444">
+      <div style="font-size:10px;font-weight:700;color:#991b1b;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">❌ Motif de rejet</div>
+      <div style="font-size:13px;color:#7f1d1d">${p.motif_rejet}</div>
+    </div>` : '';
+
   document.getElementById('detail-body').innerHTML=`
-    <div class="point-preview">
-      <h2>Point ${p.type_point==='point_18h'?'Final':'Intermédiaire'} — ${p.site_nom}</h2>
-      <div class="pp-date">Date : ${new Date(p.date_point).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'})}</div>
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px">
-        ${[['🚗',p.nb_vp,'VP'],['🚛',p.nb_camion,'Camion'],['🚚',p.nb_semi,'Semi'],['🏍️',p.nb_moto,'Moto']]
-          .map(([i,v,l])=>`<div class="pp-stat"><div class="psv">${v}</div><div class="psl">${i} ${l}</div></div>`).join('')}
+    <!-- En-tête -->
+    <div style="background:linear-gradient(135deg,#0a1628,#163566);border-radius:14px;padding:20px 24px;margin-bottom:20px;color:white">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+        <div style="font-family:'Montserrat',sans-serif;font-size:18px;font-weight:900">${p.site_nom}</div>
+        <span style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;background:${sc.bg};color:${sc.col}">${sc.icon} ${sc.lbl}</span>
       </div>
-      <div class="pp-section">
-        <div class="pp-title">Total Immatriculation</div>
-        ${p.nb_vp>0?`<div class="pp-row"><span>• Véhicule Particulier</span><span>${p.nb_vp}</span></div>`:''}
-        ${p.nb_camion>0?`<div class="pp-row"><span>• Camion</span><span>${p.nb_camion}</span></div>`:''}
-        ${p.nb_semi>0?`<div class="pp-row"><span>• Semi-remorque</span><span>${p.nb_semi}</span></div>`:''}
-        ${p.nb_moto>0?`<div class="pp-row"><span>• Moto</span><span>${p.nb_moto}</span></div>`:''}
-        <div class="pp-total"><span>TOTAL ENGINS</span><span>${p.total_engins}</span></div>
-        <div class="pp-total" style="border-top:none;padding-top:0;margin-top:0"><span>TOTAL PLAQUES</span><span>${p.total_plaques}</span></div>
+      <div style="font-size:12px;opacity:.6;margin-bottom:16px">${typeLbl[p.type_point]||p.type_point} · ${dateStr}</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
+        <div style="text-align:center">
+          <div style="font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900">${p.total_engins}</div>
+          <div style="font-size:10px;opacity:.5;text-transform:uppercase">Engins</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900">${p.total_plaques}</div>
+          <div style="font-size:10px;opacity:.5;text-transform:uppercase">Plaques</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900">${parseInt(p.rivets_utilises)||0}</div>
+          <div style="font-size:10px;opacity:.5;text-transform:uppercase">Rivets posés</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900">${p.moyenne_prod}</div>
+          <div style="font-size:10px;opacity:.5;text-transform:uppercase">V/H</div>
+        </div>
       </div>
-      <div class="pp-section" style="margin-top:12px">
-        <div class="pp-title">Statistiques</div>
-        <div class="pp-row"><span>#MOYENNE DE PRODUCTION</span><span>${p.moyenne_prod} V/H</span></div>
-        <div class="pp-row"><span>🔩 Rivets utilisés</span><span>${p.rivets_utilises}</span></div>
-        ${p.rivets_endommages>0?`<div class="pp-row"><span>⚠️ Rivets endommagés</span><span>${p.rivets_endommages}</span></div>`:''}
-      </div>
-      <div class="pp-section" style="margin-top:12px">
-        <div class="pp-title">Véhicules non posés</div>
-        <div class="pp-row"><span>- Concessionnaires</span><span>${String(p.non_poses_concessionnaires).padStart(2,'0')}</span></div>
-        <div class="pp-row"><span>- Usagers</span><span>${String(p.non_poses_usagers).padStart(2,'0')}</span></div>
-      </div>
-      ${p.observations?`<div class="pp-section" style="margin-top:12px"><div class="pp-title">NB</div><div style="font-size:13px;opacity:.8">${p.observations}</div></div>`:''}
     </div>
-    <div style="text-align:center;font-size:12px;color:var(--muted)">Enregistré par ${p.agent||'—'} · ${{'valide':'✅ Validé','brouillon':'⏳ Brouillon','en_attente_validation':'📤 En attente superviseur','suivi':'📊 Suivi'}[p.statut]||p.statut}</div>`;
+
+    <!-- Véhicules -->
+    <div style="margin-bottom:20px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">🚗 Répartition véhicules</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">${vehCards}</div>
+      <div style="display:flex;justify-content:space-between;margin-top:10px;padding:10px 14px;background:#f8fafc;border-radius:8px;font-size:13px">
+        <span style="color:var(--muted)">Total engins</span>
+        <span style="font-family:'Montserrat',sans-serif;font-weight:800;color:var(--navy)">${p.total_engins}</span>
+        <span style="color:var(--muted)">Total plaques</span>
+        <span style="font-family:'Montserrat',sans-serif;font-weight:800;color:#1565c0">${p.total_plaques}</span>
+        <span style="color:var(--muted)">Heures</span>
+        <span style="font-family:'Montserrat',sans-serif;font-weight:800;color:var(--navy)">${p.nb_heures_travail||'—'}h</span>
+      </div>
+    </div>
+
+    ${rivSection}
+    ${npSection}
+    ${obsSection}
+    ${motifSection}
+
+    <!-- Footer -->
+    <div style="border-top:1px solid var(--border);padding-top:12px;display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted)">
+      <span>Enregistré par <strong style="color:var(--navy)">${p.agent||'—'}</strong></span>
+      <span>${p.date_point}</span>
+    </div>`;
 }
 
 async function editPoint(id){
