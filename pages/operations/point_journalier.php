@@ -1584,11 +1584,10 @@ async function viewPoint(id){
       <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">🎞️ Films utilisés par bobine</div>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${filmsList.map(f=>`
-          <div style="display:grid;grid-template-columns:40px 1fr 80px 90px 90px;gap:8px;align-items:center;background:#f8fafc;border-radius:8px;padding:10px 12px">
-            <div style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;color:#1565c0;text-align:center">#${f.bobine_num}</div>
+          <div style="display:grid;grid-template-columns:1fr 90px 90px;gap:8px;align-items:center;background:#f8fafc;border-radius:8px;padding:10px 12px">
             <div>
-              <div style="font-size:12px;font-weight:600;color:var(--navy)">${f.type_veh||'—'}</div>
-              <div style="font-size:10px;color:var(--muted)">${f.type_code||''}</div>
+              <div style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:800;color:#1565c0">Bobine #${f.bobine_num}</div>
+              <div style="font-size:11px;color:var(--muted)">${f.type_code||''}</div>
             </div>
             <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#1565c0">${f.films_utilises}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase">Utilisés</div></div>
             <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#e65100">${f.films_endommages||0}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase">Endommagés</div></div>
