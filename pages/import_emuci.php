@@ -460,35 +460,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
 
                         } else {
                             // ── Bobine existante → MISE À JOUR
-                            $old_stock  = (int)$bobine['films_restants'];
-                            $qte_init   = (int)$bobine['qte_initiale'] ?: 500;
-                            $site_upd   = $site_id_ds ?? $bobine['site_id'];
-                            $diff       = $quantity - $old_stock;
+                            // films_restants = quantité PHYSIQUE (gérée par PJ) — ne pas écraser
+                            // stock_systeme  = quantité EMUCI (comparaison uniquement)
+                            $old_systeme = (int)$bobine['stock_systeme'];
+                            $old_phys    = (int)$bobine['films_restants'];
+                            $qte_init    = (int)$bobine['qte_initiale'] ?: 500;
+                            $site_upd    = $site_id_ds ?? $bobine['site_id'];
+                            $diff_sys    = $quantity - $old_systeme;
 
-                            // en_cours si consommée (< qte initiale), sinon en_stock
+                            // Statut basé sur la quantité PHYSIQUE (pas EMUCI)
                             $new_statut = match(true) {
-                                $state == 7    => 'retiree',
-                                $quantity == 0 => 'epuisee',
-                                $quantity < $qte_init => 'en_cours',
-                                default        => 'en_stock',
+                                $state == 7        => 'retiree',
+                                $old_phys == 0     => 'epuisee',
+                                $old_phys < $qte_init => 'en_cours',
+                                default            => 'en_stock',
                             };
 
                             db_query(
                                 "UPDATE op_bobines
-                                 SET films_restants=?, stock_systeme=?, statut=?,
+                                 SET stock_systeme=?, statut=?,
                                      site_id=?, format=IF(?<>'',?,format)
                                  WHERE id=?",
-                                [$quantity, $quantity, $new_statut,
+                                [$quantity, $new_statut,
                                  $site_upd, $format, $format, $bobine['id']]
                             );
 
-                            if ($diff !== 0) {
+                            if ($diff_sys !== 0) {
                                 db_query(
                                     "INSERT INTO mouvements_bobines
                                      (bobine_id,type,quantite,stock_avant,stock_apres,motif,created_by)
                                      VALUES (?,?,?,?,?,?,?)",
-                                    [$bobine['id'],'ajustement_inventaire',$diff,$old_stock,$quantity,
-                                     "Sync OptoTrace $date_import",$user['id']]
+                                    [$bobine['id'],'sync_emuci',$diff_sys,$old_systeme,$quantity,
+                                     "Sync EMUCI $date_import (quantité système)",$user['id']]
                                 );
                                 $nb_stock_maj++;
                             }
