@@ -327,9 +327,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
 // ── LISTE DES POINTS
 $role_slug_pj = current_user()['role_slug'] ?? '';
-// Coordinateur : forcé sur son site
-if ($role_slug_pj === 'coordinateur_site' && $user['site_id']) {
-    $f_site = (int)$user['site_id'];
+// Coordinateur : forcé sur son site (jamais les autres sites)
+if ($role_slug_pj === 'coordinateur_site') {
+    // Sans site assigné → résultat vide (-1 ne matche aucun site_id)
+    $f_site = $user['site_id'] ? (int)$user['site_id'] : -1;
 } else {
     // Superviseur et autres : peuvent voir tous les sites
     $f_site = (int)($_GET['site'] ?? 0);
@@ -349,12 +350,16 @@ $points = db_fetch_all(
     [$f_mois, $f_site, $f_site]
 );
 
-// Stock rivets par site
-// Chips rivets : coordinateur voit seulement son site
-if ($role_slug_pj === 'coordinateur_site' && $user['site_id']) {
-    $stock_rivets_all = db_fetch_all("SELECT sr.*, s.nom FROM op_stock_rivets sr JOIN sites s ON s.id=sr.site_id WHERE sr.site_id=?", [(int)$user['site_id']]);
+// Stock rivets — chips : coordinateur voit uniquement son site
+if ($role_slug_pj === 'coordinateur_site') {
+    $stock_rivets_all = $user['site_id']
+        ? db_fetch_all("SELECT sr.*, s.nom FROM op_stock_rivets sr JOIN sites s ON s.id=sr.site_id WHERE sr.site_id=?", [(int)$user['site_id']])
+        : [];
+} elseif ($f_site > 0) {
+    // Superviseur filtré sur un site
+    $stock_rivets_all = db_fetch_all("SELECT sr.*, s.nom FROM op_stock_rivets sr JOIN sites s ON s.id=sr.site_id WHERE sr.site_id=?", [$f_site]);
 } else {
-    $stock_rivets_all = db_fetch_all("SELECT sr.*, s.nom FROM op_stock_rivets sr JOIN sites s ON s.id=sr.site_id");
+    $stock_rivets_all = db_fetch_all("SELECT sr.*, s.nom FROM op_stock_rivets sr JOIN sites s ON s.id=sr.site_id ORDER BY s.nom");
 }
 
 // Vérifier si le coordinateur est autorisé à travailler aujourd'hui
