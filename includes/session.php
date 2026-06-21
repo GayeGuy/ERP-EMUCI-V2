@@ -11,10 +11,11 @@ if (session_status() === PHP_SESSION_NONE) {
     ]);
 }
 
-// ── Retourner l'utilisateur connecté (avec cache session)
+// ── Retourner l'utilisateur connecté (cache par requête uniquement — pas de session cache pour éviter les données périmées)
 function current_user(): ?array {
+    static $user_cached = null;
+    if ($user_cached !== null) return $user_cached;
     if (!isset($_SESSION['user_id'])) return null;
-    if (isset($_SESSION['user_cache'])) return $_SESSION['user_cache'];
 
     $u = db_fetch_one(
         "SELECT u.*, r.slug AS role_slug, r.nom AS role_nom, s.nom AS site_nom
@@ -48,7 +49,7 @@ function current_user(): ?array {
         $u['delegations_recues'] = [];
     }
 
-    $_SESSION['user_cache'] = $u;
+    $user_cached = $u;
     return $u;
 }
 

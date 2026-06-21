@@ -282,7 +282,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 [$cmd_id]
             );
             foreach ($lignes_rivets as $lr) {
-                $type_rivet = (stripos($lr['libelle'], 'clat') !== false) ? 'eclate' : 'gonflable';
+                // Normaliser accents pour comparaison fiable (éclaté → eclat)
+                $lib_norm   = strtolower(str_replace(
+                    ['é','è','ê','ë','É','È','Ê','Ë'],
+                    ['e','e','e','e','e','e','e','e'],
+                    $lr['libelle']
+                ));
+                $type_rivet = (strpos($lib_norm, 'eclat') !== false) ? 'eclate' : 'gonflable';
                 db_query(
                     "INSERT INTO op_stock_rivets (site_id, type_rivet, quantite) VALUES (?,?,?)
                      ON DUPLICATE KEY UPDATE quantite = quantite + ?",
