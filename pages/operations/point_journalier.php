@@ -50,7 +50,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $films_data = json_decode($_POST['films_data'] ?? '[]', true);
         $pmma_data  = json_decode($_POST['pmma_data']  ?? '[]', true);
 
-        if (!$site_id || !$date_point) json_response(false, 'Site et date obligatoires.');
+        $types_valides = ['point_9h', 'point_13h', 'point_18h', 'final', 'intermediaire'];
+        if (!$site_id)                              json_response(false, 'Veuillez sélectionner un site.');
+        if (!$date_point)                           json_response(false, 'Veuillez saisir une date.');
+        if (!in_array($type_point, $types_valides)) json_response(false, 'Veuillez sélectionner un type de point (9h, 13h ou 18h).');
 
         // Calculs automatiques
         $total_engins  = $nb_vp + $nb_camion + $nb_semi + $nb_moto;
@@ -103,6 +106,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                      $total_gonfl,$total_eclate,
                      $np_conc,$np_usag,$heures,$obs,$user['id']]);
                 $point_id = (int)db_last_id();
+                if (!$point_id) throw new Exception("Impossible de créer le point journalier.");
             }
 
             // Déduire rivets du stock site par type
