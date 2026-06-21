@@ -175,7 +175,7 @@ function get_groupes_pour_role(string $role_slug): array {
         // Stock & approvisionnement (accès commandes via OPERATIONS)
         'gestionnaire_stock'         => ['DASHBOARD','STOCK','BOBINES','OPERATIONS'],
         // Supervision opérationnelle
-        'superviseur_operation'      => ['DASHBOARD','OPERATIONS','BOBINES','RAPPORTS'],
+        'superviseur_operation'      => ['DASHBOARD','STOCK','OPERATIONS','BOBINES','RAPPORTS'],
         // IT maintenance
         'maintenance_info'           => ['DASHBOARD','STOCK','INFORMATIQUE'],
         'superviseur_it'             => ['DASHBOARD','STOCK','INFORMATIQUE'],
