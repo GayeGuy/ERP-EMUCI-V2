@@ -132,9 +132,10 @@ function _auto_valider_stock(string $date_import, int $user_id): array {
                 [$site_id]
             );
             foreach ($coords as $c) {
-                db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                     [$c['id'],'stock_valide','✅ Stock validé',
-                     "Votre stock bobines du $date_import est validé automatiquement. Vous pouvez commencer votre activité."]);
+                     "Votre stock bobines du $date_import est validé automatiquement. Vous pouvez commencer votre activité.",
+                     '/pages/import_emuci.php']);
             }
             $resultats[] = ['site_id'=>$site_id,'statut'=>'valide_auto','nb_ecarts'=>0];
         } else {
@@ -151,9 +152,10 @@ function _auto_valider_stock(string $date_import, int $user_id): array {
             );
             $site_nom = db_fetch_value("SELECT nom FROM sites WHERE id=?",[$site_id]);
             foreach ($gsb_users as $gsb) {
-                db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                     [$gsb['id'],'stock_ecart','⚠️ Écart stock détecté',
-                     "Import du $date_import — Site $site_nom : $nb_ecarts écart(s) détecté(s). Validation GSB requise avant démarrage coordinateur."]);
+                     "Import du $date_import — Site $site_nom : $nb_ecarts écart(s) détecté(s). Validation GSB requise avant démarrage coordinateur.",
+                     '/pages/validation_stock_matin.php']);
             }
             // Notifier coordinateurs du blocage
             $coords = db_fetch_all(
@@ -161,9 +163,10 @@ function _auto_valider_stock(string $date_import, int $user_id): array {
                 [$site_id]
             );
             foreach ($coords as $c) {
-                db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                     [$c['id'],'stock_bloque','🔒 Stock en attente de validation',
-                     "Votre stock du $date_import présente $nb_ecarts écart(s). Le gestionnaire doit valider avant que vous puissiez travailler."]);
+                     "Votre stock du $date_import présente $nb_ecarts écart(s). Le gestionnaire doit valider avant que vous puissiez travailler.",
+                     '/pages/validation_stock_matin.php']);
             }
             $resultats[] = ['site_id'=>$site_id,'statut'=>'bloque','nb_ecarts'=>$nb_ecarts];
         }

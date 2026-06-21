@@ -74,9 +74,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             );
             $site_nom = db_fetch_value("SELECT nom FROM sites WHERE id=?",[$site_id]);
             foreach ($targets as $t) {
-                db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                     [$t['id'],'info',"📦 Commande $num à valider",
-                     "{$user['prenom']} {$user['nom']} (Site: $site_nom) — ".count($lignes)." article(s) — En attente de votre validation."]);
+                     "{$user['prenom']} {$user['nom']} (Site: $site_nom) — ".count($lignes)." article(s) — En attente de votre validation.",
+                     '/pages/commandes.php']);
             }
             audit_log($user['id'],'CREATE','commandes',$cmd_id,"Commande $num créée — ".count($lignes)." ligne(s)");
             db_commit();
@@ -120,18 +121,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 [$cmd['site_id']]
             );
             foreach ($coords as $c) {
-                db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                     [$c['id'],'info',"✅ Commande {$cmd['numero_commande']} validée",
-                     "Votre commande a été validée par le superviseur et est en cours de préparation."]);
+                     "Votre commande a été validée par le superviseur et est en cours de préparation.",
+                     '/pages/commandes.php']);
             }
             $gests = db_fetch_all(
                 "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id
                  WHERE r.slug IN ('gestionnaire_stock','superviseur_achat','admin','superadmin') AND u.actif=1"
             );
             foreach ($gests as $g) {
-                db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                     [$g['id'],'info',"📦 Commande {$cmd['numero_commande']} à préparer",
-                     "Commande validée — prête pour préparation et expédition."]);
+                     "Commande validée — prête pour préparation et expédition.",
+                     '/pages/commandes.php']);
             }
             audit_log($user['id'],'UPDATE','commandes',$cmd_id,"Commande validée par superviseur — $nb_valides ligne(s)");
             db_commit();
@@ -157,8 +160,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                  WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1", [$cmd['site_id']]
             );
             foreach ($coords as $c) {
-                db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
-                    [$c['id'],'info',"❌ Commande {$cmd['numero_commande']} rejetée","Motif : $motif"]);
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                    [$c['id'],'info',"❌ Commande {$cmd['numero_commande']} rejetée","Motif : $motif",
+                     '/pages/commandes.php']);
             }
             audit_log($user['id'],'UPDATE','commandes',$cmd_id,"Commande rejetée : $motif");
             db_commit();
@@ -229,9 +233,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                  WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1",[$cmd['site_id']]
             );
             foreach ($coords as $c) {
-                db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                     [$c['id'],'info',"🚚 Commande {$cmd['numero_commande']} expédiée",
-                     "Votre commande est en route. Confirmez la réception à l'arrivée."]);
+                     "Votre commande est en route. Confirmez la réception à l'arrivée.",
+                     '/pages/commandes.php']);
             }
             audit_log($user['id'],'UPDATE','commandes',$cmd_id,"Livraison émise — bon $num_dist");
             db_commit();

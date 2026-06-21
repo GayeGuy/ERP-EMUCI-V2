@@ -70,9 +70,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         );
         $site_nom = db_fetch_value("SELECT nom FROM sites WHERE id=?", [$site_force]);
         foreach ($sups as $s) {
-            db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
+            db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                 [$s['id'],'info',"🎞️ Demande bobine $num",
-                 "{$user['prenom']} {$user['nom']} ($site_nom) demande une bobine type {$type_code} — {$type['libelle']}"]);
+                 "{$user['prenom']} {$user['nom']} ($site_nom) demande une bobine type {$type_code} — {$type['libelle']}",
+                 '/pages/commandes_bobines.php']);
         }
         audit_log($user['id'],'CREATE','commandes_bobines',$cmd_id,"Demande $num — type $type_code");
         json_response(true,'Demande envoyée. En attente de validation.', ['numero'=>$num]);
@@ -101,12 +102,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
              WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1", [$cmd['site_id']]
         );
         foreach ($coord as $c) {
-            db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
+            db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                 [$c['id'], $decision==='valide'?'success':'danger',
                  $decision==='valide'?"✅ Demande {$cmd['numero']} validée":"❌ Demande {$cmd['numero']} rejetée",
                  $decision==='valide'
                    ? "Votre demande de bobine {$cmd['libelle_type']} a été validée. En cours de préparation par le GSB."
-                   : "Votre demande a été rejetée. Motif : $motif"]);
+                   : "Votre demande a été rejetée. Motif : $motif",
+                 '/pages/commandes_bobines.php']);
         }
 
         if ($decision==='valide') {
@@ -116,10 +118,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                  WHERE r.slug IN ('gestionnaire_stock_bobines','admin','superadmin') AND u.actif=1"
             );
             foreach ($gsbs as $g) {
-                db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                     [$g['id'],'info',"🎞️ Commande bobine à préparer",
                      "Commande {$cmd['numero']} validée — type {$cmd['type_bobine']} pour ".
-                     db_fetch_value("SELECT nom FROM sites WHERE id=?",[$cmd['site_id']])]);
+                     db_fetch_value("SELECT nom FROM sites WHERE id=?",[$cmd['site_id']]),
+                     '/pages/commandes_bobines.php']);
             }
         }
         audit_log($user['id'],'UPDATE','commandes_bobines',$cmd_id,"$decision par superviseur");
@@ -188,9 +191,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             );
             $nb = count($bobine_ids);
             foreach ($coords as $c) {
-                db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                     [$c['id'],'info',"🎞️ Bobine(s) expédiée(s)",
-                     "$nb bobine(s) de type {$cmd['type_bobine']} affectée(s) à votre site. Confirmez la réception."]);
+                     "$nb bobine(s) de type {$cmd['type_bobine']} affectée(s) à votre site. Confirmez la réception.",
+                     '/pages/commandes_bobines.php']);
             }
             audit_log($user['id'],'UPDATE','commandes_bobines',$cmd_id,"$nb bobine(s) affectée(s)");
             db_commit();

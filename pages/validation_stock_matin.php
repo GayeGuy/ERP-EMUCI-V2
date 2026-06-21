@@ -187,8 +187,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         // Notifier coordinateurs du site
         $coords = db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1",[$site_id]);
         foreach($coords as $c) {
-            db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
-                [$c['id'],'stock_valide','✅ Stock validé',"Votre stock bobines du $date est validé. Vous pouvez commencer votre activité."]);
+            db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                [$c['id'],'stock_valide','✅ Stock validé',"Votre stock bobines du $date est validé. Vous pouvez commencer votre activité.",
+                 '/pages/validation_stock_matin.php']);
         }
         audit_log($user['id'],'CREATE','validations_stock_matin',0,"Validation auto stock site:$site_id $date");
         json_response(true,'Stock validé automatiquement.');
@@ -272,8 +273,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 'refuse'         => '❌ Activité bloquée',
             ];
             foreach($coords as $c) {
-                db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
-                    [$c['id'],'stock_validation',$titre_map[$decision],$msg_map[$decision]]);
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                    [$c['id'],'stock_validation',$titre_map[$decision],$msg_map[$decision],
+                     '/pages/validation_stock_matin.php']);
             }
 
             audit_log($user['id'],'UPDATE','validations_stock_matin',0,"$decision stock site:$site_id $date — $commentaire");

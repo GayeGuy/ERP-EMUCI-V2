@@ -87,8 +87,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             : 'Équipement non spécifié';
         $site_nom  = $site_id ? db_fetch_value("SELECT nom FROM sites WHERE id=?",[$site_id]) : '';
         foreach ($notif_targets as $t) {
-            db_query("INSERT INTO notifications (user_id,type,titre,message) VALUES (?,?,?,?)",
-                [$t['id'], 'info', '🔧 Demande intervention', "Panne signalée sur {$equip_nom} — Site {$site_nom} par {$user['prenom']} {$user['nom']}: {$description}"]);
+            db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                [$t['id'], 'info', '🔧 Demande intervention', "Panne signalée sur {$equip_nom} — Site {$site_nom} par {$user['prenom']} {$user['nom']}: {$description}",
+                 '/pages/interventions.php']);
         }
         audit_log($user['id'],'CREATE','interventions',$id,"Demande intervention coordinateur: $description");
         json_response(true,'Demande envoyée au service maintenance.');
