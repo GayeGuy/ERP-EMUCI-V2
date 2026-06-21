@@ -395,6 +395,12 @@ $points = db_fetch_all(
     [$f_mois, $f_site, $f_site]
 );
 
+// KPIs du mois
+$kpi_engins  = array_sum(array_column($points, 'total_engins'));
+$kpi_plaques = array_sum(array_column($points, 'total_plaques'));
+$kpi_rivets  = array_sum(array_column($points, 'rivets_utilises'));
+$kpi_valides = count(array_filter($points, fn($p) => $p['statut'] === 'valide'));
+
 // Stock rivets — chips : coordinateur voit uniquement son site
 if ($role_slug_pj === 'coordinateur_site') {
     $stock_rivets_all = $user['site_id']
@@ -424,33 +430,67 @@ if ($role_slug_pj === 'coordinateur_site' && $user['site_id']) {
 include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
-/* ── POINT FORM ── */
-.point-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}
-.veh-card{background:white;border:1.5px solid var(--border);border-radius:12px;padding:18px;transition:border-color .2s}
+/* ── KPI BAR ── */
+.kpi-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+.kpi-card{background:white;border:1px solid var(--border);border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:12px}
+.kpi-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
+.kpi-val{font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:var(--navy);line-height:1}
+.kpi-lbl{font-size:11px;color:var(--muted);margin-top:2px}
+
+/* ── POINTS CARDS ── */
+.pj-card{background:white;border:1px solid var(--border);border-radius:14px;padding:14px 18px;display:grid;grid-template-columns:64px 1fr auto;gap:14px;align-items:center;transition:box-shadow .18s,border-color .18s;cursor:default}
+.pj-card:hover{box-shadow:0 4px 16px rgba(10,22,40,.08);border-color:#c5d3e8}
+.pj-card.today{border-left:4px solid #1a56a0}
+.pj-date-block{text-align:center}
+.pj-date-block .pjd{font-family:'Montserrat',sans-serif;font-size:26px;font-weight:900;color:var(--navy);line-height:1}
+.pj-date-block .pjm{font-size:10px;text-transform:uppercase;color:var(--muted);letter-spacing:.5px}
+.pj-type-pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;margin-top:5px}
+.pj-pills{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+.pj-pill{padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
+.pj-pill.engins{background:#e3f2fd;color:#1565c0}
+.pj-pill.plaques{background:#e8f5e9;color:#1b5e20}
+.pj-pill.rivets{background:#f3e5f5;color:#6a1b9a}
+.pj-pill.prod{background:#fff3e0;color:#e65100}
+.pj-pill.veh{background:#f8fafc;color:#475569;border:1px solid #e2e8f0}
+.pj-actions{display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.pj-status{padding:4px 11px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap;margin-bottom:6px;text-align:center}
+
+/* ── FORM POINT ── */
+.point-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.veh-card{background:white;border:1.5px solid var(--border);border-radius:12px;padding:16px;transition:border-color .2s}
 .veh-card:hover{border-color:var(--blue-mid,#1a56a0)}
-.veh-card .vc-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
-.veh-card .vc-icon{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
-.veh-card .vc-title{font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;color:var(--navy)}
-.veh-card .vc-sub{font-size:11.5px;color:var(--muted)}
-.veh-card .vc-badges{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
-.badge-info{background:#e3f2fd;color:#1565c0;padding:3px 8px;border-radius:6px;font-size:11px;font-weight:600}
-.nb-input{width:100%;padding:12px;text-align:center;font-family:'Montserrat',sans-serif;font-size:24px;font-weight:800;border:2px solid var(--border);border-radius:10px;outline:none;color:var(--navy)}
-.nb-input:focus{border-color:var(--blue-mid,#1a56a0);box-shadow:0 0 0 3px rgba(26,86,160,.1)}
-.nb-input::-webkit-inner-spin-button{opacity:1;transform:scale(1.5)}
+.veh-card .vc-header{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.veh-card .vc-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.veh-card .vc-title{font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:var(--navy)}
+.veh-card .vc-sub{font-size:11px;color:var(--muted)}
+.veh-card .vc-badges{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap}
+.badge-info{background:#e3f2fd;color:#1565c0;padding:2px 7px;border-radius:6px;font-size:11px;font-weight:600}
+.nb-input{width:100%;padding:14px;text-align:center;font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900;border:2px solid var(--border);border-radius:10px;outline:none;color:var(--navy);transition:border-color .2s}
+.nb-input:focus{border-color:#1a56a0;box-shadow:0 0 0 3px rgba(26,86,160,.1)}
+.nb-input:not([value="0"]):not(:placeholder-shown){border-color:#1a56a0;color:#1a56a0}
+.nb-input::-webkit-inner-spin-button{opacity:1;transform:scale(1.4)}
 
-/* ── CALCUL TEMPS RÉEL ── */
-.calc-panel{background:linear-gradient(135deg,#0a1628,#0f2d5c);color:white;border-radius:14px;padding:20px;margin-bottom:20px;position:sticky;top:72px;z-index:10}
-.calc-panel h3{font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;opacity:.8;margin-bottom:12px}
-.calc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-.calc-item .cv{font-family:'Montserrat',sans-serif;font-size:26px;font-weight:900;color:white}
-.calc-item .cl{font-size:11px;opacity:.6;margin-top:2px}
-.calc-item.warn .cv{color:#ffa726}
-.calc-item.danger .cv{color:#ef5350}
-.calc-item.success .cv{color:#66bb6a}
+/* ── CALC PANEL (compact) ── */
+.calc-panel{background:linear-gradient(135deg,#0a1628,#163566);border-radius:14px;padding:14px 20px;margin-bottom:20px;position:sticky;top:0;z-index:10}
+.calc-panel-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.calc-panel-top h3{font-family:'Montserrat',sans-serif;font-size:12px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.8px;margin:0}
+.calc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.calc-item{text-align:center}
+.calc-item .cv{font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:white;line-height:1}
+.calc-item .cl{font-size:10px;color:rgba(255,255,255,.5);margin-top:3px;text-transform:uppercase;letter-spacing:.5px}
+.calc-item.warn .cv{color:#fbbf24}
+.calc-item.danger .cv{color:#f87171}
+.calc-item.success .cv{color:#34d399}
 
-/* ── FILMS SECTION ── */
-.film-serie{background:white;border:1px solid var(--border);border-radius:12px;margin-bottom:12px;overflow:hidden}
-.film-serie-header{padding:12px 16px;background:var(--lighter);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:pointer}
+/* ── SECTION HEADERS IN MODAL ── */
+.form-section{margin-bottom:24px}
+.form-section-title{display:flex;align-items:center;gap:8px;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid var(--border)}
+.form-section-num{width:24px;height:24px;border-radius:50%;background:var(--navy);color:white;font-family:'Montserrat',sans-serif;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.form-section-title h4{font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;color:var(--navy);margin:0}
+
+/* ── FILMS ── */
+.film-serie{background:white;border:1px solid var(--border);border-radius:12px;margin-bottom:10px;overflow:hidden}
+.film-serie-header{padding:11px 16px;background:var(--lighter);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:pointer}
 .film-serie-header h4{font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700}
 .film-serie-body{padding:14px 16px;display:none}
 .film-serie-body.open{display:block}
@@ -461,37 +501,37 @@ include __DIR__ . '/../../templates/header.php';
 .bobine-input{width:72px;padding:6px;border:1.5px solid var(--border);border-radius:7px;text-align:center;font-size:13px;font-family:'Montserrat',sans-serif;font-weight:700;outline:none}
 .bobine-input:focus{border-color:var(--blue-mid,#1a56a0)}
 
-/* ── TABLEAU POINTS ── */
+/* ── STATUS BADGES ── */
 .point-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
-.point-badge.final{background:#e3f2fd;color:#1565c0}
-.point-badge.intermediaire{background:#fff3e0;color:#e65100}
-.point-badge.valide{background:#e8f5e9;color:#2e7d32}
+.point-badge.valide{background:#d1fae5;color:#065f46}
 .point-badge.en_attente_validation{background:#dbeafe;color:#1d4ed8}
+.point-badge.brouillon{background:#fef3c7;color:#92400e}
 .point-badge.suivi{background:#f1f5f9;color:#475569}
 .point-badge.rejete{background:#fee2e2;color:#991b1b}
 
+/* ── MODALS ── */
 .modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(10,22,40,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
-.modal{background:white;border-radius:16px;max-width:95vw;max-height:95vh;overflow-y:auto;animation:mIn .25s cubic-bezier(.22,1,.36,1)}
-@keyframes mIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
-.mhdr{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:white;z-index:10}
-.mhdr h3{font-family:'Montserrat',sans-serif;font-size:17px;font-weight:700}
+.modal{background:white;border-radius:16px;max-width:95vw;max-height:95vh;overflow-y:auto;animation:mIn .22s cubic-bezier(.22,1,.36,1)}
+@keyframes mIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.mhdr{padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:white;z-index:10}
+.mhdr h3{font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800}
 .mclose{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:none;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
-.mbody{padding:24px}
+.mbody{padding:20px 24px}
 .mfoot{padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;background:white}
 
-/* ── APERÇU POINT ── */
-.point-preview{font-family:'Montserrat',sans-serif;background:#0a1628;color:white;border-radius:12px;padding:24px;margin-bottom:20px}
-.point-preview h2{font-size:16px;font-weight:800;margin-bottom:4px;text-align:center}
-.point-preview .pp-date{text-align:center;opacity:.7;font-size:12px;margin-bottom:18px}
+/* ── APERÇU ── */
+.point-preview{font-family:'Montserrat',sans-serif;background:linear-gradient(135deg,#0a1628,#163566);color:white;border-radius:12px;padding:20px;margin-bottom:20px}
+.point-preview h2{font-size:15px;font-weight:800;margin-bottom:4px;text-align:center}
+.point-preview .pp-date{text-align:center;opacity:.7;font-size:12px;margin-bottom:16px}
 .point-preview .pp-section{margin-bottom:14px}
-.point-preview .pp-title{font-size:11px;font-weight:700;opacity:.6;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
+.point-preview .pp-title{font-size:10px;font-weight:700;opacity:.5;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
 .point-preview .pp-row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.08)}
 .point-preview .pp-total{display:flex;justify-content:space-between;font-size:15px;font-weight:800;padding:8px 0;border-top:2px solid rgba(255,255,255,.2);margin-top:6px}
-.point-preview .pp-stat{background:rgba(255,255,255,.08);border-radius:8px;padding:10px 14px;text-align:center}
-.point-preview .pp-stat .psv{font-size:24px;font-weight:900}
+.point-preview .pp-stat{background:rgba(255,255,255,.1);border-radius:8px;padding:10px 14px;text-align:center}
+.point-preview .pp-stat .psv{font-size:22px;font-weight:900}
 .point-preview .pp-stat .psl{font-size:10px;opacity:.6;margin-top:2px}
-@media(max-width:900px){.point-grid{grid-template-columns:1fr}.calc-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:900px){.point-grid{grid-template-columns:1fr}.calc-grid{grid-template-columns:repeat(2,1fr)}.kpi-bar{grid-template-columns:repeat(2,1fr)}.pj-card{grid-template-columns:1fr}}
 </style>
 
 <!-- HEADER BAR -->
@@ -604,79 +644,141 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
 </div>
 <?php endif; ?>
 
+<!-- KPI BAR -->
+<div class="kpi-bar">
+  <div class="kpi-card">
+    <div class="kpi-icon" style="background:#e3f2fd">🚗</div>
+    <div><div class="kpi-val"><?= fmt_number($kpi_engins) ?></div><div class="kpi-lbl">Engins ce mois</div></div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-icon" style="background:#e8f5e9">📋</div>
+    <div><div class="kpi-val"><?= fmt_number($kpi_plaques) ?></div><div class="kpi-lbl">Plaques ce mois</div></div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-icon" style="background:#f3e5f5">🔩</div>
+    <div><div class="kpi-val"><?= fmt_number($kpi_rivets) ?></div><div class="kpi-lbl">Rivets posés</div></div>
+  </div>
+  <div class="kpi-card">
+    <div class="kpi-icon" style="background:#d1fae5">✅</div>
+    <div><div class="kpi-val"><?= $kpi_valides ?> / <?= count($points) ?></div><div class="kpi-lbl">Points validés</div></div>
+  </div>
+</div>
+
 <!-- STOCK RIVETS RAPIDE -->
 <?php if(!empty($stock_rivets_all)): ?>
-<div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap">
+<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
+  <span style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Stock rivets :</span>
   <?php foreach($stock_rivets_all as $sr):
     $label = $sr['type_rivet'] === 'eclate' ? 'Éclatés' : 'Gonflables';
     $icon  = $sr['type_rivet'] === 'eclate' ? '🔴' : '🔵';
-    $col   = $sr['quantite']<100 ? 'var(--danger)' : ($sr['quantite']<500 ? 'var(--warning)' : 'var(--navy)');
+    $col   = $sr['quantite']<100 ? '#dc2626' : ($sr['quantite']<500 ? '#d97706' : '#1e40af');
+    $bg    = $sr['quantite']<100 ? '#fee2e2' : ($sr['quantite']<500 ? '#fef3c7' : '#eff6ff');
   ?>
-  <div style="padding:6px 14px;background:white;border:1px solid var(--border);border-radius:20px;font-size:12.5px;display:flex;align-items:center;gap:6px">
-    <?= $icon ?> <strong><?= $label ?></strong> :
-    <span style="font-family:'Montserrat',sans-serif;font-weight:800;color:<?= $col ?>">
-      <?= fmt_number($sr['quantite']) ?>
-    </span>
+  <div style="padding:5px 14px;background:<?= $bg ?>;border-radius:20px;font-size:12px;font-weight:700;color:<?= $col ?>;display:flex;align-items:center;gap:5px">
+    <?= $icon ?> <?= $label ?> : <?= fmt_number($sr['quantite']) ?>
+    <?php if(!empty($sr['nom'])&&$role_slug_pj!=='coordinateur_site'): ?>
+    <span style="font-weight:400;opacity:.7">· <?= h($sr['nom']) ?></span>
+    <?php endif; ?>
   </div>
   <?php endforeach; ?>
 </div>
 <?php endif; ?>
 
-<!-- LISTE DES POINTS -->
-<div class="card">
-  <div class="card-header">
-    <h3>📋 Points journaliers <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= count($points) ?>)</span></h3>
-  </div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr>
-        <th>Date</th><th>Site</th><th>Point</th>
-        <th style="text-align:center">VP</th><th style="text-align:center">Cam.</th>
-        <th style="text-align:center">Semi</th><th style="text-align:center">Moto</th>
-        <th style="text-align:center">Engins</th><th style="text-align:center">Plaques</th>
-        <th style="text-align:center">Moy.</th><th style="text-align:center">Rivets</th>
-        <th>Statut</th><th>Agent</th><th>Actions</th>
-      </tr></thead>
-      <tbody>
-      <?php if(empty($points)): ?>
-        <tr><td colspan="14" style="text-align:center;padding:40px;color:var(--muted)">Aucun point ce mois.</td></tr>
-      <?php else: foreach($points as $p): ?>
-        <tr>
-          <td style="font-weight:600;white-space:nowrap"><?= fmt_date($p['date_point'],'d/m/Y') ?></td>
-          <td style="font-size:13px"><?= h($p['site_nom']) ?></td>
-          <td><span class="point-badge <?= $p['type_point'] ?>"><?= ['point_9h'=>'🕘 9h','point_13h'=>'🕐 13h','point_18h'=>'🕕 18h ✅','final'=>'Final','intermediaire'=>'Intermédiaire'][$p['type_point']] ?? h($p['type_point']) ?></span></td>
-          <td style="text-align:center;font-weight:700"><?= $p['nb_vp'] ?></td>
-          <td style="text-align:center;font-weight:700"><?= $p['nb_camion'] ?></td>
-          <td style="text-align:center;font-weight:700"><?= $p['nb_semi'] ?></td>
-          <td style="text-align:center;font-weight:700"><?= $p['nb_moto'] ?></td>
-          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:16px;color:var(--navy)"><?= $p['total_engins'] ?></td>
-          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:16px;color:var(--blue-mid,#1a56a0)"><?= $p['total_plaques'] ?></td>
-          <td style="text-align:center;font-size:12px"><?= $p['moyenne_prod'] ?> V/H</td>
-          <td style="text-align:center;font-size:12.5px">🔩 <?= $p['rivets_utilises'] ?><?= $p['rivets_endommages']>0?' ⚠️'.$p['rivets_endommages']:'' ?></td>
-          <td><span class="point-badge <?= $p['statut'] ?>"><?= ['valide'=>'✅ Validé','brouillon'=>'⏳ Brouillon','en_attente_validation'=>'📤 En attente superviseur','suivi'=>'📊 Suivi','rejete'=>'❌ Rejeté'][$p['statut']] ?? $p['statut'] ?></span></td>
-          <td style="font-size:12px"><?= h($p['agent']??'—') ?></td>
-          <td style="white-space:nowrap;display:flex;gap:4px">
-            <button class="btn btn-secondary btn-sm" onclick="viewPoint(<?= $p['id'] ?>)" title="Aperçu">👁</button>
-            <button class="btn btn-secondary btn-sm" onclick="printPoint(<?= $p['id'] ?>)" title="Imprimer">🖨️</button>
-            <?php if($p['statut']==='brouillon' && ($p['agent_id']??0)==$user['id']): ?>
-            <?php if(($p['type_point']??'')==='point_18h'): ?>
-            <button class="btn btn-primary btn-sm" onclick="soumettrePoint(<?= $p['id'] ?>)" title="Soumettre au superviseur">📤</button>
-            <?php else: ?>
-            <button class="btn btn-success btn-sm" onclick="validerPointCoord(<?= $p['id'] ?>)" title="Valider définitivement">✅</button>
-            <?php endif; ?>
-            <button class="btn btn-secondary btn-sm" onclick="editPoint(<?= $p['id'] ?>)" title="Modifier" style="background:var(--blue-pale,#e8f4f9);color:var(--blue)">✏️</button>
-            <?php endif; ?>
-            <?php if(in_array($p['statut'],['brouillon','en_attente_validation']) && ($p['type_point']??'')==='point_18h' && in_array($role_slug_pj,['admin','superadmin','superviseur_operation'])): ?>
-            <button class="btn btn-success btn-sm" onclick="validerPoint(<?= $p['id'] ?>)" title="Valider le point 18h">✅</button>
-            <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5" onclick="ouvrirRejet(<?= $p['id'] ?>,<?= htmlspecialchars(json_encode($p['date_point'])) ?>)" title="Rejeter et restaurer le stock">❌</button>
-            <?php endif; ?>
-          </td>
-        </tr>
-      <?php endforeach; endif; ?>
-      </tbody>
-    </table>
-  </div>
+<!-- LISTE DES POINTS — CARDS -->
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+  <h3 style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:700;color:var(--navy)">
+    📋 Points journaliers <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= count($points) ?>)</span>
+  </h3>
 </div>
+
+<?php if(empty($points)): ?>
+<div style="background:white;border:1px solid var(--border);border-radius:14px;padding:48px;text-align:center;color:var(--muted)">
+  <div style="font-size:40px;margin-bottom:12px">📋</div>
+  <div style="font-size:15px;font-weight:600">Aucun point journalier ce mois</div>
+  <div style="font-size:13px;margin-top:4px">Cliquez sur "Nouveau point" pour commencer</div>
+</div>
+<?php else: ?>
+<div style="display:flex;flex-direction:column;gap:8px">
+<?php
+$statut_cfg = [
+  'valide'                => ['bg'=>'#d1fae5','col'=>'#065f46','icon'=>'✅','lbl'=>'Validé'],
+  'brouillon'             => ['bg'=>'#fef3c7','col'=>'#92400e','icon'=>'⏳','lbl'=>'Brouillon'],
+  'en_attente_validation' => ['bg'=>'#dbeafe','col'=>'#1d4ed8','icon'=>'📤','lbl'=>'En attente'],
+  'suivi'                 => ['bg'=>'#f1f5f9','col'=>'#475569','icon'=>'📊','lbl'=>'Suivi'],
+  'rejete'                => ['bg'=>'#fee2e2','col'=>'#991b1b','icon'=>'❌','lbl'=>'Rejeté'],
+];
+$type_cfg = [
+  'point_9h'  => ['lbl'=>'9h', 'bg'=>'#fef3c7','col'=>'#92400e'],
+  'point_13h' => ['lbl'=>'13h','bg'=>'#ffedd5','col'=>'#c2410c'],
+  'point_18h' => ['lbl'=>'18h ✅','bg'=>'#dbeafe','col'=>'#1d4ed8'],
+  'final'     => ['lbl'=>'Final','bg'=>'#e0f2fe','col'=>'#0369a1'],
+  'intermediaire'=>['lbl'=>'Interm.','bg'=>'#fff7ed','col'=>'#c2410c'],
+];
+foreach($points as $p):
+  $sc  = $statut_cfg[$p['statut']] ?? ['bg'=>'#f3f4f6','col'=>'#374151','icon'=>'·','lbl'=>$p['statut']];
+  $tc  = $type_cfg[$p['type_point']] ?? ['lbl'=>$p['type_point'],'bg'=>'#f3f4f6','col'=>'#374151'];
+  $today = ($p['date_point'] === date('Y-m-d'));
+  $veh = [];
+  if($p['nb_vp']>0)     $veh[]="🚗 {$p['nb_vp']}";
+  if($p['nb_camion']>0) $veh[]="🚛 {$p['nb_camion']}";
+  if($p['nb_semi']>0)   $veh[]="🚚 {$p['nb_semi']}";
+  if($p['nb_moto']>0)   $veh[]="🏍️ {$p['nb_moto']}";
+?>
+<div class="pj-card<?= $today ? ' today' : '' ?>">
+
+  <!-- Date + Type -->
+  <div class="pj-date-block">
+    <div class="pjd"><?= date('d', strtotime($p['date_point'])) ?></div>
+    <div class="pjm"><?= date('M', strtotime($p['date_point'])) ?></div>
+    <div class="pj-type-pill" style="background:<?= $tc['bg'] ?>;color:<?= $tc['col'] ?>"><?= $tc['lbl'] ?></div>
+  </div>
+
+  <!-- Stats -->
+  <div>
+    <div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:6px">
+      <?= h($p['site_nom']) ?>
+      <?php if($p['agent']): ?>
+      <span style="font-size:11px;color:var(--muted);font-weight:400"> · <?= h($p['agent']) ?></span>
+      <?php endif; ?>
+    </div>
+    <div class="pj-pills">
+      <span class="pj-pill engins">🚗 <?= $p['total_engins'] ?> engins</span>
+      <span class="pj-pill plaques">📋 <?= $p['total_plaques'] ?> plaques</span>
+      <?php if($p['rivets_utilises'] > 0): ?>
+      <span class="pj-pill rivets">🔩 <?= $p['rivets_utilises'] ?> rivets<?= $p['rivets_endommages']>0?' (⚠️'.$p['rivets_endommages'].' end.)':'' ?></span>
+      <?php endif; ?>
+      <span class="pj-pill prod">⚡ <?= $p['moyenne_prod'] ?> V/H</span>
+      <?php if($veh): ?>
+      <span class="pj-pill veh"><?= implode(' · ', $veh) ?></span>
+      <?php endif; ?>
+    </div>
+  </div>
+
+  <!-- Statut + Actions -->
+  <div class="pj-actions" style="flex-direction:column">
+    <div class="pj-status" style="background:<?= $sc['bg'] ?>;color:<?= $sc['col'] ?>"><?= $sc['icon'] ?> <?= $sc['lbl'] ?></div>
+    <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
+      <button class="btn btn-secondary btn-sm" onclick="viewPoint(<?= $p['id'] ?>)" title="Aperçu">👁</button>
+      <button class="btn btn-secondary btn-sm" onclick="printPoint(<?= $p['id'] ?>)" title="Imprimer">🖨️</button>
+      <?php if($p['statut']==='brouillon' && ($p['agent_id']??0)==$user['id']): ?>
+        <?php if(($p['type_point']??'')==='point_18h'): ?>
+        <button class="btn btn-primary btn-sm" onclick="soumettrePoint(<?= $p['id'] ?>)" title="Soumettre">📤</button>
+        <?php else: ?>
+        <button class="btn btn-success btn-sm" onclick="validerPointCoord(<?= $p['id'] ?>)" title="Valider">✅</button>
+        <?php endif; ?>
+        <button class="btn btn-secondary btn-sm" onclick="editPoint(<?= $p['id'] ?>)" title="Modifier" style="background:#e8f4f9;color:var(--blue)">✏️</button>
+      <?php endif; ?>
+      <?php if(in_array($p['statut'],['brouillon','en_attente_validation']) && ($p['type_point']??'')==='point_18h' && in_array($role_slug_pj,['admin','superadmin','superviseur_operation'])): ?>
+        <button class="btn btn-success btn-sm" onclick="validerPoint(<?= $p['id'] ?>)" title="Valider">✅</button>
+        <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5" onclick="ouvrirRejet(<?= $p['id'] ?>,<?= htmlspecialchars(json_encode($p['date_point'])) ?>)" title="Rejeter">❌</button>
+      <?php endif; ?>
+    </div>
+  </div>
+
+</div>
+<?php endforeach; ?>
+</div>
+<?php endif; ?>
 
 <!-- ═════════ MODAL SAISIE POINT ═════════ -->
 <div class="modal-overlay" id="mPoint">
@@ -688,53 +790,83 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
     <div class="mbody">
       <div id="pAlert"></div>
 
-      <!-- Panneau calcul temps réel -->
+      <!-- Panneau calcul en temps réel (compact) -->
       <div class="calc-panel">
-        <h3>Calcul en temps réel</h3>
+        <div class="calc-panel-top">
+          <h3>Calcul en temps réel</h3>
+          <div style="font-size:11px;color:rgba(255,255,255,.4)" id="c-stock-info"></div>
+        </div>
         <div class="calc-grid">
-          <div class="calc-item"><div class="cv" id="c-engins">0</div><div class="cl">Total Engins</div></div>
-          <div class="calc-item"><div class="cv" id="c-plaques">0</div><div class="cl">Total Plaques</div></div>
-          <div class="calc-item" id="c-rivets-wrap"><div class="cv" id="c-rivets">0</div><div class="cl">Rivets nécessaires</div></div>
-          <div class="calc-item"><div class="cv" id="c-moy">0</div><div class="cl">Moy. V/H</div></div>
-        </div>
-        <div style="margin-top:10px;font-size:12px;opacity:.6" id="c-stock-info"></div>
-      </div>
-
-      <!-- Infos générales -->
-      <div class="form-row cols-3" style="margin-bottom:16px">
-        <div class="form-group"><label>Site *</label>
-          <?php if($role_slug_pj === 'coordinateur_site' && $user['site_id']): ?>
-          <input type="hidden" id="p-site" value="<?= (int)$user['site_id'] ?>">
-          <div class="form-control" style="background:var(--lighter);color:var(--navy);font-weight:600;cursor:default">
-            📍 <?= h(db_fetch_value("SELECT nom FROM sites WHERE id=?",[(int)$user['site_id']]) ?? '') ?>
+          <div class="calc-item">
+            <div class="cv" id="c-engins">0</div>
+            <div class="cl">Engins</div>
           </div>
-          <?php else: ?>
-          <select class="form-control" id="p-site" onchange="loadStockRivets();loadBobines();loadStockPMMA()">
-            <option value="">— Sélectionner —</option>
-            <?php foreach($sites_list as $s): ?>
-            <option value="<?= $s['id'] ?>"><?= h($s['nom']) ?></option>
-            <?php endforeach; ?>
-          </select>
-          <?php endif; ?>
-        </div>
-        <div class="form-group"><label>Date</label>
-          <input type="date" class="form-control" id="p-date" value="<?= date('Y-m-d') ?>">
-        </div>
-        <div class="form-group"><label>Type de point</label>
-          <select class="form-control" id="p-type" onchange="onTypePointChange(this.value)">
-            <option value="point_9h">🕘 Point 9h — Suivi matinée</option>
-            <option value="point_13h">🕐 Point 13h — Suivi mi-journée</option>
-            <option value="point_18h" selected>🕕 Point 18h — Fin de journée ✅ (validation)</option>
-          </select>
-          <div id="type-info" style="margin-top:6px;font-size:12px;padding:8px 12px;border-radius:8px;background:#d1fae5;color:#065f46;font-weight:600">
-            ✅ Ce point sera envoyé en validation au superviseur.
+          <div class="calc-item">
+            <div class="cv" id="c-plaques">0</div>
+            <div class="cl">Plaques</div>
+          </div>
+          <div class="calc-item" id="c-rivets-wrap">
+            <div class="cv" id="c-rivets">0</div>
+            <div class="cl">Rivets sortis</div>
+          </div>
+          <div class="calc-item">
+            <div class="cv" id="c-moy">0</div>
+            <div class="cl">Moy. V/H</div>
           </div>
         </div>
       </div>
 
-      <!-- Véhicules posés -->
-      <h4 style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;margin-bottom:14px;color:var(--navy)">🚗 Véhicules posés</h4>
-      <div class="point-grid" style="margin-bottom:20px">
+      <!-- ① Informations générales -->
+      <div class="form-section">
+        <div class="form-section-title">
+          <div class="form-section-num">1</div>
+          <h4>Informations générales</h4>
+        </div>
+        <div class="form-row cols-3">
+          <div class="form-group"><label>Site *</label>
+            <?php if($role_slug_pj === 'coordinateur_site' && $user['site_id']): ?>
+            <input type="hidden" id="p-site" value="<?= (int)$user['site_id'] ?>">
+            <div class="form-control" style="background:var(--lighter);color:var(--navy);font-weight:600;cursor:default">
+              📍 <?= h(db_fetch_value("SELECT nom FROM sites WHERE id=?",[(int)$user['site_id']]) ?? '') ?>
+            </div>
+            <?php else: ?>
+            <select class="form-control" id="p-site" onchange="loadStockRivets();loadBobines();loadStockPMMA()">
+              <option value="">— Sélectionner —</option>
+              <?php foreach($sites_list as $s): ?>
+              <option value="<?= $s['id'] ?>"><?= h($s['nom']) ?></option>
+              <?php endforeach; ?>
+            </select>
+            <?php endif; ?>
+          </div>
+          <div class="form-group"><label>Date</label>
+            <input type="date" class="form-control" id="p-date" value="<?= date('Y-m-d') ?>">
+          </div>
+          <div class="form-group"><label>Type de point</label>
+            <select class="form-control" id="p-type" onchange="onTypePointChange(this.value)">
+              <option value="point_9h">🕘 Point 9h — Suivi matinée</option>
+              <option value="point_13h">🕐 Point 13h — Suivi mi-journée</option>
+              <option value="point_18h" selected>🕕 Point 18h — Fin de journée ✅</option>
+            </select>
+            <div id="type-info" style="margin-top:6px;font-size:12px;padding:7px 12px;border-radius:8px;background:#d1fae5;color:#065f46;font-weight:600">
+              ✅ Ce point sera envoyé en validation au superviseur.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ② Véhicules posés -->
+      <div class="form-section">
+        <div class="form-section-title">
+          <div class="form-section-num">2</div>
+          <h4>Véhicules posés</h4>
+          <span style="margin-left:auto;font-size:12px;color:var(--muted)">⏱
+            <input type="number" id="p-heures" value="8" min="0" max="24" step="0.5"
+                   oninput="recalcule()"
+                   style="width:52px;padding:3px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-weight:700;text-align:center;outline:none;color:var(--navy)">
+            h de travail
+          </span>
+        </div>
+      <div class="point-grid" style="margin-bottom:0">
         <?php
         $veh_icons = ['VP'=>'🚗','CAM'=>'🚛','SEMI'=>'🚚','MOTO'=>'🏍️'];
         $veh_colors= ['VP'=>'#e3f2fd','CAM'=>'#e8f5e9','SEMI'=>'#fff3e0','MOTO'=>'#fce4ec'];
@@ -764,19 +896,22 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
         <?php endforeach; ?>
       </div>
 
-      <!-- Heures travail + stock rivets -->
-      <div class="form-row cols-2" style="margin-bottom:16px">
-        <div class="form-group"><label>⏱ Heures de travail</label>
-          <input type="number" class="form-control" id="p-heures" value="8" min="0" max="24" step="0.5" oninput="recalcule()">
-        </div>
-        <div class="form-group"><label>Stock rivets site</label>
-          <input type="text" class="form-control" id="p-stock-rivets" disabled style="font-weight:700;font-size:12px;color:var(--navy)">
-        </div>
-      </div>
+      </div><!-- /point-grid -->
 
-      <!-- Rivets par type -->
-      <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;margin-bottom:12px;color:var(--navy)">🔩 Consommation rivets</h4>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px">
+      <!-- Stock rivets (info discrète) -->
+      <div style="margin-top:10px;margin-bottom:20px;display:flex;align-items:center;gap:8px">
+        <span style="font-size:12px;color:var(--muted)">Stock rivets :</span>
+        <input type="text" id="p-stock-rivets" disabled style="border:none;background:none;font-weight:700;font-size:12px;color:var(--navy);padding:0;flex:1">
+      </div>
+      </div><!-- /form-section ② -->
+
+      <!-- ③ Consommation rivets -->
+      <div class="form-section">
+        <div class="form-section-title">
+          <div class="form-section-num">3</div>
+          <h4>Consommation rivets</h4>
+        </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:0">
         <div style="background:#e3f2fd;border-radius:12px;padding:14px;border:1.5px solid #90caf9">
           <div style="font-size:12px;font-weight:700;color:#1565c0;margin-bottom:10px">🔵 Rivets Gonflables</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -810,40 +945,52 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
           <div id="info-eclate" style="font-size:11px;margin-top:8px;color:#880e4f;font-weight:600">Stock: — | Sortis: 0</div>
         </div>
       </div>
+      </div><!-- /rivets grid -->
       <input type="hidden" id="p-riv-endomm" value="0">
+      </div><!-- /form-section ③ -->
 
-      <!-- PMMA -->
-      <div style="margin-top:20px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center">
-        <h4 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700;color:var(--navy)">🪟 PMMA</h4>
-        <span style="font-size:11px;color:var(--muted)">Par type de PMMA disponible sur le site</span>
-      </div>
-      <div id="pmma-container">
-        <div style="text-align:center;color:var(--muted);padding:12px;font-size:13px">Chargement du stock PMMA...</div>
-      </div>
-
-      <!-- Films utilisés par bobine -->
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
-        <h4 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700;color:var(--navy)">🎞️ Films utilisés par bobine</h4>
-        <span style="font-size:11px;color:var(--muted)">Uniquement les bobines en utilisation</span>
-      </div>
-      <div id="films-container">
-        <div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">Chargement des bobines...</div>
-      </div>
-
-      <!-- Véhicules non posés -->
-      <h4 style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;margin:20px 0 14px;color:var(--navy)">🚫 Véhicules non posés</h4>
-      <div class="form-row cols-2" style="margin-bottom:16px">
-        <div class="form-group"><label>Concessionnaires</label>
-          <input type="number" class="form-control" id="p-np-conc" min="0" value="0">
+      <!-- ④ PMMA -->
+      <div class="form-section">
+        <div class="form-section-title">
+          <div class="form-section-num">4</div>
+          <h4>PMMA</h4>
+          <span style="margin-left:8px;font-size:11px;color:var(--muted)">Sélectionner et ajouter les types consommés</span>
         </div>
-        <div class="form-group"><label>Usagers</label>
-          <input type="number" class="form-control" id="p-np-usag" min="0" value="0">
+        <div id="pmma-container">
+          <div style="text-align:center;color:var(--muted);padding:12px;font-size:13px">Chargement du stock PMMA...</div>
         </div>
-      </div>
+      </div><!-- /form-section ④ -->
 
-      <div class="form-group"><label>Observations / NB</label>
-        <textarea class="form-control" id="p-obs" rows="3" placeholder="Erreur carte grise, remarques…"></textarea>
-      </div>
+      <!-- ⑤ Films -->
+      <div class="form-section">
+        <div class="form-section-title">
+          <div class="form-section-num">5</div>
+          <h4>Films utilisés par bobine</h4>
+          <span style="margin-left:8px;font-size:11px;color:var(--muted)">Uniquement les bobines en utilisation</span>
+        </div>
+        <div id="films-container">
+          <div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">Chargement des bobines...</div>
+        </div>
+      </div><!-- /form-section ⑤ -->
+
+      <!-- ⑥ Compléments -->
+      <div class="form-section">
+        <div class="form-section-title">
+          <div class="form-section-num">6</div>
+          <h4>Compléments</h4>
+        </div>
+        <div class="form-row cols-2" style="margin-bottom:16px">
+          <div class="form-group"><label>🚫 Non posés — Concessionnaires</label>
+            <input type="number" class="form-control" id="p-np-conc" min="0" value="0">
+          </div>
+          <div class="form-group"><label>🚫 Non posés — Usagers</label>
+            <input type="number" class="form-control" id="p-np-usag" min="0" value="0">
+          </div>
+        </div>
+        <div class="form-group"><label>Observations / NB</label>
+          <textarea class="form-control" id="p-obs" rows="3" placeholder="Erreur carte grise, remarques particulières…"></textarea>
+        </div>
+      </div><!-- /form-section ⑥ -->
 
       <!-- Aperçu en temps réel -->
       <div class="point-preview" id="point-preview" style="display:none">
