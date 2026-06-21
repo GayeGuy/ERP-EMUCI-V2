@@ -356,6 +356,14 @@ safe_exec($db, "CREATE TABLE IF NOT EXISTS `demandes_bobines` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", $m);
 $results[] = "demandes_bobines (CREATE IF NOT EXISTS) : $m";
 
+// ── op_points_journaliers — ENUM type_point ──────────────────────
+$m = '';
+safe_exec($db, "UPDATE `op_points_journaliers` SET type_point='final' WHERE type_point NOT IN ('point_9h','point_13h','point_18h','final','intermediaire')", $m);
+$results[] = "op_points_journaliers.type_point normalize : $m";
+$m = '';
+safe_exec($db, "ALTER TABLE `op_points_journaliers` MODIFY COLUMN `type_point` ENUM('point_9h','point_13h','point_18h','final','intermediaire') NOT NULL DEFAULT 'final'", $m);
+$results[] = "op_points_journaliers.type_point ENUM : $m";
+
 // ── op_points_journaliers — colonnes per-type rivets ──────────────
 $m = '';
 safe_exec($db, "ALTER TABLE `op_points_journaliers` ADD COLUMN `rivets_gonflables` INT NOT NULL DEFAULT 0", $m);
