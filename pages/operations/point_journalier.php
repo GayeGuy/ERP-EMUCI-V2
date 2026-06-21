@@ -402,6 +402,11 @@ if ($role_slug_pj === 'coordinateur_site') {
 }
 $f_mois = trim($_GET['mois'] ?? date('Y-m'));
 
+// Les brouillons ne sont visibles que par leur auteur (coordinateur)
+$filtre_brouillon = ($role_slug_pj === 'coordinateur_site')
+    ? ""
+    : "AND p.statut != 'brouillon'";
+
 $points = db_fetch_all(
     "SELECT p.*, s.nom AS site_nom,
             p.created_by AS agent_id,
@@ -411,6 +416,7 @@ $points = db_fetch_all(
      LEFT JOIN users u ON u.id=p.created_by
      WHERE DATE_FORMAT(p.date_point,'%Y-%m')=?
        AND (? = 0 OR p.site_id=?)
+       $filtre_brouillon
      ORDER BY p.date_point DESC, p.type_point DESC",
     [$f_mois, $f_site, $f_site]
 );
