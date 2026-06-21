@@ -260,7 +260,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
     // ── REJETER POINT (superviseur) — reverse les déductions stock
     if ($action === 'rejeter_point') {
-        if (!in_array($role_slug, ['admin','superadmin','superviseur_operation']))
+        if (!in_array($user['role_slug'] ?? '', ['admin','superadmin','superviseur_operation']))
             json_response(false, 'Accès refusé.');
         $point_id   = (int)($_POST['point_id']    ?? 0);
         $motif      = trim($_POST['motif_rejet']  ?? '');
