@@ -690,8 +690,8 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
   </div>
 </div>
 
-<!-- STOCK RIVETS RAPIDE -->
-<?php if(!empty($stock_rivets_all)): ?>
+<!-- STOCK RIVETS RAPIDE — visible coordinateur uniquement -->
+<?php if(!empty($stock_rivets_all) && $role_slug_pj === 'coordinateur_site'): ?>
 <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
   <span style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Stock rivets :</span>
   <?php foreach($stock_rivets_all as $sr):
