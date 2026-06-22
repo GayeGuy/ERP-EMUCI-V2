@@ -307,6 +307,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     }
 
     if ($action === 'valider_point') {
+        if (!in_array($user['role_slug'] ?? '', ['admin','superadmin','superviseur_operation']))
+            json_response(false, 'Accès refusé.');
         $point_id = (int)($_POST['point_id'] ?? 0);
         $point = db_fetch_one("SELECT * FROM op_points_journaliers WHERE id=?", [$point_id]);
         if (!$point) json_response(false, 'Point introuvable.');

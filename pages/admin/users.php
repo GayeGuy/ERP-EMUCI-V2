@@ -103,7 +103,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     if ($action === 'get') {
         $id  = (int)($_POST['id'] ?? 0);
         $row = db_fetch_one(
-            "SELECT u.*, r.nom AS role_nom, r.slug AS role_slug,
+            "SELECT u.id, u.nom, u.prenom, u.email, u.telephone,
+                    u.role_id, u.site_id, u.actif, u.last_login, u.created_at,
+                    r.nom AS role_nom, r.slug AS role_slug,
                     s.nom AS site_nom
              FROM users u
              JOIN roles r ON r.id=u.role_id

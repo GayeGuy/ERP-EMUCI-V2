@@ -43,11 +43,15 @@ function refreshNotifs() {
     const list = document.querySelector('.notif-list');
     if (!list) return;
     if (count === 0) { list.innerHTML = '<div class="notif-empty">✅ Aucune notification</div>'; return; }
+    const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     list.innerHTML = d.data.data.map(n=>`
-      <div class="notif-item" onclick="readNotif(${n.id},'${(n.lien||'').replace(/'/g,"\\'")}')">
-        <div class="n-titre">${n.titre||''}</div>
-        <div class="n-date">${n.created_at||''}</div>
+      <div class="notif-item" data-id="${n.id}" data-lien="${esc(n.lien||'')}">
+        <div class="n-titre">${esc(n.titre)}</div>
+        <div class="n-date">${esc(n.created_at)}</div>
       </div>`).join('');
+    list.querySelectorAll('.notif-item').forEach(el=>{
+      el.addEventListener('click',()=>readNotif(el.dataset.id, el.dataset.lien));
+    });
   }).catch(()=>{});
 }
 // Rafraîchir toutes les 60 secondes

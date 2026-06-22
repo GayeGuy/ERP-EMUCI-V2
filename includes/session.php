@@ -8,6 +8,7 @@ if (session_status() === PHP_SESSION_NONE) {
         'cookie_lifetime' => SESSION_LIFETIME,
         'cookie_httponly'  => true,
         'cookie_samesite'  => 'Lax',
+        'cookie_secure'    => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
     ]);
 }
 
@@ -90,8 +91,10 @@ function can(string $module, string $droit = 'can_read'): bool {
 }
 
 function _check_permission_db(int $role_id, string $module, string $droit): bool {
+    static $allowed = ['can_read','can_create','can_update','can_delete','can_export'];
+    if (!in_array($droit, $allowed, true)) return false;
     $val = db_fetch_value(
-        "SELECT $droit FROM permissions WHERE role_id=? AND module=?",
+        "SELECT `$droit` FROM permissions WHERE role_id=? AND module=?",
         [$role_id, $module]
     );
     return (bool)$val;
