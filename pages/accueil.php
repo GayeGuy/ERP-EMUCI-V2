@@ -5,7 +5,7 @@
 // ============================================================
 if (!headers_sent()) {
     header_remove('Content-Security-Policy');
-    header("Content-Security-Policy: default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;");
+    header("Content-Security-Policy: default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; script-src * 'unsafe-inline' 'unsafe-eval' blob: data:; style-src * 'unsafe-inline' data:; font-src * data:; img-src * data: blob:;");
 }
 
 require_once __DIR__ . '/../includes/db.php';
