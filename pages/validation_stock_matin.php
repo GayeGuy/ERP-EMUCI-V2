@@ -736,6 +736,7 @@ async function verifierSite(siteId, siteNom) {
       `<div class="alert alert-danger">❌ ${d.message}</div>`;
     return;
   }
+  d = d.data;
 
   currentEcarts = d.ecarts || [];
   const bobines  = d.bobines_detail || [];
@@ -890,8 +891,9 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
   document.getElementById('modalDetails').style.display = 'flex';
 
   // Charger la liste complète des bobines vérifiées via AJAX
-  const d = await ap({action:'calculer_ecarts', site_id:siteId, date:'<?= h($f_date) ?>'});
-  if(!d.success){document.getElementById('detailBody').innerHTML='<div class="alert alert-danger">'+d.message+'</div>';return;}
+  const _r = await ap({action:'calculer_ecarts', site_id:siteId, date:'<?= h($f_date) ?>'});
+  if(!_r.success){document.getElementById('detailBody').innerHTML='<div class="alert alert-danger">'+_r.message+'</div>';return;}
+  const d = _r.data;
 
   const statutLabels = {
     valide_auto:'✅ Validé automatiquement', valide_gsb:'✅ Validé par GSB',
