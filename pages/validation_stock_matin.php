@@ -147,6 +147,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     'films_endommages' => $films_endommages,
                     'films_restants'   => $films_restants,
                     'films_optoplate'  => $films_optoplate,
+                    'stock_systeme'    => (int)($b['stock_systeme'] ?? 0),
                     'ecart'            => $ecart_val,
                     'has_ecart'        => $has_ecart,
                 ];
@@ -782,7 +783,7 @@ async function verifierSite(siteId, siteNom) {
       html += `<tr style="background:${bg}">
         <td style="padding:9px 12px;font-family:monospace;font-weight:800;color:#06033A">${b.numero}</td>
         <td style="padding:9px 12px;font-size:12px;color:var(--muted)">${b.type_code||b.format||'—'}</td>
-        <td style="padding:9px 12px;text-align:center;font-weight:600">${b.films_pj}</td>
+        <td style="padding:9px 12px;text-align:center;font-weight:600">${b.films_utilises??'—'}</td>
         ${d.dernier_import ? `<td style="padding:9px 12px;text-align:center;font-weight:600">${b.films_optoplate!==null?b.films_optoplate:'—'}</td>` : ''}
         <td style="padding:9px 12px;text-align:center;font-size:12px;color:var(--muted)">${b.stock_systeme}</td>
         <td style="padding:9px 12px;text-align:center">
