@@ -151,7 +151,7 @@ $nb_fin_cycle = count(array_filter($equipements, fn($e)=>$e['date_fin_cycle'] &&
 
 // ── EXPORT EXCEL
 if (isset($_GET['export'])) {
-    $autoload = __DIR__ . '/../../vendor/autoload.php';
+    $autoload = __DIR__ . '/../vendor/autoload.php';
     if (!file_exists($autoload)) die('PhpSpreadsheet non installé.');
     require_once $autoload;
     $sp = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
@@ -162,7 +162,7 @@ if (isset($_GET['export'])) {
                 'Date acq.','Prix achat','Valeur résiduelle','Amort. %',
                 'Fin de cycle','Nb interventions','Taux curative %'];
     foreach ($headers as $i => $h) {
-        $cell = $ws->getCellByColumnAndRow($i+1, 1);
+        $cell = $ws->getCell([$i+1, 1]);
         $cell->setValue($h);
         $cell->getStyle()->getFont()->setBold(true);
         $cell->getStyle()->getFill()->setFillType(\PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID)
@@ -173,24 +173,24 @@ if (isset($_GET['export'])) {
     foreach ($equipements as $e) {
         $taux_curative = $e['nb_interventions_total'] > 0
             ? round($e['nb_curative'] / $e['nb_interventions_total'] * 100, 1) : 0;
-        $ws->setCellValueByColumnAndRow(1,  $row, $e['numero_serie_interne'] ?? '');
-        $ws->setCellValueByColumnAndRow(2,  $row, $e['type_nom'] ?? '');
-        $ws->setCellValueByColumnAndRow(3,  $row, $e['marque'] ?? '');
-        $ws->setCellValueByColumnAndRow(4,  $row, $e['modele'] ?? '');
-        $ws->setCellValueByColumnAndRow(5,  $row, $e['site_nom'] ?? '');
-        $ws->setCellValueByColumnAndRow(6,  $row, $etats[$e['etat']] ?? $e['etat']);
-        $ws->setCellValueByColumnAndRow(7,  $row, $e['statut_stock'] ?? '');
-        $ws->setCellValueByColumnAndRow(8,  $row, $e['date_acquisition'] ?? '');
-        $ws->setCellValueByColumnAndRow(9,  $row, $e['prix_achat'] ? (float)$e['prix_achat'] : '');
-        $ws->setCellValueByColumnAndRow(10, $row, $e['valeur_residuelle'] !== null ? (float)$e['valeur_residuelle'] : '');
-        $ws->setCellValueByColumnAndRow(11, $row, $e['pct_amorti'] !== null ? (float)$e['pct_amorti'] : '');
-        $ws->setCellValueByColumnAndRow(12, $row, $e['date_fin_cycle'] ?? '');
-        $ws->setCellValueByColumnAndRow(13, $row, (int)$e['nb_interventions_total']);
-        $ws->setCellValueByColumnAndRow(14, $row, $taux_curative);
+        $ws->setCellValue([1,  $row], $e['numero_serie_interne'] ?? '');
+        $ws->setCellValue([2,  $row], $e['type_nom'] ?? '');
+        $ws->setCellValue([3,  $row], $e['marque'] ?? '');
+        $ws->setCellValue([4,  $row], $e['modele'] ?? '');
+        $ws->setCellValue([5,  $row], $e['site_nom'] ?? '');
+        $ws->setCellValue([6,  $row], $etats[$e['etat']] ?? $e['etat']);
+        $ws->setCellValue([7,  $row], $e['statut_stock'] ?? '');
+        $ws->setCellValue([8,  $row], $e['date_acquisition'] ?? '');
+        $ws->setCellValue([9,  $row], $e['prix_achat'] ? (float)$e['prix_achat'] : '');
+        $ws->setCellValue([10, $row], $e['valeur_residuelle'] !== null ? (float)$e['valeur_residuelle'] : '');
+        $ws->setCellValue([11, $row], $e['pct_amorti'] !== null ? (float)$e['pct_amorti'] : '');
+        $ws->setCellValue([12, $row], $e['date_fin_cycle'] ?? '');
+        $ws->setCellValue([13, $row], (int)$e['nb_interventions_total']);
+        $ws->setCellValue([14, $row], $taux_curative);
         $row++;
     }
     foreach (range(1, count($headers)) as $col)
-        $ws->getColumnDimensionByColumn($col)->setAutoSize(true);
+        $ws->getColumnDimension(\PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($col))->setAutoSize(true);
     $cat   = ucfirst($f_categorie);
     $fname = "equipements_{$f_categorie}_".date('Ymd').".xlsx";
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
