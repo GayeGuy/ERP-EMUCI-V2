@@ -471,6 +471,14 @@ $results[] = "op_pmma_utilises (CREATE IF NOT EXISTS) : $m";
 
 $db->exec("SET FOREIGN_KEY_CHECKS=1");
 
+// ── Fix cohérence equipements: site_id/statut_stock
+$m = '';
+safe_exec($db, "UPDATE equipements SET statut_stock='en_stock' WHERE site_id IS NULL AND statut_stock='affecte' AND etat != 'hs'", $m);
+$results[] = "Fix equipements statut_stock (site NULL + affecte → en_stock) : $m";
+$m = '';
+safe_exec($db, "UPDATE equipements SET statut_stock='hs' WHERE etat='hs' AND statut_stock != 'hs'", $m);
+$results[] = "Fix equipements statut_stock (etat hs → statut hs) : $m";
+
 echo "<pre style='font-family:monospace;font-size:14px;padding:20px'>";
 foreach ($results as $r) echo $r . "\n";
 

@@ -58,7 +58,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $etat         = trim($_POST['etat']                 ?? 'neuf');
         $date_achat   = trim($_POST['date_achat']           ?? '');
         $prix_achat   = (float)($_POST['prix_achat']        ?? 0);
-        $statut_stock = trim($_POST['statut_stock']         ?? 'affecte');
+        // statut_stock dérivé automatiquement — pas du formulaire
+        if ($etat === 'hs')   $statut_stock = 'hs';
+        elseif (!$site_id)    $statut_stock = 'en_stock';
+        else                  $statut_stock = 'affecte';
 
         if (!$marque && !$nsi) json_response(false,'Marque ou N° série interne obligatoire.');
 
