@@ -21,6 +21,27 @@ $types_map = array_column($types_v, null, 'id');
 // Sites accessibles
 $sites_list = db_fetch_all("SELECT id,nom,type FROM sites WHERE actif=1 AND type NOT IN ('entrepot') ORDER BY nom");
 
+// ── Vérifie si le coordinateur est bloqué par un écart GSB non résolu
+function _site_bloque_ecart(int $site_id, string $date_today): ?string {
+    $dernier_point = db_fetch_one(
+        "SELECT date_point FROM op_points_journaliers
+         WHERE site_id=? AND date_point < ? AND statut != 'brouillon'
+         ORDER BY date_point DESC LIMIT 1",
+        [$site_id, $date_today]
+    );
+    if (!$dernier_point) return null;
+    $date_prec = $dernier_point['date_point'];
+    $validation = db_fetch_one(
+        "SELECT statut FROM validations_stock_matin WHERE site_id=? AND date_validation=?",
+        [$site_id, $date_prec]
+    );
+    if (!$validation)
+        return "⚠️ Votre stock du ".date('d/m/Y', strtotime($date_prec))." n'a pas encore été validé par le GSB. Vous ne pouvez pas saisir un nouveau point journalier tant que les écarts ne sont pas résolus.";
+    if ($validation['statut'] === 'refuse')
+        return "🚫 Le GSB a bloqué votre activité suite à un écart non résolu sur le stock du ".date('d/m/Y', strtotime($date_prec)).". Contactez votre gestionnaire stock.";
+    return null;
+}
+
 // ── AJAX
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     header('Content-Type: application/json');
@@ -54,6 +75,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         if (!$site_id)                              json_response(false, 'Veuillez sélectionner un site.');
         if (!$date_point)                           json_response(false, 'Veuillez saisir une date.');
         if (!in_array($type_point, $types_valides)) json_response(false, 'Veuillez sélectionner un type de point (9h, 13h ou 18h).');
+
+        // ── Blocage coordinateur si écart non résolu par GSB
+        if (($user['role_slug'] ?? '') === 'coordinateur_site') {
+            $bloque = _site_bloque_ecart($site_id, $date_point);
+            if ($bloque) json_response(false, $bloque);
+        }
 
         // Calculs automatiques
         $total_engins  = $nb_vp + $nb_camion + $nb_semi + $nb_moto;
@@ -453,16 +480,19 @@ if ($role_slug_pj === 'coordinateur_site') {
 }
 
 // Vérifier si le coordinateur est autorisé à travailler aujourd'hui
-$stock_bloque = false;
-$validation_matin = null;
+$stock_bloque        = false;
+$stock_bloque_msg    = '';
+$validation_matin    = null;
 if ($role_slug_pj === 'coordinateur_site' && $user['site_id']) {
     $validation_matin = db_fetch_one(
         "SELECT * FROM validations_stock_matin WHERE site_id=? AND date_validation=?",
         [(int)$user['site_id'], date('Y-m-d')]
     );
-    // Bloqué si statut = refuse, ou si aucune validation aujourd'hui mais des écarts existent
-    if ($validation_matin && $validation_matin['statut'] === 'refuse') {
-        $stock_bloque = true;
+    // Blocage via écart non résolu (veille ou plus récent)
+    $msg_ecart = _site_bloque_ecart((int)$user['site_id'], date('Y-m-d'));
+    if ($msg_ecart) {
+        $stock_bloque     = true;
+        $stock_bloque_msg = $msg_ecart;
     }
 }
 
@@ -603,7 +633,15 @@ include __DIR__ . '/../../templates/header.php';
   <?php endif; ?>
 </div>
 
-<?php if($stock_bloque && $validation_matin): ?>
+<?php if($stock_bloque && $stock_bloque_msg): ?>
+<div style="background:#FEF2F2;border:2px solid #FECACA;border-radius:12px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:flex-start;gap:12px">
+  <span style="font-size:22px;flex-shrink:0">🚫</span>
+  <div>
+    <div style="font-weight:800;color:#991B1B;font-size:14px;margin-bottom:4px">Saisie de point journalier bloquée</div>
+    <div style="color:#7F1D1D;font-size:13px"><?= h($stock_bloque_msg) ?></div>
+  </div>
+</div>
+<?php elseif($stock_bloque && $validation_matin): ?>
 <?php
 // Charger les corrections demandées pour ce site/date
 $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_id'])
