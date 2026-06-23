@@ -313,22 +313,72 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 $f_date = trim($_GET['date'] ?? date('Y-m-d'));
 $f_site = (int)($_GET['site'] ?? 0);
 
-// Vue d'ensemble des validations du jour
-// Coordinateur : uniquement son site | GSB/Admin : tous les sites
-$coord_where = $is_coord && $site_force ? "AND v.site_id=$site_force" : '';
-$validations_jour = db_fetch_all(
-    "SELECT v.*, s.nom AS site_nom,
-            CONCAT(u.prenom,' ',u.nom) AS gsb_nom,
-            (SELECT COUNT(*) FROM op_bobines b WHERE b.site_id=v.site_id AND b.statut IN ('en_cours','en_stock')) AS nb_bobines_actives
-     FROM validations_stock_matin v
-     JOIN sites s ON s.id=v.site_id
-     LEFT JOIN users u ON u.id=v.gsb_user_id
-     WHERE v.date_validation=? $coord_where
-     ORDER BY v.statut='refuse' DESC, v.created_at DESC",
-    [$f_date]
-);
+// ── Fonction réutilisable : calculer les écarts d'un site pour une date
+function _calculer_ecarts_site(int $site_id, string $date): array {
+    $pj_entries = db_fetch_all(
+        "SELECT fu.bobine_id,
+                SUM(fu.films_utilises)   AS films_utilises,
+                SUM(fu.films_endommages) AS films_endommages,
+                b.numero, b.type_code, b.format, b.serie,
+                b.stock_systeme, b.films_restants, b.statut,
+                pj.id AS point_id, pj.type_point
+         FROM op_films_utilises fu
+         JOIN op_points_journaliers pj ON pj.id = fu.point_id
+         JOIN op_bobines b ON b.id = fu.bobine_id
+         WHERE pj.site_id=? AND pj.date_point=?
+           AND pj.type_point='point_18h' AND pj.statut='valide'
+         GROUP BY fu.bobine_id, b.numero, b.type_code, b.format, b.serie,
+                  b.stock_systeme, b.films_restants, b.statut, pj.id, pj.type_point",
+        [$site_id, $date]
+    );
+    if (empty($pj_entries)) {
+        $pj_entries = db_fetch_all(
+            "SELECT fu.bobine_id,
+                    SUM(fu.films_utilises)   AS films_utilises,
+                    SUM(fu.films_endommages) AS films_endommages,
+                    b.numero, b.type_code, b.format, b.serie,
+                    b.stock_systeme, b.films_restants, b.statut,
+                    ANY_VALUE(pj.id) AS point_id, ANY_VALUE(pj.type_point) AS type_point
+             FROM op_films_utilises fu
+             JOIN op_points_journaliers pj ON pj.id = fu.point_id
+             JOIN op_bobines b ON b.id = fu.bobine_id
+             WHERE pj.site_id=? AND pj.date_point=?
+               AND pj.statut IN ('valide','en_attente_validation','suivi','rejete')
+             GROUP BY fu.bobine_id, b.numero, b.type_code, b.format, b.serie,
+                      b.stock_systeme, b.films_restants, b.statut",
+            [$site_id, $date]
+        );
+    }
+    $dernier_import = db_fetch_value(
+        "SELECT MAX(date_import) FROM import_optoplate WHERE site_id=?", [$site_id]
+    );
+    $ecarts = []; $bobines_detail = []; $nb_ecarts = 0;
+    foreach ($pj_entries as $b) {
+        $films_utilises   = (int)$b['films_utilises'];
+        $films_endommages = (int)($b['films_endommages'] ?? 0);
+        $films_total_pj   = $films_utilises + $films_endommages;
+        $stock_debut      = isset($b['stock_avant']) ? (int)$b['stock_avant'] : (int)$b['stock_systeme'] + $films_utilises;
+        $films_restants   = $stock_debut - $films_total_pj;
+        $films_optoplate  = $dernier_import
+            ? (int)db_fetch_value("SELECT COUNT(*) FROM import_optoplate WHERE num_bobine=? AND statut_plaque='in_use' AND date_import=?", [$b['numero'], $dernier_import])
+            : null;
+        $ecart_val = $films_optoplate !== null ? ($films_optoplate - $films_utilises) : 0;
+        $has_ecart = $films_optoplate !== null && $ecart_val !== 0;
+        $ligne = [
+            'bobine_id' => $b['bobine_id'], 'numero' => $b['numero'],
+            'type_code' => $b['type_code'] ?? '', 'format' => $b['format'] ?? '',
+            'stock_debut' => $stock_debut, 'films_utilises' => $films_utilises,
+            'films_endommages' => $films_endommages, 'films_restants' => $films_restants,
+            'films_optoplate' => $films_optoplate, 'stock_systeme' => (int)($b['stock_systeme'] ?? 0),
+            'ecart' => $ecart_val, 'has_ecart' => $has_ecart,
+        ];
+        $bobines_detail[] = $ligne;
+        if ($has_ecart) { $nb_ecarts++; $ecarts[] = $ligne; }
+    }
+    return compact('nb_ecarts','ecarts','bobines_detail','dernier_import');
+}
 
-// Sites sans validation (masqué pour coordinateur — il ne gère que son site)
+// ── Auto-traitement batch : valider silencieusement tous les sites sans écart
 $sites_non_valides = [];
 if ($can_valider) {
     $sites_non_valides = db_fetch_all(
@@ -341,7 +391,51 @@ if ($can_valider) {
          ORDER BY s.nom",
         [$f_date]
     );
+    // Pour chaque site non encore validé, calculer les écarts et auto-valider si 0 écart
+    foreach ($sites_non_valides as &$s) {
+        $result = _calculer_ecarts_site((int)$s['id'], $f_date);
+        $s['nb_ecarts']     = $result['nb_ecarts'];
+        $s['ecarts']        = $result['ecarts'];
+        $s['bobines_detail']= $result['bobines_detail'];
+        $s['dernier_import']= $result['dernier_import'];
+        if ($result['nb_ecarts'] === 0 && !empty($result['bobines_detail'])) {
+            // Auto-valider
+            db_query(
+                "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,gsb_user_id,gsb_at)
+                 VALUES (?,?,'valide_auto',0,?,NOW())
+                 ON DUPLICATE KEY UPDATE statut='valide_auto',nb_ecarts=0,gsb_user_id=VALUES(gsb_user_id),gsb_at=NOW()",
+                [(int)$s['id'], $f_date, $user['id']]
+            );
+            $coords = db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1", [(int)$s['id']]);
+            foreach ($coords as $c) {
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                    [$c['id'],'stock_valide','✅ Stock validé',"Votre stock bobines du $f_date est validé. Vous pouvez commencer votre activité.",'/pages/validation_stock_matin.php']);
+            }
+            $s['auto_valide'] = true;
+        } else {
+            $s['auto_valide'] = false;
+        }
+    }
+    unset($s);
+    // Séparer : sites avec écarts (action GSB) vs sites auto-validés maintenant
+    $sites_avec_ecarts  = array_values(array_filter($sites_non_valides, fn($s) => !$s['auto_valide'] && $s['nb_ecarts'] > 0));
+    $sites_sans_point   = array_values(array_filter($sites_non_valides, fn($s) => !$s['auto_valide'] && $s['nb_ecarts'] === 0 && empty($s['bobines_detail'])));
+    $sites_non_valides  = $sites_avec_ecarts; // compatibilité JS
 }
+
+// Vue d'ensemble des validations du jour
+$coord_where = $is_coord && $site_force ? "AND v.site_id=$site_force" : '';
+$validations_jour = db_fetch_all(
+    "SELECT v.*, s.nom AS site_nom,
+            CONCAT(u.prenom,' ',u.nom) AS gsb_nom,
+            (SELECT COUNT(*) FROM op_bobines b WHERE b.site_id=v.site_id AND b.statut IN ('en_cours','en_stock')) AS nb_bobines_actives
+     FROM validations_stock_matin v
+     JOIN sites s ON s.id=v.site_id
+     LEFT JOIN users u ON u.id=v.gsb_user_id
+     WHERE v.date_validation=? $coord_where
+     ORDER BY v.statut='refuse' DESC, v.created_at DESC",
+    [$f_date]
+);
 
 // ── Rapport journalier GSB : sites auto-validés + réajustés
 $rapport_journalier = [];
@@ -534,63 +628,102 @@ $statut_colors = [
 <?php else: ?>
 <!-- ── VUE GSB / ADMIN ── -->
 
-<!-- SITES NON VALIDÉS -->
+<!-- ══ SECTION 1 : SITES AVEC ÉCARTS — ACTION GSB REQUISE ══ -->
 <?php if(!empty($sites_non_valides) && $can_valider): ?>
-<div style="background:#fff3e0;border:1.5px solid #ffcc80;border-radius:14px;padding:16px 20px;margin-bottom:20px">
-  <div style="font-weight:700;color:#e65100;margin-bottom:10px">⏳ <?= count($sites_non_valides) ?> site(s) en attente de validation aujourd'hui</div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap">
+<div style="background:#FEF2F2;border:2px solid #FECACA;border-radius:14px;padding:20px 24px;margin-bottom:24px">
+  <div style="font-weight:800;font-size:15px;color:#991B1B;margin-bottom:14px">
+    ⚠️ <?= count($sites_non_valides) ?> site(s) avec écarts — décision GSB requise
+  </div>
+  <div class="vsm-grid" style="margin:0">
     <?php foreach($sites_non_valides as $s): ?>
-    <button class="btn btn-sm" style="background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80"
-            data-site-id="<?= $s['id'] ?>"
-            onclick="verifierSite(<?= $s['id'] ?>,'<?= h($s['nom']) ?>')">
-      <?= h($s['nom']) ?> (<?= $s['nb_bobines'] ?> bobines)
-    </button>
+    <div class="vsm-card refuse" style="border:1.5px solid #FECACA">
+      <div class="vsm-site"><?= h($s['nom']) ?></div>
+      <div class="vsm-sub"><?= $s['nb_bobines'] ?> bobines actives</div>
+      <span class="vsm-statut" style="background:#FEE2E2;color:#991B1B">⚠️ <?= $s['nb_ecarts'] ?> écart(s)</span>
+      <div style="margin-top:10px">
+        <button class="btn btn-sm" style="background:#DC2626;color:white;border:none;width:100%"
+                data-site-id="<?= $s['id'] ?>"
+                onclick="verifierSite(<?= $s['id'] ?>,'<?= h($s['nom']) ?>')">
+          🔍 Traiter les écarts
+        </button>
+      </div>
+    </div>
     <?php endforeach; ?>
   </div>
 </div>
 <?php endif; ?>
 
-<!-- VALIDATIONS DU JOUR -->
-<?php if(!empty($validations_jour)): ?>
-<div class="vsm-grid">
-  <?php foreach($validations_jour as $v):
+<?php if(!empty($sites_sans_point) && $can_valider): ?>
+<div style="background:#F0F9FF;border:1.5px solid #BAE6FD;border-radius:14px;padding:16px 20px;margin-bottom:24px">
+  <div style="font-weight:700;color:#0369A1;margin-bottom:8px">
+    ℹ️ <?= count($sites_sans_point) ?> site(s) sans point journalier pour le <?= fmt_date($f_date,'d/m/Y') ?>
+  </div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <?php foreach($sites_sans_point as $s): ?>
+    <span style="background:#E0F2FE;color:#0369A1;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:600">
+      <?= h($s['nom']) ?>
+    </span>
+    <?php endforeach; ?>
+  </div>
+</div>
+<?php endif; ?>
+
+<!-- ══ SECTION 2 : VALIDATIONS DU JOUR ══ -->
+<?php
+$valides_auto  = array_filter($validations_jour, fn($v) => $v['statut'] === 'valide_auto');
+$valides_manuel = array_filter($validations_jour, fn($v) => in_array($v['statut'], ['valide_gsb','autorise_ecart','reajuste','refuse']));
+?>
+
+<?php if(!empty($valides_auto) && $can_valider): ?>
+<div style="background:#F0FDF4;border:1.5px solid #BBF7D0;border-radius:14px;padding:20px 24px;margin-bottom:24px">
+  <div style="font-weight:800;font-size:15px;color:#065F46;margin-bottom:14px">
+    ✅ <?= count($valides_auto) ?> site(s) validés automatiquement — aucun écart détecté
+  </div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px">
+    <?php foreach($valides_auto as $v): ?>
+    <div style="background:white;border:1px solid #BBF7D0;border-radius:10px;padding:10px 16px;display:flex;align-items:center;gap:10px">
+      <span style="font-weight:700;color:#065F46"><?= h($v['site_nom']) ?></span>
+      <span style="font-size:11px;color:var(--muted)"><?= $v['nb_bobines_actives'] ?> bobines</span>
+      <button class="detail-btn" style="padding:3px 10px;font-size:11px"
+        onclick="voirDetails(<?= $v['site_id'] ?>,'<?= h($v['site_nom']) ?>',0,'[]','valide_auto','','Auto','<?= h(fmt_datetime($v['gsb_at'])) ?>')">
+        <i class="ph-duotone ph-eye"></i> Détails
+      </button>
+    </div>
+    <?php endforeach; ?>
+  </div>
+</div>
+<?php endif; ?>
+
+<?php if(!empty($valides_manuel)): ?>
+<div style="margin-bottom:24px">
+  <div style="font-weight:800;font-size:15px;color:var(--navy);margin-bottom:14px">
+    📋 Validations manuelles du jour
+  </div>
+  <div class="vsm-grid">
+  <?php foreach($valides_manuel as $v):
     $sc = match($v['statut']){
-      'valide_auto','valide_gsb'=>'valide',
-      'autorise_ecart'=>'attente',
-      'refuse'=>'refuse',
-      'reajuste'=>'reajuste',
-      default=>'attente'
+      'valide_gsb'=>'valide','autorise_ecart'=>'attente',
+      'refuse'=>'refuse','reajuste'=>'reajuste',default=>'attente'
     };
     $sl = match($v['statut']){
-      'valide_auto'=>'✅ Validé automatiquement',
-      'valide_gsb'=>'✅ Validé par GSB',
-      'autorise_ecart'=>'⚠️ Écart autorisé',
-      'reajuste'=>'🔄 Stock réajusté',
-      'refuse'=>'❌ Bloqué',
-      default=>$v['statut']
+      'valide_gsb'=>'✅ Validé par GSB','autorise_ecart'=>'⚠️ Écart autorisé',
+      'reajuste'=>'🔄 Stock réajusté','refuse'=>'❌ Bloqué',default=>$v['statut']
     };
   ?>
   <div class="vsm-card <?= $sc ?>">
     <div class="vsm-site"><?= h($v['site_nom']) ?></div>
     <div class="vsm-sub"><?= $v['nb_bobines_actives'] ?> bobines actives</div>
     <span class="vsm-statut s-<?= $v['statut'] ?>"><?= $sl ?></span>
-
     <?php if($v['nb_ecarts'] > 0): ?>
-    <div style="font-size:12.5px;font-weight:600;color:#991b1b;margin-bottom:6px">
-      ⚠️ <?= $v['nb_ecarts'] ?> écart(s) détecté(s)
-    </div>
+    <div style="font-size:12.5px;font-weight:600;color:#991b1b;margin-bottom:6px">⚠️ <?= $v['nb_ecarts'] ?> écart(s)</div>
     <?php endif; ?>
-
     <?php if($v['commentaire']): ?>
     <div style="font-size:12px;color:var(--muted);margin-bottom:6px">💬 <?= h($v['commentaire']) ?></div>
     <?php endif; ?>
-
     <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
       <?= $v['gsb_nom']?h($v['gsb_nom']):'Auto' ?> — <?= fmt_datetime($v['gsb_at']) ?>
     </div>
-
     <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <!-- Bouton Voir détails — toujours présent -->
       <button class="detail-btn"
         onclick="voirDetails(<?= $v['site_id'] ?>,'<?= h($v['site_nom']) ?>',<?= (int)$v['nb_ecarts'] ?>,<?= htmlspecialchars(json_encode($v['details_ecarts'] ?? '[]'), ENT_QUOTES) ?>,'<?= h($v['statut']) ?>','<?= h($v['commentaire']??'') ?>','<?= h($v['gsb_nom']??'Auto') ?>','<?= h(fmt_datetime($v['gsb_at'])) ?>')">
         <i class="ph-duotone ph-eye"></i> Voir détails
@@ -601,8 +734,11 @@ $statut_colors = [
     </div>
   </div>
   <?php endforeach; ?>
+  </div>
 </div>
-<?php else: ?>
+<?php endif; ?>
+
+<?php if(empty($validations_jour) && empty($sites_non_valides) && $can_valider): ?>
 <div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--muted)">
   Aucune validation enregistrée pour le <?= fmt_date($f_date,'d/m/Y') ?>.
 </div></div>
