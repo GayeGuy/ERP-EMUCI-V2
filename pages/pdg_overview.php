@@ -62,10 +62,10 @@ $bobines_stats = db_fetch_one(
         COUNT(*) AS total,
         SUM(CASE WHEN statut='en_cours' THEN 1 ELSE 0 END) AS en_cours,
         SUM(CASE WHEN statut='en_stock' THEN 1 ELSE 0 END) AS en_stock,
-        SUM(CASE WHEN statut='termine' AND DATE_FORMAT(updated_at,'%Y-%m')=? THEN 1 ELSE 0 END) AS terminees_mois,
+        SUM(CASE WHEN statut='epuisee' THEN 1 ELSE 0 END) AS terminees_mois,
         COALESCE(SUM(films_restants),0) AS films_restants
      FROM op_bobines",
-    [$mois]
+    []
 );
 
 $films_mois = (int)db_fetch_value(
