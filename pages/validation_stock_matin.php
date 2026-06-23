@@ -541,6 +541,7 @@ $statut_colors = [
   <div style="display:flex;gap:8px;flex-wrap:wrap">
     <?php foreach($sites_non_valides as $s): ?>
     <button class="btn btn-sm" style="background:#fff3e0;color:#e65100;border:1.5px solid #ffcc80"
+            data-site-id="<?= $s['id'] ?>"
             onclick="verifierSite(<?= $s['id'] ?>,'<?= h($s['nom']) ?>')">
       <?= h($s['nom']) ?> (<?= $s['nb_bobines'] ?> bobines)
     </button>
@@ -709,39 +710,45 @@ $statut_colors = [
 
 <script>
 function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
-function toast(m,t='success'){const el=document.createElement('div');el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white`;el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),3500);}
+function toast(m,t='success'){const bg={success:'#27ae60',error:'#e74c3c',info:'#1B75BC'}[t]||'#27ae60';const el=document.createElement('div');el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${bg};color:white;max-width:320px`;el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),4000);}
 
 let currentSiteId=null, currentEcarts=[];
 
 async function verifierSite(siteId, siteNom) {
   currentSiteId = siteId;
-  document.getElementById('vsmTitle').textContent = `🔍 ${siteNom}`;
-  document.getElementById('vsmBody').innerHTML = `
-    <div style="text-align:center;padding:40px">
-      <div style="width:40px;height:40px;border:4px solid #E8ECFF;border-top-color:#1B75BC;
-        border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 14px"></div>
-      <div style="font-size:14px;color:var(--muted)">Calcul des écarts en cours…</div>
-    </div>`;
-  document.getElementById('modalVSM').style.display = 'flex';
+  const canValider = <?= $can_valider ? 'true' : 'false' ?>;
+
+  // Spinner discret (pas de modal encore — on attend le résultat)
+  toast(`⏳ Vérification ${siteNom}…`, 'info');
 
   let d;
   try {
-    d = await ap({action:'calculer_ecarts', site_id:siteId, date:'<?= h($f_date) ?>'});
+    const r = await ap({action:'calculer_ecarts', site_id:siteId, date:'<?= h($f_date) ?>'});
+    if (!r.success) { toast(`❌ ${r.message}`, 'error'); return; }
+    d = r.data;
   } catch(err) {
-    document.getElementById('vsmBody').innerHTML =
-      `<div class="alert alert-danger">❌ Erreur réseau. Réessayez.<br><small>${err.message||''}</small></div>`;
-    return;
+    toast('❌ Erreur réseau. Réessayez.', 'error'); return;
   }
-  if (!d.success) {
-    document.getElementById('vsmBody').innerHTML =
-      `<div class="alert alert-danger">❌ ${d.message}</div>`;
-    return;
-  }
-  d = d.data;
 
+  // ── 0 écart + GSB non encore validé → validation automatique silencieuse
+  if (canValider && !d.validation && d.nb_ecarts === 0) {
+    const v = await ap({action:'valider_auto', site_id:siteId, date:'<?= h($f_date) ?>'});
+    if (v.success) {
+      toast(`✅ ${siteNom} — Stock conforme, validé automatiquement`, 'success');
+      // Supprimer la carte du site de la liste "en attente"
+      const card = document.querySelector(`[data-site-id="${siteId}"]`);
+      if (card) card.remove();
+    } else {
+      toast(`❌ Erreur validation : ${v.message}`, 'error');
+    }
+    return;
+  }
+
+  // ── Écarts détectés (ou déjà validé) → ouvrir le modal
   currentEcarts = d.ecarts || [];
   const bobines  = d.bobines_detail || [];
-  const canValider = <?= $can_valider ? 'true' : 'false' ?>;
+  document.getElementById('vsmTitle').textContent = `🔍 ${siteNom}`;
+  document.getElementById('modalVSM').style.display = 'flex';
 
   // ── KPIs
   let html = `
@@ -798,18 +805,9 @@ async function verifierSite(siteId, siteNom) {
   }
   html += `</tbody></table></div>`;
 
-  // ── Zone de décision (si GSB et non encore validé)
-  if (canValider && !d.validation) {
-    if (d.nb_ecarts === 0) {
-      html += `
-        <div style="background:#D1FAE5;border-radius:12px;padding:16px 20px;text-align:center;margin-bottom:14px">
-          <div style="font-size:15px;font-weight:800;color:#065F46">✅ Aucun écart — stock conforme</div>
-          <div style="font-size:13px;color:#065F46;margin-top:4px">Le coordinateur peut démarrer son activité</div>
-        </div>
-        <div style="display:flex;justify-content:flex-end">
-          <button class="btn btn-success" onclick="validerAuto()">✅ Valider le stock</button>
-        </div>`;
-    } else {
+  // ── Zone de décision (si GSB et écarts détectés — le cas 0 écart est auto-validé avant l'ouverture du modal)
+  if (canValider && !d.validation && d.nb_ecarts > 0) {
+    {
       html += `
         <div style="background:#FEF3C7;border-left:4px solid #F59E0B;padding:12px 16px;border-radius:8px;margin-bottom:14px;font-size:13px;color:#92400E">
           <strong>⚠️ ${d.nb_ecarts} écart(s) détecté(s).</strong> Saisissez un commentaire et choisissez votre décision.
