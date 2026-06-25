@@ -660,17 +660,23 @@ async function sauver(statut){
   const date=document.getElementById('fDate').value;
   if(!site||!date){document.getElementById('mAlert').innerHTML='<div class="alert alert-danger">Site et date obligatoires.</div>';return;}
   const btn=statut==='soumis'?document.getElementById('btnSoumettre'):document.getElementById('btnBrouillon');
+  const lblOrig=statut==='soumis'?'📤 Soumettre':'💾 Brouillon';
   btn.disabled=true;btn.textContent='⏳...';
-  const d=await ap({
-    action:'sauver',site_id:site,date_point:date,statut,
-    plaques_posees:document.getElementById('fPosees').value||0,
-    poses_ex_reservees:document.getElementById('fPosesExRes').value||0,
-    plaques_reservees:document.getElementById('fReservees').value||0,
-    notes:document.getElementById('fNotes').value
-  });
-  btn.disabled=false;btn.textContent=statut==='soumis'?'📤 Soumettre':'💾 Brouillon';
-  if(d.success){toast(d.message);fermer();setTimeout(()=>location.reload(),900);}
-  else document.getElementById('mAlert').innerHTML=`<div class="alert alert-danger">${d.message}</div>`;
+  try {
+    const d=await ap({
+      action:'sauver',site_id:site,date_point:date,statut,
+      plaques_posees:document.getElementById('fPosees').value||0,
+      poses_ex_reservees:document.getElementById('fPosesExRes').value||0,
+      plaques_reservees:document.getElementById('fReservees').value||0,
+      notes:document.getElementById('fNotes').value
+    });
+    if(d.success){toast(d.message);fermer();setTimeout(()=>location.reload(),900);}
+    else document.getElementById('mAlert').innerHTML=`<div class="alert alert-danger">${d.message}</div>`;
+  } catch(e) {
+    document.getElementById('mAlert').innerHTML='<div class="alert alert-danger">Erreur réseau — réessayez.</div>';
+  } finally {
+    btn.disabled=false;btn.textContent=lblOrig;
+  }
 }
 
 async function valider(id){
