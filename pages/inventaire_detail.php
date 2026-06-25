@@ -29,7 +29,7 @@ if (!$inv) { header('Location: inventaire_bobines.php'); exit; }
 $role_slug    = $user['role_slug'] ?? '';
 $can_edit     = $inv['statut'] === 'brouillon' && can('inventaire_bobines','can_update');
 $can_validate = $inv['statut'] === 'brouillon'
-    && in_array($role_slug, ['admin','superadmin','superviseur_operation','gestionnaire_stock_bobines']);
+    && in_array($role_slug, ['admin','superadmin','superviseur_operation','gestionnaire_stock_bobines','gestionnaire_stock']);
 $page_title  = 'Inventaire du ' . fmt_date($inv['date_inventaire']);
 $active_page = 'inventaire_bobines';
 

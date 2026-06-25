@@ -27,7 +27,7 @@ if (!in_array($role_slug, $roles_autorises_inv)) {
 $page_title   = 'Inventaire Bobines';
 $active_page  = 'inventaire_bobines';
 $sites_list   = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom");
-$can_validate = in_array($role_slug, ['admin','superadmin','superviseur_operation','gestionnaire_stock_bobines']);
+$can_validate = in_array($role_slug, ['admin','superadmin','superviseur_operation','gestionnaire_stock_bobines','gestionnaire_stock']);
 $can_create   = can('inventaire_bobines','can_create');
 
 // ============================================================
