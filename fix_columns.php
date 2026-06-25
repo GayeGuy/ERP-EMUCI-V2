@@ -57,6 +57,19 @@ function safe_exec(PDO $db, string $sql, string &$msg): void {
 
 $db->exec("SET FOREIGN_KEY_CHECKS=0");
 
+// ── op_points_journaliers — colonnes correction GP ────────────
+$cols_pj_gp = [
+    'correction_gp'       => "INT DEFAULT NULL",
+    'motif_correction_gp' => "VARCHAR(500) DEFAULT NULL",
+    'corrected_by_gp'     => "INT UNSIGNED DEFAULT NULL",
+    'corrected_at'        => "DATETIME DEFAULT NULL",
+];
+foreach ($cols_pj_gp as $col => $def) {
+    $m = '';
+    safe_exec($db, "ALTER TABLE `op_points_journaliers` ADD COLUMN `$col` $def", $m);
+    $results[] = "op_points_journaliers.$col : $m";
+}
+
 // ── import_session_id INT → VARCHAR(36) ───────────────────────
 foreach (['import_optotrace', 'import_optoplate'] as $tbl) {
     $m = '';
