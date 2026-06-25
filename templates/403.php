@@ -1,7 +1,10 @@
 <?php
 // Si connecté → rediriger vers dashboard automatiquement
 if (session_status() === PHP_SESSION_NONE) session_start();
-$dashboard_url = '/stockapp/pages/dashboard.php';
+if (!defined('APP_URL')) {
+    require_once dirname(__DIR__) . '/includes/db.php';
+}
+$dashboard_url = APP_URL . '/pages/dashboard.php';
 ?>
 <!DOCTYPE html>
 <html lang="fr">
