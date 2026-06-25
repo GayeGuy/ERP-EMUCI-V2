@@ -615,7 +615,7 @@ endif;
   <?php endif; ?>
   <?php
   $nb_demandes_att = (int)db_fetch_value("SELECT COUNT(*) FROM demandes_bobines d JOIN op_bobines b ON b.id=d.bobine_id WHERE d.statut='en_attente'" . ($site_force?" AND b.site_id=$site_force":""));
-  if(in_array($role_slug,['gestionnaire_stock_bobines','admin','superadmin']) || ($is_coord && $nb_demandes_att>0)):
+  if(in_array($role_slug,['gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation','admin','superadmin']) || ($is_coord && $nb_demandes_att>0)):
   ?>
   <button class="tab-btn" onclick="showTab('demandes',this)">
     📬 Demandes <?= $nb_demandes_att>0?"<span style='background:var(--warning);color:white;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px'>$nb_demandes_att</span>":'' ?>
