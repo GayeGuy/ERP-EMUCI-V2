@@ -196,7 +196,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         );
         $dem_id = (int)db_last_id();
         // Notifier les GSB
-        $gsb_users = db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='gestionnaire_stock_bobines' AND u.actif=1");
+        $gsb_users = db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug IN ('gestionnaire_stock_bobines','gestionnaire_stock') AND u.actif=1");
         foreach($gsb_users as $gsb) {
             db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                 [$gsb['id'],'info','🎞️ Demande utilisation bobine',
@@ -209,7 +209,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
 
     // ── TRAITER DEMANDE (GSB → approuver/refuser)
     if ($action==='traiter_demande') {
-        $gsb_roles = ['gestionnaire_stock_bobines','admin','superadmin'];
+        $gsb_roles = ['gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation','admin','superadmin'];
         if (!in_array($role_slug,$gsb_roles)) json_response(false,'Accès refusé.');
         $dem_id    = (int)($_POST['dem_id'] ?? 0);
         $decision  = trim($_POST['decision'] ?? '');
