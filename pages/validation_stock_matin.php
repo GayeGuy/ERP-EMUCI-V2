@@ -60,13 +60,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                  WHERE pj.site_id=?
                    AND pj.date_point=?
                    AND pj.type_point='point_18h'
-                   AND pj.statut='valide'
+                   AND pj.statut IN ('valide','en_attente_validation','suivi','rejete')
                  GROUP BY fu.bobine_id, b.numero, b.type_code, b.format, b.serie,
                           b.stock_systeme, b.films_restants, b.statut, pj.id, pj.type_point",
                 [$site_id, $date]
             );
 
-            // Fallback 1 : si pas de point_18h valide, prendre le point valide le plus récent du jour
+            // Fallback 1 : si pas de point_18h, prendre n'importe quel point soumis du jour
             if (empty($pj_entries)) {
                 $pj_entries = db_fetch_all(
                     "SELECT fu.bobine_id,
@@ -78,7 +78,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                      FROM op_films_utilises fu
                      JOIN op_points_journaliers pj ON pj.id = fu.point_id
                      JOIN op_bobines b ON b.id = fu.bobine_id
-                     WHERE pj.site_id=? AND pj.date_point=? AND pj.statut='valide'
+                     WHERE pj.site_id=? AND pj.date_point=?
+                       AND pj.statut IN ('valide','en_attente_validation','suivi','rejete')
                      GROUP BY fu.bobine_id, b.numero, b.type_code, b.format, b.serie,
                               b.stock_systeme, b.films_restants, b.statut",
                     [$site_id, $date]
