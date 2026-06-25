@@ -10,7 +10,7 @@ require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
 
 require_auth();
-invalidate_user_cache();
+
 
 $user      = current_user();
 $role_slug = $user['role_slug'] ?? '';

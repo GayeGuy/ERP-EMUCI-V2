@@ -11,7 +11,7 @@ require_once __DIR__ . '/../../includes/notifications.php';
 require_once __DIR__ . '/../../includes/upload.php';
 
 require_auth();
-invalidate_user_cache(); // Force rechargement depuis DB (évite cache de rôle périmé)
+ // Force rechargement depuis DB (évite cache de rôle périmé)
 
 $user      = current_user();
 $role_slug = $user['role_slug'] ?? '';

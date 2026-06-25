@@ -92,12 +92,16 @@ function can(string $module, string $droit = 'can_read'): bool {
 
 function _check_permission_db(int $role_id, string $module, string $droit): bool {
     static $allowed = ['can_read','can_create','can_update','can_delete','can_export'];
+    static $cache   = [];
     if (!in_array($droit, $allowed, true)) return false;
-    $val = db_fetch_value(
-        "SELECT `$droit` FROM permissions WHERE role_id=? AND module=?",
-        [$role_id, $module]
-    );
-    return (bool)$val;
+    $key = "$role_id:$module:$droit";
+    if (!array_key_exists($key, $cache)) {
+        $cache[$key] = (bool)db_fetch_value(
+            "SELECT `$droit` FROM permissions WHERE role_id=? AND module=?",
+            [$role_id, $module]
+        );
+    }
+    return $cache[$key];
 }
 
 function _support_it_can(array $user, string $module, string $droit): bool {
