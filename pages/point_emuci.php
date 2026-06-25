@@ -136,7 +136,7 @@ foreach ($sites_list as $s) {
 $total_ecart = $total_in_use - $total_declared;
 
 // ============================================================
-include __DIR__ . '/../includes/header.php';
+include __DIR__ . '/../templates/header.php';
 ?>
 <style>
 .emuci-card{background:#fff;border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.07);padding:20px 24px;display:flex;flex-direction:column;gap:4px}
@@ -393,4 +393,4 @@ function showMotif(pjId, motif, by, at){
 <?php endif; ?>
 </script>
 
-<?php include __DIR__ . '/../includes/footer.php'; ?>
+<?php include __DIR__ . '/../templates/footer.php'; ?>
