@@ -163,11 +163,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 [$site_id, $date]
             );
 
+            // Fallback historique : si données live absentes mais snapshot sauvegardé
+            if (empty($bobines_detail) && !empty($exist['bobines_snapshot'])) {
+                $bobines_detail = json_decode($exist['bobines_snapshot'], true) ?: [];
+                $nb_ecarts      = 0;
+                foreach ($bobines_detail as $bl) {
+                    if (!empty($bl['has_ecart'])) $nb_ecarts++;
+                }
+            }
+
             json_response(true, '', [
                 'ecarts'         => $ecarts,
                 'bobines_detail' => $bobines_detail,
                 'nb_ecarts'      => $nb_ecarts,
-                'nb_bobines'     => count($pj_entries),
+                'nb_bobines'     => count($pj_entries) ?: count($bobines_detail),
                 'dernier_import' => $dernier_import,
                 'validation'     => $exist,
             ]);
@@ -180,11 +189,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     if ($action === 'valider_auto') {
         $site_id = (int)($_POST['site_id'] ?? 0);
         $date    = trim($_POST['date'] ?? date('Y-m-d'));
+        $snap    = _calculer_ecarts_site($site_id, $date);
+        $snapshot= json_encode($snap['bobines_detail'] ?: []);
         db_query(
-            "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,gsb_user_id,gsb_at)
-             VALUES (?,?,'valide_auto',0,?,NOW())
-             ON DUPLICATE KEY UPDATE statut='valide_auto',nb_ecarts=0,gsb_user_id=VALUES(gsb_user_id),gsb_at=NOW()",
-            [$site_id,$date,$user['id']]
+            "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,bobines_snapshot,gsb_user_id,gsb_at)
+             VALUES (?,?,'valide_auto',0,?,?,NOW())
+             ON DUPLICATE KEY UPDATE statut='valide_auto',nb_ecarts=0,bobines_snapshot=VALUES(bobines_snapshot),gsb_user_id=VALUES(gsb_user_id),gsb_at=NOW()",
+            [$site_id,$date,$snapshot,$user['id']]
         );
         // Notifier coordinateurs du site
         $coords = db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1",[$site_id]);
@@ -210,8 +221,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             json_response(false,'Décision invalide.');
         if (!$commentaire) json_response(false,'Le commentaire est obligatoire.');
 
-        $ecarts = json_decode($ecarts_json, true) ?: [];
-        $nb_ecarts = count($ecarts);
+        $ecarts      = json_decode($ecarts_json, true) ?: [];
+        $nb_ecarts   = count($ecarts);
+        $bobines_json= $_POST['bobines_json'] ?? '[]';
 
         db_begin();
         try {
@@ -255,11 +267,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             }
 
             db_query(
-                "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,details_ecarts,gsb_user_id,gsb_at,commentaire)
-                 VALUES (?,?,?,?,?,?,NOW(),?)
+                "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,details_ecarts,bobines_snapshot,gsb_user_id,gsb_at,commentaire)
+                 VALUES (?,?,?,?,?,?,?,NOW(),?)
                  ON DUPLICATE KEY UPDATE statut=VALUES(statut),nb_ecarts=VALUES(nb_ecarts),
-                 details_ecarts=VALUES(details_ecarts),gsb_user_id=VALUES(gsb_user_id),gsb_at=NOW(),commentaire=VALUES(commentaire)",
-                [$site_id,$date,$decision,$nb_ecarts,$ecarts_json,$user['id'],$commentaire]
+                 details_ecarts=VALUES(details_ecarts),bobines_snapshot=VALUES(bobines_snapshot),
+                 gsb_user_id=VALUES(gsb_user_id),gsb_at=NOW(),commentaire=VALUES(commentaire)",
+                [$site_id,$date,$decision,$nb_ecarts,$ecarts_json,$bobines_json,$user['id'],$commentaire]
             );
 
             // Notifier coordinateurs
@@ -400,12 +413,13 @@ if ($can_valider) {
         $s['bobines_detail']= $result['bobines_detail'];
         $s['dernier_import']= $result['dernier_import'];
         if ($result['nb_ecarts'] === 0 && !empty($result['bobines_detail'])) {
-            // Auto-valider
+            // Auto-valider avec snapshot
+            $snapshot = json_encode($result['bobines_detail']);
             db_query(
-                "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,gsb_user_id,gsb_at)
-                 VALUES (?,?,'valide_auto',0,?,NOW())
-                 ON DUPLICATE KEY UPDATE statut='valide_auto',nb_ecarts=0,gsb_user_id=VALUES(gsb_user_id),gsb_at=NOW()",
-                [(int)$s['id'], $f_date, $user['id']]
+                "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,bobines_snapshot,gsb_user_id,gsb_at)
+                 VALUES (?,?,'valide_auto',0,?,?,NOW())
+                 ON DUPLICATE KEY UPDATE statut='valide_auto',nb_ecarts=0,bobines_snapshot=VALUES(bobines_snapshot),gsb_user_id=VALUES(gsb_user_id),gsb_at=NOW()",
+                [(int)$s['id'], $f_date, $snapshot, $user['id']]
             );
             $coords = db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1", [(int)$s['id']]);
             foreach ($coords as $c) {
@@ -849,7 +863,7 @@ $valides_manuel = array_filter($validations_jour, fn($v) => in_array($v['statut'
 function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
 function toast(m,t='success'){const bg={success:'#27ae60',error:'#e74c3c',info:'#1B75BC'}[t]||'#27ae60';const el=document.createElement('div');el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${bg};color:white;max-width:320px`;el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),4000);}
 
-let currentSiteId=null, currentEcarts=[];
+let currentSiteId=null, currentEcarts=[], currentBobinesDetail=[];
 
 async function verifierSite(siteId, siteNom) {
   currentSiteId = siteId;
@@ -882,8 +896,9 @@ async function verifierSite(siteId, siteNom) {
   }
 
   // ── Écarts détectés (ou déjà validé) → ouvrir le modal
-  currentEcarts = d.ecarts || [];
-  const bobines  = d.bobines_detail || [];
+  currentEcarts       = d.ecarts || [];
+  currentBobinesDetail= d.bobines_detail || [];
+  const bobines       = currentBobinesDetail;
   document.getElementById('vsmTitle').textContent = `🔍 ${siteNom}`;
   document.getElementById('modalVSM').style.display = 'flex';
 
@@ -1001,7 +1016,8 @@ async function decisionGSB(decision){
   if(!commentaire){alert('Le commentaire est obligatoire.');return;}
   const d=await ap({
     action:'decision_gsb',site_id:currentSiteId,date:'<?= h($f_date) ?>',
-    decision,commentaire,ecarts_json:JSON.stringify(currentEcarts)
+    decision,commentaire,ecarts_json:JSON.stringify(currentEcarts),
+    bobines_json:JSON.stringify(currentBobinesDetail)
   });
   if(d.success){toast(d.message);fermerVSM();setTimeout(()=>location.reload(),900);}
   else toast(d.message,'error');

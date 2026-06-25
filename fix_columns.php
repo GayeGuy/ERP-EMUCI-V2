@@ -471,6 +471,11 @@ $results[] = "op_pmma_utilises (CREATE IF NOT EXISTS) : $m";
 
 $db->exec("SET FOREIGN_KEY_CHECKS=1");
 
+// ── Snapshot bobines dans validations_stock_matin
+$m = '';
+safe_exec($db, "ALTER TABLE `validations_stock_matin` ADD COLUMN `bobines_snapshot` LONGTEXT DEFAULT NULL", $m);
+$results[] = "validations_stock_matin.bobines_snapshot : $m";
+
 // ── Fix cohérence equipements: site_id/statut_stock
 $m = '';
 safe_exec($db, "UPDATE equipements SET statut_stock='en_stock' WHERE site_id IS NULL AND statut_stock='affecte' AND etat != 'hs'", $m);
