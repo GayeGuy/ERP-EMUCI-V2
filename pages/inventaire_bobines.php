@@ -64,8 +64,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         db_begin();
         try {
             $total_systeme = array_sum(array_column($bobines,'stock_systeme'));
-            $films_emuci   = (int)db_fetch_value("SELECT COALESCE(SUM(plaques_posees - poses_ex_reservees + plaques_reservees),0) FROM points_emuci WHERE site_id=? AND date_point=?", [$site_id, $date]);
-            $films_digi    = (int)db_fetch_value("SELECT COALESCE(SUM(total_plaques),0) FROM op_points_journaliers WHERE site_id=? AND date_point=?", [$site_id, $date]);
+            try {
+                $films_emuci = (int)db_fetch_value(
+                    "SELECT COALESCE(SUM(plaques_posees),0) FROM points_emuci WHERE site_id=? AND date_point=?",
+                    [$site_id, $date]
+                );
+            } catch (Exception $e) { $films_emuci = 0; }
+            $films_digi = (int)db_fetch_value("SELECT COALESCE(SUM(total_plaques),0) FROM op_points_journaliers WHERE site_id=? AND date_point=?", [$site_id, $date]);
 
             db_query(
                 "INSERT INTO inventaires_bobines (site_id,date_inventaire,type_inventaire,statut,nb_bobines,notes,total_films_systeme,total_films_emuci,ecart_digistock_emuci,cree_par)
