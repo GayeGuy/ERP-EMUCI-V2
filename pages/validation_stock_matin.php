@@ -606,7 +606,7 @@ $statut_colors = [
     <?php endif; ?>
     <div style="display:flex;gap:10px">
       <button class="detail-btn"
-        onclick="voirDetails(<?= $coord_validation['site_id'] ?>,'<?= h($coord_validation['site_nom']) ?>',<?= (int)$coord_validation['nb_ecarts'] ?>,<?= htmlspecialchars(json_encode($coord_validation['details_ecarts']??'[]'),ENT_QUOTES) ?>,'<?= h($coord_validation['statut']) ?>','<?= h($coord_validation['commentaire']??'') ?>','<?= h($coord_validation['gsb_nom']??'Auto') ?>','<?= h(fmt_datetime($coord_validation['gsb_at'])) ?>')">
+        onclick="voirDetails(<?= $coord_validation['site_id'] ?>,'<?= h($coord_validation['site_nom']) ?>',<?= (int)$coord_validation['nb_ecarts'] ?>,<?= htmlspecialchars(json_encode($coord_validation['details_ecarts']??'[]'),ENT_QUOTES) ?>,'<?= h($coord_validation['statut']) ?>','<?= h($coord_validation['commentaire']??'') ?>','<?= h($coord_validation['gsb_nom']??'Auto') ?>','<?= h(fmt_datetime($coord_validation['gsb_at'])) ?>','<?= h($coord_validation['date_validation']) ?>')">
         <i class="ph-duotone ph-eye"></i> Voir le détail des bobines
       </button>
     </div>
@@ -686,7 +686,7 @@ $valides_manuel = array_filter($validations_jour, fn($v) => in_array($v['statut'
       <span style="font-weight:700;color:#065F46"><?= h($v['site_nom']) ?></span>
       <span style="font-size:11px;color:var(--muted)"><?= $v['nb_bobines_actives'] ?> bobines</span>
       <button class="detail-btn" style="padding:3px 10px;font-size:11px"
-        onclick="voirDetails(<?= $v['site_id'] ?>,'<?= h($v['site_nom']) ?>',0,'[]','valide_auto','','Auto','<?= h(fmt_datetime($v['gsb_at'])) ?>')">
+        onclick="voirDetails(<?= $v['site_id'] ?>,'<?= h($v['site_nom']) ?>',0,'[]','valide_auto','','Auto','<?= h(fmt_datetime($v['gsb_at'])) ?>','<?= h($v['date_validation']) ?>')">
         <i class="ph-duotone ph-eye"></i> Détails
       </button>
     </div>
@@ -726,7 +726,7 @@ $valides_manuel = array_filter($validations_jour, fn($v) => in_array($v['statut'
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="detail-btn"
-        onclick="voirDetails(<?= $v['site_id'] ?>,'<?= h($v['site_nom']) ?>',<?= (int)$v['nb_ecarts'] ?>,<?= htmlspecialchars(json_encode($v['details_ecarts'] ?? '[]'), ENT_QUOTES) ?>,'<?= h($v['statut']) ?>','<?= h($v['commentaire']??'') ?>','<?= h($v['gsb_nom']??'Auto') ?>','<?= h(fmt_datetime($v['gsb_at'])) ?>')">
+        onclick="voirDetails(<?= $v['site_id'] ?>,'<?= h($v['site_nom']) ?>',<?= (int)$v['nb_ecarts'] ?>,<?= htmlspecialchars(json_encode($v['details_ecarts'] ?? '[]'), ENT_QUOTES) ?>,'<?= h($v['statut']) ?>','<?= h($v['commentaire']??'') ?>','<?= h($v['gsb_nom']??'Auto') ?>','<?= h(fmt_datetime($v['gsb_at'])) ?>','<?= h($v['date_validation']) ?>')">
         <i class="ph-duotone ph-eye"></i> Voir détails
       </button>
       <?php if($can_valider && in_array($v['statut'],['autorise_ecart','reajuste','refuse'])): ?>
@@ -1020,7 +1020,7 @@ document.getElementById('modalVSM').addEventListener('click',e=>{if(e.target===d
 document.getElementById('modalDetails').addEventListener('click',e=>{if(e.target===document.getElementById('modalDetails'))e.target.style.display='none';});
 
 // ── Voir détails d'une validation (lecture seule)
-async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, commentaire, gsbNom, gsbAt) {
+async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, commentaire, gsbNom, gsbAt, dateVal) {
   document.getElementById('detailTitle').textContent = `🔍 ${siteNom}`;
   document.getElementById('detailMeta').textContent  = `Validé le <?= h($f_date) ?> par ${gsbNom} — ${gsbAt}`;
   document.getElementById('detailBody').innerHTML    = '<div style="text-align:center;padding:30px;color:var(--muted)">⏳ Chargement...</div>';
@@ -1028,8 +1028,11 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
 
   // Charger la liste complète des bobines vérifiées via AJAX
   const _r = await ap({action:'calculer_ecarts', site_id:siteId, date:'<?= h($f_date) ?>'});
-  if(!_r.success){document.getElementById('detailBody').innerHTML='<div class="alert alert-danger">'+_r.message+'</div>';return;}
-  const d = _r.data;
+  if(!_r.success){document.getElementById('detailBody').innerHTML='<div class="alert alert-danger">'+(_r.message||'Erreur')+'</div>';return;}
+  const d = _r.data || {};
+
+  const nb_bobines  = d.nb_bobines  ?? 0;
+  const nb_ecarts   = d.nb_ecarts   ?? 0;
 
   const statutLabels = {
     valide_auto:'✅ Validé automatiquement', valide_gsb:'✅ Validé par GSB',
@@ -1060,12 +1063,12 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
   html += `
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px">
       <div style="text-align:center;padding:12px;background:var(--tertiary);border-radius:10px">
-        <div style="font-size:22px;font-weight:900;color:var(--navy)">${d.nb_bobines}</div>
+        <div style="font-size:22px;font-weight:900;color:var(--navy)">${nb_bobines}</div>
         <div style="font-size:11px;color:var(--muted);font-weight:600">Bobines vérifiées</div>
       </div>
-      <div style="text-align:center;padding:12px;background:${d.nb_ecarts>0?'#fee2e2':'#d1fae5'};border-radius:10px">
-        <div style="font-size:22px;font-weight:900;color:${d.nb_ecarts>0?'#991b1b':'#065f46'}">${d.nb_ecarts}</div>
-        <div style="font-size:11px;color:${d.nb_ecarts>0?'#991b1b':'#065f46'};font-weight:600">Écarts</div>
+      <div style="text-align:center;padding:12px;background:${nb_ecarts>0?'#fee2e2':'#d1fae5'};border-radius:10px">
+        <div style="font-size:22px;font-weight:900;color:${nb_ecarts>0?'#991b1b':'#065f46'}">${nb_ecarts}</div>
+        <div style="font-size:11px;color:${nb_ecarts>0?'#991b1b':'#065f46'};font-weight:600">Écarts</div>
       </div>
       <div style="text-align:center;padding:12px;background:var(--tertiary);border-radius:10px">
         <div style="font-size:13px;font-weight:700;color:var(--navy)">${d.dernier_import||'—'}</div>
@@ -1079,15 +1082,20 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
 
   let tableTitle = bobinesDetail.length > 0
     ? `🎞️ Détail par bobine saisie dans le Point Journalier (${bobinesDetail.length} bobine(s))`
-    : '🎞️ Aucune saisie de bobine trouvée pour ce jour';
+    : '🎞️ Détail des bobines';
 
   html += `<div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">${tableTitle}</div>`;
 
   if (bobinesDetail.length === 0) {
-    html += `<div style="background:#FEF3C7;border-radius:10px;padding:16px;font-size:13px;color:#92400E">
-      ⚠️ Le coordinateur n'a pas saisi de données bobines dans le Point Journalier pour cette date.
-      La comparaison avec EMUCI n'est pas possible.
-    </div>`;
+    // Si la validation existe déjà (auto ou manuelle), le point a été vérifié même sans détail lisible ici
+    const msgValide = ['valide_auto','valide_gsb'].includes(statut);
+    html += msgValide
+      ? `<div style="background:#D1FAE5;border-radius:10px;padding:16px;font-size:13px;color:#065F46">
+           ✅ Le stock a été validé pour cette date. Les données détaillées ne sont plus disponibles pour relecture.
+         </div>`
+      : `<div style="background:#FEF3C7;border-radius:10px;padding:16px;font-size:13px;color:#92400E">
+           ⚠️ Aucune donnée bobine trouvée pour cette date. La comparaison avec EMUCI n'est pas possible.
+         </div>`;
   } else {
     html += `
     <div style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden">
