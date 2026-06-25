@@ -26,7 +26,10 @@ $inv = db_fetch_one(
 );
 if (!$inv) { header('Location: inventaire_bobines.php'); exit; }
 
-$can_edit = $inv['statut'] === 'brouillon' && can('inventaire_bobines','can_update');
+$role_slug    = $user['role_slug'] ?? '';
+$can_edit     = $inv['statut'] === 'brouillon' && can('inventaire_bobines','can_update');
+$can_validate = $inv['statut'] === 'brouillon'
+    && in_array($role_slug, ['admin','superadmin','superviseur_operation','gestionnaire_stock_bobines']);
 $page_title  = 'Inventaire du ' . fmt_date($inv['date_inventaire']);
 $active_page = 'inventaire_bobines';
 
@@ -142,8 +145,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
 
     // ── VALIDER L'INVENTAIRE
     if ($action==='valider') {
-        if (!$can_edit) json_response(false,'Inventaire non modifiable.');
-        require_permission('inventaire_bobines','can_update');
+        if (!$can_validate) json_response(false,'Seul le GSB ou un administrateur peut valider l\'inventaire.');
         $lignes = db_fetch_all("SELECT * FROM inventaire_details_bobines WHERE inventaire_id=?",[$inv_id]);
         $nb_ecarts = 0;
         db_begin();
@@ -276,10 +278,14 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
       <?= h($inv['site_nom']??'Tous les sites') ?> · <strong><?= count($lignes) ?></strong> bobines · Créé par <?= h($inv['createur']??'—') ?>
     </div>
   </div>
-  <?php if($can_edit): ?>
+  <?php if($can_edit || $can_validate): ?>
   <div style="display:flex;gap:8px">
+    <?php if($can_edit): ?>
     <button class="btn btn-secondary" id="btnSauverTout" onclick="sauverTout()">💾 Tout sauver</button>
+    <?php endif; ?>
+    <?php if($can_validate): ?>
     <button class="btn btn-success" onclick="validerInventaire()">✅ Valider l'inventaire</button>
+    <?php endif; ?>
   </div>
   <?php endif; ?>
 </div>
@@ -473,10 +479,14 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
   </div>
 </div>
 
-<?php if($can_edit): ?>
+<?php if($can_edit || $can_validate): ?>
 <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
+  <?php if($can_edit): ?>
   <button class="btn btn-secondary" onclick="sauverTout()">💾 Tout sauver</button>
+  <?php endif; ?>
+  <?php if($can_validate): ?>
   <button class="btn btn-success" style="font-size:14px;padding:10px 24px" onclick="validerInventaire()">✅ Valider l'inventaire</button>
+  <?php endif; ?>
 </div>
 <?php endif; ?>
 
