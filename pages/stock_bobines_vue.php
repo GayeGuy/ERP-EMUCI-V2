@@ -348,48 +348,53 @@ XML;
 
     $tableW = $slideW;
     $tableH = count($tableRows) * $rowH + 100000;
-    $tableY = 700000;
+    $tableY = 680000;
+    $dateGen = date('d/m/Y');
+    $titreDetail = "{$total_bobines} bobines \u{00B7} " . number_format($total_films) . " films";
 
-    // slide1.xml
-    $slideXml = <<<XML
-<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"
-       xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"
-       xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-<p:cSld>
-  <p:spTree>
-    <p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>
-    <p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="{$slideW}" cy="{$slideH}"/><a:chOff x="0" y="0"/><a:chExt cx="{$slideW}" cy="{$slideH}"/></a:xfrm></p:grpSpPr>
-    <!-- Fond -->
-    <p:sp><p:nvSpPr><p:cNvPr id="2" name="bg"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body"/></p:nvPr></p:nvSpPr>
-      <p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="{$slideW}" cy="{$slideH}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="F4F6FB"/></a:solidFill></p:spPr>
-      <p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody></p:sp>
-    <!-- Titre -->
-    <p:sp><p:nvSpPr><p:cNvPr id="3" name="titre"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr>
-      <p:spPr><a:xfrm><a:off x="300000" y="150000"/><a:ext cx="8500000" cy="480000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>
-      <p:txBody><a:bodyPr/><a:lstStyle/>
-        <a:p><a:r><a:rPr lang="fr-FR" b="1" sz="2000"><a:solidFill><a:srgbClr val="{$navy}"/></a:solidFill></a:rPr><a:t>Vue Stock Bobines — </a:t></a:r><a:r><a:rPr lang="fr-FR" sz="1600"><a:solidFill><a:srgbClr val="555555"/></a:solidFill></a:rPr><a:t>{$total_bobines} bobines · {$total_films} films · {$_SERVER['REQUEST_TIME_FLOAT']}</a:t></a:r></a:p>
-        <a:p><a:r><a:rPr lang="fr-FR" sz="1100"><a:solidFill><a:srgbClr val="888888"/></a:solidFill></a:rPr><a:t>Généré le </a:t></a:r><a:r><a:rPr lang="fr-FR" b="1" sz="1100"><a:solidFill><a:srgbClr val="888888"/></a:solidFill></a:rPr><a:t>]] . date('d/m/Y') . [[</a:t></a:r></a:p>
-      </p:txBody></p:sp>
-    <!-- Tableau -->
-    <p:graphicFrame>
-      <p:nvGraphicFramePr><p:cNvPr id="4" name="tableau"/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>
-      <p:xfrm><a:off x="0" y="{$tableY}"/><a:ext cx="{$tableW}" cy="{$tableH}"/></p:xfrm>
-      <a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">
-        <a:tbl><a:tblPr firstRow="1" bandRow="1"><a:tableStyleId>{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}</a:tableStyleId></a:tblPr>
-        {$gridXml}
-        {$rowsXml}
-        </a:tbl>
-      </a:graphicData></a:graphic>
-    </p:graphicFrame>
-  </p:spTree>
-</p:cSld>
-<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>
-</p:sld>
-XML;
-    // Corriger le placeholder date
-    $slideXml = str_replace(']' . '] . date(\'d/m/Y\') . [' . '[', date('d/m/Y'), $slideXml);
-    $slideXml = str_replace('{$_SERVER[\'REQUEST_TIME_FLOAT\']}', number_format($total_films), $slideXml);
+    // slide1.xml — pas de <p:ph>, fond via <p:bg>, titres en textbox plain
+    $slideXml  = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+    $slideXml .= '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
+    $slideXml .= ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"';
+    $slideXml .= ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
+    $slideXml .= '<p:cSld>';
+    // Fond uni via p:bg (pas de shape placeholder)
+    $slideXml .= '<p:bg><p:bgPr><a:solidFill><a:srgbClr val="F4F6FB"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>';
+    $slideXml .= '<p:spTree>';
+    $slideXml .= '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>';
+    $slideXml .= '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' . $slideW . '" cy="' . $slideH . '"/><a:chOff x="0" y="0"/><a:chExt cx="' . $slideW . '" cy="' . $slideH . '"/></a:xfrm></p:grpSpPr>';
+    // Bande titre (rectangle plein navy)
+    $slideXml .= '<p:sp><p:nvSpPr><p:cNvPr id="2" name="bandeTitre"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>';
+    $slideXml .= '<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' . $slideW . '" cy="600000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>';
+    $slideXml .= '<a:solidFill><a:srgbClr val="06033A"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>';
+    $slideXml .= '<p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/><a:p/></p:txBody></p:sp>';
+    // Titre principal
+    $slideXml .= '<p:sp><p:nvSpPr><p:cNvPr id="3" name="titre"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>';
+    $slideXml .= '<p:spPr><a:xfrm><a:off x="280000" y="80000"/><a:ext cx="6800000" cy="440000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>';
+    $slideXml .= '<p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/>';
+    $slideXml .= '<a:p><a:r><a:rPr lang="fr-FR" b="1" sz="2200" dirty="0"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:rPr>';
+    $slideXml .= '<a:t>Vue Stock Bobines</a:t></a:r>';
+    $slideXml .= '<a:r><a:rPr lang="fr-FR" sz="1600" dirty="0"><a:solidFill><a:srgbClr val="90b8d8"/></a:solidFill></a:rPr>';
+    $slideXml .= '<a:t>  ' . htmlspecialchars($titreDetail, ENT_XML1) . '</a:t></a:r></a:p>';
+    $slideXml .= '</p:txBody></p:sp>';
+    // Date (en haut à droite)
+    $slideXml .= '<p:sp><p:nvSpPr><p:cNvPr id="4" name="date"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>';
+    $slideXml .= '<p:spPr><a:xfrm><a:off x="7200000" y="100000"/><a:ext cx="1800000" cy="400000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>';
+    $slideXml .= '<p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/>';
+    $slideXml .= '<a:p><a:pPr algn="r"/><a:r><a:rPr lang="fr-FR" sz="1100" dirty="0"><a:solidFill><a:srgbClr val="90b8d8"/></a:solidFill></a:rPr>';
+    $slideXml .= '<a:t>' . htmlspecialchars($dateGen, ENT_XML1) . '</a:t></a:r></a:p>';
+    $slideXml .= '</p:txBody></p:sp>';
+    // Tableau
+    $slideXml .= '<p:graphicFrame>';
+    $slideXml .= '<p:nvGraphicFramePr><p:cNvPr id="5" name="tableau"/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>';
+    $slideXml .= '<p:xfrm><a:off x="0" y="' . $tableY . '"/><a:ext cx="' . $tableW . '" cy="' . $tableH . '"/></p:xfrm>';
+    $slideXml .= '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">';
+    $slideXml .= '<a:tbl><a:tblPr firstRow="1" bandRow="1"/>';
+    $slideXml .= $gridXml . $rowsXml;
+    $slideXml .= '</a:tbl></a:graphicData></a:graphic>';
+    $slideXml .= '</p:graphicFrame>';
+    $slideXml .= '</p:spTree></p:cSld>';
+    $slideXml .= '<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>';
 
     file_put_contents("$tmpDir/ppt/slides/slide1.xml", $slideXml);
 
