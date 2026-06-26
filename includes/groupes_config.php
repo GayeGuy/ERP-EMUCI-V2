@@ -76,6 +76,8 @@ function _groupes_def(): array {
                  'url'=>'pages/validation_stock_matin.php','active_keys'=>['validation_stock_matin']],
                 ['label'=>'Inventaire bobines',   'icon'=>'ph-clipboard-text',
                  'url'=>'pages/inventaire_bobines.php','active_keys'=>['inventaire_bobines']],
+                ['label'=>'Vue stock par site',   'icon'=>'ph-table',
+                 'url'=>'pages/stock_bobines_vue.php','active_keys'=>['stock_bobines_vue']],
             ],
         ],
 
