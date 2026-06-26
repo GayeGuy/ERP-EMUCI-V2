@@ -527,15 +527,18 @@ include __DIR__ . '/../templates/header.php';
   border-left-color:#f59e0b}
 
 /* ── Ligne TOTAL GÉNÉRAL ── */
-.vue-table tr.total-row td{
-  background:#06033A;border-top:2px solid #1B75BC;border-bottom:none;
+.vue-table tbody tr.total-row td,
+.vue-table tbody tr.total-row:nth-child(even) td{
+  background:#06033A !important;border-top:2px solid #1B75BC;border-bottom:none;
   border-right:1px solid rgba(255,255,255,.08)}
-.vue-table tr.total-row td.site-name{
-  background:linear-gradient(90deg,#06033A 0%,#0d1a4a 100%);
+.vue-table tbody tr.total-row td.site-name,
+.vue-table tbody tr.total-row:nth-child(even) td.site-name{
+  background:linear-gradient(90deg,#06033A 0%,#0d1a4a 100%) !important;
   color:#fff;font-size:12px;font-weight:900;letter-spacing:.8px;text-transform:uppercase;
   border-right:4px solid #4da6d8}
-.vue-table tr.total-row td.td-total{
-  background:linear-gradient(90deg,#04102a 0%,#06033A 100%);
+.vue-table tbody tr.total-row td.td-total,
+.vue-table tbody tr.total-row:nth-child(even) td.td-total{
+  background:linear-gradient(90deg,#04102a 0%,#06033A 100%) !important;
   border-left:4px solid #4da6d8}
 
 /* ── Contenu cellule ── */
