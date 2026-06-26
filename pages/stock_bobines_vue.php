@@ -9,6 +9,18 @@ require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
 
+$_autoload = __DIR__ . '/../vendor/autoload.php';
+if (file_exists($_autoload)) {
+    require_once $_autoload;
+}
+
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx as XlsxWriter;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Util\Coordinate;
+
 require_auth();
 
 $user      = current_user();
@@ -143,16 +155,7 @@ if ($export === 'csv') {
 
 // ── Export XLSX ──────────────────────────────────────────────
 if ($export === 'xlsx') {
-    $autoload = __DIR__ . '/../vendor/autoload.php';
-    if (!file_exists($autoload)) { echo 'PhpSpreadsheet non installé.'; exit; }
-    require_once $autoload;
-    use PhpOffice\PhpSpreadsheet\Spreadsheet;
-    use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
-    use PhpOffice\PhpSpreadsheet\Style\Alignment;
-    use PhpOffice\PhpSpreadsheet\Style\Fill;
-    use PhpOffice\PhpSpreadsheet\Style\Color;
-    use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
-    use PhpOffice\PhpSpreadsheet\Util\Coordinate;
+    if (!file_exists($_autoload)) { echo 'PhpSpreadsheet non installé.'; exit; }
 
     $sp = new Spreadsheet();
     $ws = $sp->getActiveSheet();
@@ -240,13 +243,13 @@ if ($export === 'xlsx') {
         $ws->getColumnDimension(Coordinate::stringFromColumnIndex($c))->setWidth(13);
     }
     // Bordures
-    $ws->getStyle("A2:{$lastCol}{$row}")->getBorders()->getAllBorders()->setBorderStyle(\PhpOffice\PhpSpreadsheet\Style\Border::BORDER_THIN);
+    $ws->getStyle("A2:{$lastCol}{$row}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
     $ws->getStyle("A2:{$lastCol}{$row}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
     $ws->getStyle('A2:A'.$row)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_LEFT);
 
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     header('Content-Disposition: attachment; filename="stock_bobines_' . date('Ymd') . '.xlsx"');
-    (new Xlsx($sp))->save('php://output');
+    (new XlsxWriter($sp))->save('php://output');
     exit;
 }
 
