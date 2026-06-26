@@ -116,13 +116,15 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
                 if ($phy_val === null) continue;
 
                 $det = db_fetch_one(
-                    "SELECT d.*, b.stock_systeme FROM inventaire_details_bobines d
+                    "SELECT d.*, b.stock_systeme AS b_stock_systeme, b.films_restants
+                     FROM inventaire_details_bobines d
                      JOIN op_bobines b ON b.id=d.bobine_id WHERE d.id=? AND d.inventaire_id=?",
                     [$detail_id, $inv_id]
                 );
                 if (!$det) continue;
 
-                $stock_sys  = (int)$det['stock_systeme'];
+                // Utiliser films_restants comme référence (valeur réelle affichée)
+                $stock_sys  = (int)($det['films_restants'] ?: $det['b_stock_systeme']);
                 $ecart_mes  = $phy_val - $stock_sys;
                 $conso_moy  = (float)$det['conso_quotidienne_moy'];
                 $jours_phy  = $conso_moy > 0 ? (int)ceil($phy_val / $conso_moy) : null;
@@ -156,26 +158,43 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         db_begin();
         try {
             foreach ($lignes as $l) {
-                if ($l['stock_physique'] == 0 && $l['ecart'] == 0) continue;
+                // Ignorer les lignes sans stock physique déclaré
+                if ($l['stock_physique'] === null || $l['stock_physique'] === '') continue;
+                $phy     = (int)$l['stock_physique'];
+                $sys_inv = (int)$l['stock_systeme']; // snapshot au moment de la saisie
 
-                // Fermer tous les écarts ouverts précédents de cette bobine
+                // Toujours appliquer le stock physique déclaré — source de vérité
+                db_query(
+                    "UPDATE op_bobines SET films_restants=?, stock_systeme=?,
+                     statut=IF(?> 0, IF(statut IN('retiree'),'retiree', IF(statut='en_cours','en_cours','en_stock')), 'epuisee')
+                     WHERE id=?",
+                    [$phy, $phy, $phy, $l['bobine_id']]
+                );
+
+                // Fermer les écarts ouverts précédents
                 db_query("UPDATE ecarts_bobines SET statut='resolu', resolu_at=NOW(), resolu_par=?
                           WHERE bobine_id=? AND statut='ouvert'",
                     [$user['id'], $l['bobine_id']]);
 
-                if ($l['ecart'] != 0) {
+                // Recalculer l'écart réel (phy vs films_restants système actuel)
+                $ecart_reel = (int)db_fetch_value(
+                    "SELECT films_restants FROM op_bobines WHERE id=?", [$l['bobine_id']]
+                );
+                // L'écart = ce qu'on vient de poser vs ce qu'il y avait avant
+                $ecart_applique = $phy - $sys_inv;
+
+                if ($ecart_applique != 0) {
                     $nb_ecarts++;
-                    $phy = (int)$l['stock_physique'];
-                    db_query("UPDATE op_bobines SET stock_systeme=?,films_restants=?,statut=IF(?>0,IF(statut='retiree','retiree','en_cours'),'epuisee') WHERE id=?",
-                        [$phy,$phy,$phy,$l['bobine_id']]);
-                    db_query("INSERT INTO mouvements_bobines (bobine_id,type,quantite,stock_avant,stock_apres,motif,ref_id,created_by) VALUES (?,?,?,?,?,?,?,?)",
-                        [$l['bobine_id'],'ajustement_inventaire',$l['ecart'],(int)$l['stock_systeme'],$phy,"Inventaire #$inv_id",$inv_id,$user['id']]);
-                    // Écart tracé mais immédiatement résolu car stock ajusté
+                    db_query(
+                        "INSERT INTO mouvements_bobines (bobine_id,type,quantite,stock_avant,stock_apres,motif,ref_id,created_by)
+                         VALUES (?,?,?,?,?,?,?,?)",
+                        [$l['bobine_id'],'ajustement_inventaire',$ecart_applique,$sys_inv,$phy,"Inventaire #$inv_id",$inv_id,$user['id']]
+                    );
                     db_query(
                         "INSERT INTO ecarts_bobines (bobine_id,date_constat,stock_systeme,stock_physique,ecart,motif,source,inventaire_id,statut,resolu_at,resolu_par,created_by)
                          VALUES (?,?,?,?,?,?,?,?,'resolu',NOW(),?,?)",
-                        [$l['bobine_id'],$inv['date_inventaire'],(int)$l['stock_systeme'],$phy,
-                         $l['ecart'],$l['notes']??'','inventaire',$inv_id,$user['id'],$user['id']]
+                        [$l['bobine_id'],$inv['date_inventaire'],$sys_inv,$phy,$ecart_applique,
+                         $l['notes']??'','inventaire',$inv_id,$user['id'],$user['id']]
                     );
                 }
             }
