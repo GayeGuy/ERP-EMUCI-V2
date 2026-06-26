@@ -253,193 +253,293 @@ if ($export === 'xlsx') {
     exit;
 }
 
-// ── Export PPTX (Open XML natif) ─────────────────────────────
+// ── Export PPTX (Open XML via ZipArchive::addFromString) ─────
 if ($export === 'pptx') {
-    // Générer PPTX minimal avec table via Open XML (ZIP)
-    $tmpDir = sys_get_temp_dir() . '/pptx_' . uniqid();
-    foreach ([
-        $tmpDir, "$tmpDir/_rels", "$tmpDir/ppt",
-        "$tmpDir/ppt/slides",        "$tmpDir/ppt/slides/_rels",
-        "$tmpDir/ppt/slideLayouts",  "$tmpDir/ppt/slideLayouts/_rels",
-        "$tmpDir/ppt/slideMasters",  "$tmpDir/ppt/slideMasters/_rels",
-        "$tmpDir/ppt/theme",         "$tmpDir/ppt/_rels",
-    ] as $_d) { if (!is_dir($_d)) mkdir($_d, 0777, true); }
 
-    // Palette couleurs
-    $navy = '06033A'; $blue = '1B75BC'; $gray = 'E8EDF8'; $white = 'FFFFFF';
-
-    // Préparer les lignes du tableau
-    $tableRows = [];
-    // En-tête
+    // ── Données tableau ──────────────────────────────────────────
     $hdr = ['Site'];
     foreach ($types as $t) { $hdr[] = "Bobines $t"; $hdr[] = "Films $t"; }
     $hdr[] = 'Total Bobines'; $hdr[] = 'Total Films';
-    $tableRows[] = ['cells' => $hdr, 'header' => true];
+    $rows = [['cells' => $hdr, 'hdr' => true, 'tot' => false]];
 
-    foreach (array_keys($par_site) as $site_nom) {
-        $cells = [$site_nom];
+    foreach (array_keys($par_site) as $sn) {
+        $r = [$sn];
         foreach ($types as $t) {
-            $cell = $idx[$site_nom][$t] ?? null;
-            $cells[] = $cell ? (string)(int)$cell['nb_bobines']  : '0';
-            $cells[] = $cell ? number_format((int)$cell['total_films']) : '0';
+            $c = $idx[$sn][$t] ?? null;
+            $r[] = $c ? (string)(int)$c['nb_bobines']           : '0';
+            $r[] = $c ? number_format((int)$c['total_films'])    : '0';
         }
-        $cells[] = (string)(int)$par_site[$site_nom]['nb_bobines'];
-        $cells[] = number_format((int)$par_site[$site_nom]['total_films']);
-        $tableRows[] = ['cells' => $cells, 'header' => false];
+        $r[] = (string)(int)$par_site[$sn]['nb_bobines'];
+        $r[] = number_format((int)$par_site[$sn]['total_films']);
+        $rows[] = ['cells' => $r, 'hdr' => false, 'tot' => false];
     }
     if (!empty($sans_site)) {
-        $cells = ['En dépôt (sans site)'];
-        $idx_ss = array_column($sans_site, null, 'type_code');
+        $r = ['En depot (sans site)'];
+        $iss = array_column($sans_site, null, 'type_code');
         foreach ($types as $t) {
-            $ss = $idx_ss[$t] ?? null;
-            $cells[] = $ss ? (string)(int)$ss['nb']    : '0';
-            $cells[] = $ss ? number_format((int)$ss['films']) : '0';
+            $ss = $iss[$t] ?? null;
+            $r[] = $ss ? (string)(int)$ss['nb']           : '0';
+            $r[] = $ss ? number_format((int)$ss['films'])  : '0';
         }
-        $cells[] = (string)array_sum(array_column($sans_site,'nb'));
-        $cells[] = number_format(array_sum(array_column($sans_site,'films')));
-        $tableRows[] = ['cells' => $cells, 'header' => false];
+        $r[] = (string)array_sum(array_column($sans_site,'nb'));
+        $r[] = number_format(array_sum(array_column($sans_site,'films')));
+        $rows[] = ['cells' => $r, 'hdr' => false, 'tot' => false];
     }
-    // Total
-    $cells = ['TOTAL'];
+    $r = ['TOTAL'];
     foreach ($types as $t) {
-        $cells[] = (string)(int)($par_type[$t]['nb_bobines']  ?? 0);
-        $cells[] = number_format((int)($par_type[$t]['total_films'] ?? 0));
+        $r[] = (string)(int)($par_type[$t]['nb_bobines']  ?? 0);
+        $r[] = number_format((int)($par_type[$t]['total_films'] ?? 0));
     }
-    $cells[] = (string)$total_bobines;
-    $cells[] = number_format($total_films);
-    $tableRows[] = ['cells' => $cells, 'header' => false, 'total' => true];
+    $r[] = (string)$total_bobines;
+    $r[] = number_format($total_films);
+    $rows[] = ['cells' => $r, 'hdr' => false, 'tot' => true];
 
-    $nbCols = count($hdr);
-    // Largeur de chaque colonne en EMU (slide 9144000 EMU = 10 inches)
-    // Slide width = 9144000. col0 = 15%, rest = 85%/nbCols-1
-    $slideW = 9144000; $slideH = 5143500;
-    $colW0  = (int)($slideW * 0.20);
-    $colWn  = (int)(($slideW * 0.80) / ($nbCols - 1));
+    // ── EMU dimensions ───────────────────────────────────────────
+    $SW = 9144000; $SH = 5143500;
+    $nC = count($hdr);
+    $cW0 = (int)($SW * 0.20);
+    $cWn = $nC > 1 ? (int)(($SW * 0.80) / ($nC - 1)) : $SW;
+    $rH  = 380000;
+    $tY  = 650000;
+    $tH  = count($rows) * $rH + 80000;
 
-    // Fonction helper pour cellule tableau PPTX
-    $makeTc = function(string $text, bool $header, bool $isFirst, bool $total, int $colW) use ($navy, $blue, $gray, $white): string {
-        $bold   = $header || $isFirst || $total ? '1' : '0';
-        $fgClr  = ($header) ? $white : (($total) ? $navy : '222222');
-        $bgClr  = ($header) ? $blue  : (($total) ? $gray : $white);
-        $sz     = $header ? '1200' : '1000';
-        return <<<XML
-<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr lang="fr-FR" b="{$bold}" sz="{$sz}"><a:solidFill><a:srgbClr val="{$fgClr}"/></a:solidFill></a:rPr><a:t>{$text}</a:t></a:r></a:p></a:txBody><a:tcPr><a:solidFill><a:srgbClr val="{$bgClr}"/></a:solidFill><a:lnL w="12700"><a:solidFill><a:srgbClr val="CCCCCC"/></a:solidFill></a:lnL><a:lnR w="12700"><a:solidFill><a:srgbClr val="CCCCCC"/></a:solidFill></a:lnR><a:lnT w="12700"><a:solidFill><a:srgbClr val="CCCCCC"/></a:solidFill></a:lnT><a:lnB w="12700"><a:solidFill><a:srgbClr val="CCCCCC"/></a:solidFill></a:lnB></a:tcPr></a:tc>
-XML;
+    // ── Helper cellule ───────────────────────────────────────────
+    $tc = static function(string $txt, bool $h, bool $f, bool $tot): string {
+        $b   = ($h || $f || $tot) ? '1' : '0';
+        $fg  = $h ? 'FFFFFF' : ($tot ? '06033A' : '222222');
+        $bg  = $h ? '1B75BC' : ($tot ? 'E8EDF8' : 'FFFFFF');
+        $sz  = $h  ? '1100' : '1000';
+        $ln  = '<a:ln w="9525"><a:solidFill><a:srgbClr val="CCCCCC"/></a:solidFill></a:ln>';
+        return '<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r>'
+             . '<a:rPr lang="fr-FR" b="' . $b . '" sz="' . $sz . '" dirty="0">'
+             . '<a:solidFill><a:srgbClr val="' . $fg . '"/></a:solidFill></a:rPr>'
+             . '<a:t>' . htmlspecialchars($txt, ENT_XML1, 'UTF-8') . '</a:t>'
+             . '</a:r></a:p></a:txBody>'
+             . '<a:tcPr marL="91440" marR="91440" marT="45720" marB="45720">'
+             . '<a:solidFill><a:srgbClr val="' . $bg . '"/></a:solidFill>'
+             . '<a:lnL>' . $ln . '</a:lnL><a:lnR>' . $ln . '</a:lnR>'
+             . '<a:lnT>' . $ln . '</a:lnT><a:lnB>' . $ln . '</a:lnB>'
+             . '</a:tcPr></a:tc>';
     };
 
-    // Construire les colonnes XML
-    $gridXml = "<a:tblGrid>";
-    $gridXml .= "<a:gridCol w=\"$colW0\"/>";
-    for ($c = 1; $c < $nbCols; $c++) $gridXml .= "<a:gridCol w=\"$colWn\"/>";
-    $gridXml .= "</a:tblGrid>";
+    // ── Construire XML tableau ────────────────────────────────────
+    $grid = '<a:tblGrid>';
+    $grid .= '<a:gridCol w="' . $cW0 . '"/>';
+    for ($i = 1; $i < $nC; $i++) $grid .= '<a:gridCol w="' . $cWn . '"/>';
+    $grid .= '</a:tblGrid>';
 
-    $rowsXml = '';
-    $rowH = 400000;
-    foreach ($tableRows as $tr) {
-        $isHdr   = $tr['header'] ?? false;
-        $isTotal = $tr['total']  ?? false;
-        $rowsXml .= "<a:tr h=\"$rowH\">";
-        foreach ($tr['cells'] as $ci => $cell) {
-            $cw = $ci === 0 ? $colW0 : $colWn;
-            $rowsXml .= $makeTc(htmlspecialchars($cell, ENT_XML1), $isHdr, $ci===0 && !$isHdr, $isTotal, $cw);
+    $trows = '';
+    foreach ($rows as $row) {
+        $trows .= '<a:tr h="' . $rH . '">';
+        foreach ($row['cells'] as $ci => $val) {
+            $trows .= $tc($val, $row['hdr'], $ci === 0 && !$row['hdr'], $row['tot']);
         }
-        $rowsXml .= "</a:tr>";
+        $trows .= '</a:tr>';
     }
 
-    $tableW = $slideW;
-    $tableH = count($tableRows) * $rowH + 100000;
-    $tableY = 680000;
-    $dateGen = date('d/m/Y');
-    $titreDetail = "{$total_bobines} bobines \u{00B7} " . number_format($total_films) . " films";
+    // ── slide1.xml ───────────────────────────────────────────────
+    $dateStr = date('d/m/Y');
+    $slide = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+           . '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"'
+           . ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"'
+           . ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+           . '<p:cSld>'
+           . '<p:bg><p:bgPr><a:solidFill><a:srgbClr val="F4F6FB"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>'
+           . '<p:spTree>'
+           . '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>'
+           . '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' . $SW . '" cy="' . $SH . '"/>'
+           . '<a:chOff x="0" y="0"/><a:chExt cx="' . $SW . '" cy="' . $SH . '"/></a:xfrm></p:grpSpPr>'
+           // bande titre
+           . '<p:sp><p:nvSpPr><p:cNvPr id="2" name="bg2"/>'
+           . '<p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>'
+           . '<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' . $SW . '" cy="600000"/></a:xfrm>'
+           . '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
+           . '<a:solidFill><a:srgbClr val="06033A"/></a:solidFill>'
+           . '<a:ln><a:noFill/></a:ln></p:spPr>'
+           . '<p:txBody><a:bodyPr/><a:lstStyle/><a:p/></p:txBody></p:sp>'
+           // texte titre
+           . '<p:sp><p:nvSpPr><p:cNvPr id="3" name="titre"/>'
+           . '<p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr>'
+           . '<p:spPr><a:xfrm><a:off x="270000" y="90000"/><a:ext cx="8600000" cy="430000"/></a:xfrm>'
+           . '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
+           . '<a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>'
+           . '<p:txBody><a:bodyPr anchor="ctr" wrap="square"><a:spAutoFit/></a:bodyPr><a:lstStyle/>'
+           . '<a:p>'
+           . '<a:r><a:rPr lang="fr-FR" b="1" sz="2200" dirty="0">'
+           . '<a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:rPr>'
+           . '<a:t>Vue Stock Bobines</a:t></a:r>'
+           . '<a:r><a:rPr lang="fr-FR" sz="1500" dirty="0">'
+           . '<a:solidFill><a:srgbClr val="8BB8D8"/></a:solidFill></a:rPr>'
+           . '<a:t>  ' . $total_bobines . ' bobines  |  ' . number_format($total_films) . ' films  |  ' . $dateStr . '</a:t></a:r>'
+           . '</a:p>'
+           . '</p:txBody></p:sp>'
+           // tableau
+           . '<p:graphicFrame>'
+           . '<p:nvGraphicFramePr>'
+           . '<p:cNvPr id="4" name="tbl"/>'
+           . '<p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>'
+           . '<p:nvPr/></p:nvGraphicFramePr>'
+           . '<p:xfrm><a:off x="0" y="' . $tY . '"/><a:ext cx="' . $SW . '" cy="' . $tH . '"/></p:xfrm>'
+           . '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">'
+           . '<a:tbl><a:tblPr firstRow="1" bandRow="1">'
+           . '<a:tableStyleId>{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}</a:tableStyleId>'
+           . '</a:tblPr>' . $grid . $trows . '</a:tbl>'
+           . '</a:graphicData></a:graphic>'
+           . '</p:graphicFrame>'
+           . '</p:spTree></p:cSld>'
+           . '<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>';
 
-    // slide1.xml — pas de <p:ph>, fond via <p:bg>, titres en textbox plain
-    $slideXml  = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
-    $slideXml .= '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
-    $slideXml .= ' xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"';
-    $slideXml .= ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">';
-    $slideXml .= '<p:cSld>';
-    // Fond uni via p:bg (pas de shape placeholder)
-    $slideXml .= '<p:bg><p:bgPr><a:solidFill><a:srgbClr val="F4F6FB"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>';
-    $slideXml .= '<p:spTree>';
-    $slideXml .= '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>';
-    $slideXml .= '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' . $slideW . '" cy="' . $slideH . '"/><a:chOff x="0" y="0"/><a:chExt cx="' . $slideW . '" cy="' . $slideH . '"/></a:xfrm></p:grpSpPr>';
-    // Bande titre (rectangle plein navy)
-    $slideXml .= '<p:sp><p:nvSpPr><p:cNvPr id="2" name="bandeTitre"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>';
-    $slideXml .= '<p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="' . $slideW . '" cy="600000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>';
-    $slideXml .= '<a:solidFill><a:srgbClr val="06033A"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr>';
-    $slideXml .= '<p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/><a:p/></p:txBody></p:sp>';
-    // Titre principal
-    $slideXml .= '<p:sp><p:nvSpPr><p:cNvPr id="3" name="titre"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>';
-    $slideXml .= '<p:spPr><a:xfrm><a:off x="280000" y="80000"/><a:ext cx="6800000" cy="440000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>';
-    $slideXml .= '<p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/>';
-    $slideXml .= '<a:p><a:r><a:rPr lang="fr-FR" b="1" sz="2200" dirty="0"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:rPr>';
-    $slideXml .= '<a:t>Vue Stock Bobines</a:t></a:r>';
-    $slideXml .= '<a:r><a:rPr lang="fr-FR" sz="1600" dirty="0"><a:solidFill><a:srgbClr val="90b8d8"/></a:solidFill></a:rPr>';
-    $slideXml .= '<a:t>  ' . htmlspecialchars($titreDetail, ENT_XML1) . '</a:t></a:r></a:p>';
-    $slideXml .= '</p:txBody></p:sp>';
-    // Date (en haut à droite)
-    $slideXml .= '<p:sp><p:nvSpPr><p:cNvPr id="4" name="date"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>';
-    $slideXml .= '<p:spPr><a:xfrm><a:off x="7200000" y="100000"/><a:ext cx="1800000" cy="400000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>';
-    $slideXml .= '<p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/>';
-    $slideXml .= '<a:p><a:pPr algn="r"/><a:r><a:rPr lang="fr-FR" sz="1100" dirty="0"><a:solidFill><a:srgbClr val="90b8d8"/></a:solidFill></a:rPr>';
-    $slideXml .= '<a:t>' . htmlspecialchars($dateGen, ENT_XML1) . '</a:t></a:r></a:p>';
-    $slideXml .= '</p:txBody></p:sp>';
-    // Tableau
-    $slideXml .= '<p:graphicFrame>';
-    $slideXml .= '<p:nvGraphicFramePr><p:cNvPr id="5" name="tableau"/><p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr><p:nvPr/></p:nvGraphicFramePr>';
-    $slideXml .= '<p:xfrm><a:off x="0" y="' . $tableY . '"/><a:ext cx="' . $tableW . '" cy="' . $tableH . '"/></p:xfrm>';
-    $slideXml .= '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table">';
-    $slideXml .= '<a:tbl><a:tblPr firstRow="1" bandRow="1"/>';
-    $slideXml .= $gridXml . $rowsXml;
-    $slideXml .= '</a:tbl></a:graphicData></a:graphic>';
-    $slideXml .= '</p:graphicFrame>';
-    $slideXml .= '</p:spTree></p:cSld>';
-    $slideXml .= '<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>';
+    // ── Fichiers statiques ────────────────────────────────────────
+    $NS_PKG  = 'http://schemas.openxmlformats.org/package/2006/relationships';
+    $NS_OFF  = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+    $NS_PML  = 'http://schemas.openxmlformats.org/presentationml/2006/main';
+    $NS_ADR  = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+    $NS_CT   = 'http://schemas.openxmlformats.org/package/2006/content-types';
 
-    file_put_contents("$tmpDir/ppt/slides/slide1.xml", $slideXml);
+    $rels_root = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+               . '<Relationships xmlns="' . $NS_PKG . '">'
+               . '<Relationship Id="rId1" Type="' . $NS_OFF . '/officeDocument" Target="ppt/presentation.xml"/>'
+               . '</Relationships>';
 
-    file_put_contents("$tmpDir/ppt/slides/_rels/slide1.xml.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>');
+    $rels_pres = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+               . '<Relationships xmlns="' . $NS_PKG . '">'
+               . '<Relationship Id="rId1" Type="' . $NS_OFF . '/slideMaster" Target="slideMasters/slideMaster1.xml"/>'
+               . '<Relationship Id="rId2" Type="' . $NS_OFF . '/slide"       Target="slides/slide1.xml"/>'
+               . '<Relationship Id="rId3" Type="' . $NS_OFF . '/theme"       Target="theme/theme1.xml"/>'
+               . '</Relationships>';
 
-    file_put_contents("$tmpDir/ppt/slideLayouts/slideLayout1.xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" type="blank"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>');
+    $rels_slide = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                . '<Relationships xmlns="' . $NS_PKG . '">'
+                . '<Relationship Id="rId1" Type="' . $NS_OFF . '/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>'
+                . '</Relationships>';
 
-    file_put_contents("$tmpDir/ppt/slideLayouts/_rels/slideLayout1.xml.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>');
+    $rels_layout = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                 . '<Relationships xmlns="' . $NS_PKG . '">'
+                 . '<Relationship Id="rId1" Type="' . $NS_OFF . '/slideMaster" Target="../slideMasters/slideMaster1.xml"/>'
+                 . '</Relationships>';
 
-    file_put_contents("$tmpDir/ppt/slideMasters/slideMaster1.xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldMaster xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="acc1" accent2="acc2" accent3="acc3" accent4="acc4" accent5="acc5" accent6="acc6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle><a:lstStyle/></p:titleStyle><p:bodyStyle><a:lstStyle/></p:bodyStyle><p:otherStyle><a:lstStyle/></p:otherStyle></p:txStyles></p:sldMaster>');
+    $rels_master = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                 . '<Relationships xmlns="' . $NS_PKG . '">'
+                 . '<Relationship Id="rId1" Type="' . $NS_OFF . '/slideLayout" Target="../slideLayouts/slideLayout1.xml"/>'
+                 . '<Relationship Id="rId2" Type="' . $NS_OFF . '/theme"       Target="../theme/theme1.xml"/>'
+                 . '</Relationships>';
 
-    file_put_contents("$tmpDir/ppt/slideMasters/_rels/slideMaster1.xml.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/></Relationships>');
+    $presentation = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                  . '<p:presentation xmlns:p="' . $NS_PML . '" xmlns:a="' . $NS_ADR . '"'
+                  . ' xmlns:r="' . $NS_OFF . '">'
+                  . '<p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst>'
+                  . '<p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst>'
+                  . '<p:sldSz cx="9144000" cy="5143500" type="screen4x3"/>'
+                  . '<p:notesSz cx="6858000" cy="9144000"/>'
+                  . '</p:presentation>';
 
-    file_put_contents("$tmpDir/ppt/theme/theme1.xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="DigiStock"><a:themeElements><a:clrScheme name="DigiStock"><a:dk1><a:srgbClr val="06033A"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="1B75BC"/></a:dk2><a:lt2><a:srgbClr val="E8EDF8"/></a:lt2><a:accent1><a:srgbClr val="1B75BC"/></a:accent1><a:accent2><a:srgbClr val="06033A"/></a:accent2><a:accent3><a:srgbClr val="2e7d32"/></a:accent3><a:accent4><a:srgbClr val="f39c12"/></a:accent4><a:accent5><a:srgbClr val="8e44ad"/></a:accent5><a:accent6><a:srgbClr val="c0392b"/></a:accent6><a:hlink><a:srgbClr val="1B75BC"/></a:hlink><a:folHlink><a:srgbClr val="06033A"/></a:folHlink></a:clrScheme><a:fontScheme name="DigiStock"><a:majorFont><a:latin typeface="Plus Jakarta Sans"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Plus Jakarta Sans"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="DigiStock"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"><a:tint val="95000"/></a:schemeClr></a:solidFill><a:solidFill><a:schemeClr val="phClr"><a:shade val="75000"/></a:schemeClr></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>');
+    $layout = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<p:sldLayout xmlns:p="' . $NS_PML . '" xmlns:a="' . $NS_ADR . '"'
+            . ' xmlns:r="' . $NS_OFF . '" type="blank" preserve="1">'
+            . '<p:cSld><p:spTree>'
+            . '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>'
+            . '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/>'
+            . '<a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>'
+            . '</p:spTree></p:cSld>'
+            . '<p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr>'
+            . '</p:sldLayout>';
 
-    file_put_contents("$tmpDir/ppt/presentation.xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" saveSubsetFonts="1"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst><p:sldSz cx="9144000" cy="5143500" type="screen4x3"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>');
+    $master = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            . '<p:sldMaster xmlns:p="' . $NS_PML . '" xmlns:a="' . $NS_ADR . '"'
+            . ' xmlns:r="' . $NS_OFF . '">'
+            . '<p:cSld><p:spTree>'
+            . '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr>'
+            . '<p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/>'
+            . '<a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>'
+            . '</p:spTree></p:cSld>'
+            . '<p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2"'
+            . ' accent1="acc1" accent2="acc2" accent3="acc3" accent4="acc4"'
+            . ' accent5="acc5" accent6="acc6" hlink="hlink" folHlink="folHlink"/>'
+            . '<p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst>'
+            . '<p:txStyles>'
+            . '<p:titleStyle><a:lstStyle/></p:titleStyle>'
+            . '<p:bodyStyle><a:lstStyle/></p:bodyStyle>'
+            . '<p:otherStyle><a:lstStyle/></p:otherStyle>'
+            . '</p:txStyles>'
+            . '</p:sldMaster>';
 
-    file_put_contents("$tmpDir/ppt/_rels/presentation.xml.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>');
+    $theme = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+           . '<a:theme xmlns:a="' . $NS_ADR . '" name="Office Theme">'
+           . '<a:themeElements>'
+           . '<a:clrScheme name="Office">'
+           . '<a:dk1><a:srgbClr val="06033A"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>'
+           . '<a:dk2><a:srgbClr val="1B75BC"/></a:dk2><a:lt2><a:srgbClr val="E8EDF8"/></a:lt2>'
+           . '<a:accent1><a:srgbClr val="4472C4"/></a:accent1>'
+           . '<a:accent2><a:srgbClr val="ED7D31"/></a:accent2>'
+           . '<a:accent3><a:srgbClr val="A9D18E"/></a:accent3>'
+           . '<a:accent4><a:srgbClr val="FFC000"/></a:accent4>'
+           . '<a:accent5><a:srgbClr val="5B9BD5"/></a:accent5>'
+           . '<a:accent6><a:srgbClr val="70AD47"/></a:accent6>'
+           . '<a:hlink><a:srgbClr val="0563C1"/></a:hlink>'
+           . '<a:folHlink><a:srgbClr val="954F72"/></a:folHlink>'
+           . '</a:clrScheme>'
+           . '<a:fontScheme name="Office">'
+           . '<a:majorFont><a:latin typeface="Calibri Light"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>'
+           . '<a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont>'
+           . '</a:fontScheme>'
+           . '<a:fmtScheme name="Office">'
+           . '<a:fillStyleLst>'
+           . '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>'
+           . '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>'
+           . '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>'
+           . '</a:fillStyleLst>'
+           . '<a:lnStyleLst>'
+           . '<a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln>'
+           . '<a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln>'
+           . '<a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln>'
+           . '</a:lnStyleLst>'
+           . '<a:effectStyleLst>'
+           . '<a:effectStyle><a:effectLst/></a:effectStyle>'
+           . '<a:effectStyle><a:effectLst/></a:effectStyle>'
+           . '<a:effectStyle><a:effectLst/></a:effectStyle>'
+           . '</a:effectStyleLst>'
+           . '<a:bgFillStyleLst>'
+           . '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>'
+           . '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>'
+           . '<a:solidFill><a:schemeClr val="phClr"/></a:solidFill>'
+           . '</a:bgFillStyleLst>'
+           . '</a:fmtScheme>'
+           . '</a:themeElements></a:theme>';
 
-    file_put_contents("$tmpDir/_rels/.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>');
+    $content_types = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                   . '<Types xmlns="' . $NS_CT . '">'
+                   . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+                   . '<Default Extension="xml"  ContentType="application/xml"/>'
+                   . '<Override PartName="/ppt/presentation.xml"'
+                   . ' ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>'
+                   . '<Override PartName="/ppt/slides/slide1.xml"'
+                   . ' ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>'
+                   . '<Override PartName="/ppt/slideLayouts/slideLayout1.xml"'
+                   . ' ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/>'
+                   . '<Override PartName="/ppt/slideMasters/slideMaster1.xml"'
+                   . ' ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/>'
+                   . '<Override PartName="/ppt/theme/theme1.xml"'
+                   . ' ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>'
+                   . '</Types>';
 
-    file_put_contents("$tmpDir/[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slides/slide1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/><Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/></Types>');
-
-    // Créer le ZIP
-    $pptxFile = sys_get_temp_dir() . '/stock_bobines_' . date('Ymd') . '.pptx';
+    // ── Assemblage ZIP en mémoire ─────────────────────────────────
+    $pptxFile = tempnam(sys_get_temp_dir(), 'pptx_');
     $zip = new ZipArchive();
-    $zip->open($pptxFile, ZipArchive::CREATE | ZipArchive::OVERWRITE);
-    $iter = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($tmpDir, RecursiveDirectoryIterator::SKIP_DOTS));
-    foreach ($iter as $file) {
-        $relPath = str_replace($tmpDir . DIRECTORY_SEPARATOR, '', $file->getPathname());
-        $relPath = str_replace('\\', '/', $relPath);
-        $zip->addFile($file->getPathname(), $relPath);
+    if ($zip->open($pptxFile, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        echo 'Erreur: impossible de créer le fichier PPTX.'; exit;
     }
+    $zip->addFromString('[Content_Types].xml',                          $content_types);
+    $zip->addFromString('_rels/.rels',                                  $rels_root);
+    $zip->addFromString('ppt/presentation.xml',                         $presentation);
+    $zip->addFromString('ppt/_rels/presentation.xml.rels',              $rels_pres);
+    $zip->addFromString('ppt/slides/slide1.xml',                        $slide);
+    $zip->addFromString('ppt/slides/_rels/slide1.xml.rels',             $rels_slide);
+    $zip->addFromString('ppt/slideLayouts/slideLayout1.xml',            $layout);
+    $zip->addFromString('ppt/slideLayouts/_rels/slideLayout1.xml.rels', $rels_layout);
+    $zip->addFromString('ppt/slideMasters/slideMaster1.xml',            $master);
+    $zip->addFromString('ppt/slideMasters/_rels/slideMaster1.xml.rels', $rels_master);
+    $zip->addFromString('ppt/theme/theme1.xml',                         $theme);
     $zip->close();
-
-    // Nettoyer tmp (suppression récursive)
-    $rmrf = function(string $dir) use (&$rmrf): void {
-        foreach (scandir($dir) as $item) {
-            if ($item === '.' || $item === '..') continue;
-            $path = "$dir/$item";
-            is_dir($path) ? $rmrf($path) : unlink($path);
-        }
-        rmdir($dir);
-    };
-    $rmrf($tmpDir);
 
     header('Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation');
     header('Content-Disposition: attachment; filename="stock_bobines_' . date('Ymd') . '.pptx"');
