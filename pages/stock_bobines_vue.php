@@ -451,37 +451,79 @@ include __DIR__ . '/../templates/header.php';
 ?>
 <style>
 .vue-table{width:100%;border-collapse:collapse;font-size:14px}
-.vue-table th{background:#06033A;color:#fff;padding:11px 14px;text-align:center;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;position:sticky;top:0;z-index:2}
-.vue-table th.site-col{text-align:left;min-width:160px}
-.vue-table td{padding:10px 14px;border-bottom:1px solid var(--border);text-align:center;vertical-align:middle}
-.vue-table td.site-name{text-align:left;font-weight:600;color:var(--navy)}
-.vue-table tr:hover td{background:#f8f9ff}
-.vue-table tr.total-row td{background:#e8f0fe;font-weight:700;border-top:2px solid var(--primary)}
+/* ── Table ── */
+.vue-table{width:100%;border-collapse:separate;border-spacing:0;font-size:14px}
+.vue-table thead tr th{
+  background:linear-gradient(135deg,#06033A 0%,#1B75BC 100%);
+  color:#fff;padding:14px 16px;text-align:center;font-weight:700;
+  font-size:12px;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;
+  position:sticky;top:0;z-index:2;border-bottom:2px solid rgba(255,255,255,.15)}
+.vue-table th.site-col{text-align:left;min-width:180px;padding-left:20px}
+.vue-table th.total-col{border-left:2px solid rgba(255,255,255,.25);background:linear-gradient(135deg,#0D5C8A 0%,#06033A 100%)}
+.vue-table td{padding:12px 16px;border-bottom:1px solid #eef0f5;text-align:center;vertical-align:middle}
+.vue-table td.site-name{
+  text-align:left;font-weight:700;font-size:14px;color:#06033A;
+  padding-left:20px;border-right:3px solid #e8edf8}
+.vue-table tbody tr:nth-child(even) td{background:#fafbff}
+.vue-table tbody tr:hover td{background:#f0f4ff;transition:background .15s}
+.vue-table tr.total-row td{
+  background:linear-gradient(90deg,#e8f0fe 0%,#f0f4ff 100%);
+  font-weight:800;font-size:15px;border-top:2px solid #1B75BC;color:#06033A}
+.vue-table tr.total-row td.site-name{color:#06033A;border-right:3px solid #1B75BC}
 .vue-table tr.sans-site-row td{background:#fff8e1}
-.cell-films{font-size:12px;color:#888;margin-top:2px}
-.cell-nb{font-size:17px;font-weight:700;color:var(--navy)}
-.cell-empty{color:#ccc;font-size:12px}
-.badge-type{display:inline-block;background:rgba(255,255,255,.15);border-radius:5px;padding:1px 6px;font-size:11px;font-weight:700}
-.kpi-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:22px}
-.kpi{background:#fff;border-radius:12px;border:1px solid var(--border);border-left:4px solid var(--primary);padding:14px 18px}
-.kpi-v{font-size:26px;font-weight:800;color:var(--navy)}
-.kpi-l{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
-.overflow-wrap{overflow-x:auto;border-radius:14px;box-shadow:0 2px 12px rgba(0,0,0,.07)}
-.fsel{padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none}
-.export-btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:9px;font-size:13px;font-weight:600;border:none;cursor:pointer;text-decoration:none}
-.btn-csv {background:#e8f5e9;color:#2e7d32}
-.btn-xlsx{background:#e3f2fd;color:#1565c0}
-.btn-pptx{background:#fce4ec;color:#c62828}
-.btn-csv:hover{background:#c8e6c9} .btn-xlsx:hover{background:#bbdefb} .btn-pptx:hover{background:#f8bbd0}
+.vue-table tr.sans-site-row td.site-name{border-right:3px solid #ffb300}
+/* Cellules */
+.cell-films{font-size:11px;color:#9ca3af;margin-top:3px;letter-spacing:.2px}
+.cell-nb{font-size:20px;font-weight:800;color:#06033A;line-height:1}
+.cell-empty{color:#d1d5db;font-size:18px}
+.badge-type{
+  display:inline-block;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);
+  border-radius:6px;padding:3px 9px;font-size:12px;font-weight:700;letter-spacing:.4px}
+.tag-cours{display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:20px;
+  padding:2px 7px;font-size:10px;font-weight:700;margin-top:4px}
+/* KPI */
+.kpi-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:24px}
+.kpi{
+  background:#fff;border-radius:14px;border:1px solid #e8edf8;
+  padding:18px 20px;position:relative;overflow:hidden;
+  box-shadow:0 1px 6px rgba(6,3,58,.06)}
+.kpi::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;background:var(--kpi-c,#1B75BC);border-radius:4px 0 0 4px}
+.kpi-v{font-size:30px;font-weight:900;color:var(--kpi-c,#06033A);line-height:1;margin-bottom:4px}
+.kpi-l{font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.kpi-icon{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:28px;opacity:.12}
+/* Section titre */
+.page-banner{
+  background:linear-gradient(135deg,#06033A 0%,#1B75BC 100%);
+  border-radius:16px;padding:24px 28px;margin-bottom:24px;
+  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;
+  box-shadow:0 4px 20px rgba(6,3,58,.2)}
+.page-banner h1{color:#fff;font-size:22px;font-weight:800;margin:0;display:flex;align-items:center;gap:10px}
+.page-banner p{color:rgba(255,255,255,.75);font-size:13px;margin:4px 0 0}
+.export-btn{
+  display:inline-flex;align-items:center;gap:7px;padding:10px 18px;
+  border-radius:10px;font-size:13px;font-weight:700;border:none;cursor:pointer;
+  text-decoration:none;transition:transform .1s,box-shadow .1s}
+.export-btn:hover{transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,.15)}
+.btn-csv {background:#fff;color:#2e7d32;border:1.5px solid #a5d6a7}
+.btn-xlsx{background:#fff;color:#1565c0;border:1.5px solid #90caf9}
+.btn-pptx{background:#fff;color:#c62828;border:1.5px solid #ef9a9a}
+/* Filtres */
+.filter-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;
+  background:#fff;padding:14px 20px;border-radius:12px;
+  border:1px solid #e8edf8;margin-bottom:22px;
+  box-shadow:0 1px 4px rgba(6,3,58,.04)}
+.fsel{padding:9px 12px;border:1.5px solid #e0e4ef;border-radius:9px;font-size:13px;background:white;outline:none;color:#06033A;cursor:pointer}
+.fsel:focus{border-color:#1B75BC}
+.overflow-wrap{overflow-x:auto;border-radius:14px;box-shadow:0 2px 16px rgba(6,3,58,.08);border:1px solid #e8edf8}
 </style>
 
-<div class="page-header" style="margin-bottom:18px;flex-wrap:wrap;gap:12px">
+<!-- BANNIÈRE TITRE -->
+<div class="page-banner">
   <div>
-    <h1 class="page-title">🎞️ Vue Stock Bobines</h1>
-    <p style="color:var(--muted);font-size:14px;margin:4px 0 0">Synthèse par site et par type — bobines actives</p>
+    <h1>🎞️ Vue Stock Bobines</h1>
+    <p>Synthèse par site et par type — <?= date('d/m/Y') ?> · <?= $total_bobines ?> bobines · <?= number_format($total_films) ?> films</p>
   </div>
-  <!-- Exports -->
-  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
     <a href="?<?= http_build_query(array_merge($_GET,['export'=>'csv']))  ?>" class="export-btn btn-csv">📄 CSV</a>
     <a href="?<?= http_build_query(array_merge($_GET,['export'=>'xlsx'])) ?>" class="export-btn btn-xlsx">📊 Excel</a>
     <a href="?<?= http_build_query(array_merge($_GET,['export'=>'pptx'])) ?>" class="export-btn btn-pptx">📑 PowerPoint</a>
@@ -489,40 +531,61 @@ include __DIR__ . '/../templates/header.php';
 </div>
 
 <!-- FILTRES -->
-<form method="GET" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;background:#fff;padding:14px 18px;border-radius:12px;border:1px solid var(--border);margin-bottom:20px">
-  <select name="site" class="fsel" onchange="this.form.submit()">
-    <option value="">Tous les sites</option>
-    <?php foreach ($sites_list as $s): ?>
-    <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
-    <?php endforeach; ?>
-  </select>
-  <select name="type" class="fsel" onchange="this.form.submit()">
-    <option value="">Tous les types</option>
-    <?php foreach ($types_list as $t): ?>
-    <option value="<?= h($t['type_code']) ?>" <?= $f_type===$t['type_code']?'selected':'' ?>><?= h($t['type_code']) ?></option>
-    <?php endforeach; ?>
-  </select>
-  <select name="statut" class="fsel" onchange="this.form.submit()">
-    <option value="">Tous les statuts</option>
-    <option value="en_cours" <?= $f_statut==='en_cours'?'selected':'' ?>>En cours</option>
-    <option value="en_stock" <?= $f_statut==='en_stock'?'selected':'' ?>>En stock</option>
-  </select>
-  <?php if ($f_site || $f_type || $f_statut): ?>
-  <a href="stock_bobines_vue.php" style="font-size:13px;color:var(--muted);text-decoration:none">✕ Réinitialiser</a>
-  <?php endif; ?>
-</form>
+<div class="filter-bar">
+  <form method="GET" style="display:contents">
+    <select name="site" class="fsel" onchange="this.form.submit()">
+      <option value="">🏢 Tous les sites</option>
+      <?php foreach ($sites_list as $s): ?>
+      <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
+      <?php endforeach; ?>
+    </select>
+    <select name="type" class="fsel" onchange="this.form.submit()">
+      <option value="">🎞️ Tous les types</option>
+      <?php foreach ($types_list as $t): ?>
+      <option value="<?= h($t['type_code']) ?>" <?= $f_type===$t['type_code']?'selected':'' ?>><?= h($t['type_code']) ?></option>
+      <?php endforeach; ?>
+    </select>
+    <select name="statut" class="fsel" onchange="this.form.submit()">
+      <option value="">⚡ Tous statuts</option>
+      <option value="en_cours" <?= $f_statut==='en_cours'?'selected':'' ?>>En cours</option>
+      <option value="en_stock" <?= $f_statut==='en_stock'?'selected':'' ?>>En stock</option>
+    </select>
+    <?php if ($f_site || $f_type || $f_statut): ?>
+    <a href="stock_bobines_vue.php" style="font-size:13px;color:#9ca3af;text-decoration:none;padding:8px 12px;border-radius:8px;border:1.5px solid #e0e4ef">✕ Réinitialiser</a>
+    <?php endif; ?>
+  </form>
+</div>
 
 <!-- KPI -->
 <div class="kpi-bar">
-  <div class="kpi"><div class="kpi-v"><?= $total_bobines ?></div><div class="kpi-l">Bobines actives</div></div>
-  <div class="kpi" style="border-left-color:#2e7d32"><div class="kpi-v" style="color:#2e7d32"><?= number_format($total_films) ?></div><div class="kpi-l">Films restants</div></div>
-  <div class="kpi" style="border-left-color:#1565c0"><div class="kpi-v" style="color:#1565c0"><?= count($par_site) ?></div><div class="kpi-l">Sites actifs</div></div>
-  <div class="kpi" style="border-left-color:#7b1fa2"><div class="kpi-v" style="color:#7b1fa2"><?= count($types) ?></div><div class="kpi-l">Types</div></div>
+  <div class="kpi" style="--kpi-c:#1B75BC">
+    <div class="kpi-icon">🎞️</div>
+    <div class="kpi-v"><?= $total_bobines ?></div>
+    <div class="kpi-l">Bobines actives</div>
+  </div>
+  <div class="kpi" style="--kpi-c:#2e7d32">
+    <div class="kpi-icon">🎬</div>
+    <div class="kpi-v"><?= number_format($total_films) ?></div>
+    <div class="kpi-l">Films restants</div>
+  </div>
+  <div class="kpi" style="--kpi-c:#1565c0">
+    <div class="kpi-icon">🏢</div>
+    <div class="kpi-v"><?= count($par_site) ?></div>
+    <div class="kpi-l">Sites actifs</div>
+  </div>
+  <div class="kpi" style="--kpi-c:#7b1fa2">
+    <div class="kpi-icon">🏷️</div>
+    <div class="kpi-v"><?= count($types) ?></div>
+    <div class="kpi-l">Types de bobine</div>
+  </div>
 </div>
 
 <!-- TABLEAU -->
 <?php if (empty($par_site) && empty($sans_site)): ?>
-<div style="text-align:center;padding:60px;color:var(--muted)"><div style="font-size:40px;margin-bottom:12px">🎞️</div><div>Aucune bobine active pour les filtres sélectionnés.</div></div>
+<div style="text-align:center;padding:60px;color:#9ca3af;background:#fff;border-radius:14px;border:1px solid #e8edf8">
+  <div style="font-size:48px;margin-bottom:12px">🎞️</div>
+  <div style="font-size:16px;font-weight:600">Aucune bobine active pour les filtres sélectionnés.</div>
+</div>
 <?php else: ?>
 <div class="overflow-wrap">
 <table class="vue-table">
@@ -532,7 +595,7 @@ include __DIR__ . '/../templates/header.php';
       <?php foreach ($types as $t): ?>
       <th><span class="badge-type"><?= h($t) ?></span></th>
       <?php endforeach; ?>
-      <th style="border-left:2px solid rgba(255,255,255,.2)">Total</th>
+      <th class="total-col">Total</th>
     </tr>
   </thead>
   <tbody>
@@ -546,13 +609,13 @@ include __DIR__ . '/../templates/header.php';
           <div class="cell-nb"><?= $cell['nb_bobines'] ?></div>
           <div class="cell-films"><?= number_format($cell['total_films']) ?> films</div>
           <?php if ($cell['nb_en_cours'] > 0): ?>
-          <div style="font-size:11px;color:#1976d2"><?= $cell['nb_en_cours'] ?> en cours</div>
+          <div class="tag-cours"><?= $cell['nb_en_cours'] ?> en cours</div>
           <?php endif; ?>
         <?php else: ?><span class="cell-empty">—</span><?php endif; ?>
       </td>
       <?php endforeach; ?>
-      <td style="border-left:2px solid var(--border)">
-        <div class="cell-nb"><?= $site_tot['nb_bobines'] ?></div>
+      <td style="border-left:2px solid #e0e4ef">
+        <div class="cell-nb" style="color:#1B75BC"><?= $site_tot['nb_bobines'] ?></div>
         <div class="cell-films"><?= number_format($site_tot['total_films']) ?> films</div>
       </td>
     </tr>
@@ -560,18 +623,18 @@ include __DIR__ . '/../templates/header.php';
 
     <?php if (!empty($sans_site)): ?>
     <tr class="sans-site-row">
-      <td class="site-name" style="color:#e65100">📦 En dépôt</td>
+      <td class="site-name" style="color:#b45309">📦 En dépôt</td>
       <?php $idx_ss = array_column($sans_site, null, 'type_code');
             foreach ($types as $t): $found = $idx_ss[$t] ?? null; ?>
       <td>
         <?php if ($found): ?>
-          <div class="cell-nb"><?= $found['nb'] ?></div>
+          <div class="cell-nb" style="color:#b45309"><?= $found['nb'] ?></div>
           <div class="cell-films"><?= number_format($found['films']) ?> films</div>
         <?php else: ?><span class="cell-empty">—</span><?php endif; ?>
       </td>
       <?php endforeach; ?>
-      <td style="border-left:2px solid var(--border)">
-        <div class="cell-nb"><?= array_sum(array_column($sans_site,'nb')) ?></div>
+      <td style="border-left:2px solid #e0e4ef">
+        <div class="cell-nb" style="color:#b45309"><?= array_sum(array_column($sans_site,'nb')) ?></div>
         <div class="cell-films"><?= number_format(array_sum(array_column($sans_site,'films'))) ?> films</div>
       </td>
     </tr>
@@ -587,7 +650,7 @@ include __DIR__ . '/../templates/header.php';
         <?php else: ?><span class="cell-empty">—</span><?php endif; ?>
       </td>
       <?php endforeach; ?>
-      <td style="border-left:2px solid var(--border)">
+      <td style="border-left:2px solid #1B75BC">
         <div class="cell-nb"><?= $total_bobines ?></div>
         <div class="cell-films"><?= number_format($total_films) ?> films</div>
       </td>
