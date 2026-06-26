@@ -455,19 +455,19 @@ include __DIR__ . '/../templates/header.php';
 
 /* ── En-têtes types (colonnes) ── */
 .vue-table thead tr.row-types th{
-  background:linear-gradient(160deg,#06033A 0%,#1B75BC 100%);
+  background:#0a1a3a;
   color:#fff;padding:16px 18px;text-align:center;
   white-space:nowrap;position:sticky;top:0;z-index:2;
   border-right:1px solid rgba(255,255,255,.1)}
 .vue-table thead tr.row-types th.th-site{
   text-align:left;min-width:190px;padding-left:22px;
-  background:#06033A;border-right:3px solid #1B75BC}
+  background:#06033A;border-right:3px solid #4da6d8}
 .vue-table thead tr.row-types th.th-type .type-label{
-  display:inline-block;background:rgba(255,255,255,.15);
-  border:1.5px solid rgba(255,255,255,.35);border-radius:8px;
+  display:inline-block;background:rgba(255,255,255,.12);
+  border:1.5px solid rgba(255,255,255,.28);border-radius:8px;
   padding:5px 14px;font-size:13px;font-weight:800;letter-spacing:.5px}
 .vue-table thead tr.row-types th.th-total{
-  background:#0a1a3a;border-left:3px solid #4da6d8;
+  background:#04102a;border-left:3px solid #4da6d8;
   padding:16px 22px}
 .vue-table thead tr.row-types th.th-total .type-label{
   background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.25)}
@@ -504,8 +504,9 @@ include __DIR__ . '/../templates/header.php';
   border-right:1px solid #f0f2f8}
 .vue-table tbody tr:nth-child(even) td{background:#fafbff}
 .vue-table tbody tr:nth-child(even) td.site-name{background:#eef2ff}
-.vue-table tbody tr:hover td{background:#edf2ff}
-.vue-table tbody tr:hover td.site-name{background:#e0e8ff}
+.vue-table tbody tr:not(.total-row):hover td{background:#edf2ff}
+.vue-table tbody tr:not(.total-row):hover td.site-name{background:#e0e8ff}
+.vue-table tbody tr:not(.total-row):hover td.td-total{background:#d8e8fa}
 
 /* ── Colonne Total ── */
 .vue-table td.td-total{
