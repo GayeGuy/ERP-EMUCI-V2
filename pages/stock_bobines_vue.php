@@ -450,37 +450,95 @@ XML;
 include __DIR__ . '/../templates/header.php';
 ?>
 <style>
-.vue-table{width:100%;border-collapse:collapse;font-size:14px}
 /* ── Table ── */
 .vue-table{width:100%;border-collapse:separate;border-spacing:0;font-size:14px}
-.vue-table thead tr th{
-  background:linear-gradient(135deg,#06033A 0%,#1B75BC 100%);
-  color:#fff;padding:14px 16px;text-align:center;font-weight:700;
-  font-size:12px;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;
-  position:sticky;top:0;z-index:2;border-bottom:2px solid rgba(255,255,255,.15)}
-.vue-table th.site-col{text-align:left;min-width:180px;padding-left:20px}
-.vue-table th.total-col{border-left:2px solid rgba(255,255,255,.25);background:linear-gradient(135deg,#0D5C8A 0%,#06033A 100%)}
-.vue-table td{padding:12px 16px;border-bottom:1px solid #eef0f5;text-align:center;vertical-align:middle}
+
+/* ── En-têtes types (colonnes) ── */
+.vue-table thead tr.row-types th{
+  background:linear-gradient(160deg,#06033A 0%,#1B75BC 100%);
+  color:#fff;padding:16px 18px;text-align:center;
+  white-space:nowrap;position:sticky;top:0;z-index:2;
+  border-right:1px solid rgba(255,255,255,.1)}
+.vue-table thead tr.row-types th.th-site{
+  text-align:left;min-width:190px;padding-left:22px;
+  background:#06033A;border-right:3px solid #1B75BC}
+.vue-table thead tr.row-types th.th-type .type-label{
+  display:inline-block;background:rgba(255,255,255,.15);
+  border:1.5px solid rgba(255,255,255,.35);border-radius:8px;
+  padding:5px 14px;font-size:13px;font-weight:800;letter-spacing:.5px}
+.vue-table thead tr.row-types th.th-total{
+  background:#0a1a3a;border-left:3px solid #4da6d8;
+  padding:16px 22px}
+.vue-table thead tr.row-types th.th-total .type-label{
+  background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.25)}
+
+/* ── En-têtes sous-labels (Qté / Films) ── */
+.vue-table thead tr.row-sub th{
+  background:#0f2144;color:rgba(255,255,255,.6);
+  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+  padding:5px 18px 8px;text-align:center;
+  position:sticky;top:52px;z-index:2;
+  border-bottom:2px solid rgba(255,255,255,.08);
+  border-right:1px solid rgba(255,255,255,.06)}
+.vue-table thead tr.row-sub th.th-site-sub{
+  text-align:left;padding-left:22px;background:#081530;
+  border-right:3px solid #1B75BC}
+.vue-table thead tr.row-sub th.th-total-sub{
+  background:#081530;border-left:3px solid #4da6d8}
+
+/* ── Colonne site (en-tête de ligne) ── */
 .vue-table td.site-name{
+  background:#f5f7ff;
   text-align:left;font-weight:700;font-size:14px;color:#06033A;
-  padding-left:20px;border-right:3px solid #e8edf8}
+  padding:14px 18px 14px 22px;
+  border-right:3px solid #1B75BC;
+  white-space:nowrap}
+.vue-table td.site-name .site-icon{
+  display:inline-block;width:8px;height:8px;border-radius:50%;
+  background:#1B75BC;margin-right:8px;vertical-align:middle}
+
+/* ── Cellules données ── */
+.vue-table td{
+  padding:12px 18px;border-bottom:1px solid #eef0f5;
+  text-align:center;vertical-align:middle;background:#fff;
+  border-right:1px solid #f0f2f8}
 .vue-table tbody tr:nth-child(even) td{background:#fafbff}
-.vue-table tbody tr:hover td{background:#f0f4ff;transition:background .15s}
+.vue-table tbody tr:nth-child(even) td.site-name{background:#eef2ff}
+.vue-table tbody tr:hover td{background:#edf2ff}
+.vue-table tbody tr:hover td.site-name{background:#e0e8ff}
+
+/* ── Colonne Total ── */
+.vue-table td.td-total{
+  background:#eef5ff;border-left:3px solid #1B75BC;
+  border-right:none}
+.vue-table tbody tr:nth-child(even) td.td-total{background:#e4eefc}
+.vue-table tbody tr:hover td.td-total{background:#d8e8fa}
+
+/* ── Ligne sans site ── */
+.vue-table tr.sans-site-row td{background:#fffbeb}
+.vue-table tr.sans-site-row td.site-name{
+  background:#fff8e1;color:#92400e;border-right-color:#f59e0b}
+.vue-table tr.sans-site-row td.td-total{background:#fef3c7;border-left-color:#f59e0b}
+
+/* ── Ligne TOTAL ── */
 .vue-table tr.total-row td{
-  background:linear-gradient(90deg,#e8f0fe 0%,#f0f4ff 100%);
-  font-weight:800;font-size:15px;border-top:2px solid #1B75BC;color:#06033A}
-.vue-table tr.total-row td.site-name{color:#06033A;border-right:3px solid #1B75BC}
-.vue-table tr.sans-site-row td{background:#fff8e1}
-.vue-table tr.sans-site-row td.site-name{border-right:3px solid #ffb300}
-/* Cellules */
-.cell-films{font-size:11px;color:#9ca3af;margin-top:3px;letter-spacing:.2px}
-.cell-nb{font-size:20px;font-weight:800;color:#06033A;line-height:1}
+  background:#06033A;border-top:2px solid #1B75BC;border-bottom:none;
+  border-right:1px solid rgba(255,255,255,.08)}
+.vue-table tr.total-row td.site-name{
+  background:#06033A;color:#fff;
+  font-size:13px;font-weight:900;letter-spacing:.8px;text-transform:uppercase;
+  border-right:3px solid #4da6d8}
+.vue-table tr.total-row td.td-total{
+  background:#0a1a3a;border-left:3px solid #4da6d8}
+
+/* ── Contenu cellule ── */
+.cell-nb{font-size:22px;font-weight:900;color:#06033A;line-height:1}
+.cell-films{font-size:11px;color:#9ca3af;margin-top:4px;letter-spacing:.2px}
 .cell-empty{color:#d1d5db;font-size:18px}
-.badge-type{
-  display:inline-block;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.3);
-  border-radius:6px;padding:3px 9px;font-size:12px;font-weight:700;letter-spacing:.4px}
 .tag-cours{display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:20px;
-  padding:2px 7px;font-size:10px;font-weight:700;margin-top:4px}
+  padding:2px 7px;font-size:10px;font-weight:700;margin-top:5px}
+.total-row .cell-nb{color:#fff;font-size:24px}
+.total-row .cell-films{color:rgba(255,255,255,.5)}
 /* KPI */
 .kpi-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:24px}
 .kpi{
@@ -590,18 +648,25 @@ include __DIR__ . '/../templates/header.php';
 <div class="overflow-wrap">
 <table class="vue-table">
   <thead>
-    <tr>
-      <th class="site-col">Site</th>
+    <!-- Ligne 1 : types de bobine -->
+    <tr class="row-types">
+      <th class="th-site" rowspan="2">Site</th>
       <?php foreach ($types as $t): ?>
-      <th><span class="badge-type"><?= h($t) ?></span></th>
+      <th class="th-type"><span class="type-label"><?= h($t) ?></span></th>
       <?php endforeach; ?>
-      <th class="total-col">Total</th>
+      <th class="th-total" rowspan="2"><span class="type-label">Total</span></th>
+    </tr>
+    <!-- Ligne 2 : sous-labels Qté / Films -->
+    <tr class="row-sub">
+      <?php foreach ($types as $t): ?>
+      <th class="th-sub">Qté · Films</th>
+      <?php endforeach; ?>
     </tr>
   </thead>
   <tbody>
     <?php foreach ($par_site as $site_nom => $site_tot): ?>
     <tr>
-      <td class="site-name"><?= h($site_nom) ?></td>
+      <td class="site-name"><span class="site-icon"></span><?= h($site_nom) ?></td>
       <?php foreach ($types as $t):
             $cell = $idx[$site_nom][$t] ?? null; ?>
       <td>
@@ -614,7 +679,7 @@ include __DIR__ . '/../templates/header.php';
         <?php else: ?><span class="cell-empty">—</span><?php endif; ?>
       </td>
       <?php endforeach; ?>
-      <td style="border-left:2px solid #e0e4ef">
+      <td class="td-total">
         <div class="cell-nb" style="color:#1B75BC"><?= $site_tot['nb_bobines'] ?></div>
         <div class="cell-films"><?= number_format($site_tot['total_films']) ?> films</div>
       </td>
@@ -623,34 +688,34 @@ include __DIR__ . '/../templates/header.php';
 
     <?php if (!empty($sans_site)): ?>
     <tr class="sans-site-row">
-      <td class="site-name" style="color:#b45309">📦 En dépôt</td>
+      <td class="site-name">📦 En dépôt</td>
       <?php $idx_ss = array_column($sans_site, null, 'type_code');
             foreach ($types as $t): $found = $idx_ss[$t] ?? null; ?>
       <td>
         <?php if ($found): ?>
-          <div class="cell-nb" style="color:#b45309"><?= $found['nb'] ?></div>
+          <div class="cell-nb" style="color:#92400e"><?= $found['nb'] ?></div>
           <div class="cell-films"><?= number_format($found['films']) ?> films</div>
         <?php else: ?><span class="cell-empty">—</span><?php endif; ?>
       </td>
       <?php endforeach; ?>
-      <td style="border-left:2px solid #e0e4ef">
-        <div class="cell-nb" style="color:#b45309"><?= array_sum(array_column($sans_site,'nb')) ?></div>
+      <td class="td-total">
+        <div class="cell-nb" style="color:#92400e"><?= array_sum(array_column($sans_site,'nb')) ?></div>
         <div class="cell-films"><?= number_format(array_sum(array_column($sans_site,'films'))) ?> films</div>
       </td>
     </tr>
     <?php endif; ?>
 
     <tr class="total-row">
-      <td class="site-name">TOTAL</td>
+      <td class="site-name">TOTAL GÉNÉRAL</td>
       <?php foreach ($types as $t): $tc = $par_type[$t] ?? null; ?>
       <td>
         <?php if ($tc): ?>
           <div class="cell-nb"><?= $tc['nb_bobines'] ?></div>
           <div class="cell-films"><?= number_format($tc['total_films']) ?> films</div>
-        <?php else: ?><span class="cell-empty">—</span><?php endif; ?>
+        <?php else: ?><span class="cell-empty" style="color:rgba(255,255,255,.2)">—</span><?php endif; ?>
       </td>
       <?php endforeach; ?>
-      <td style="border-left:2px solid #1B75BC">
+      <td class="td-total">
         <div class="cell-nb"><?= $total_bobines ?></div>
         <div class="cell-films"><?= number_format($total_films) ?> films</div>
       </td>
