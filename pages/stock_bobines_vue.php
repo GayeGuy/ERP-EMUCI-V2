@@ -257,10 +257,13 @@ if ($export === 'xlsx') {
 if ($export === 'pptx') {
     // Générer PPTX minimal avec table via Open XML (ZIP)
     $tmpDir = sys_get_temp_dir() . '/pptx_' . uniqid();
-    mkdir($tmpDir); mkdir("$tmpDir/_rels"); mkdir("$tmpDir/ppt");
-    mkdir("$tmpDir/ppt/slides"); mkdir("$tmpDir/ppt/slides/_rels");
-    mkdir("$tmpDir/ppt/slideLayouts"); mkdir("$tmpDir/ppt/slideMasters");
-    mkdir("$tmpDir/ppt/theme");
+    foreach ([
+        $tmpDir, "$tmpDir/_rels", "$tmpDir/ppt",
+        "$tmpDir/ppt/slides",        "$tmpDir/ppt/slides/_rels",
+        "$tmpDir/ppt/slideLayouts",  "$tmpDir/ppt/slideLayouts/_rels",
+        "$tmpDir/ppt/slideMasters",  "$tmpDir/ppt/slideMasters/_rels",
+        "$tmpDir/ppt/theme",         "$tmpDir/ppt/_rels",
+    ] as $_d) { if (!is_dir($_d)) mkdir($_d, 0777, true); }
 
     // Palette couleurs
     $navy = '06033A'; $blue = '1B75BC'; $gray = 'E8EDF8'; $white = 'FFFFFF';
@@ -394,20 +397,16 @@ XML;
 
     file_put_contents("$tmpDir/ppt/slideLayouts/slideLayout1.xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" type="blank"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>');
 
-    file_put_contents("$tmpDir/ppt/slideLayouts/_rels", ''); // placeholder
-    mkdir("$tmpDir/ppt/slideLayouts/_rels", 0777, true);
     file_put_contents("$tmpDir/ppt/slideLayouts/_rels/slideLayout1.xml.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>');
 
     file_put_contents("$tmpDir/ppt/slideMasters/slideMaster1.xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldMaster xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="acc1" accent2="acc2" accent3="acc3" accent4="acc4" accent5="acc5" accent6="acc6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle><a:lstStyle/></p:titleStyle><p:bodyStyle><a:lstStyle/></p:bodyStyle><p:otherStyle><a:lstStyle/></p:otherStyle></p:txStyles></p:sldMaster>');
 
-    mkdir("$tmpDir/ppt/slideMasters/_rels", 0777, true);
     file_put_contents("$tmpDir/ppt/slideMasters/_rels/slideMaster1.xml.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/></Relationships>');
 
     file_put_contents("$tmpDir/ppt/theme/theme1.xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="DigiStock"><a:themeElements><a:clrScheme name="DigiStock"><a:dk1><a:srgbClr val="06033A"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="1B75BC"/></a:dk2><a:lt2><a:srgbClr val="E8EDF8"/></a:lt2><a:accent1><a:srgbClr val="1B75BC"/></a:accent1><a:accent2><a:srgbClr val="06033A"/></a:accent2><a:accent3><a:srgbClr val="2e7d32"/></a:accent3><a:accent4><a:srgbClr val="f39c12"/></a:accent4><a:accent5><a:srgbClr val="8e44ad"/></a:accent5><a:accent6><a:srgbClr val="c0392b"/></a:accent6><a:hlink><a:srgbClr val="1B75BC"/></a:hlink><a:folHlink><a:srgbClr val="06033A"/></a:folHlink></a:clrScheme><a:fontScheme name="DigiStock"><a:majorFont><a:latin typeface="Plus Jakarta Sans"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Plus Jakarta Sans"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="DigiStock"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"><a:tint val="95000"/></a:schemeClr></a:solidFill><a:solidFill><a:schemeClr val="phClr"><a:shade val="75000"/></a:schemeClr></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>');
 
     file_put_contents("$tmpDir/ppt/presentation.xml", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" saveSubsetFonts="1"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="rId2"/></p:sldIdLst><p:sldSz cx="9144000" cy="5143500" type="screen4x3"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>');
 
-    mkdir("$tmpDir/ppt/_rels", 0777, true);
     file_put_contents("$tmpDir/ppt/_rels/presentation.xml.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide1.xml"/></Relationships>');
 
     file_put_contents("$tmpDir/_rels/.rels", '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>');
@@ -426,23 +425,16 @@ XML;
     }
     $zip->close();
 
-    // Nettoyer tmp
-    array_map('unlink', glob("$tmpDir/ppt/slides/_rels/*"));
-    array_map('unlink', glob("$tmpDir/ppt/slides/*"));
-    array_map('unlink', glob("$tmpDir/ppt/slideLayouts/_rels/*"));
-    array_map('unlink', glob("$tmpDir/ppt/slideLayouts/*"));
-    array_map('unlink', glob("$tmpDir/ppt/slideMasters/_rels/*"));
-    array_map('unlink', glob("$tmpDir/ppt/slideMasters/*"));
-    array_map('unlink', glob("$tmpDir/ppt/theme/*"));
-    array_map('unlink', glob("$tmpDir/ppt/_rels/*"));
-    array_map('unlink', glob("$tmpDir/ppt/*"));
-    array_map('unlink', glob("$tmpDir/_rels/*"));
-    array_map('unlink', glob("$tmpDir/*"));
-    @rmdir("$tmpDir/ppt/slides/_rels"); @rmdir("$tmpDir/ppt/slides");
-    @rmdir("$tmpDir/ppt/slideLayouts/_rels"); @rmdir("$tmpDir/ppt/slideLayouts");
-    @rmdir("$tmpDir/ppt/slideMasters/_rels"); @rmdir("$tmpDir/ppt/slideMasters");
-    @rmdir("$tmpDir/ppt/theme"); @rmdir("$tmpDir/ppt/_rels"); @rmdir("$tmpDir/ppt");
-    @rmdir("$tmpDir/_rels"); @rmdir($tmpDir);
+    // Nettoyer tmp (suppression récursive)
+    $rmrf = function(string $dir) use (&$rmrf): void {
+        foreach (scandir($dir) as $item) {
+            if ($item === '.' || $item === '..') continue;
+            $path = "$dir/$item";
+            is_dir($path) ? $rmrf($path) : unlink($path);
+        }
+        rmdir($dir);
+    };
+    $rmrf($tmpDir);
 
     header('Content-Type: application/vnd.openxmlformats-officedocument.presentationml.presentation');
     header('Content-Disposition: attachment; filename="stock_bobines_' . date('Ymd') . '.pptx"');
