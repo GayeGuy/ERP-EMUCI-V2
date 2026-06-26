@@ -488,58 +488,68 @@ include __DIR__ . '/../templates/header.php';
 
 /* ── Colonne site (en-tête de ligne) ── */
 .vue-table td.site-name{
-  background:#f5f7ff;
-  text-align:left;font-weight:700;font-size:14px;color:#06033A;
-  padding:14px 18px 14px 22px;
-  border-right:3px solid #1B75BC;
-  white-space:nowrap}
+  background:linear-gradient(90deg,#e8eeff 0%,#f0f4ff 100%);
+  text-align:left;font-weight:700;font-size:13px;color:#06033A;
+  padding:14px 16px 14px 20px;
+  border-right:4px solid #1B75BC;
+  white-space:nowrap;min-width:190px}
 .vue-table td.site-name .site-icon{
-  display:inline-block;width:8px;height:8px;border-radius:50%;
-  background:#1B75BC;margin-right:8px;vertical-align:middle}
+  display:inline-block;width:7px;height:7px;border-radius:50%;
+  background:#1B75BC;margin-right:8px;vertical-align:middle;flex-shrink:0}
 
 /* ── Cellules données ── */
 .vue-table td{
-  padding:12px 18px;border-bottom:1px solid #eef0f5;
+  padding:12px 14px;border-bottom:1px solid #eef0f5;
   text-align:center;vertical-align:middle;background:#fff;
   border-right:1px solid #f0f2f8}
 .vue-table tbody tr:nth-child(even) td{background:#fafbff}
-.vue-table tbody tr:nth-child(even) td.site-name{background:#eef2ff}
+.vue-table tbody tr:nth-child(even) td.site-name{
+  background:linear-gradient(90deg,#dde5ff 0%,#e8eeff 100%)}
 .vue-table tbody tr:not(.total-row):hover td{background:#edf2ff}
-.vue-table tbody tr:not(.total-row):hover td.site-name{background:#e0e8ff}
-.vue-table tbody tr:not(.total-row):hover td.td-total{background:#d8e8fa}
+.vue-table tbody tr:not(.total-row):hover td.site-name{
+  background:linear-gradient(90deg,#c7d4ff 0%,#d8e2ff 100%)}
+.vue-table tbody tr:not(.total-row):hover td.td-total{background:#bdd6f5}
 
 /* ── Colonne Total ── */
 .vue-table td.td-total{
-  background:#eef5ff;border-left:3px solid #1B75BC;
-  border-right:none}
-.vue-table tbody tr:nth-child(even) td.td-total{background:#e4eefc}
-.vue-table tbody tr:hover td.td-total{background:#d8e8fa}
+  background:linear-gradient(90deg,#d6e8fa 0%,#e4f0fd 100%);
+  border-left:4px solid #1B75BC;border-right:none;min-width:110px}
+.vue-table tbody tr:nth-child(even) td.td-total{
+  background:linear-gradient(90deg,#c5ddf7 0%,#d6e8fa 100%)}
 
 /* ── Ligne sans site ── */
 .vue-table tr.sans-site-row td{background:#fffbeb}
 .vue-table tr.sans-site-row td.site-name{
-  background:#fff8e1;color:#92400e;border-right-color:#f59e0b}
-.vue-table tr.sans-site-row td.td-total{background:#fef3c7;border-left-color:#f59e0b}
+  background:linear-gradient(90deg,#fef3c7 0%,#fffbeb 100%);
+  color:#92400e;border-right-color:#f59e0b}
+.vue-table tr.sans-site-row td.td-total{
+  background:linear-gradient(90deg,#fde68a 0%,#fef3c7 100%);
+  border-left-color:#f59e0b}
 
-/* ── Ligne TOTAL ── */
+/* ── Ligne TOTAL GÉNÉRAL ── */
 .vue-table tr.total-row td{
   background:#06033A;border-top:2px solid #1B75BC;border-bottom:none;
   border-right:1px solid rgba(255,255,255,.08)}
 .vue-table tr.total-row td.site-name{
-  background:#06033A;color:#fff;
-  font-size:13px;font-weight:900;letter-spacing:.8px;text-transform:uppercase;
-  border-right:3px solid #4da6d8}
+  background:linear-gradient(90deg,#06033A 0%,#0d1a4a 100%);
+  color:#fff;font-size:12px;font-weight:900;letter-spacing:.8px;text-transform:uppercase;
+  border-right:4px solid #4da6d8}
 .vue-table tr.total-row td.td-total{
-  background:#0a1a3a;border-left:3px solid #4da6d8}
+  background:linear-gradient(90deg,#04102a 0%,#06033A 100%);
+  border-left:4px solid #4da6d8}
 
 /* ── Contenu cellule ── */
-.cell-nb{font-size:22px;font-weight:900;color:#06033A;line-height:1}
+.cell-nb{font-size:20px;font-weight:900;color:#06033A;line-height:1}
 .cell-films{font-size:11px;color:#9ca3af;margin-top:4px;letter-spacing:.2px}
-.cell-empty{color:#d1d5db;font-size:18px}
+.cell-empty{color:#d1d5db;font-size:16px}
 .tag-cours{display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:20px;
   padding:2px 7px;font-size:10px;font-weight:700;margin-top:5px}
-.total-row .cell-nb{color:#fff;font-size:24px}
-.total-row .cell-films{color:rgba(255,255,255,.5)}
+.total-row .cell-nb{color:#fff;font-size:22px}
+.total-row .cell-films{color:rgba(255,255,255,.45)}
+.td-total .cell-nb{color:#1B75BC;font-size:22px}
+.td-total .cell-films{color:#6b9fd4}
+.total-row .td-total .cell-nb{color:#7dc4f5}
+.total-row .td-total .cell-films{color:rgba(125,196,245,.5)}
 /* KPI */
 .kpi-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:24px}
 .kpi{
