@@ -345,8 +345,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                  VALUES (?, ?, ?, 'en_attente')",
                 [$point_id, $user['id'], $notes]
             );
+            // Notifier le(s) coordinateur(s) du site
+            $gsb_nom = trim(($user['prenom'] ?? '') . ' ' . ($user['nom'] ?? ''));
+            $coords  = db_fetch_all(
+                "SELECT u.id FROM users u
+                 JOIN roles r ON r.id = u.role_id
+                 WHERE r.slug = 'coordinateur_site' AND u.site_id = ? AND u.actif = 1",
+                [$site_id]
+            );
+            foreach ($coords as $c) {
+                db_query(
+                    "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?,?,?,?,?)",
+                    [
+                        $c['id'],
+                        'correction_demandee',
+                        '✏️ Correction de saisie demandée',
+                        "Le GSB $gsb_nom demande une correction sur votre saisie du $date. Motif : $notes",
+                        '/pages/operations/point_journalier.php',
+                    ]
+                );
+            }
             audit_log($user['id'],'CREATE','demandes_correction_saisie',$point_id,"Correction demandée bobine:$bobine_id site:$site_id date:$date");
-            json_response(true,'Demande de correction enregistrée.');
+            json_response(true,'Demande de correction enregistrée. Le coordinateur a été notifié.');
         } catch (Exception $ex) {
             json_response(false, $ex->getMessage());
         }
