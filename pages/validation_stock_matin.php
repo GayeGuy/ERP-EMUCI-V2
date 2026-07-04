@@ -330,13 +330,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $ecart       = (int)($_POST['ecart'] ?? 0);
         if (!$bobine_id || !$site_id) json_response(false, 'Données manquantes.');
         if (!$notes) json_response(false, 'Le motif est obligatoire.');
-        db_query(
-            "INSERT INTO demandes_correction_saisie (bobine_id,site_id,gsb_id,date_cible,films_pj,films_emuci,ecart,notes_gsb)
-             VALUES (?,?,?,?,?,?,?,?)",
-            [$bobine_id,$site_id,$user['id'],$date,$films_pj,$films_emuci,$ecart,$notes]
-        );
-        audit_log($user['id'],'CREATE','demandes_correction_saisie',$bobine_id,"Correction bobine demandée site:$site_id date:$date");
-        json_response(true,'Demande de correction enregistrée.');
+        try {
+            db_query(
+                "INSERT INTO demandes_correction_saisie (bobine_id,site_id,gsb_id,date_cible,films_pj,films_emuci,ecart,notes_gsb)
+                 VALUES (?,?,?,?,?,?,?,?)",
+                [$bobine_id,$site_id,$user['id'],$date,$films_pj,$films_emuci,$ecart,$notes]
+            );
+            audit_log($user['id'],'CREATE','demandes_correction_saisie',$bobine_id,"Correction bobine demandée site:$site_id date:$date");
+            json_response(true,'Demande de correction enregistrée.');
+        } catch (Exception $ex) {
+            json_response(false, $ex->getMessage());
+        }
     }
 
     json_response(false,'Action inconnue.');
