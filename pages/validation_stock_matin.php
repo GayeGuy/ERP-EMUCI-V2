@@ -318,6 +318,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         json_response(true, '', $bobines);
     }
 
+    // ── DEMANDE DE CORRECTION PAR BOBINE
+    if ($action === 'demander_correction_bobine') {
+        if (!$can_valider) json_response(false, 'Accès refusé.');
+        $bobine_id   = (int)($_POST['bobine_id'] ?? 0);
+        $site_id     = (int)($_POST['site_id'] ?? 0);
+        $date        = trim($_POST['date'] ?? date('Y-m-d'));
+        $notes       = trim($_POST['notes_gsb'] ?? '');
+        $films_pj    = (int)($_POST['films_pj'] ?? 0);
+        $films_emuci = (int)($_POST['films_emuci'] ?? 0);
+        $ecart       = (int)($_POST['ecart'] ?? 0);
+        if (!$bobine_id || !$site_id) json_response(false, 'Données manquantes.');
+        if (!$notes) json_response(false, 'Le motif est obligatoire.');
+        db_query(
+            "INSERT INTO demandes_correction_saisie (bobine_id,site_id,gsb_id,date_cible,films_pj,films_emuci,ecart,notes_gsb,statut)
+             VALUES (?,?,?,?,?,?,?,?,'en_attente')
+             ON DUPLICATE KEY UPDATE notes_gsb=VALUES(notes_gsb),statut='en_attente',gsb_id=VALUES(gsb_id)",
+            [$bobine_id,$site_id,$user['id'],$date,$films_pj,$films_emuci,$ecart,$notes]
+        );
+        audit_log($user['id'],'CREATE','demandes_correction_saisie',$bobine_id,"Correction bobine demandée site:$site_id date:$date");
+        json_response(true,'Demande de correction enregistrée.');
+    }
+
     json_response(false,'Action inconnue.');
 }
 
@@ -549,42 +571,64 @@ if ($is_coord && $site_force) {
 
 include __DIR__ . '/../templates/header.php';
 ?>
+<?php
+$nb_en_attente  = count($sites_non_valides ?? []);
+$nb_valides_jour= count($validations_jour);
+$nb_avec_ecart  = count(array_filter($validations_jour, fn($v) => (int)$v['nb_ecarts'] > 0)) + $nb_en_attente;
+?>
 <style>
-.vsm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px;margin-bottom:24px}
-.vsm-card{background:white;border-radius:16px;border:1px solid var(--border);padding:20px;position:relative;overflow:hidden}
-.vsm-card.valide{border-left:4px solid var(--success)}
-.vsm-card.attente{border-left:4px solid #f39c12}
-.vsm-card.refuse{border-left:4px solid var(--danger)}
-.vsm-card.reajuste{border-left:4px solid var(--blue)}
-.vsm-site{font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;font-weight:800;color:var(--navy);margin-bottom:4px}
-.vsm-sub{font-size:12px;color:var(--muted);margin-bottom:14px}
-.vsm-statut{display:inline-block;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;margin-bottom:12px}
-.s-valide_auto,.s-valide_gsb{background:#d1fae5;color:#065f46}
-.s-autorise_ecart{background:#fef3c7;color:#92400e}
-.s-reajuste{background:#dbeafe;color:#1d4ed8}
-.s-refuse{background:#fee2e2;color:#991b1b}
-.s-attente{background:#fff3e0;color:#e65100}
-.ecart-row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
-.ecart-row:last-child{border-bottom:none}
-.detail-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:8px;
-  font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);
-  background:white;color:var(--navy);transition:all .15s;margin-top:10px;text-decoration:none}
+.vsm-banner{background:linear-gradient(135deg,#06033A 0%,#1B75BC 100%);border-radius:16px;padding:22px 28px;margin-bottom:24px;color:white;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
+.vsm-banner h2{font-family:'Plus Jakarta Sans',sans-serif;font-size:19px;font-weight:800;margin:0;color:white}
+.vsm-banner p{font-size:13px;opacity:.8;margin:4px 0 0;color:white}
+.vsm-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px}
+.vsm-kpi{background:white;border-radius:14px;border:1px solid var(--border);padding:20px 24px}
+.vsm-kpi-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:36px;font-weight:900;line-height:1}
+.vsm-kpi-label{font-size:11px;color:var(--muted);font-weight:700;margin-top:6px;text-transform:uppercase;letter-spacing:.06em}
+.vsm-section{background:white;border-radius:14px;border:1px solid var(--border);margin-bottom:24px;overflow:hidden}
+.vsm-section-hdr{padding:15px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:#fafbfd}
+.vsm-section-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:800;color:var(--navy);display:flex;align-items:center;gap:8px}
+.vsm-cnt{background:#e8edf8;color:var(--navy);border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700}
+.vsm-tbl{width:100%;border-collapse:collapse}
+.vsm-tbl thead th{background:#06033A;color:white;padding:11px 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;text-align:left;white-space:nowrap}
+.vsm-tbl thead th.tc{text-align:center}
+.vsm-tbl tbody td{padding:13px 16px;border-bottom:1px solid #f1f5f9;font-size:13px;color:var(--navy);vertical-align:middle}
+.vsm-tbl tbody tr:last-child td{border-bottom:none}
+.vsm-tbl tbody tr:hover td{background:#f8faff}
+.vsm-tbl tbody td.tc{text-align:center}
+.vsm-site-name{font-weight:800;color:var(--navy);font-size:14px}
+.vsm-badge{display:inline-flex;align-items:center;gap:4px;padding:4px 12px;border-radius:20px;font-size:11.5px;font-weight:700}
+.vsm-badge.valide_auto,.vsm-badge.valide_gsb{background:#d1fae5;color:#065f46}
+.vsm-badge.autorise_ecart{background:#fef3c7;color:#92400e}
+.vsm-badge.reajuste{background:#dbeafe;color:#1d4ed8}
+.vsm-badge.refuse{background:#fee2e2;color:#991b1b}
+.vsm-badge.en_attente{background:#fff3e0;color:#e65100}
+.vsm-ecart-chip{background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:8px;font-size:11.5px;font-weight:700;display:inline-block}
+.vsm-ok-chip{color:#065f46;font-weight:700;font-size:14px}
+.vsm-actions{display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:nowrap}
+.btn-traiter{background:#DC2626;color:white;border:none;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;transition:background .15s}
+.btn-traiter:hover{background:#b91c1c}
+.btn-vsm-detail{background:white;color:var(--navy);border:1.5px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;transition:all .15s}
+.btn-vsm-detail:hover{background:#f0f4ff;border-color:#1B75BC;color:#1B75BC}
+.btn-vsm-revise{background:#1B75BC;color:white;border:none;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.btn-vsm-revise:hover{background:#1565a8}
+.detail-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:white;color:var(--navy);transition:all .15s;text-decoration:none}
 .detail-btn:hover{background:var(--tertiary);border-color:var(--primary);color:var(--primary)}
 </style>
 
-<!-- HEADER -->
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+<!-- BANNIÈRE -->
+<div class="vsm-banner">
   <div>
-    <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">☀️ Validation Stock Jour</h2>
-    <p style="font-size:13px;color:var(--muted);margin-top:4px">
-      <?= $is_coord ? 'Statut du stock bobines de votre site pour la journée' : 'Vérification et validation des stocks bobines avant démarrage' ?>
-    </p>
+    <h2>☀️ Validation Stock Jour</h2>
+    <p><?= $is_coord ? 'Statut du stock bobines de votre site pour la journée' : 'Vérification et validation des stocks bobines avant démarrage' ?></p>
   </div>
-  <div style="display:flex;gap:10px;align-items:center">
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
     <input type="date" id="fDate" value="<?= h($f_date) ?>" onchange="location.href='?date='+this.value"
-           style="padding:9px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;outline:none">
+           style="padding:8px 14px;border:1.5px solid rgba(255,255,255,.35);background:rgba(255,255,255,.15);border-radius:10px;font-size:13px;outline:none;color:white;cursor:pointer">
     <?php if($can_valider): ?>
-    <button class="btn btn-primary" onclick="verifierTousSites()">🔄 Vérifier tous les sites</button>
+    <button class="btn btn-secondary" onclick="verifierTousSites()"
+            style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.35);color:white">
+      🔄 Vérifier tous les sites
+    </button>
     <?php endif; ?>
   </div>
 </div>
@@ -643,193 +687,187 @@ $statut_colors = [
 <?php else: ?>
 <!-- ── VUE GSB / ADMIN ── -->
 
-<!-- ══ SECTION 1 : SITES AVEC ÉCARTS — ACTION GSB REQUISE ══ -->
-<?php if(!empty($sites_non_valides) && $can_valider): ?>
-<div style="background:#FEF2F2;border:2px solid #FECACA;border-radius:14px;padding:20px 24px;margin-bottom:24px">
-  <div style="font-weight:800;font-size:15px;color:#991B1B;margin-bottom:14px">
-    ⚠️ <?= count($sites_non_valides) ?> site(s) avec écarts — décision GSB requise
+<!-- KPIs -->
+<?php if($can_valider): ?>
+<div class="vsm-kpis">
+  <div class="vsm-kpi">
+    <div class="vsm-kpi-val" style="color:#e65100"><?= $nb_en_attente ?></div>
+    <div class="vsm-kpi-label">En attente</div>
   </div>
-  <div class="vsm-grid" style="margin:0">
-    <?php foreach($sites_non_valides as $s): ?>
-    <div class="vsm-card refuse" style="border:1.5px solid #FECACA">
-      <div class="vsm-site"><?= h($s['nom']) ?></div>
-      <div class="vsm-sub"><?= $s['nb_bobines'] ?> bobines actives</div>
-      <span class="vsm-statut" style="background:#FEE2E2;color:#991B1B">⚠️ <?= $s['nb_ecarts'] ?> écart(s)</span>
-      <div style="margin-top:10px">
-        <button class="btn btn-sm" style="background:#DC2626;color:white;border:none;width:100%"
-                data-site-id="<?= $s['id'] ?>"
-                onclick="verifierSite(<?= $s['id'] ?>,'<?= h($s['nom']) ?>')">
-          🔍 Traiter les écarts
-        </button>
-      </div>
-    </div>
-    <?php endforeach; ?>
+  <div class="vsm-kpi">
+    <div class="vsm-kpi-val" style="color:#065f46"><?= $nb_valides_jour ?></div>
+    <div class="vsm-kpi-label">Validés aujourd'hui</div>
+  </div>
+  <div class="vsm-kpi">
+    <div class="vsm-kpi-val" style="color:<?= $nb_avec_ecart > 0 ? '#991b1b' : '#065f46' ?>"><?= $nb_avec_ecart ?></div>
+    <div class="vsm-kpi-label">Avec écart</div>
   </div>
 </div>
 <?php endif; ?>
 
+<!-- Sites sans point journalier -->
 <?php if(!empty($sites_sans_point) && $can_valider): ?>
-<div style="background:#F0F9FF;border:1.5px solid #BAE6FD;border-radius:14px;padding:16px 20px;margin-bottom:24px">
-  <div style="font-weight:700;color:#0369A1;margin-bottom:8px">
-    ℹ️ <?= count($sites_sans_point) ?> site(s) sans point journalier pour le <?= fmt_date($f_date,'d/m/Y') ?>
-  </div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap">
+<div style="background:#F0F9FF;border:1.5px solid #BAE6FD;border-radius:12px;padding:13px 18px;margin-bottom:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+  <i class="ph-duotone ph-info" style="color:#0369A1;font-size:20px;flex-shrink:0"></i>
+  <span style="font-weight:700;color:#0369A1;font-size:13px"><?= count($sites_sans_point) ?> site(s) sans point journalier</span>
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
     <?php foreach($sites_sans_point as $s): ?>
-    <span style="background:#E0F2FE;color:#0369A1;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:600">
-      <?= h($s['nom']) ?>
-    </span>
+    <span style="background:#E0F2FE;color:#0369A1;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600"><?= h($s['nom']) ?></span>
     <?php endforeach; ?>
   </div>
 </div>
 <?php endif; ?>
 
-<!-- ══ SECTION 2 : VALIDATIONS DU JOUR ══ -->
-<?php
-$valides_auto  = array_filter($validations_jour, fn($v) => $v['statut'] === 'valide_auto');
-$valides_manuel = array_filter($validations_jour, fn($v) => in_array($v['statut'], ['valide_gsb','autorise_ecart','reajuste','refuse']));
-?>
-
-<?php if(!empty($valides_auto) && $can_valider): ?>
-<div style="background:#F0FDF4;border:1.5px solid #BBF7D0;border-radius:14px;padding:20px 24px;margin-bottom:24px">
-  <div style="font-weight:800;font-size:15px;color:#065F46;margin-bottom:14px">
-    ✅ <?= count($valides_auto) ?> site(s) validés automatiquement — aucun écart détecté
-  </div>
-  <div style="display:flex;flex-wrap:wrap;gap:8px">
-    <?php foreach($valides_auto as $v): ?>
-    <div style="background:white;border:1px solid #BBF7D0;border-radius:10px;padding:10px 16px;display:flex;align-items:center;gap:10px">
-      <span style="font-weight:700;color:#065F46"><?= h($v['site_nom']) ?></span>
-      <span style="font-size:11px;color:var(--muted)"><?= $v['nb_bobines_actives'] ?> bobines</span>
-      <button class="detail-btn" style="padding:3px 10px;font-size:11px"
-        onclick="voirDetails(<?= $v['site_id'] ?>,'<?= h($v['site_nom']) ?>',0,'[]','valide_auto','','Auto','<?= h(fmt_datetime($v['gsb_at'])) ?>','<?= h($v['date_validation']) ?>')">
-        <i class="ph-duotone ph-eye"></i> Détails
-      </button>
+<!-- TABLE 1 : Sites en attente de validation -->
+<div class="vsm-section">
+  <div class="vsm-section-hdr">
+    <div class="vsm-section-title">
+      <i class="ph-duotone ph-warning-circle" style="color:#e65100;font-size:17px"></i>
+      Sites en attente de validation
+      <span class="vsm-cnt"><?= $nb_en_attente ?></span>
     </div>
+  </div>
+  <?php if(empty($sites_non_valides)): ?>
+  <div style="padding:36px;text-align:center;color:var(--muted)">
+    <i class="ph-duotone ph-check-circle" style="font-size:36px;color:#34d399;display:block;margin-bottom:10px"></i>
+    Tous les sites ont été traités pour le <?= fmt_date($f_date,'d/m/Y') ?>.
+  </div>
+  <?php else: ?>
+  <table class="vsm-tbl">
+    <thead><tr>
+      <th>Site</th>
+      <th class="tc">Bobines actives</th>
+      <th class="tc">Écarts</th>
+      <th class="tc">Statut</th>
+      <th class="tc">Actions</th>
+    </tr></thead>
+    <tbody>
+    <?php foreach($sites_non_valides as $s): ?>
+    <tr>
+      <td><div class="vsm-site-name"><?= h($s['nom']) ?></div></td>
+      <td class="tc" style="font-weight:700"><?= $s['nb_bobines'] ?></td>
+      <td class="tc"><span class="vsm-ecart-chip">⚠️ <?= $s['nb_ecarts'] ?> écart(s)</span></td>
+      <td class="tc"><span class="vsm-badge en_attente">En attente</span></td>
+      <td class="tc">
+        <div class="vsm-actions">
+          <button class="btn-traiter" data-site-id="<?= $s['id'] ?>"
+                  onclick="verifierSite(<?= $s['id'] ?>,'<?= h($s['nom']) ?>')">
+            <i class="ph-duotone ph-magnifying-glass"></i> Traiter
+          </button>
+          <button class="btn-vsm-detail"
+                  onclick="voirDetails(<?= $s['id'] ?>,'<?= h($s['nom']) ?>',<?= $s['nb_ecarts'] ?>,'[]','en_attente','','','','<?= h($f_date) ?>')">
+            <i class="ph-duotone ph-eye"></i> Détails
+          </button>
+        </div>
+      </td>
+    </tr>
     <?php endforeach; ?>
-  </div>
+    </tbody>
+  </table>
+  <?php endif; ?>
 </div>
-<?php endif; ?>
 
-<?php if(!empty($valides_manuel)): ?>
-<div style="margin-bottom:24px">
-  <div style="font-weight:800;font-size:15px;color:var(--navy);margin-bottom:14px">
-    📋 Validations manuelles du jour
-  </div>
-  <div class="vsm-grid">
-  <?php foreach($valides_manuel as $v):
-    $sc = match($v['statut']){
-      'valide_gsb'=>'valide','autorise_ecart'=>'attente',
-      'refuse'=>'refuse','reajuste'=>'reajuste',default=>'attente'
-    };
-    $sl = match($v['statut']){
-      'valide_gsb'=>'✅ Validé par GSB','autorise_ecart'=>'⚠️ Écart autorisé',
-      'reajuste'=>'🔄 Stock réajusté','refuse'=>'❌ Bloqué',default=>$v['statut']
-    };
-  ?>
-  <div class="vsm-card <?= $sc ?>">
-    <div class="vsm-site"><?= h($v['site_nom']) ?></div>
-    <div class="vsm-sub"><?= $v['nb_bobines_actives'] ?> bobines actives</div>
-    <span class="vsm-statut s-<?= $v['statut'] ?>"><?= $sl ?></span>
-    <?php if($v['nb_ecarts'] > 0): ?>
-    <div style="font-size:12.5px;font-weight:600;color:#991b1b;margin-bottom:6px">⚠️ <?= $v['nb_ecarts'] ?> écart(s)</div>
-    <?php endif; ?>
-    <?php if($v['commentaire']): ?>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:6px">💬 <?= h($v['commentaire']) ?></div>
-    <?php endif; ?>
-    <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
-      <?= $v['gsb_nom']?h($v['gsb_nom']):'Auto' ?> — <?= fmt_datetime($v['gsb_at']) ?>
+<!-- TABLE 2 : Sites validés du jour -->
+<div class="vsm-section">
+  <div class="vsm-section-hdr">
+    <div class="vsm-section-title">
+      <i class="ph-duotone ph-check-circle" style="color:#065f46;font-size:17px"></i>
+      Sites validés du jour
+      <span class="vsm-cnt"><?= $nb_valides_jour ?></span>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="detail-btn"
-        onclick="voirDetails(<?= $v['site_id'] ?>,'<?= h($v['site_nom']) ?>',<?= (int)$v['nb_ecarts'] ?>,<?= htmlspecialchars(json_encode($v['details_ecarts'] ?? '[]'), ENT_QUOTES) ?>,'<?= h($v['statut']) ?>','<?= h($v['commentaire']??'') ?>','<?= h($v['gsb_nom']??'Auto') ?>','<?= h(fmt_datetime($v['gsb_at'])) ?>','<?= h($v['date_validation']) ?>')">
-        <i class="ph-duotone ph-eye"></i> Voir détails
-      </button>
-      <?php if($can_valider && in_array($v['statut'],['autorise_ecart','reajuste','refuse'])): ?>
-      <button class="btn btn-secondary btn-sm" onclick="verifierSite(<?= $v['site_id'] ?>,'<?= h($v['site_nom']) ?>')">🔄 Réviser</button>
-      <?php endif; ?>
-    </div>
-  </div>
-  <?php endforeach; ?>
-  </div>
-</div>
-<?php endif; ?>
-
-<?php if(empty($validations_jour) && empty($sites_non_valides) && $can_valider): ?>
-<div class="card"><div class="card-body" style="text-align:center;padding:40px;color:var(--muted)">
-  Aucune validation enregistrée pour le <?= fmt_date($f_date,'d/m/Y') ?>.
-</div></div>
-<?php endif; ?>
-<!-- ── RAPPORT JOURNALIER (GSB/Admin) ── -->
-<?php if($can_valider && !empty($rapport_journalier)): ?>
-<div class="card" style="margin-top:24px">
-  <div class="card-header">
-    <h3>
-      <i class="ph-duotone ph-table" style="color:var(--primary)"></i>
-      Rapport journalier du <?= fmt_date($f_date,'d/m/Y') ?>
-      <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= count($rapport_journalier) ?> site(s))</span>
-    </h3>
-    <a href="?date=<?= h($f_date) ?>&export_rapport=1"
-       class="btn btn-secondary btn-sm">
+    <?php if($can_valider && !empty($rapport_journalier)): ?>
+    <a href="?date=<?= h($f_date) ?>&export_rapport=1" class="btn btn-secondary btn-sm">
       <i class="ph-duotone ph-file-xls"></i> Export Excel
     </a>
+    <?php endif; ?>
   </div>
-  <div class="table-wrap">
-    <table>
-      <thead><tr>
-        <th>Site</th>
-        <th style="text-align:center">Statut</th>
-        <th style="text-align:center">Bobines actives</th>
-        <th style="text-align:center">Écarts</th>
-        <th>Traité par</th>
-        <th style="text-align:center">Heure</th>
-        <th>Commentaire</th>
-      </tr></thead>
-      <tbody>
-      <?php foreach($rapport_journalier as $r):
-        $sl = match($r['statut']) {
-          'valide_auto'    => ['label'=>'✅ Auto-validé',    'bg'=>'#D1FAE5','color'=>'#065F46'],
-          'reajuste'       => ['label'=>'🔄 Réajusté',       'bg'=>'#DBEAFE','color'=>'#1D4ED8'],
-          'autorise_ecart' => ['label'=>'⚠️ Écart autorisé', 'bg'=>'#FEF3C7','color'=>'#92400E'],
-          default          => ['label'=>$r['statut'],         'bg'=>'#F1F5F9','color'=>'#64748B'],
-        };
-        $row_bg = match($r['statut']) {
-          'reajuste'       => 'background:#F0F7FF',
-          'autorise_ecart' => 'background:#FFFBF0',
-          default          => '',
-        };
-      ?>
-      <tr style="<?= $row_bg ?>">
-        <td style="font-weight:700;color:var(--navy)"><?= h($r['site_nom']) ?></td>
-        <td style="text-align:center">
-          <span style="padding:4px 12px;border-radius:20px;font-size:11.5px;font-weight:700;background:<?= $sl['bg'] ?>;color:<?= $sl['color'] ?>">
-            <?= $sl['label'] ?>
-          </span>
-        </td>
-        <td style="text-align:center;font-weight:700"><?= $r['nb_bobines'] ?></td>
-        <td style="text-align:center">
-          <?php if($r['nb_ecarts'] > 0): ?>
-          <span style="font-weight:700;color:<?= $r['statut']==='reajuste'?'#1D4ED8':'#92400E' ?>">
-            <?= $r['nb_ecarts'] ?> écart(s)
-          </span>
-          <?php else: ?>
-          <span style="color:var(--success);font-weight:700">—</span>
+  <?php if(empty($validations_jour)): ?>
+  <div style="padding:36px;text-align:center;color:var(--muted)">
+    Aucune validation enregistrée pour le <?= fmt_date($f_date,'d/m/Y') ?>.
+  </div>
+  <?php else: ?>
+  <table class="vsm-tbl">
+    <thead><tr>
+      <th>Site</th>
+      <th class="tc">Statut</th>
+      <th class="tc">Bobines</th>
+      <th class="tc">Écarts</th>
+      <th>Traité par</th>
+      <th class="tc">Heure</th>
+      <th>Commentaire</th>
+      <th class="tc">Actions</th>
+    </tr></thead>
+    <tbody>
+    <?php foreach($validations_jour as $v):
+      $sl = match($v['statut']){
+        'valide_auto'    => '✅ Auto-validé',
+        'valide_gsb'     => '✅ Validé GSB',
+        'autorise_ecart' => '⚠️ Écart autorisé',
+        'reajuste'       => '🔄 Réajusté',
+        'refuse'         => '❌ Bloqué',
+        default          => $v['statut'],
+      };
+    ?>
+    <tr>
+      <td><div class="vsm-site-name"><?= h($v['site_nom']) ?></div></td>
+      <td class="tc"><span class="vsm-badge <?= h($v['statut']) ?>"><?= $sl ?></span></td>
+      <td class="tc" style="font-weight:700"><?= $v['nb_bobines_actives'] ?></td>
+      <td class="tc">
+        <?php if((int)$v['nb_ecarts'] > 0): ?>
+        <span class="vsm-ecart-chip"><?= $v['nb_ecarts'] ?> écart(s)</span>
+        <?php else: ?>
+        <span class="vsm-ok-chip">✓</span>
+        <?php endif; ?>
+      </td>
+      <td style="font-size:12.5px"><?= $v['gsb_nom'] ? h($v['gsb_nom']) : '<span style="color:var(--muted)">Automatique</span>' ?></td>
+      <td class="tc" style="font-size:12.5px;color:var(--muted)"><?= $v['gsb_at'] ? date('H:i', strtotime($v['gsb_at'])) : '—' ?></td>
+      <td style="font-size:12px;color:var(--muted);max-width:180px"><?= $v['commentaire'] ? h($v['commentaire']) : '<span style="color:var(--border)">—</span>' ?></td>
+      <td class="tc">
+        <div class="vsm-actions">
+          <button class="btn-vsm-detail"
+            onclick="voirDetails(<?= $v['site_id'] ?>,'<?= h($v['site_nom']) ?>',<?= (int)$v['nb_ecarts'] ?>,<?= htmlspecialchars(json_encode($v['details_ecarts'] ?? '[]'), ENT_QUOTES) ?>,'<?= h($v['statut']) ?>','<?= h($v['commentaire']??'') ?>','<?= h($v['gsb_nom']??'Auto') ?>','<?= h(fmt_datetime($v['gsb_at'])) ?>','<?= h($v['date_validation']) ?>')">
+            <i class="ph-duotone ph-eye"></i> Détails
+          </button>
+          <?php if($can_valider && in_array($v['statut'],['autorise_ecart','reajuste','refuse'])): ?>
+          <button class="btn-vsm-revise" onclick="verifierSite(<?= $v['site_id'] ?>,'<?= h($v['site_nom']) ?>')">
+            <i class="ph-duotone ph-arrow-counter-clockwise"></i> Réviser
+          </button>
           <?php endif; ?>
-        </td>
-        <td style="font-size:12.5px"><?= h($r['gsb_nom'] ?: 'Automatique') ?></td>
-        <td style="text-align:center;font-size:12.5px;color:var(--muted)">
-          <?= $r['gsb_at'] ? date('H:i', strtotime($r['gsb_at'])) : '—' ?>
-        </td>
-        <td style="font-size:12px;color:var(--muted);max-width:200px">
-          <?= $r['commentaire'] ? h($r['commentaire']) : '<span style="color:var(--border)">—</span>' ?>
-        </td>
-      </tr>
-      <?php endforeach; ?>
-      </tbody>
-    </table>
-  </div>
+        </div>
+      </td>
+    </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table>
+  <?php endif; ?>
 </div>
-<?php endif; ?>
 
 <?php endif; // fin else GSB/Admin ?>
+
+<!-- MINI-MODAL DEMANDE DE CORRECTION PAR BOBINE -->
+<div id="miniModalCorr" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1200;align-items:center;justify-content:center">
+  <div style="background:white;border-radius:16px;width:440px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3);padding:28px">
+    <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px">
+      ✏️ Demander une modification
+    </div>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:20px">
+      Bobine : <strong id="miniCorrBobineNum" style="color:var(--navy)"></strong>
+    </div>
+    <label style="font-size:13px;font-weight:700;color:var(--navy);display:block;margin-bottom:6px">
+      Motif de la correction <span style="color:#e74c3c">*</span>
+    </label>
+    <textarea id="miniCorrNotes" rows="3" class="form-control"
+      placeholder="Décrivez la correction souhaitée sur la saisie du coordinateur…"
+      style="border-radius:10px;width:100%;box-sizing:border-box;margin-bottom:20px"></textarea>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="document.getElementById('miniModalCorr').style.display='none'"
+              class="btn btn-secondary">Annuler</button>
+      <button onclick="submitCorrectionBobine()" class="btn btn-primary">
+        <i class="ph-duotone ph-paper-plane-tilt"></i> Envoyer
+      </button>
+    </div>
+  </div>
+</div>
 
 <!-- MODAL DÉTAILS (lecture seule) -->
 <div id="modalDetails" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:flex-start;justify-content:center;padding:30px;overflow-y:auto">
@@ -1034,6 +1072,42 @@ async function verifierTousSites(){
 function fermerVSM(){document.getElementById('modalVSM').style.display='none';}
 document.getElementById('modalVSM').addEventListener('click',e=>{if(e.target===document.getElementById('modalVSM'))fermerVSM();});
 document.getElementById('modalDetails').addEventListener('click',e=>{if(e.target===document.getElementById('modalDetails'))e.target.style.display='none';});
+document.getElementById('miniModalCorr').addEventListener('click',e=>{if(e.target===document.getElementById('miniModalCorr'))e.target.style.display='none';});
+
+function demanderModifBobine(bobineId, bobineNum, siteId, date, filmsPj, filmsEmuci, ecart) {
+  const m = document.getElementById('miniModalCorr');
+  document.getElementById('miniCorrBobineNum').textContent = bobineNum;
+  document.getElementById('miniCorrNotes').value = '';
+  m.dataset.bobineId   = bobineId;
+  m.dataset.siteId     = siteId;
+  m.dataset.date       = date;
+  m.dataset.filmsPj    = filmsPj;
+  m.dataset.filmsEmuci = filmsEmuci;
+  m.dataset.ecart      = ecart;
+  m.style.display = 'flex';
+}
+
+async function submitCorrectionBobine() {
+  const m     = document.getElementById('miniModalCorr');
+  const notes = document.getElementById('miniCorrNotes').value.trim();
+  if (!notes) { alert('Le motif est obligatoire.'); return; }
+  const d = await ap({
+    action:      'demander_correction_bobine',
+    bobine_id:   m.dataset.bobineId,
+    site_id:     m.dataset.siteId,
+    date:        m.dataset.date,
+    notes_gsb:   notes,
+    films_pj:    m.dataset.filmsPj,
+    films_emuci: m.dataset.filmsEmuci,
+    ecart:       m.dataset.ecart,
+  });
+  if (d.success) {
+    toast('✅ Demande de correction enregistrée.', 'success');
+    m.style.display = 'none';
+  } else {
+    toast('❌ ' + d.message, 'error');
+  }
+}
 
 // ── Voir détails d'une validation (lecture seule)
 async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, commentaire, gsbNom, gsbAt, dateVal) {
@@ -1126,6 +1200,7 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Restant</th>
             ${hasImport ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">EMUCI</th><th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Écart</th>' : ''}
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Statut</th>
+            <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Action</th>
           </tr>
         </thead>
         <tbody>`;
@@ -1151,6 +1226,12 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
           ${hasEcart
             ? `<span style="background:#FEE2E2;color:#991B1B;padding:3px 9px;border-radius:8px;font-size:10.5px;font-weight:700">⚠️ Écart ${b.ecart>0?'+':''}${b.ecart}</span>`
             : '<span style="background:#D1FAE5;color:#065F46;padding:3px 9px;border-radius:8px;font-size:10.5px;font-weight:700">✅ OK</span>'}
+        </td>
+        <td style="padding:7px 12px;text-align:center">
+          <button onclick="demanderModifBobine(${b.bobine_id},'${b.numero}',${siteId},'<?= h($f_date) ?>',${b.films_utilises||0},${b.films_optoplate!==null?b.films_optoplate:0},${b.ecart||0})"
+            style="background:#fff7ed;color:#c2410c;border:1.5px solid #fed7aa;padding:4px 9px;border-radius:7px;font-size:10.5px;font-weight:700;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:4px">
+            ✏️ Demander modif
+          </button>
         </td>
       </tr>`;
     });
