@@ -331,12 +331,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         if (!$bobine_id || !$site_id) json_response(false, 'Données manquantes.');
         if (!$notes) json_response(false, 'Le motif est obligatoire.');
         try {
-            db_query(
-                "INSERT INTO demandes_correction_saisie (bobine_id,site_id,gsb_id,date_cible,films_pj,films_emuci,ecart,notes_gsb)
-                 VALUES (?,?,?,?,?,?,?,?)",
-                [$bobine_id,$site_id,$user['id'],$date,$films_pj,$films_emuci,$ecart,$notes]
+            // Retrouver le point journalier lié à cette bobine pour ce site/date
+            $point_id = (int)db_fetch_value(
+                "SELECT pj.id FROM op_points_journaliers pj
+                 JOIN op_films_utilises fu ON fu.point_id = pj.id
+                 WHERE fu.bobine_id = ? AND pj.site_id = ? AND pj.date_point = ?
+                 ORDER BY pj.id DESC LIMIT 1",
+                [$bobine_id, $site_id, $date]
             );
-            audit_log($user['id'],'CREATE','demandes_correction_saisie',$bobine_id,"Correction bobine demandée site:$site_id date:$date");
+            if (!$point_id) json_response(false, 'Point journalier introuvable pour cette bobine à cette date.');
+            db_query(
+                "INSERT INTO demandes_correction_saisie (point_id, demande_par, motif, statut)
+                 VALUES (?, ?, ?, 'en_attente')",
+                [$point_id, $user['id'], $notes]
+            );
+            audit_log($user['id'],'CREATE','demandes_correction_saisie',$point_id,"Correction demandée bobine:$bobine_id site:$site_id date:$date");
             json_response(true,'Demande de correction enregistrée.');
         } catch (Exception $ex) {
             json_response(false, $ex->getMessage());
