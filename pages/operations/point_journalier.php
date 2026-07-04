@@ -87,9 +87,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $total_plaques = ($nb_vp * 2) + ($nb_camion * 2) + ($nb_semi * 1) + ($nb_moto * 1);
         $moy_prod      = $heures > 0 ? round($total_engins / $heures, 1) : 0;
 
-        // Vérifier stock rivets par type
-        $stock_gonfl  = (int)(db_fetch_value("SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=? AND type_rivet='gonflable'", [$site_id]) ?? 0);
-        $stock_eclate = (int)(db_fetch_value("SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=? AND type_rivet='eclate'", [$site_id]) ?? 0);
+        // Pré-vérifier si c'est une mise à jour (pour ajuster le check stock en conséquence)
+        $existing_pre = db_fetch_one(
+            "SELECT id, rivets_gonflables, rivets_eclates FROM op_points_journaliers WHERE site_id=? AND date_point=? AND type_point=?",
+            [$site_id, $date_point, $type_point]
+        );
+        $old_riv_gonfl  = $existing_pre ? (int)($existing_pre['rivets_gonflables'] ?? 0) : 0;
+        $old_riv_eclate = $existing_pre ? (int)($existing_pre['rivets_eclates']    ?? 0) : 0;
+
+        // Vérifier stock rivets par type (stock actuel + anciens rivets qui seront restaurés)
+        $stock_gonfl  = (int)(db_fetch_value("SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=? AND type_rivet='gonflable'", [$site_id]) ?? 0) + $old_riv_gonfl;
+        $stock_eclate = (int)(db_fetch_value("SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=? AND type_rivet='eclate'", [$site_id]) ?? 0) + $old_riv_eclate;
         $stock_rivets = $stock_gonfl + $stock_eclate;
         if ($total_gonfl > $stock_gonfl)
             json_response(false, "Stock rivets gonflables insuffisant. Disponible : $stock_gonfl, Nécessaires : $total_gonfl");
@@ -118,6 +126,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                      $total_engins,$total_plaques,$moy_prod,
                      $rivets_util,$riv_endomm,$total_gonfl,$total_eclate,
                      $np_conc,$np_usag,$heures,$obs,$point_id]);
+                // Restaurer le stock bobines avant de supprimer les anciens films
+                $old_films = db_fetch_all(
+                    "SELECT bobine_id, films_utilises, films_endommages FROM op_films_utilises WHERE point_id=?",
+                    [$point_id]
+                );
+                foreach ($old_films as $of) {
+                    $total_restore = (int)$of['films_utilises'] + (int)$of['films_endommages'];
+                    if ($total_restore > 0) {
+                        db_query(
+                            "UPDATE op_bobines SET
+                             films_utilises   = GREATEST(0, films_utilises   - ?),
+                             films_endommages = GREATEST(0, films_endommages - ?),
+                             films_restants   = films_restants + ?,
+                             statut = CASE WHEN statut='epuisee' AND films_restants + ? > 0 THEN 'en_cours' ELSE statut END
+                             WHERE id=?",
+                            [(int)$of['films_utilises'], (int)$of['films_endommages'], $total_restore, $total_restore, (int)$of['bobine_id']]
+                        );
+                    }
+                }
+                // Restaurer le stock rivets avant de supprimer
+                if ($old_riv_gonfl > 0)
+                    db_query("UPDATE op_stock_rivets SET quantite = quantite + ? WHERE site_id=? AND type_rivet='gonflable'",
+                        [$old_riv_gonfl, $site_id]);
+                if ($old_riv_eclate > 0)
+                    db_query("UPDATE op_stock_rivets SET quantite = quantite + ? WHERE site_id=? AND type_rivet='eclate'",
+                        [$old_riv_eclate, $site_id]);
+                // Restaurer le stock PMMA avant de supprimer
+                $old_pmma = db_fetch_all("SELECT type_pmma, utilises, endommages FROM op_pmma_utilises WHERE point_id=?", [$point_id]);
+                foreach ($old_pmma as $op_) {
+                    $total_pm_restore = (int)$op_['utilises'] + (int)$op_['endommages'];
+                    if ($total_pm_restore > 0)
+                        db_query("UPDATE stock_pmma_site SET quantite = quantite + ? WHERE site_id=? AND type_pmma=?",
+                            [$total_pm_restore, $site_id, $op_['type_pmma']]);
+                }
                 // Supprimer anciens films et PMMA
                 db_query("DELETE FROM op_films_utilises WHERE point_id=?", [$point_id]);
                 db_query("DELETE FROM op_pmma_utilises  WHERE point_id=?", [$point_id]);
@@ -296,6 +338,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $point_id = (int)($_POST['point_id'] ?? 0);
         $point = db_fetch_one("SELECT * FROM op_points_journaliers WHERE id=?", [$point_id]);
         if (!$point) json_response(false, 'Point introuvable.');
+        $point['films'] = db_fetch_all(
+            "SELECT bobine_id, films_utilises, films_endommages FROM op_films_utilises WHERE point_id=?",
+            [$point_id]
+        );
         json_response(true, '', ['point' => $point]);
     }
 
@@ -306,6 +352,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         if (!$point) json_response(false, 'Point introuvable.');
         if (($point['created_by'] ?? 0) != $user['id']) json_response(false, 'Accès refusé.');
         if ($point['statut'] !== 'brouillon') json_response(false, 'Ce point ne peut plus être modifié.');
+        $nb_films = (int)db_fetch_value("SELECT COUNT(*) FROM op_films_utilises WHERE point_id=?", [$point_id]);
+        if ($nb_films === 0) json_response(false, 'Impossible de valider un point sans données bobines. Veuillez saisir les films utilisés avant de valider.');
         db_query("UPDATE op_points_journaliers SET statut='valide', validated_by=?, validated_at=NOW() WHERE id=?",
             [$user['id'], $point_id]);
         json_response(true, 'Point validé avec succès.');
@@ -319,6 +367,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         if (($point['created_by'] ?? 0) != $user['id']) json_response(false, 'Accès refusé.');
         if ($point['statut'] !== 'brouillon') json_response(false, 'Ce point a déjà été soumis.');
         if (($point['type_point'] ?? '') !== 'point_18h') json_response(false, 'Seul le point 18h peut être soumis au superviseur.');
+        $nb_films = (int)db_fetch_value("SELECT COUNT(*) FROM op_films_utilises WHERE point_id=?", [$point_id]);
+        if ($nb_films === 0) json_response(false, 'Impossible de soumettre un point sans données bobines. Veuillez saisir les films utilisés avant de soumettre.');
         db_query("UPDATE op_points_journaliers SET statut='en_attente_validation' WHERE id=?", [$point_id]);
         // Notifier le superviseur
         $notif_targets = db_fetch_all(
@@ -1707,19 +1757,42 @@ async function editPoint(id){
   if(!d.success){ alert('Erreur de chargement'); return; }
   const p = d.data.point;
   currentPointId = id;
-  // Remplir les champs du formulaire
+  // Champs généraux
   if(document.getElementById('p-site').tagName==='SELECT')
     document.getElementById('p-site').value = p.site_id;
   document.getElementById('p-date').value  = p.date_point;
   document.getElementById('p-type').value  = p.type_point;
   document.getElementById('p-heures').value= p.nb_heures_travail||'8';
-  document.getElementById('p-riv-endomm').value = p.rivets_endommages||'0';
-  document.getElementById('p-np-conc').value    = p.non_poses_concessionnaires||'0';
-  document.getElementById('p-np-usag').value    = p.non_poses_usagers||'0';
-  document.getElementById('p-obs').value         = p.observations||'';
+  document.getElementById('p-np-conc').value = p.non_poses_concessionnaires||'0';
+  document.getElementById('p-np-usag').value = p.non_poses_usagers||'0';
+  document.getElementById('p-obs').value    = p.observations||'';
+  // Véhicules
+  const nbVP   = document.getElementById('nb-VP');   if(nbVP)   nbVP.value   = p.nb_vp||'0';
+  const nbCAM  = document.getElementById('nb-CAM');  if(nbCAM)  nbCAM.value  = p.nb_camion||'0';
+  const nbSEMI = document.getElementById('nb-SEMI'); if(nbSEMI) nbSEMI.value = p.nb_semi||'0';
+  const nbMOTO = document.getElementById('nb-MOTO'); if(nbMOTO) nbMOTO.value = p.nb_moto||'0';
+  // Rivets (on stocke les totaux par type ; posés = total, endomm = 0 si non distinguables)
+  document.getElementById('p-gonfl-util').value  = p.rivets_gonflables||'0';
+  document.getElementById('p-gonfl-end').value   = '0';
+  document.getElementById('p-eclate-util').value = p.rivets_eclates||'0';
+  document.getElementById('p-eclate-end').value  = '0';
   await loadStockRivets();
   await loadBobines();
+  // Restaurer les bobines sauvegardées
+  if(p.films && p.films.length > 0){
+    renderBobinesRows(p.films.map(f=>parseInt(f.bobine_id)));
+    p.films.forEach((f,i)=>{
+      const sel    = document.getElementById('bsel-'+i);
+      const util   = document.getElementById('butil-'+i);
+      const endomm = document.getElementById('bendomm-'+i);
+      if(sel)    sel.value    = f.bobine_id;
+      if(util)   util.value   = f.films_utilises;
+      if(endomm) endomm.value = f.films_endommages;
+      updateBobineRestants(i);
+    });
+  }
   await loadStockPMMA();
+  recalcule();
   document.getElementById('mPoint').classList.add('open');
 }
 
