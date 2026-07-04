@@ -871,7 +871,7 @@ $statut_colors = [
 
 <!-- MODAL DÉTAILS (lecture seule) -->
 <div id="modalDetails" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:flex-start;justify-content:center;padding:30px;overflow-y:auto">
-  <div style="background:white;border-radius:20px;width:680px;max-width:95vw;margin:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+  <div style="background:white;border-radius:20px;width:980px;max-width:96vw;margin:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <div style="padding:22px 28px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
       <div>
         <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800;color:var(--navy)" id="detailTitle">Détails validation</h3>
@@ -952,7 +952,7 @@ async function verifierSite(siteId, siteNom) {
         <div style="font-size:11px;color:${d.nb_ecarts>0?'#991B1B':'#065F46'};font-weight:700;text-transform:uppercase">Écarts</div>
       </div>
       <div style="text-align:center;padding:12px;background:#F0F4FF;border-radius:10px">
-        <div style="font-size:13px;font-weight:700;color:var(--navy)">${d.dernier_import||'—'}</div>
+        <div style="font-size:12.5px;font-weight:700;color:var(--navy)">${d.dernier_import ? (() => { const dt=new Date(d.dernier_import.replace(' ','T')); return dt.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'})+' à '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); })() : '—'}</div>
         <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase">Dernier import EMUCI</div>
       </div>
     </div>`;
@@ -1123,6 +1123,9 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
 
   const nb_bobines  = d.nb_bobines  ?? 0;
   const nb_ecarts   = d.nb_ecarts   ?? 0;
+  const fmtImport = d.dernier_import
+    ? (() => { const dt = new Date(d.dernier_import.replace(' ','T')); return dt.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'}) + ' à ' + dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); })()
+    : '—';
 
   const statutLabels = {
     valide_auto:'✅ Validé automatiquement', valide_gsb:'✅ Validé par GSB',
@@ -1161,7 +1164,7 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
         <div style="font-size:11px;color:${nb_ecarts>0?'#991b1b':'#065f46'};font-weight:600">Écarts</div>
       </div>
       <div style="text-align:center;padding:12px;background:var(--tertiary);border-radius:10px">
-        <div style="font-size:13px;font-weight:700;color:var(--navy)">${d.dernier_import||'—'}</div>
+        <div style="font-size:12.5px;font-weight:700;color:var(--navy)">${fmtImport}</div>
         <div style="font-size:11px;color:var(--muted);font-weight:600">Dernier import EMUCI</div>
       </div>
     </div>`;
