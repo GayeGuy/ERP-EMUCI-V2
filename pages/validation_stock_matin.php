@@ -353,20 +353,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                  WHERE r.slug = 'coordinateur_site' AND u.site_id = ? AND u.actif = 1",
                 [$site_id]
             );
+            $notif_sent = 0;
             foreach ($coords as $c) {
                 db_query(
                     "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?,?,?,?,?)",
                     [
                         $c['id'],
-                        'correction_demandee',
+                        'info',
                         '✏️ Correction de saisie demandée',
                         "Le GSB $gsb_nom demande une correction sur votre saisie du $date. Motif : $notes",
                         '/pages/operations/point_journalier.php',
                     ]
                 );
+                $notif_sent++;
             }
             audit_log($user['id'],'CREATE','demandes_correction_saisie',$point_id,"Correction demandée bobine:$bobine_id site:$site_id date:$date");
-            json_response(true,'Demande de correction enregistrée. Le coordinateur a été notifié.');
+            $msg = $notif_sent > 0
+                ? 'Demande de correction enregistrée. Le coordinateur a été notifié.'
+                : 'Demande enregistrée. Aucun coordinateur actif trouvé pour ce site — vérifiez les comptes utilisateurs.';
+            json_response(true, $msg);
         } catch (Exception $ex) {
             json_response(false, $ex->getMessage());
         }
