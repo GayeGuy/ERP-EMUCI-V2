@@ -331,9 +331,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         if (!$bobine_id || !$site_id) json_response(false, 'Données manquantes.');
         if (!$notes) json_response(false, 'Le motif est obligatoire.');
         db_query(
-            "INSERT INTO demandes_correction_saisie (bobine_id,site_id,gsb_id,date_cible,films_pj,films_emuci,ecart,notes_gsb,statut)
-             VALUES (?,?,?,?,?,?,?,?,'en_attente')
-             ON DUPLICATE KEY UPDATE notes_gsb=VALUES(notes_gsb),statut='en_attente',gsb_id=VALUES(gsb_id)",
+            "INSERT INTO demandes_correction_saisie (bobine_id,site_id,gsb_id,date_cible,films_pj,films_emuci,ecart,notes_gsb)
+             VALUES (?,?,?,?,?,?,?,?)",
             [$bobine_id,$site_id,$user['id'],$date,$films_pj,$films_emuci,$ecart,$notes]
         );
         audit_log($user['id'],'CREATE','demandes_correction_saisie',$bobine_id,"Correction bobine demandée site:$site_id date:$date");
@@ -1091,21 +1090,25 @@ async function submitCorrectionBobine() {
   const m     = document.getElementById('miniModalCorr');
   const notes = document.getElementById('miniCorrNotes').value.trim();
   if (!notes) { alert('Le motif est obligatoire.'); return; }
-  const d = await ap({
-    action:      'demander_correction_bobine',
-    bobine_id:   m.dataset.bobineId,
-    site_id:     m.dataset.siteId,
-    date:        m.dataset.date,
-    notes_gsb:   notes,
-    films_pj:    m.dataset.filmsPj,
-    films_emuci: m.dataset.filmsEmuci,
-    ecart:       m.dataset.ecart,
-  });
-  if (d.success) {
-    toast('✅ Demande de correction enregistrée.', 'success');
-    m.style.display = 'none';
-  } else {
-    toast('❌ ' + d.message, 'error');
+  try {
+    const d = await ap({
+      action:      'demander_correction_bobine',
+      bobine_id:   m.dataset.bobineId,
+      site_id:     m.dataset.siteId,
+      date:        m.dataset.date,
+      notes_gsb:   notes,
+      films_pj:    m.dataset.filmsPj,
+      films_emuci: m.dataset.filmsEmuci,
+      ecart:       m.dataset.ecart,
+    });
+    if (d.success) {
+      toast('✅ Demande de correction enregistrée.', 'success');
+      m.style.display = 'none';
+    } else {
+      toast('❌ ' + d.message, 'error');
+    }
+  } catch(err) {
+    toast('❌ Erreur réseau. Réessayez.', 'error');
   }
 }
 
