@@ -180,8 +180,8 @@ $unread = count($notifs);
     .user-info { flex: 1; min-width: 0; }
     .user-info .name { font-size: 12.5px; font-weight: 700; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .user-info .role { font-size: 10.5px; color: rgba(165,216,255,.6); margin-top: 1px; }
-    .logout-btn { color: rgba(255,255,255,.3); text-decoration: none; font-size: 16px; transition: color .15s; flex-shrink: 0; }
-    .logout-btn:hover { color: var(--danger); }
+    .logout-btn { color: rgba(255,255,255,.55); text-decoration: none; font-size: 18px; transition: color .15s, background .15s; flex-shrink: 0; width:32px; height:32px; border-radius:8px; display:flex; align-items:center; justify-content:center; }
+    .logout-btn:hover { color: #f87171; background: rgba(248,113,113,.12); }
 
     /* ===== MAIN AREA ===== */
     .main-wrap {
@@ -490,7 +490,9 @@ $unread = count($notifs);
         <div class="name"><?= h($user['prenom'] . ' ' . $user['nom']) ?></div>
         <div class="role"><?= h($user['role_nom']) ?></div>
       </div>
-      <a href="<?= APP_URL ?>/logout.php" class="logout-btn" title="Déconnexion">🚪</a>
+      <a href="<?= APP_URL ?>/logout.php" class="logout-btn" title="Déconnexion">
+        <i class="ph-duotone ph-sign-out"></i>
+      </a>
     </div>
   </div>
 </aside>
