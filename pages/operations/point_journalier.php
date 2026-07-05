@@ -477,6 +477,112 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         }
     }
 
+    // ── CORRECTIONS BOBINES — liste pour le coordinateur
+    if ($action === 'get_corrections_coord') {
+        $site_id = (int)($_POST['site_id'] ?? ($user['site_id'] ?? 0));
+        if (!$site_id) json_response(false, 'Site introuvable.');
+        $rows = db_fetch_all(
+            "SELECT cb.*, b.numero AS bobine_num,
+                    CONCAT(gsb.prenom,' ',gsb.nom) AS gsb_nom
+             FROM corrections_bobines cb
+             JOIN op_bobines b ON b.id = cb.bobine_id
+             JOIN users gsb   ON gsb.id = cb.gsb_id
+             WHERE cb.site_id = ? AND cb.statut = 'en_attente'
+             ORDER BY cb.created_at DESC",
+            [$site_id]
+        );
+        json_response(true, '', $rows);
+    }
+
+    // ── CORRECTIONS BOBINES — réponse du coordinateur
+    if ($action === 'repondre_correction') {
+        $role_user = $user['role_slug'] ?? '';
+        if ($role_user !== 'coordinateur_site' && !in_array($role_user, ['admin','superadmin']))
+            json_response(false, 'Accès refusé.');
+        $correction_id  = (int)($_POST['correction_id'] ?? 0);
+        $reponse        = trim($_POST['reponse']         ?? '');
+        $films_final    = isset($_POST['films_final']) && $_POST['films_final'] !== '' ? (int)$_POST['films_final'] : null;
+        $reponse_coord  = trim($_POST['reponse_coord']   ?? '');
+
+        if (!$correction_id) json_response(false, 'Correction introuvable.');
+        if (!in_array($reponse, ['approuvee','contreproposee','refusee'])) json_response(false, 'Réponse invalide.');
+        if ($reponse !== 'refusee' && $films_final === null) json_response(false, 'La valeur finale est obligatoire.');
+        if ($reponse === 'refusee' && !$reponse_coord) json_response(false, 'Veuillez expliquer le refus.');
+
+        $corr = db_fetch_one("SELECT * FROM corrections_bobines WHERE id=? AND statut='en_attente'", [$correction_id]);
+        if (!$corr) json_response(false, 'Demande introuvable ou déjà traitée.');
+
+        db_begin();
+        try {
+            if ($reponse !== 'refusee') {
+                // Appliquer la correction sur op_films_utilises
+                $old_fu = db_fetch_one(
+                    "SELECT films_utilises FROM op_films_utilises WHERE point_id=? AND bobine_id=?",
+                    [$corr['point_id'], $corr['bobine_id']]
+                );
+                if ($old_fu) {
+                    $delta = $films_final - (int)$old_fu['films_utilises'];
+                    db_query(
+                        "UPDATE op_films_utilises SET films_utilises=? WHERE point_id=? AND bobine_id=?",
+                        [$films_final, $corr['point_id'], $corr['bobine_id']]
+                    );
+                    if ($delta !== 0) {
+                        db_query(
+                            "UPDATE op_bobines SET
+                             films_utilises = GREATEST(0, films_utilises + ?),
+                             films_restants = films_restants - ?
+                             WHERE id=?",
+                            [$delta, $delta, $corr['bobine_id']]
+                        );
+                    }
+                }
+                // Passer la validation du jour en "réajusté"
+                db_query(
+                    "UPDATE validations_stock_matin SET statut='reajuste' WHERE site_id=? AND date_validation=?",
+                    [$corr['site_id'], $corr['date_point']]
+                );
+            }
+
+            // Mettre à jour la correction
+            db_query(
+                "UPDATE corrections_bobines SET statut=?, films_final=?, reponse_coord=?, coord_id=?, traite_at=NOW() WHERE id=?",
+                [$reponse, $films_final, $reponse_coord ?: null, $user['id'], $correction_id]
+            );
+
+            // Notifier le GSB
+            $coord_nom = trim(($user['prenom'] ?? '') . ' ' . ($user['nom'] ?? ''));
+            $bobine_num = db_fetch_value("SELECT numero FROM op_bobines WHERE id=?", [$corr['bobine_id']]) ?? '';
+            $notif_msg = match($reponse) {
+                'approuvee'      => "Le coordinateur $coord_nom a confirmé la correction sur la bobine $bobine_num. Valeur appliquée : $films_final films.",
+                'contreproposee' => "Le coordinateur $coord_nom propose $films_final films pour la bobine $bobine_num. Motif : $reponse_coord",
+                'refusee'        => "Le coordinateur $coord_nom a refusé la correction sur la bobine $bobine_num. Motif : $reponse_coord",
+            };
+            $notif_titre = match($reponse) {
+                'approuvee'      => '✅ Correction confirmée',
+                'contreproposee' => '🔄 Contre-proposition du coordinateur',
+                'refusee'        => '❌ Correction refusée',
+            };
+            db_query(
+                "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                [$corr['gsb_id'], 'info', $notif_titre, $notif_msg, '/pages/validation_stock_matin.php']
+            );
+
+            audit_log($user['id'], 'UPDATE', 'corrections_bobines', $correction_id,
+                "Réponse coordinateur: $reponse, films_final: $films_final");
+            db_commit();
+
+            $msg = match($reponse) {
+                'approuvee'      => 'Correction confirmée. Le stock a été ajusté.',
+                'contreproposee' => 'Contre-proposition envoyée au GSB.',
+                'refusee'        => 'Refus enregistré. Le GSB a été notifié.',
+            };
+            json_response(true, $msg);
+        } catch (Exception $e) {
+            db_rollback();
+            json_response(false, 'Erreur : ' . $e->getMessage());
+        }
+    }
+
     json_response(false, 'Action inconnue.');
 }
 
@@ -544,6 +650,23 @@ if ($role_slug_pj === 'coordinateur_site' && $user['site_id']) {
         $stock_bloque     = true;
         $stock_bloque_msg = $msg_ecart;
     }
+}
+
+// Corrections bobines en attente (pour coordinateur seulement)
+$corrections_en_attente = [];
+$nb_corrections_attente = 0;
+if ($role_slug_pj === 'coordinateur_site' && $user['site_id']) {
+    $corrections_en_attente = db_fetch_all(
+        "SELECT cb.*, b.numero AS bobine_num,
+                CONCAT(gsb.prenom,' ',gsb.nom) AS gsb_nom
+         FROM corrections_bobines cb
+         JOIN op_bobines b ON b.id = cb.bobine_id
+         JOIN users gsb   ON gsb.id = cb.gsb_id
+         WHERE cb.site_id = ? AND cb.statut = 'en_attente'
+         ORDER BY cb.created_at DESC",
+        [(int)$user['site_id']]
+    );
+    $nb_corrections_attente = count($corrections_en_attente);
 }
 
 include __DIR__ . '/../../templates/header.php';
@@ -790,6 +913,61 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
     <div><div class="kpi-val"><?= $kpi_valides ?> / <?= count($points) ?></div><div class="kpi-lbl">Points validés</div></div>
   </div>
 </div>
+
+<!-- CORRECTIONS BOBINES EN ATTENTE — visible coordinateur uniquement -->
+<?php if($role_slug_pj === 'coordinateur_site' && $nb_corrections_attente > 0): ?>
+<div id="panel-corrections-bobines" style="background:white;border:2px solid #f59e0b;border-radius:14px;margin-bottom:20px;overflow:hidden">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:linear-gradient(90deg,#fffbeb,#fef3c7);border-bottom:1px solid #fcd34d">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:20px">🔔</span>
+      <div>
+        <div style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;color:#92400e">
+          <?= $nb_corrections_attente ?> demande<?= $nb_corrections_attente > 1 ? 's' : '' ?> de correction bobine<?= $nb_corrections_attente > 1 ? 's' : '' ?> en attente
+        </div>
+        <div style="font-size:12px;color:#a16207">Le gestionnaire stock bobines demande votre validation sur des écarts de films.</div>
+      </div>
+    </div>
+    <button onclick="this.closest('#panel-corrections-bobines').querySelector('.corr-body').classList.toggle('hidden')" style="background:none;border:1px solid #fcd34d;border-radius:8px;padding:4px 12px;font-size:12px;color:#92400e;cursor:pointer">Afficher / Masquer</button>
+  </div>
+  <div class="corr-body">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="background:#fffbeb">
+          <th style="padding:9px 14px;text-align:left;font-size:11px;color:#78350f;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Bobine</th>
+          <th style="padding:9px 14px;text-align:center;font-size:11px;color:#78350f;font-weight:700;text-transform:uppercase">Films déclarés (PJ)</th>
+          <th style="padding:9px 14px;text-align:center;font-size:11px;color:#78350f;font-weight:700;text-transform:uppercase">Films proposés (GSB)</th>
+          <th style="padding:9px 14px;text-align:left;font-size:11px;color:#78350f;font-weight:700;text-transform:uppercase">Motif GSB</th>
+          <th style="padding:9px 14px;text-align:left;font-size:11px;color:#78350f;font-weight:700;text-transform:uppercase">Demandé par</th>
+          <th style="padding:9px 14px;text-align:left;font-size:11px;color:#78350f;font-weight:700;text-transform:uppercase">Date</th>
+          <th style="padding:9px 14px;text-align:center;font-size:11px;color:#78350f;font-weight:700;text-transform:uppercase">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+      <?php foreach($corrections_en_attente as $cb): ?>
+        <tr style="border-top:1px solid #fde68a" data-corr-id="<?= $cb['id'] ?>">
+          <td style="padding:9px 14px">
+            <span style="font-family:monospace;font-weight:700;color:#0d1f35"><?= h($cb['bobine_num']) ?></span>
+          </td>
+          <td style="padding:9px 14px;text-align:center;font-family:'Montserrat',sans-serif;font-weight:700;color:#475569"><?= (int)$cb['films_original'] ?></td>
+          <td style="padding:9px 14px;text-align:center;font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#d97706"><?= (int)$cb['films_proposes'] ?></td>
+          <td style="padding:9px 14px;font-size:12px;color:#374151;max-width:220px"><?= h($cb['motif_gsb']) ?></td>
+          <td style="padding:9px 14px;font-size:12px;color:#6b7280"><?= h($cb['gsb_nom']) ?></td>
+          <td style="padding:9px 14px;font-size:12px;color:#6b7280"><?= fmt_date($cb['date_point'], 'd/m/Y') ?></td>
+          <td style="padding:9px 14px;text-align:center">
+            <div style="display:flex;gap:6px;justify-content:center">
+              <button onclick="ouvrirReponseCorrection(<?= $cb['id'] ?>, <?= (int)$cb['films_original'] ?>, <?= (int)$cb['films_proposes'] ?>, '<?= addslashes(h($cb['bobine_num'])) ?>')"
+                      style="background:#1a56a0;color:white;border:none;border-radius:7px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer">
+                Répondre
+              </button>
+            </div>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+<?php endif; ?>
 
 <!-- STOCK RIVETS RAPIDE — visible coordinateur uniquement -->
 <?php if(!empty($stock_rivets_all) && $role_slug_pj === 'coordinateur_site'): ?>
@@ -1158,6 +1336,74 @@ foreach($points as $p):
     <div class="mfoot">
       <button class="btn btn-secondary" onclick="document.getElementById('mRejet').classList.remove('open')">Annuler</button>
       <button class="btn" style="background:#dc2626;color:white" onclick="confirmerRejet()">❌ Confirmer le rejet</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL RÉPONSE CORRECTION BOBINE (coordinateur) -->
+<div class="modal-overlay" id="mReponseCorr">
+  <div class="modal" style="width:520px">
+    <div class="mhdr"><h3>🔔 Répondre à la demande de correction</h3>
+      <button class="mclose" onclick="fermerReponseCorrection()">✕</button>
+    </div>
+    <div class="mbody">
+      <input type="hidden" id="rc-correction-id" value="">
+      <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px">
+        <div style="font-weight:700;color:#92400e;margin-bottom:6px">Bobine : <span id="rc-bobine-num" style="font-family:monospace"></span></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="text-align:center;background:white;border-radius:8px;padding:8px">
+            <div style="font-size:11px;color:#6b7280;text-transform:uppercase;font-weight:600;margin-bottom:4px">Films déclarés (vous)</div>
+            <div id="rc-films-original" style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#0d1f35"></div>
+          </div>
+          <div style="text-align:center;background:#fef3c7;border-radius:8px;padding:8px">
+            <div style="font-size:11px;color:#92400e;text-transform:uppercase;font-weight:600;margin-bottom:4px">Films proposés (GSB)</div>
+            <div id="rc-films-proposes" style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#d97706"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px">
+        <label style="font-size:13px;font-weight:700;color:#374151;display:block;margin-bottom:8px">Votre décision :</label>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer" id="rc-opt-approuvee">
+            <input type="radio" name="rc-reponse" value="approuvee" onchange="onRcReponseChange()">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#065f46">✅ Confirmer la proposition du GSB</div>
+              <div style="font-size:11px;color:#6b7280">Le stock sera ajusté à la valeur proposée par le GSB.</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer" id="rc-opt-contreproposee">
+            <input type="radio" name="rc-reponse" value="contreproposee" onchange="onRcReponseChange()">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#b45309">🔄 Contre-proposer une autre valeur</div>
+              <div style="font-size:11px;color:#6b7280">Vous proposez un nombre de films différent, avec explication.</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer" id="rc-opt-refusee">
+            <input type="radio" name="rc-reponse" value="refusee" onchange="onRcReponseChange()">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#991b1b">❌ Refuser la demande de correction</div>
+              <div style="font-size:11px;color:#6b7280">Votre saisie initiale est maintenue telle quelle.</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div id="rc-section-films" style="display:none;margin-bottom:14px">
+        <label style="font-size:13px;font-weight:700;color:#374151;display:block;margin-bottom:6px">Nombre de films final <span style="color:#dc2626">*</span></label>
+        <input type="number" id="rc-films-final" min="0" step="1" placeholder="0"
+               style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;font-family:'Montserrat',sans-serif;font-size:20px;font-weight:800;text-align:center">
+      </div>
+
+      <div id="rc-section-note" style="display:none;margin-bottom:4px">
+        <label style="font-size:13px;font-weight:700;color:#374151;display:block;margin-bottom:6px">Explication <span style="color:#dc2626">*</span></label>
+        <textarea id="rc-note" rows="3" placeholder="Expliquez votre décision…"
+                  style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;resize:vertical;box-sizing:border-box"></textarea>
+      </div>
+    </div>
+    <div class="mfoot" style="display:flex;justify-content:flex-end;gap:10px">
+      <button class="btn btn-secondary" onclick="fermerReponseCorrection()">Annuler</button>
+      <button class="btn btn-primary" id="rc-submit-btn" onclick="submitReponseCorrection()">Envoyer ma réponse</button>
     </div>
   </div>
 </div>
@@ -1842,6 +2088,66 @@ function ap(data){
 }
 document.getElementById('mPoint').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');});
 document.getElementById('mDetail').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');});
+
+// ── CORRECTIONS BOBINES — réponse coordinateur
+function ouvrirReponseCorrection(corrId, filmsOriginal, filmsProposes, bobineNum){
+  document.getElementById('rc-correction-id').value = corrId;
+  document.getElementById('rc-bobine-num').textContent = bobineNum;
+  document.getElementById('rc-films-original').textContent = filmsOriginal;
+  document.getElementById('rc-films-proposes').textContent = filmsProposes;
+  document.getElementById('rc-films-final').value = filmsProposes;
+  document.querySelectorAll('input[name="rc-reponse"]').forEach(r=>r.checked=false);
+  document.getElementById('rc-section-films').style.display='none';
+  document.getElementById('rc-section-note').style.display='none';
+  document.getElementById('mReponseCorr').classList.add('open');
+}
+function fermerReponseCorrection(){
+  document.getElementById('mReponseCorr').classList.remove('open');
+}
+function onRcReponseChange(){
+  const val = document.querySelector('input[name="rc-reponse"]:checked')?.value;
+  const secFilms = document.getElementById('rc-section-films');
+  const secNote  = document.getElementById('rc-section-note');
+  if(val === 'approuvee'){
+    secFilms.style.display = 'none';
+    secNote.style.display  = 'none';
+    const fp = document.getElementById('rc-films-proposes').textContent;
+    document.getElementById('rc-films-final').value = fp;
+  } else if(val === 'contreproposee'){
+    secFilms.style.display = 'block';
+    secNote.style.display  = 'block';
+  } else if(val === 'refusee'){
+    secFilms.style.display = 'none';
+    secNote.style.display  = 'block';
+    document.getElementById('rc-films-final').value = '';
+  }
+}
+async function submitReponseCorrection(){
+  const corrId   = document.getElementById('rc-correction-id').value;
+  const reponse  = document.querySelector('input[name="rc-reponse"]:checked')?.value;
+  const note     = document.getElementById('rc-note').value.trim();
+  const filmsFin = document.getElementById('rc-films-final').value;
+  if(!reponse){ toast('Veuillez choisir une réponse.','warning'); return; }
+  if(reponse === 'refusee' && !note){ toast('Veuillez saisir un motif de refus.','warning'); return; }
+  if(reponse === 'contreproposee' && (filmsFin===''||isNaN(parseInt(filmsFin)))){ toast('Veuillez saisir le nombre de films final.','warning'); return; }
+  const payload = { action:'repondre_correction', correction_id:corrId, reponse, reponse_coord:note };
+  if(reponse !== 'refusee') payload.films_final = reponse==='approuvee'
+    ? document.getElementById('rc-films-proposes').textContent
+    : filmsFin;
+  const btn = document.getElementById('rc-submit-btn');
+  btn.disabled = true; btn.textContent = 'Envoi…';
+  try {
+    const d = await ap(payload);
+    toast(d.message, d.success?'success':'danger');
+    if(d.success){
+      fermerReponseCorrection();
+      setTimeout(()=>location.reload(), 1200);
+    }
+  } finally {
+    btn.disabled = false; btn.textContent = 'Envoyer ma réponse';
+  }
+}
+document.getElementById('mReponseCorr').addEventListener('click',e=>{if(e.target===e.currentTarget)fermerReponseCorrection();});
 </script>
 <style>@media print{.sidebar,.topbar,.mhdr button,.mfoot{display:none!important}.modal{position:static;border:none;box-shadow:none}.point-preview{color:black!important;background:white!important}.point-preview *{color:black!important}}</style>
 

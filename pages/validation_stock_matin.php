@@ -318,20 +318,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         json_response(true, '', $bobines);
     }
 
-    // ── DEMANDE DE CORRECTION PAR BOBINE
+    // ── DEMANDE DE CORRECTION PAR BOBINE (Option 2 — accord coordinateur)
     if ($action === 'demander_correction_bobine') {
         if (!$can_valider) json_response(false, 'Accès refusé.');
-        $bobine_id   = (int)($_POST['bobine_id'] ?? 0);
-        $site_id     = (int)($_POST['site_id'] ?? 0);
-        $date        = trim($_POST['date'] ?? date('Y-m-d'));
-        $notes       = trim($_POST['notes_gsb'] ?? '');
-        $films_pj    = (int)($_POST['films_pj'] ?? 0);
-        $films_emuci = (int)($_POST['films_emuci'] ?? 0);
-        $ecart       = (int)($_POST['ecart'] ?? 0);
+        $bobine_id      = (int)($_POST['bobine_id']      ?? 0);
+        $site_id        = (int)($_POST['site_id']        ?? 0);
+        $date           = trim($_POST['date']            ?? date('Y-m-d'));
+        $notes          = trim($_POST['notes_gsb']       ?? '');
+        $films_pj       = (int)($_POST['films_pj']       ?? 0);
+        $films_proposes = (int)($_POST['films_proposes'] ?? 0);
         if (!$bobine_id || !$site_id) json_response(false, 'Données manquantes.');
-        if (!$notes) json_response(false, 'Le motif est obligatoire.');
+        if (!$notes)         json_response(false, 'Le motif est obligatoire.');
         try {
-            // Retrouver le point journalier lié à cette bobine pour ce site/date
+            // Retrouver le point journalier et vérifier qu'il a les données bobine
             $point_id = (int)db_fetch_value(
                 "SELECT pj.id FROM op_points_journaliers pj
                  JOIN op_films_utilises fu ON fu.point_id = pj.id
@@ -340,14 +339,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 [$bobine_id, $site_id, $date]
             );
             if (!$point_id) json_response(false, 'Point journalier introuvable pour cette bobine à cette date.');
-            db_query(
-                "INSERT INTO demandes_correction_saisie (point_id, demande_par, motif, statut)
-                 VALUES (?, ?, ?, 'en_attente')",
-                [$point_id, $user['id'], $notes]
+
+            // Vérifier qu'il n'y a pas déjà une correction en attente pour cette bobine/date
+            $existing = db_fetch_value(
+                "SELECT id FROM corrections_bobines WHERE bobine_id=? AND site_id=? AND date_point=? AND statut='en_attente'",
+                [$bobine_id, $site_id, $date]
             );
+            if ($existing) json_response(false, 'Une demande de correction est déjà en attente pour cette bobine.');
+
+            // Insérer la correction dans la table dédiée
+            db_query(
+                "INSERT INTO corrections_bobines
+                 (point_id, bobine_id, site_id, date_point, films_original, films_proposes, motif_gsb, gsb_id, statut)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'en_attente')",
+                [$point_id, $bobine_id, $site_id, $date, $films_pj, $films_proposes, $notes, $user['id']]
+            );
+            $correction_id = (int)db_last_id();
+
             // Notifier le(s) coordinateur(s) du site
             $gsb_nom = trim(($user['prenom'] ?? '') . ' ' . ($user['nom'] ?? ''));
-            $coords  = db_fetch_all(
+            $bobine_num = db_fetch_value("SELECT numero FROM op_bobines WHERE id=?", [$bobine_id]) ?? "bobine #$bobine_id";
+            $coords = db_fetch_all(
                 "SELECT u.id FROM users u
                  JOIN roles r ON r.id = u.role_id
                  WHERE r.slug = 'coordinateur_site' AND u.site_id = ? AND u.actif = 1",
@@ -358,19 +370,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 db_query(
                     "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?,?,?,?,?)",
                     [
-                        $c['id'],
-                        'info',
+                        $c['id'], 'info',
                         '✏️ Correction de saisie demandée',
-                        "Le GSB $gsb_nom demande une correction sur votre saisie du $date. Motif : $notes",
+                        "Le GSB $gsb_nom demande une correction sur la bobine $bobine_num (saisie du $date). Valeur actuelle : $films_pj films → proposition : $films_proposes films. Motif : $notes",
                         '/pages/operations/point_journalier.php',
                     ]
                 );
                 $notif_sent++;
             }
-            audit_log($user['id'],'CREATE','demandes_correction_saisie',$point_id,"Correction demandée bobine:$bobine_id site:$site_id date:$date");
+            audit_log($user['id'], 'CREATE', 'corrections_bobines', $correction_id,
+                "Correction demandée bobine:$bobine_id site:$site_id date:$date original:$films_pj proposes:$films_proposes");
             $msg = $notif_sent > 0
-                ? 'Demande de correction enregistrée. Le coordinateur a été notifié.'
-                : 'Demande enregistrée. Aucun coordinateur actif trouvé pour ce site — vérifiez les comptes utilisateurs.';
+                ? 'Demande envoyée. Le coordinateur doit confirmer la correction.'
+                : 'Demande enregistrée. Aucun coordinateur actif trouvé pour ce site.';
             json_response(true, $msg);
         } catch (Exception $ex) {
             json_response(false, $ex->getMessage());
@@ -883,24 +895,48 @@ $statut_colors = [
 
 <!-- MINI-MODAL DEMANDE DE CORRECTION PAR BOBINE -->
 <div id="miniModalCorr" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1200;align-items:center;justify-content:center">
-  <div style="background:white;border-radius:16px;width:440px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3);padding:28px">
+  <div style="background:white;border-radius:16px;width:500px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3);padding:28px">
     <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px">
-      ✏️ Demander une modification
+      ✏️ Demander une correction
     </div>
-    <div style="font-size:13px;color:var(--muted);margin-bottom:20px">
+    <div style="font-size:13px;color:var(--muted);margin-bottom:16px">
       Bobine : <strong id="miniCorrBobineNum" style="color:var(--navy)"></strong>
     </div>
+
+    <!-- Comparatif Films PJ vs EMUCI -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      <div style="background:#f0f4ff;border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:10px;font-weight:700;color:#5b76ff;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Films saisie PJ</div>
+        <div id="miniCorrFilmsPj" style="font-size:22px;font-weight:800;color:#1e2b4a">—</div>
+      </div>
+      <div style="background:#fff3e0;border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:10px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Films EMUCI</div>
+        <div id="miniCorrFilmsEmuci" style="font-size:22px;font-weight:800;color:#1e2b4a">—</div>
+      </div>
+    </div>
+
+    <!-- Films proposés -->
+    <div style="margin-bottom:14px">
+      <label style="font-size:13px;font-weight:700;color:var(--navy);display:block;margin-bottom:6px">
+        Films proposés <span style="color:#e74c3c">*</span>
+        <span style="font-size:11px;font-weight:400;color:var(--muted);margin-left:6px">Valeur que vous proposez au coordinateur</span>
+      </label>
+      <input type="number" id="miniCorrFilmsProposes" min="0" class="form-control"
+        style="text-align:center;font-size:20px;font-weight:800;color:var(--navy)">
+    </div>
+
     <label style="font-size:13px;font-weight:700;color:var(--navy);display:block;margin-bottom:6px">
-      Motif de la correction <span style="color:#e74c3c">*</span>
+      Motif <span style="color:#e74c3c">*</span>
     </label>
-    <textarea id="miniCorrNotes" rows="3" class="form-control"
-      placeholder="Décrivez la correction souhaitée sur la saisie du coordinateur…"
+    <textarea id="miniCorrNotes" rows="2" class="form-control"
+      placeholder="Expliquez la raison de la correction…"
       style="border-radius:10px;width:100%;box-sizing:border-box;margin-bottom:20px"></textarea>
+
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button onclick="document.getElementById('miniModalCorr').style.display='none'"
               class="btn btn-secondary">Annuler</button>
       <button onclick="submitCorrectionBobine()" class="btn btn-primary">
-        <i class="ph-duotone ph-paper-plane-tilt"></i> Envoyer
+        <i class="ph-duotone ph-paper-plane-tilt"></i> Envoyer au coordinateur
       </button>
     </div>
   </div>
@@ -1113,8 +1149,11 @@ document.getElementById('miniModalCorr').addEventListener('click',e=>{if(e.targe
 
 function demanderModifBobine(bobineId, bobineNum, siteId, date, filmsPj, filmsEmuci, ecart) {
   const m = document.getElementById('miniModalCorr');
-  document.getElementById('miniCorrBobineNum').textContent = bobineNum;
-  document.getElementById('miniCorrNotes').value = '';
+  document.getElementById('miniCorrBobineNum').textContent      = bobineNum;
+  document.getElementById('miniCorrNotes').value                = '';
+  document.getElementById('miniCorrFilmsPj').textContent        = filmsPj;
+  document.getElementById('miniCorrFilmsEmuci').textContent     = filmsEmuci !== null && filmsEmuci !== undefined ? filmsEmuci : '—';
+  document.getElementById('miniCorrFilmsProposes').value        = filmsEmuci !== null && filmsEmuci !== undefined ? filmsEmuci : filmsPj;
   m.dataset.bobineId   = bobineId;
   m.dataset.siteId     = siteId;
   m.dataset.date       = date;
@@ -1125,28 +1164,33 @@ function demanderModifBobine(bobineId, bobineNum, siteId, date, filmsPj, filmsEm
 }
 
 async function submitCorrectionBobine() {
-  const m     = document.getElementById('miniModalCorr');
-  const notes = document.getElementById('miniCorrNotes').value.trim();
-  if (!notes) { alert('Le motif est obligatoire.'); return; }
+  const m             = document.getElementById('miniModalCorr');
+  const notes         = document.getElementById('miniCorrNotes').value.trim();
+  const filmsProposes = document.getElementById('miniCorrFilmsProposes').value.trim();
+  if (!notes)         { alert('Le motif est obligatoire.'); return; }
+  if (filmsProposes === '' || isNaN(parseInt(filmsProposes))) {
+    alert('Veuillez saisir le nombre de films proposé.'); return;
+  }
   try {
     const d = await ap({
-      action:      'demander_correction_bobine',
-      bobine_id:   m.dataset.bobineId,
-      site_id:     m.dataset.siteId,
-      date:        m.dataset.date,
-      notes_gsb:   notes,
-      films_pj:    m.dataset.filmsPj,
-      films_emuci: m.dataset.filmsEmuci,
-      ecart:       m.dataset.ecart,
+      action:          'demander_correction_bobine',
+      bobine_id:       m.dataset.bobineId,
+      site_id:         m.dataset.siteId,
+      date:            m.dataset.date,
+      notes_gsb:       notes,
+      films_pj:        m.dataset.filmsPj,
+      films_proposes:  filmsProposes,
+      films_emuci:     m.dataset.filmsEmuci,
+      ecart:           m.dataset.ecart,
     });
     if (d.success) {
-      toast('✅ Demande de correction enregistrée.', 'success');
+      toast('✅ Demande envoyée. Le coordinateur a été notifié.', 'success');
       m.style.display = 'none';
     } else {
-      toast('❌ ' + d.message, 'error');
+      toast('❌ ' + d.message, 'danger');
     }
   } catch(err) {
-    toast('❌ Erreur réseau. Réessayez.', 'error');
+    toast('❌ Erreur réseau. Réessayez.', 'danger');
   }
 }
 

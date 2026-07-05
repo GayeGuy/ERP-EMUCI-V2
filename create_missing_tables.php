@@ -150,7 +150,26 @@ $tables = [
   `quantite` int(11) DEFAULT 0,
   `created_at` datetime DEFAULT current_timestamp(),
   PRIMARY KEY (`id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci",
+
+"CREATE TABLE IF NOT EXISTS `corrections_bobines` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `point_id` int(10) UNSIGNED NOT NULL,
+  `bobine_id` int(10) UNSIGNED NOT NULL,
+  `site_id` int(10) UNSIGNED NOT NULL,
+  `date_point` date NOT NULL,
+  `films_original` int(11) NOT NULL COMMENT 'Valeur saisie par le coordinateur',
+  `films_proposes` int(11) NOT NULL COMMENT 'Valeur proposée par le GSB',
+  `motif_gsb` text NOT NULL,
+  `gsb_id` int(10) UNSIGNED NOT NULL,
+  `statut` enum('en_attente','approuvee','contreproposee','refusee') NOT NULL DEFAULT 'en_attente',
+  `coord_id` int(10) UNSIGNED DEFAULT NULL,
+  `reponse_coord` text DEFAULT NULL,
+  `films_final` int(11) DEFAULT NULL COMMENT 'Valeur définitivement appliquée',
+  `traite_at` datetime DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Demandes de correction bobines GSB → Coordinateur'"
 ];
 
 foreach ($tables as $sql) {
