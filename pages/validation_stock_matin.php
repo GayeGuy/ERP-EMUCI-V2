@@ -838,38 +838,46 @@ $statut_colors = [
   <table class="vsm-tbl">
     <thead><tr>
       <th>Site</th>
+      <th class="tc">Date validation</th>
       <th class="tc">Statut</th>
       <th class="tc">Bobines</th>
-      <th class="tc">Écarts</th>
       <th>Traité par</th>
-      <th class="tc">Heure</th>
       <th>Commentaire</th>
       <th class="tc">Actions</th>
     </tr></thead>
     <tbody>
     <?php foreach($validations_jour as $v):
-      $sl = match($v['statut']){
-        'valide_auto'    => '✅ Auto-validé',
-        'valide_gsb'     => '✅ Validé GSB',
-        'autorise_ecart' => '⚠️ Écart autorisé',
-        'reajuste'       => '🔄 Réajusté',
-        'refuse'         => '❌ Bloqué',
-        default          => $v['statut'],
-      };
+      // Colonne "Statut" : ce qui s'est passé sur les écarts
+      if ($v['statut'] === 'refuse') {
+        $statut_badge = '<span class="vsm-badge refuse">❌ Bloqué</span>';
+      } elseif ($v['statut'] === 'reajuste') {
+        $statut_badge = '<span class="vsm-badge reajuste">🔄 Réajusté</span>';
+      } elseif ($v['statut'] === 'autorise_ecart') {
+        $statut_badge = '<span class="vsm-badge autorise_ecart">⚠️ Avec écart</span>';
+      } elseif ((int)$v['nb_ecarts'] > 0) {
+        $statut_badge = '<span class="vsm-badge autorise_ecart">⚠️ Avec écart</span>';
+      } else {
+        $statut_badge = '<span class="vsm-badge valide_auto">✅ Conforme</span>';
+      }
+      // Colonne "Date validation" : badge Validée + date
+      $date_label = in_array($v['statut'], ['refuse']) ? '❌ Bloquée' : '✅ Validée';
+      $date_col_bg = $v['statut'] === 'refuse' ? '#fee2e2' : '#d1fae5';
+      $date_col_color = $v['statut'] === 'refuse' ? '#991b1b' : '#065f46';
     ?>
     <tr>
       <td><div class="vsm-site-name"><?= h($v['site_nom']) ?></div></td>
-      <td class="tc"><span class="vsm-badge <?= h($v['statut']) ?>"><?= $sl ?></span></td>
-      <td class="tc" style="font-weight:700"><?= $v['nb_bobines_actives'] ?></td>
       <td class="tc">
-        <?php if((int)$v['nb_ecarts'] > 0): ?>
-        <span class="vsm-ecart-chip"><?= $v['nb_ecarts'] ?> écart(s)</span>
-        <?php else: ?>
-        <span class="vsm-ok-chip">✓</span>
-        <?php endif; ?>
+        <div style="display:inline-flex;flex-direction:column;align-items:center;gap:3px">
+          <span style="background:<?= $date_col_bg ?>;color:<?= $date_col_color ?>;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700"><?= $date_label ?></span>
+          <span style="font-size:12px;color:var(--muted);font-weight:600"><?= fmt_date($v['date_validation'],'d/m/Y') ?></span>
+          <?php if($v['gsb_at']): ?>
+          <span style="font-size:11px;color:var(--muted)">à <?= date('H:i', strtotime($v['gsb_at'])) ?></span>
+          <?php endif; ?>
+        </div>
       </td>
+      <td class="tc"><?= $statut_badge ?></td>
+      <td class="tc" style="font-weight:700"><?= $v['nb_bobines_actives'] ?></td>
       <td style="font-size:12.5px"><?= $v['gsb_nom'] ? h($v['gsb_nom']) : '<span style="color:var(--muted)">Automatique</span>' ?></td>
-      <td class="tc" style="font-size:12.5px;color:var(--muted)"><?= $v['gsb_at'] ? date('H:i', strtotime($v['gsb_at'])) : '—' ?></td>
       <td style="font-size:12px;color:var(--muted);max-width:180px"><?= $v['commentaire'] ? h($v['commentaire']) : '<span style="color:var(--border)">—</span>' ?></td>
       <td class="tc">
         <div class="vsm-actions">
