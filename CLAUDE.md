@@ -42,9 +42,13 @@ stockapp/
 │   │   ├── users.php           # Gestion utilisateurs
 │   │   ├── permissions.php     # Matrice droits rôle × module
 │   │   └── audit.php           # Journal d'audit
+│   ├── operations/
+│   │   ├── point_journalier.php  # Points journaliers coordinateur + réponse corrections GSB
+│   │   └── ...
 │   ├── stock_bobines_vue.php   # Vue stock bobines par site (+ export XLSX/PPTX)
 │   ├── inventaire_bobines.php
-│   ├── validation_stock_matin.php
+│   ├── validation_stock_matin.php  # Validation stock matin GSB + demande corrections bobines
+│   ├── rapports_gsb.php        # Rapports & exports GSB (Excel 3 feuilles + PDF)
 │   ├── commandes_bobines.php
 │   ├── import_emuci.php
 │   ├── point_emuci.php
@@ -165,6 +169,80 @@ get_groupe_nav_items(slug): array     // items nav filtrés par permissions
 
 ---
 
+## Flux de correction bobines (GSB → Coordinateur)
+
+Table `corrections_bobines` (créée via `create_missing_tables.php?secret=emuci2026import`).
+
+**Workflow :**
+1. GSB voit un écart dans `validation_stock_matin.php` → clique "Demander modif" sur une bobine
+2. Mini-modal : comparaison Films PJ vs EMUCI, champ "Films proposés" + motif
+3. AJAX `demander_correction_bobine` → INSERT dans `corrections_bobines` (statut `en_attente`) + notification `info` au coordinateur
+4. Coordinateur voit le panneau jaune dans `point_journalier.php` (chargé au rendu PHP)
+5. Clic "Répondre" → modal avec 3 options :
+   - **Confirmer** → `op_films_utilises` ajusté, `op_bobines.films_restants` corrigé, `validations_stock_matin.statut='reajuste'`
+   - **Contre-proposer** → même ajustement stock, notification GSB avec la valeur alternative
+   - **Refuser** → aucun ajustement stock, notification GSB avec motif
+6. AJAX `repondre_correction` gère la transaction + audit_log + notification GSB
+
+**Champs table `corrections_bobines` :** `id`, `point_id`, `bobine_id`, `site_id`, `date_point`, `films_original`, `films_proposes`, `motif_gsb`, `gsb_id`, `statut` enum(`en_attente`,`approuvee`,`contreproposee`,`refusee`), `coord_id`, `reponse_coord`, `films_final`, `traite_at`, `created_at`
+
+---
+
+## Permissions GSB — règle importante
+
+**Ne jamais utiliser `require_permission()` pour les pages spécifiques GSB.** Le rôle `gestionnaire_stock_bobines` n'a pas toujours de permissions explicites en BDD pour tous les modules. Utiliser à la place un contrôle par liste de rôles :
+
+```php
+$gsb_roles = ['admin','superadmin','gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation'];
+if (!in_array($user['role_slug'] ?? '', $gsb_roles)) {
+    http_response_code(403); include __DIR__.'/../templates/403.php'; exit;
+}
+```
+
+---
+
+## Rapports & Exports GSB (`pages/rapports_gsb.php`)
+
+Accessible via menu **Bobines → Rapports & Exports** pour GSB, gestionnaire_stock, superviseur_operation, admin.
+
+Exports disponibles (filtres : date_from, date_to, site) :
+- **xlsx_journalier** → 3 feuilles : Consommations détail / Stock actuel / Historique validations
+- **pdf_journalier** → Tableau conso + totaux + état stock par bobine (paysage A4)
+- **xlsx_mensuel** → Synthèse groupée par mois × site
+- **pdf_mensuel** → Tableau mensuel avec totaux (paysage A4)
+- **pdf_validations** → Historique des validations avec statuts colorés
+
+Les `use PhpOffice\...` sont obligatoirement **en tête de fichier** (avant tout code exécutable).
+
+---
+
+## Notifications — contrainte enum
+
+`notifications.type` n'accepte que : `'fin_cycle'`, `'stock_bas'`, `'alerte_conso'`, `'info'`.
+Toutes les notifications applicatives (corrections, validations, blocages) utilisent `'info'`.
+
+---
+
+## validation_stock_matin.php — fonctionnalités
+
+- **Vue GSB** : 2 onglets (Validation en cours / Historique 30 jours), bandeau info, filtres, légende statuts
+- **Colonne Action / bouton "Demander modif"** : visible uniquement pour GSB (`$can_valider`), masqué pour coordinateur (PHP injecte `true`/`false` dans le JS au rendu)
+- **Statuts affichés** : `Conforme` (vert) / `Avec écart` (orange) / `Réajusté` (bleu) / `Bloqué` (rouge)
+
+---
+
+## point_journalier.php — corrections en attente
+
+- Panneau jaune en haut : corrections `en_attente` pour le site du coordinateur, chargées au rendu PHP
+- AJAX `get_corrections_coord` : liste (non utilisé côté HTML, réservé usage futur)
+- AJAX `repondre_correction` : accessible coordinateur_site + admin/superadmin uniquement (vérif `$user['role_slug']`)
+- Bugs corrigés :
+  - **Brouillon reset à zéro** : `editPoint` JS restaure tous les champs (véhicules, bobines, rivets)
+  - **Double déduction stock** : le chemin UPDATE restaure `films_restants` avant DELETE + re-INSERT
+  - **Point vide soumis** : `soumettre_point` et `valider_point_coord` vérifient `COUNT(*) FROM op_films_utilises`
+
+---
+
 ## Export PPTX — notes importantes
 
 Le fichier `pages/stock_bobines_vue.php` génère un PPTX via `ZipArchive::addFromString()` (pas de répertoire temporaire).
@@ -213,6 +291,11 @@ Variables CSS globales (définies dans `templates/header.php`) :
 - [ ] Supprimer `fix_columns.php` (migration one-shot terminée)
 - [ ] Déploiement VPS : Nginx + PHP-FPM 8.2 + MySQL + Certbot (guide préparé, VPS non encore provisionné)
 - [ ] Vérifier permissions `coordinateur_site` sur `inventaire_bobines` dans Admin → Permissions
+- [x] Flux correction bobines GSB → Coordinateur (table `corrections_bobines` + UI des deux côtés)
+- [x] Page Rapports & Exports GSB (`pages/rapports_gsb.php`)
+- [x] validation_stock_matin.php : onglets, filtres, légende, masquage bouton coordinateur
+- [x] point_journalier.php : restauration brouillon, double déduction stock, point vide bloqué
+- ⚠️ Exécuter `create_missing_tables.php?secret=emuci2026import` en production pour créer `corrections_bobines`
 
 ---
 
