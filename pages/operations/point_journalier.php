@@ -927,7 +927,7 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
         <div style="font-size:12px;color:#a16207">Le gestionnaire stock bobines demande votre validation sur des écarts de films.</div>
       </div>
     </div>
-    <button onclick="this.closest('#panel-corrections-bobines').querySelector('.corr-body').classList.toggle('hidden')" style="background:none;border:1px solid #fcd34d;border-radius:8px;padding:4px 12px;font-size:12px;color:#92400e;cursor:pointer">Afficher / Masquer</button>
+    <button onclick="const b=this.closest('#panel-corrections-bobines').querySelector('.corr-body');b.style.display=b.style.display==='none'?'block':'none'" style="background:none;border:1px solid #fcd34d;border-radius:8px;padding:4px 12px;font-size:12px;color:#92400e;cursor:pointer">Afficher / Masquer</button>
   </div>
   <div class="corr-body">
     <table style="width:100%;border-collapse:collapse;font-size:13px">
