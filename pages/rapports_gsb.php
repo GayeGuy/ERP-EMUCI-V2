@@ -2,21 +2,28 @@
 // ============================================================
 //  pages/rapports_gsb.php — Rapports & Exports GSB
 // ============================================================
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx as XlsxWriter;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/audit.php';
 
 require_auth();
-require_permission('bobines', 'can_read');
-
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Writer\Xlsx as XlsxWriter;
-use PhpOffice\PhpSpreadsheet\Style\Fill;
-use PhpOffice\PhpSpreadsheet\Style\Alignment;
-use PhpOffice\PhpSpreadsheet\Style\Border;
 
 $user        = current_user();
+$role_slug   = $user['role_slug'] ?? '';
+$gsb_roles   = ['admin','superadmin','gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation'];
+if (!in_array($role_slug, $gsb_roles)) {
+    http_response_code(403);
+    include __DIR__ . '/../templates/403.php';
+    exit;
+}
+
 $page_title  = 'Rapports & Exports';
 $active_page = 'rapports_gsb';
 
@@ -121,7 +128,7 @@ if ($export) {
         $sh1->getRowDimension(1)->setRowHeight(28);
         $cols1 = ['Date','Type','Site','Bobine','Type bobine','Films utilisés','Endommagés','Restants','Total','Coordinateur'];
         foreach ($cols1 as $i => $h) {
-            $cell = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i+1).'2';
+            $cell = Coordinate::stringFromColumnIndex($i+1).'2';
             $sh1->setCellValue($cell, $h);
         }
         xlsApplyHeader($sh1,'A2:J2','1B75BC');
@@ -153,7 +160,7 @@ if ($export) {
         $sh2->getRowDimension(1)->setRowHeight(28);
         $cols2 = ['Site','Bobine','Type','Série','Total films','Utilisés','Endommagés','Restants','Statut'];
         foreach ($cols2 as $i => $h) {
-            $cell = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i+1).'2';
+            $cell = Coordinate::stringFromColumnIndex($i+1).'2';
             $sh2->setCellValue($cell, $h);
         }
         xlsApplyHeader($sh2,'A2:I2','1B75BC');
@@ -186,7 +193,7 @@ if ($export) {
         $sh3->getRowDimension(1)->setRowHeight(28);
         $cols3 = ['Date','Site','Statut','Nb écarts','Validé par','Heure','Commentaire'];
         foreach ($cols3 as $i => $h) {
-            $cell = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i+1).'2';
+            $cell = Coordinate::stringFromColumnIndex($i+1).'2';
             $sh3->setCellValue($cell, $h);
         }
         xlsApplyHeader($sh3,'A2:G2','1B75BC');
@@ -249,7 +256,7 @@ if ($export) {
         $sh1->getRowDimension(1)->setRowHeight(28);
         $cols = ['Mois','Site','Bobine','Type','Films utilisés','Endommagés','Nb points'];
         foreach ($cols as $i => $h) {
-            $cell = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i+1).'2';
+            $cell = Coordinate::stringFromColumnIndex($i+1).'2';
             $sh1->setCellValue($cell, $h);
         }
         xlsApplyHeader($sh1,'A2:G2','1B75BC');
