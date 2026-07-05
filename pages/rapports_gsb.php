@@ -76,8 +76,7 @@ function get_stock_actuel(int $site): array {
     if ($site) { $where .= " AND b.site_id=?"; $params[] = $site; }
     return db_fetch_all(
         "SELECT s.nom AS site_nom, b.numero, b.type_code, b.serie,
-                b.films_total, b.films_utilises, b.films_endommages, b.films_restants, b.statut,
-                b.date_mise_en_service
+                b.films_total, b.films_utilises, b.films_endommages, b.films_restants, b.statut
          FROM op_bobines b
          JOIN sites s ON s.id = b.site_id
          $where
