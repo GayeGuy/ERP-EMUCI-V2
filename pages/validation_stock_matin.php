@@ -1288,7 +1288,7 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Restant</th>
             ${hasImport ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">EMUCI</th><th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Écart</th>' : ''}
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Statut</th>
-            <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Action</th>
+            ${<?= $can_valider ? 'true' : 'false' ?> ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Action</th>' : ''}
           </tr>
         </thead>
         <tbody>`;
@@ -1315,12 +1315,12 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
             ? `<span style="background:#FEE2E2;color:#991B1B;padding:3px 9px;border-radius:8px;font-size:10.5px;font-weight:700">⚠️ Écart ${b.ecart>0?'+':''}${b.ecart}</span>`
             : '<span style="background:#D1FAE5;color:#065F46;padding:3px 9px;border-radius:8px;font-size:10.5px;font-weight:700">✅ OK</span>'}
         </td>
-        <td style="padding:7px 12px;text-align:center">
+        ${<?= $can_valider ? 'true' : 'false' ?> ? `<td style="padding:7px 12px;text-align:center">
           <button onclick="demanderModifBobine(${b.bobine_id},'${b.numero}',${siteId},'<?= h($f_date) ?>',${b.films_utilises||0},${b.films_optoplate!==null?b.films_optoplate:0},${b.ecart||0})"
             style="background:#fff7ed;color:#c2410c;border:1.5px solid #fed7aa;padding:4px 9px;border-radius:7px;font-size:10.5px;font-weight:700;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:4px">
             ✏️ Demander modif
           </button>
-        </td>
+        </td>` : '<td></td>'}
       </tr>`;
     });
 
