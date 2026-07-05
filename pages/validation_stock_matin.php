@@ -605,6 +605,22 @@ if (isset($_GET['export_rapport']) && $can_valider) {
     }
 }
 
+// Historique validations (30 derniers jours) — GSB seulement
+$historique_validations = [];
+if ($can_valider) {
+    $historique_validations = db_fetch_all(
+        "SELECT v.*, s.nom AS site_nom,
+                CONCAT(u.prenom,' ',u.nom) AS gsb_nom
+         FROM validations_stock_matin v
+         JOIN sites s ON s.id=v.site_id
+         LEFT JOIN users u ON u.id=v.gsb_user_id
+         WHERE v.date_validation >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+         ORDER BY v.date_validation DESC, s.nom",
+        []
+    );
+}
+$sites_list_filter = $can_valider ? db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom") : [];
+
 // Vue coordinateur : son propre statut de validation pour aujourd'hui
 $coord_validation = null;
 if ($is_coord && $site_force) {
@@ -662,6 +678,24 @@ $nb_avec_ecart  = count(array_filter($validations_jour, fn($v) => (int)$v['nb_ec
 .btn-vsm-revise:hover{background:#1565a8}
 .detail-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:white;color:var(--navy);transition:all .15s;text-decoration:none}
 .detail-btn:hover{background:var(--tertiary);border-color:var(--primary);color:var(--primary)}
+/* ── ONGLETS ── */
+.vsm-tabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px}
+.vsm-tab{padding:10px 22px;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;display:flex;align-items:center;gap:7px;transition:color .15s,border-color .15s;background:none;border-top:none;border-left:none;border-right:none}
+.vsm-tab:hover{color:var(--navy)}
+.vsm-tab.active{color:#1B75BC;border-bottom-color:#1B75BC}
+.vsm-tab-badge{background:#e8edf8;color:var(--navy);border-radius:20px;padding:1px 8px;font-size:11px;font-weight:700}
+.vsm-tab.active .vsm-tab-badge{background:#dbeafe;color:#1d4ed8}
+/* ── BANDEAU INFO ── */
+.vsm-info-banner{background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:12px 18px;margin-bottom:18px;display:flex;align-items:center;gap:12px;font-size:13px;color:#1d4ed8}
+/* ── FILTRES ── */
+.vsm-filters{background:white;border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:18px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.vsm-filters input,.vsm-filters select{padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;color:var(--navy);background:white;transition:border-color .15s}
+.vsm-filters input:focus,.vsm-filters select:focus{border-color:#1B75BC}
+.vsm-filters label{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-right:4px}
+/* ── LÉGENDE ── */
+.vsm-legend{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+.vsm-legend-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.vsm-legend-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:20px;font-size:11.5px;font-weight:700}
 </style>
 
 <!-- BANNIÈRE -->
@@ -735,6 +769,41 @@ $statut_colors = [
 
 <?php else: ?>
 <!-- ── VUE GSB / ADMIN ── -->
+
+<!-- BANDEAU INFO -->
+<div class="vsm-info-banner">
+  <i class="ph-duotone ph-info" style="font-size:20px;flex-shrink:0"></i>
+  <div>
+    <strong>Comment ça marche ?</strong>
+    Vérifiez chaque site, comparez les stocks avec l'import EMUCI, puis validez ou traitez les écarts.
+    Les coordinateurs sont notifiés automatiquement après chaque décision.
+  </div>
+</div>
+
+<!-- ONGLETS -->
+<div class="vsm-tabs">
+  <button class="vsm-tab active" id="tab-btn-encours" onclick="switchTab('encours')">
+    <i class="ph-duotone ph-clock"></i> Validation en cours
+    <span class="vsm-tab-badge"><?= $nb_en_attente + $nb_valides_jour ?></span>
+  </button>
+  <button class="vsm-tab" id="tab-btn-historique" onclick="switchTab('historique')">
+    <i class="ph-duotone ph-clock-counter-clockwise"></i> Historique des validations
+    <span class="vsm-tab-badge"><?= count($historique_validations) ?></span>
+  </button>
+</div>
+
+<!-- TAB : VALIDATION EN COURS -->
+<div id="tab-encours">
+
+<!-- LÉGENDE -->
+<div class="vsm-legend">
+  <span class="vsm-legend-title">Légende :</span>
+  <span class="vsm-legend-chip" style="background:#d1fae5;color:#065f46">✅ Conforme</span>
+  <span class="vsm-legend-chip" style="background:#fef3c7;color:#92400e">⚠️ Avec écart</span>
+  <span class="vsm-legend-chip" style="background:#dbeafe;color:#1d4ed8">🔄 Réajusté</span>
+  <span class="vsm-legend-chip" style="background:#fee2e2;color:#991b1b">❌ Bloqué</span>
+  <span class="vsm-legend-chip" style="background:#fff3e0;color:#e65100">⏳ En attente</span>
+</div>
 
 <!-- KPIs -->
 <?php if($can_valider): ?>
@@ -899,6 +968,122 @@ $statut_colors = [
   <?php endif; ?>
 </div>
 
+</div><!-- fin tab-encours -->
+
+<!-- TAB : HISTORIQUE -->
+<div id="tab-historique" style="display:none">
+
+<!-- FILTRES HISTORIQUE -->
+<div class="vsm-filters">
+  <div style="display:flex;align-items:center;gap:6px;flex:1;min-width:200px">
+    <label>Recherche</label>
+    <input type="text" id="hist-search" placeholder="Nom du site…" oninput="filtrerHistorique()" style="flex:1">
+  </div>
+  <div style="display:flex;align-items:center;gap:6px">
+    <label>Du</label>
+    <input type="date" id="hist-date-from" value="<?= date('Y-m-d', strtotime('-30 days')) ?>" onchange="filtrerHistorique()">
+  </div>
+  <div style="display:flex;align-items:center;gap:6px">
+    <label>Au</label>
+    <input type="date" id="hist-date-to" value="<?= date('Y-m-d') ?>" onchange="filtrerHistorique()">
+  </div>
+  <div style="display:flex;align-items:center;gap:6px">
+    <label>Site</label>
+    <select id="hist-site" onchange="filtrerHistorique()">
+      <option value="">Tous</option>
+      <?php foreach($sites_list_filter as $sl): ?>
+      <option value="<?= h($sl['nom']) ?>"><?= h($sl['nom']) ?></option>
+      <?php endforeach; ?>
+    </select>
+  </div>
+  <div style="display:flex;align-items:center;gap:6px">
+    <label>Statut</label>
+    <select id="hist-statut" onchange="filtrerHistorique()">
+      <option value="">Tous</option>
+      <option value="conforme">✅ Conforme</option>
+      <option value="avec_ecart">⚠️ Avec écart</option>
+      <option value="reajuste">🔄 Réajusté</option>
+      <option value="refuse">❌ Bloqué</option>
+    </select>
+  </div>
+  <button onclick="resetFiltresHistorique()" style="padding:7px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;background:white;color:var(--muted)">↺ Réinitialiser</button>
+</div>
+
+<!-- LÉGENDE -->
+<div class="vsm-legend">
+  <span class="vsm-legend-title">Légende :</span>
+  <span class="vsm-legend-chip" style="background:#d1fae5;color:#065f46">✅ Conforme</span>
+  <span class="vsm-legend-chip" style="background:#fef3c7;color:#92400e">⚠️ Avec écart</span>
+  <span class="vsm-legend-chip" style="background:#dbeafe;color:#1d4ed8">🔄 Réajusté</span>
+  <span class="vsm-legend-chip" style="background:#fee2e2;color:#991b1b">❌ Bloqué</span>
+</div>
+
+<div class="vsm-section">
+  <div class="vsm-section-hdr">
+    <div class="vsm-section-title">
+      <i class="ph-duotone ph-clock-counter-clockwise" style="font-size:17px"></i>
+      Historique des 30 derniers jours
+      <span class="vsm-cnt" id="hist-count"><?= count($historique_validations) ?></span>
+    </div>
+    <span style="font-size:12px;color:var(--muted)" id="hist-filter-info"></span>
+  </div>
+  <table class="vsm-tbl" id="hist-table">
+    <thead><tr>
+      <th>Site</th>
+      <th class="tc">Date validation</th>
+      <th class="tc">Statut</th>
+      <th class="tc">Bobines</th>
+      <th>Traité par</th>
+      <th>Commentaire</th>
+      <th class="tc">Détails</th>
+    </tr></thead>
+    <tbody id="hist-tbody">
+    <?php foreach($historique_validations as $v):
+      if ($v['statut'] === 'refuse') {
+        $hbadge = '<span class="vsm-legend-chip" style="background:#fee2e2;color:#991b1b">❌ Bloqué</span>';
+        $hcat   = 'refuse';
+      } elseif ($v['statut'] === 'reajuste') {
+        $hbadge = '<span class="vsm-legend-chip" style="background:#dbeafe;color:#1d4ed8">🔄 Réajusté</span>';
+        $hcat   = 'reajuste';
+      } elseif ($v['statut'] === 'autorise_ecart' || (int)$v['nb_ecarts'] > 0) {
+        $hbadge = '<span class="vsm-legend-chip" style="background:#fef3c7;color:#92400e">⚠️ Avec écart</span>';
+        $hcat   = 'avec_ecart';
+      } else {
+        $hbadge = '<span class="vsm-legend-chip" style="background:#d1fae5;color:#065f46">✅ Conforme</span>';
+        $hcat   = 'conforme';
+      }
+    ?>
+    <tr data-site="<?= h($v['site_nom']) ?>" data-date="<?= h($v['date_validation']) ?>" data-cat="<?= $hcat ?>">
+      <td><div class="vsm-site-name"><?= h($v['site_nom']) ?></div></td>
+      <td class="tc">
+        <div style="display:inline-flex;flex-direction:column;align-items:center;gap:2px">
+          <span style="font-size:12.5px;font-weight:700;color:var(--navy)"><?= fmt_date($v['date_validation'],'d/m/Y') ?></span>
+          <?php if($v['gsb_at']): ?>
+          <span style="font-size:11px;color:var(--muted)">à <?= date('H:i', strtotime($v['gsb_at'])) ?></span>
+          <?php endif; ?>
+        </div>
+      </td>
+      <td class="tc"><?= $hbadge ?></td>
+      <td class="tc" style="font-weight:700"><?= $v['nb_bobines_actives'] ?? '—' ?></td>
+      <td style="font-size:12.5px"><?= $v['gsb_nom'] ? h($v['gsb_nom']) : '<span style="color:var(--muted)">Automatique</span>' ?></td>
+      <td style="font-size:12px;color:var(--muted);max-width:160px"><?= $v['commentaire'] ? h($v['commentaire']) : '<span style="color:var(--border)">—</span>' ?></td>
+      <td class="tc">
+        <button class="btn-vsm-detail"
+          onclick="voirDetails(<?= $v['site_id'] ?>,'<?= h($v['site_nom']) ?>',<?= (int)$v['nb_ecarts'] ?>,<?= htmlspecialchars(json_encode($v['details_ecarts'] ?? '[]'), ENT_QUOTES) ?>,'<?= h($v['statut']) ?>','<?= h($v['commentaire']??'') ?>','<?= h($v['gsb_nom']??'Auto') ?>','<?= h(fmt_datetime($v['gsb_at'])) ?>','<?= h($v['date_validation']) ?>')">
+          <i class="ph-duotone ph-eye"></i> Voir
+        </button>
+      </td>
+    </tr>
+    <?php endforeach; ?>
+    <?php if(empty($historique_validations)): ?>
+    <tr><td colspan="7" style="text-align:center;padding:36px;color:var(--muted)">Aucune validation dans les 30 derniers jours.</td></tr>
+    <?php endif; ?>
+    </tbody>
+  </table>
+</div>
+
+</div><!-- fin tab-historique -->
+
 <?php endif; // fin else GSB/Admin ?>
 
 <!-- MINI-MODAL DEMANDE DE CORRECTION PAR BOBINE -->
@@ -981,6 +1166,49 @@ $statut_colors = [
 <script>
 function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
 function toast(m,t='success'){const bg={success:'#27ae60',error:'#e74c3c',info:'#1B75BC'}[t]||'#27ae60';const el=document.createElement('div');el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${bg};color:white;max-width:320px`;el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),4000);}
+
+// ── ONGLETS
+function switchTab(tab) {
+  document.getElementById('tab-encours').style.display   = tab==='encours'    ? 'block' : 'none';
+  document.getElementById('tab-historique').style.display= tab==='historique' ? 'block' : 'none';
+  document.getElementById('tab-btn-encours').classList.toggle('active',    tab==='encours');
+  document.getElementById('tab-btn-historique').classList.toggle('active', tab==='historique');
+}
+
+// ── FILTRES HISTORIQUE
+function filtrerHistorique() {
+  const search  = (document.getElementById('hist-search')?.value  || '').toLowerCase();
+  const dateFrom= document.getElementById('hist-date-from')?.value || '';
+  const dateTo  = document.getElementById('hist-date-to')?.value   || '';
+  const site    = (document.getElementById('hist-site')?.value     || '').toLowerCase();
+  const statut  = document.getElementById('hist-statut')?.value    || '';
+
+  const rows = document.querySelectorAll('#hist-tbody tr[data-site]');
+  let visible = 0;
+  rows.forEach(row => {
+    const rowSite = (row.dataset.site || '').toLowerCase();
+    const rowDate = row.dataset.date || '';
+    const rowCat  = row.dataset.cat  || '';
+    const show = (!search  || rowSite.includes(search))
+              && (!dateFrom|| rowDate >= dateFrom)
+              && (!dateTo  || rowDate <= dateTo)
+              && (!site    || rowSite.includes(site))
+              && (!statut  || rowCat === statut);
+    row.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  document.getElementById('hist-count').textContent = visible;
+  const info = document.getElementById('hist-filter-info');
+  if (info) info.textContent = visible < rows.length ? `${visible} / ${rows.length} résultats` : '';
+}
+function resetFiltresHistorique() {
+  document.getElementById('hist-search').value    = '';
+  document.getElementById('hist-date-from').value = '<?= date('Y-m-d', strtotime('-30 days')) ?>';
+  document.getElementById('hist-date-to').value   = '<?= date('Y-m-d') ?>';
+  document.getElementById('hist-site').value      = '';
+  document.getElementById('hist-statut').value    = '';
+  filtrerHistorique();
+}
 
 let currentSiteId=null, currentEcarts=[], currentBobinesDetail=[];
 
