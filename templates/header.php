@@ -528,6 +528,86 @@ $unread = count($notifs);
   [data-theme="dark"] .vue-table tr.total-row td { background: #0F172A !important; color: #E2E8F0 !important; }
   [data-theme="dark"] h2, [data-theme="dark"] h3,
   [data-theme="dark"] h4, [data-theme="dark"] h5 { color: #E2E8F0; }
+
+  /* ═══ FIX PRINCIPAL : --navy dans le contenu principal → clair ═══
+     La sidebar est <aside> hors de .main-wrap → background:var(--navy) n'est pas affecté.
+     Tous les inline style="color:var(--navy)" dans les pages sont corrigés d'un coup. */
+  [data-theme="dark"] .main-wrap { --navy: #E2E8F0; --blue-mid: #93C5FD; --blue-light: #93C5FD; }
+
+  /* ═══ CARTES KPI / STAT (communes à toutes les pages) ═══ */
+  [data-theme="dark"] .ik,
+  [data-theme="dark"] .ek,
+  [data-theme="dark"] .stat-card     { background: #1E293B !important; }
+  [data-theme="dark"] .ik-val,
+  [data-theme="dark"] .ek-val,
+  [data-theme="dark"] .stat-val      { color: #E2E8F0 !important; }
+  [data-theme="dark"] .ek-lbl,
+  [data-theme="dark"] .ik-lbl,
+  [data-theme="dark"] .stat-lbl      { color: #94A3B8 !important; }
+
+  /* ═══ FILTRES SELECT inline background:white ═══ */
+  [data-theme="dark"] .fsel,
+  [data-theme="dark"] select[style*="background:white"],
+  [data-theme="dark"] select[style*="background: white"] {
+    background: #0F172A !important;
+    color: #E2E8F0 !important;
+    border-color: #334155 !important;
+  }
+
+  /* ═══ COULEURS HARDCODÉES dans les cellules PHP-générées ═══ */
+  [data-theme="dark"] .main-wrap [style*="color:#06033A"],
+  [data-theme="dark"] .main-wrap [style*="color: #06033A"]  { color: #E2E8F0 !important; }
+  [data-theme="dark"] .main-wrap td[style*="color:#06033A"] { color: #E2E8F0 !important; }
+  [data-theme="dark"] .main-wrap td[style*="color:#1E2B4A"] { color: #E2E8F0 !important; }
+  [data-theme="dark"] .main-wrap td[style*="color:#1B75BC"] { color: #93C5FD !important; }
+  /* Liens/spans colorés hardcodés */
+  [data-theme="dark"] .main-wrap [style*="color:#1B75BC"]   { color: #93C5FD !important; }
+
+  /* ═══ LIGNES TR colorées inline ═══ */
+  [data-theme="dark"] tr[style*="background:#fff5f5"] td    { background: #2D1515 !important; }
+
+  /* ═══ IMPORT EMUCI — classes spécifiques ═══ */
+  [data-theme="dark"] .irb-stat-val                         { color: #E2E8F0 !important; }
+  [data-theme="dark"] .irb-stat-lbl                         { color: #94A3B8 !important; }
+  [data-theme="dark"] .import-result-banner.success         { background: #064E3B !important; border-color: #34D399 !important; }
+  [data-theme="dark"] .import-result-banner.danger          { background: #4A1D1D !important; border-color: #F87171 !important; }
+  [data-theme="dark"] .ld-title                             { color: #E2E8F0 !important; }
+  [data-theme="dark"] .ld-sub                               { color: #94A3B8 !important; }
+
+  /* ═══ TAB BUTTONS ═══ */
+  [data-theme="dark"] .tab-btn       { color: #94A3B8 !important; background: transparent; border-color: #334155 !important; }
+  [data-theme="dark"] .tab-btn:hover { color: #E2E8F0 !important; }
+  [data-theme="dark"] .tab-btn.active { color: var(--primary) !important; border-color: var(--primary) !important; }
+
+  /* ═══ COMMANDES BOBINES — statuts pills ═══ */
+  [data-theme="dark"] .s-attente        { background: #451A03 !important; }
+  [data-theme="dark"] .s-valide         { background: #1C3B6E !important; }
+  [data-theme="dark"] .s-expedie        { background: #3D1A0A !important; }
+  [data-theme="dark"] .s-recu           { background: #064E3B !important; }
+  [data-theme="dark"] .st-en_attente    { background: #451A03 !important; }
+  [data-theme="dark"] .st-valide        { background: #1C3B6E !important; }
+  [data-theme="dark"] .st-en_preparation,
+  [data-theme="dark"] .st-expedie       { background: #3D1A0A !important; }
+  [data-theme="dark"] .st-recu          { background: #064E3B !important; }
+  [data-theme="dark"] .st-rejete        { background: #4A1D1D !important; }
+  [data-theme="dark"] .st-annule        { background: #1E293B !important; color: #94A3B8 !important; }
+
+  /* ═══ VUE STOCK PAR SITE ═══ */
+  [data-theme="dark"] .cell-nb          { color: #E2E8F0 !important; }
+  [data-theme="dark"] .cell-films       { color: #7A99BE !important; }
+  [data-theme="dark"] .cell-empty       { color: #334155 !important; }
+  [data-theme="dark"] .tag-cours        { background: #1C3B6E !important; color: #93C5FD !important; }
+
+  /* ═══ ÉQUIPEMENTS — badges état ═══ */
+  [data-theme="dark"] .etat-hs          { background: #334155 !important; color: #E2E8F0 !important; }
+  [data-theme="dark"] .main-wrap [style*="background:#e8f4f9"] { background: #1C3B6E !important; color: #93C5FD !important; }
+  [data-theme="dark"] .main-wrap [style*="background:#f0f0f0"] { background: #253349 !important; color: #94A3B8 !important; }
+
+  /* ═══ BOBINES — statuts validation ═══ */
+  [data-theme="dark"] .s-in_use         { background: #064E3B !important; color: #6EE7B7 !important; }
+  [data-theme="dark"] .s-reserved       { background: #1C3B6E !important; color: #93C5FD !important; }
+  [data-theme="dark"] .s-declared_broken { background: #4A1D1D !important; color: #FCA5A5 !important; }
+  [data-theme="dark"] .s-lost           { background: #253349 !important; color: #94A3B8 !important; }
   </style>
 
   <script>
