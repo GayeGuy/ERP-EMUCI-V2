@@ -80,8 +80,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         try {
             db_query("UPDATE users SET signature=? WHERE id=?", [$sig, $user['id']]);
         } catch (\Throwable $e) {
+            // Colonne absente — migration automatique
             try {
-                db_query("ALTER TABLE users ADD COLUMN IF NOT EXISTS signature LONGTEXT NULL AFTER telephone");
+                $col = (int) db_fetch_value(
+                    "SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'signature'"
+                );
+                if (!$col) {
+                    db_query("ALTER TABLE users ADD COLUMN signature LONGTEXT NULL AFTER telephone");
+                }
                 db_query("UPDATE users SET signature=? WHERE id=?", [$sig, $user['id']]);
             } catch (\Throwable $e2) {
                 json_response(false, 'Migration requise. Exécutez migrate_signature.php.');
