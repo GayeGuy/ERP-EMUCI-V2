@@ -97,7 +97,8 @@ function _groupes_def(): array {
                 ['label'=>'Point journalier',       'icon'=>'ph-clipboard-text',
                  'url'=>'pages/operations/point_journalier.php','active_keys'=>['operations']],
                 ['label'=>'Demande d\'intervention','icon'=>'ph-warning-circle',
-                 'url'=>'pages/interventions.php','active_keys'=>['interventions']],
+                 'url'=>'pages/interventions.php','active_keys'=>['interventions'],
+                 'roles_exclude'=>['coordinateur_site']],
                 // Commandes dans OPERATIONS uniquement pour les profils sans STOCK
                 ['label'=>'Commandes',              'icon'=>'ph-shopping-cart',
                  'url'=>'pages/commandes.php','active_keys'=>['commandes'],
