@@ -5,7 +5,7 @@
 // ============================================================
 
 define('TOUS_LES_GROUPES', [
-    'DASHBOARD','STOCK','BOBINES','OPERATIONS',
+    'DASHBOARD','OPERATIONS','BOBINES','STOCK',
     'INFORMATIQUE','RAPPORTS','ADMINISTRATION'
 ]);
 
@@ -181,27 +181,27 @@ function get_groupes_pour_role(string $role_slug): array {
     $all = TOUS_LES_GROUPES;
     $map = [
         // Terrain production
-        'coordinateur_site'          => ['DASHBOARD','STOCK','BOBINES','OPERATIONS'],
+        'coordinateur_site'          => ['DASHBOARD','OPERATIONS','BOBINES','STOCK'],
         // Stock & approvisionnement (accès commandes via OPERATIONS)
-        'gestionnaire_stock'         => ['DASHBOARD','STOCK','BOBINES','OPERATIONS'],
+        'gestionnaire_stock'         => ['DASHBOARD','OPERATIONS','BOBINES','STOCK'],
         // Supervision opérationnelle
-        'superviseur_operation'      => ['DASHBOARD','STOCK','OPERATIONS','BOBINES','RAPPORTS'],
+        'superviseur_operation'      => ['DASHBOARD','OPERATIONS','BOBINES','STOCK','RAPPORTS'],
         // IT maintenance
-        'maintenance_info'           => ['DASHBOARD','STOCK','INFORMATIQUE'],
-        'superviseur_it'             => ['DASHBOARD','STOCK','INFORMATIQUE'],
+        'maintenance_info'           => ['DASHBOARD','INFORMATIQUE','STOCK'],
+        'superviseur_it'             => ['DASHBOARD','INFORMATIQUE','STOCK'],
         'support_it'                 => ['DASHBOARD','INFORMATIQUE'],
         // Achat & approvisionnement (accès commandes via OPERATIONS)
         'superviseur_achat'          => ['DASHBOARD','OPERATIONS','STOCK'],
         // Production (ex-PRODUCTION → OPERATIONS)
-        'controleur_production'      => ['DASHBOARD','BOBINES','OPERATIONS'],
+        'controleur_production'      => ['DASHBOARD','OPERATIONS','BOBINES'],
         // Opérations
         'gestionnaire_operation'     => ['DASHBOARD','OPERATIONS'],
         // Gestionnaire polyvalent (ex-EQUIPEMENTS → STOCK)
         'gestionnaire'               => ['DASHBOARD','STOCK'],
         // GSB (gestionnaire stock bobines)
-        'gestionnaire_stock_bobines' => ['DASHBOARD','STOCK','BOBINES','OPERATIONS'],
+        'gestionnaire_stock_bobines' => ['DASHBOARD','OPERATIONS','BOBINES','STOCK'],
         // Lecture seule
-        'lecteur'                    => ['DASHBOARD','STOCK','BOBINES','OPERATIONS','RAPPORTS'],
+        'lecteur'                    => ['DASHBOARD','OPERATIONS','BOBINES','STOCK','RAPPORTS'],
         // Admin
         'admin'                      => $all,
         'superadmin'                 => $all,
