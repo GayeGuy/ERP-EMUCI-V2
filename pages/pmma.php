@@ -1,9 +1,15 @@
 <?php
 // ============================================================
-//  pages/pmma.php — Module PMMA
-//  Support physique sur lequel on pose la bobine
-//  pour produire une plaque d'immatriculation
+//  pages/pmma.php — Suivi consommation PMMA
 // ============================================================
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx as XlsxWriter;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use Dompdf\Dompdf;
+use Dompdf\Options;
+
+require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/audit.php';
@@ -11,20 +17,19 @@ require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
 
 require_auth();
-// Permissions vérifiées via can() sur les actions
+$user       = current_user();
+$role_slug  = $user['role_slug'] ?? '';
+$page_title = 'Suivi PMMA';
+$active_page= 'pmma';
+$is_coord   = $role_slug === 'coordinateur_site';
+$site_force = ($is_coord && $user['site_id']) ? (int)$user['site_id'] : 0;
+$sites_list = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom");
+$can_saisie = in_array($role_slug, ['admin','superadmin','gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation']);
 
-$user      = current_user();
-$role_slug = $user['role_slug'] ?? '';
-$page_title  = 'PMMA';
-$active_page = 'pmma';
-$is_coord    = $role_slug === 'coordinateur_site';
-$site_force  = ($is_coord && $user['site_id']) ? (int)$user['site_id'] : 0;
-$sites_list  = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom");
-$can_create  = can('pmma','can_create');
-
-// ── AJAX
+// ── AJAX (Entrée/Sortie manuelle — GSB/admin uniquement)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     header('Content-Type: application/json');
+    if (!$can_saisie) json_response(false, 'Accès refusé.');
     $action = $_POST['action'] ?? '';
 
     if ($action === 'entree') {
@@ -32,57 +37,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $quantite = (int)($_POST['quantite'] ?? 0);
         $type     = trim($_POST['type_pmma'] ?? '');
         $notes    = trim($_POST['notes'] ?? '');
-        if (!$site_id || $quantite <= 0) json_response(false,'Site et quantité obligatoires.');
-
+        if (!$site_id || $quantite <= 0) json_response(false, 'Site et quantité obligatoires.');
         db_query("INSERT INTO stock_pmma (site_id,type_pmma,quantite,type_mouvement,notes,created_by) VALUES (?,?,?,'entree',?,?)",
-            [$site_id,$type,$quantite,$notes,$user['id']]);
+            [$site_id, $type, $quantite, $notes, $user['id']]);
         db_query("UPDATE stock_pmma_site SET quantite=quantite+? WHERE site_id=? AND type_pmma=?",
-            [$quantite,$site_id,$type]);
-        $affected = db_fetch_value("SELECT ROW_COUNT()");
+            [$quantite, $site_id, $type]);
+        $affected = (int)db_fetch_value("SELECT ROW_COUNT()");
         if (!$affected) {
             db_query("INSERT INTO stock_pmma_site (site_id,type_pmma,quantite,seuil_alerte) VALUES (?,?,?,10)",
-                [$site_id,$type,$quantite]);
+                [$site_id, $type, $quantite]);
         }
-        audit_log($user['id'],'CREATE','pmma',null,"Entrée PMMA: $quantite ($type) site:$site_id");
-        json_response(true,"Entrée de $quantite PMMA enregistrée.");
+        audit_log($user['id'], 'CREATE', 'pmma', null, "Entrée PMMA: $quantite ($type) site:$site_id");
+        json_response(true, "Entrée de $quantite PMMA enregistrée.");
     }
 
     if ($action === 'sortie') {
-        $site_id  = $site_force ?: (int)($_POST['site_id'] ?? 0);
-        $quantite = (int)($_POST['quantite'] ?? 0);
-        $type     = trim($_POST['type_pmma'] ?? '');
-        $bobine_id= (int)($_POST['bobine_id'] ?? 0);
-        if (!$site_id || $quantite <= 0) json_response(false,'Site et quantité obligatoires.');
-
+        $site_id   = $site_force ?: (int)($_POST['site_id'] ?? 0);
+        $quantite  = (int)($_POST['quantite'] ?? 0);
+        $type      = trim($_POST['type_pmma'] ?? '');
+        $bobine_id = (int)($_POST['bobine_id'] ?? 0);
+        if (!$site_id || $quantite <= 0) json_response(false, 'Site et quantité obligatoires.');
         $stock_actuel = (int)db_fetch_value(
-            "SELECT quantite FROM stock_pmma_site WHERE site_id=? AND type_pmma=?",[$site_id,$type]
+            "SELECT quantite FROM stock_pmma_site WHERE site_id=? AND type_pmma=?", [$site_id, $type]
         );
-        if ($stock_actuel < $quantite) json_response(false,"Stock insuffisant. Disponible: $stock_actuel");
-
+        if ($stock_actuel < $quantite) json_response(false, "Stock insuffisant. Disponible : $stock_actuel");
         db_query("INSERT INTO stock_pmma (site_id,type_pmma,quantite,type_mouvement,bobine_id,notes,created_by) VALUES (?,?,?,'sortie',?,?,?)",
-            [$site_id,$type,$quantite,$bobine_id ?: null,'Utilisation production',$user['id']]);
+            [$site_id, $type, $quantite, $bobine_id ?: null, 'Utilisation production', $user['id']]);
         db_query("UPDATE stock_pmma_site SET quantite=quantite-? WHERE site_id=? AND type_pmma=?",
-            [$quantite,$site_id,$type]);
-        audit_log($user['id'],'UPDATE','pmma',null,"Sortie PMMA: $quantite ($type) site:$site_id");
-        json_response(true,"Sortie de $quantite PMMA enregistrée.");
+            [$quantite, $site_id, $type]);
+        audit_log($user['id'], 'UPDATE', 'pmma', null, "Sortie PMMA: $quantite ($type) site:$site_id");
+        json_response(true, "Sortie de $quantite PMMA enregistrée.");
     }
 
-    json_response(false,'Action inconnue.');
+    json_response(false, 'Action inconnue.');
 }
 
-// ── DONNÉES
+// ── FILTRES
 $f_site = $site_force ?: (int)($_GET['site'] ?? 0);
+$f_from = $_GET['from'] ?? date('Y-m-01');
+$f_to   = $_GET['to']   ?? date('Y-m-d');
 
+// ── STOCK ACTUEL
 $stock_par_site = db_fetch_all(
     "SELECT sp.*, s.nom AS site_nom
      FROM stock_pmma_site sp
-     JOIN sites s ON s.id=sp.site_id
+     JOIN sites s ON s.id = sp.site_id
      WHERE (? = 0 OR sp.site_id = ?)
      ORDER BY s.nom, sp.type_pmma",
     [$f_site ?: 0, $f_site ?: 0]
 );
-
-// Si pas de données PMMA site, afficher tous les sites
 if (empty($stock_par_site) && !$f_site) {
     $stock_par_site = db_fetch_all(
         "SELECT s.id AS site_id, s.nom AS site_nom, '' AS type_pmma, 0 AS quantite, 10 AS seuil_alerte
@@ -90,208 +93,509 @@ if (empty($stock_par_site) && !$f_site) {
     );
 }
 
-$historique = db_fetch_all(
-    "SELECT m.*, s.nom AS site_nom, CONCAT(u.prenom,' ',u.nom) AS agent
-     FROM stock_pmma m
-     LEFT JOIN sites s ON s.id=m.site_id
-     LEFT JOIN users u ON u.id=m.created_by
-     WHERE (? = 0 OR m.site_id = ?)
-     ORDER BY m.created_at DESC LIMIT 50",
-    [$f_site ?: 0, $f_site ?: 0]
+// ── CONSOMMATION (depuis les points journaliers)
+$ws_site = $f_site ? "AND p.site_id = $f_site" : '';
+$conso = db_fetch_all(
+    "SELECT p.date_point, s.nom AS site_nom, pu.type_pmma,
+            SUM(pu.utilises) AS utilises,
+            SUM(pu.endommages) AS endommages,
+            SUM(pu.utilises + pu.endommages) AS total_sortis
+     FROM op_pmma_utilises pu
+     JOIN op_points_journaliers p ON p.id = pu.point_id
+     JOIN sites s ON s.id = p.site_id
+     WHERE p.date_point BETWEEN ? AND ? $ws_site
+     GROUP BY p.date_point, p.site_id, pu.type_pmma
+     ORDER BY p.date_point DESC",
+    [$f_from, $f_to]
 );
 
-$bobines_actives = db_fetch_all(
-    "SELECT id,numero FROM op_bobines WHERE statut='en_cours'"
-    .($site_force ? " AND site_id=$site_force" : "")
-    ." ORDER BY numero"
-);
+// ── SYNTHÈSE PAR TYPE SUR LA PÉRIODE
+$totaux_type = [];
+$grand_total  = ['utilises' => 0, 'endommages' => 0, 'total' => 0];
+foreach ($conso as $c) {
+    $k = $c['type_pmma'] ?: 'Standard';
+    if (!isset($totaux_type[$k])) $totaux_type[$k] = ['utilises' => 0, 'endommages' => 0, 'total' => 0];
+    $totaux_type[$k]['utilises']   += (int)$c['utilises'];
+    $totaux_type[$k]['endommages'] += (int)$c['endommages'];
+    $totaux_type[$k]['total']      += (int)$c['total_sortis'];
+    $grand_total['utilises']       += (int)$c['utilises'];
+    $grand_total['endommages']     += (int)$c['endommages'];
+    $grand_total['total']          += (int)$c['total_sortis'];
+}
+
+// Stock bas count
+$nb_stock_bas = 0;
+foreach ($stock_par_site as $sp_item) {
+    if ($sp_item['type_pmma'] && $sp_item['quantite'] < ($sp_item['seuil_alerte'] ?? 10)) $nb_stock_bas++;
+}
+
+// Bobines actives pour modal sortie
+$bobines_actives = [];
+if ($can_saisie) {
+    $bobines_actives = db_fetch_all(
+        "SELECT id,numero FROM op_bobines WHERE statut='en_cours'"
+        . ($site_force ? " AND site_id=$site_force" : "")
+        . " ORDER BY numero"
+    );
+}
+
+// ── EXPORTS
+if (isset($_GET['export'])) {
+    $export = $_GET['export'];
+    $site_label = $f_site
+        ? (db_fetch_value("SELECT nom FROM sites WHERE id=?", [$f_site]) ?: 'Site inconnu')
+        : 'Tous les sites';
+
+    if ($export === 'xlsx') {
+        $spreadsheet = new Spreadsheet();
+
+        // Feuille 1 : Consommation détail
+        $sh1 = $spreadsheet->getActiveSheet();
+        $sh1->setTitle('Consommation');
+        $headers1 = ['Date', 'Site', 'Type PMMA', 'Utilisés', 'Endommagés', 'Total sorti'];
+        foreach ($headers1 as $i => $h) {
+            $col = chr(65 + $i);
+            $sh1->setCellValue("{$col}1", $h);
+            $sh1->getStyle("{$col}1")->applyFromArray([
+                'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '06033A']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+            ]);
+        }
+        $row = 2;
+        foreach ($conso as $c) {
+            $sh1->setCellValue("A$row", $c['date_point']);
+            $sh1->setCellValue("B$row", $c['site_nom']);
+            $sh1->setCellValue("C$row", $c['type_pmma'] ?: 'Standard');
+            $sh1->setCellValue("D$row", (int)$c['utilises']);
+            $sh1->setCellValue("E$row", (int)$c['endommages']);
+            $sh1->setCellValue("F$row", (int)$c['total_sortis']);
+            $row++;
+        }
+        // Ligne total
+        $sh1->setCellValue("A$row", 'TOTAL');
+        $sh1->setCellValue("D$row", $grand_total['utilises']);
+        $sh1->setCellValue("E$row", $grand_total['endommages']);
+        $sh1->setCellValue("F$row", $grand_total['total']);
+        $sh1->getStyle("A$row:F$row")->applyFromArray([
+            'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1B75BC']],
+        ]);
+        foreach (range('A', 'F') as $col) $sh1->getColumnDimension($col)->setAutoSize(true);
+
+        // Feuille 2 : Stock actuel
+        $spreadsheet->createSheet();
+        $sh2 = $spreadsheet->getSheet(1);
+        $sh2->setTitle('Stock actuel');
+        $headers2 = ['Site', 'Type PMMA', 'Quantité', 'Seuil alerte', 'État'];
+        foreach ($headers2 as $i => $h) {
+            $col = chr(65 + $i);
+            $sh2->setCellValue("{$col}1", $h);
+            $sh2->getStyle("{$col}1")->applyFromArray([
+                'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+                'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1B75BC']],
+                'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
+            ]);
+        }
+        $row2 = 2;
+        foreach ($stock_par_site as $sp_item) {
+            $seuil = (int)($sp_item['seuil_alerte'] ?? 10);
+            $etat  = $sp_item['type_pmma'] && $sp_item['quantite'] < $seuil ? 'Stock bas' : 'OK';
+            $sh2->setCellValue("A$row2", $sp_item['site_nom']);
+            $sh2->setCellValue("B$row2", $sp_item['type_pmma'] ?: 'Standard');
+            $sh2->setCellValue("C$row2", (int)$sp_item['quantite']);
+            $sh2->setCellValue("D$row2", $seuil);
+            $sh2->setCellValue("E$row2", $etat);
+            $row2++;
+        }
+        foreach (range('A', 'E') as $col) $sh2->getColumnDimension($col)->setAutoSize(true);
+
+        $spreadsheet->setActiveSheetIndex(0);
+        $filename = 'suivi_pmma_' . date('Ymd') . '.xlsx';
+        header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        header('Content-Disposition: attachment; filename="' . $filename . '"');
+        header('Cache-Control: max-age=0');
+        $writer = new XlsxWriter($spreadsheet);
+        $tmp = tempnam(sys_get_temp_dir(), 'pmma_');
+        $writer->save($tmp);
+        readfile($tmp);
+        unlink($tmp);
+        exit;
+    }
+
+    if ($export === 'pdf') {
+        $rows_html = '';
+        foreach ($conso as $c) {
+            $endomm_color = $c['endommages'] > 0 ? '#991b1b' : '#64748b';
+            $rows_html .= '<tr>
+                <td>' . h(fmt_date($c['date_point'])) . '</td>
+                <td>' . h($c['site_nom']) . '</td>
+                <td>' . h($c['type_pmma'] ?: 'Standard') . '</td>
+                <td style="text-align:center">' . (int)$c['utilises'] . '</td>
+                <td style="text-align:center;color:' . $endomm_color . '">' . (int)$c['endommages'] . '</td>
+                <td style="text-align:center;font-weight:700">' . (int)$c['total_sortis'] . '</td>
+            </tr>';
+        }
+        $html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+        body{font-family:Arial,sans-serif;font-size:11px;margin:20px}
+        h1{font-size:15px;color:#06033A;margin:0 0 3px 0}
+        .sub{font-size:9px;color:#64748b;margin-bottom:14px}
+        table{width:100%;border-collapse:collapse}
+        th{background:#06033A;color:#fff;padding:7px 8px;font-size:10px;text-align:center}
+        td{padding:5px 8px;border-bottom:1px solid #e2e8f0;font-size:10px}
+        tr:nth-child(even) td{background:#f8fafc}
+        .total-row td{background:#06033A!important;color:#fff!important;font-weight:bold;text-align:center}
+        </style></head><body>
+        <h1>Suivi Consommation PMMA</h1>
+        <div class="sub">Période : ' . h($f_from) . ' → ' . h($f_to) . ' &nbsp;|&nbsp; Site : ' . h($site_label) . ' &nbsp;|&nbsp; Généré le ' . date('d/m/Y H:i') . '</div>
+        <table><thead><tr>
+            <th>Date</th><th>Site</th><th>Type PMMA</th><th>Utilisés</th><th>Endommagés</th><th>Total sorti</th>
+        </tr></thead><tbody>
+        ' . $rows_html . '
+        <tr class="total-row"><td colspan="3">TOTAL PÉRIODE</td>
+            <td>' . $grand_total['utilises'] . '</td>
+            <td>' . $grand_total['endommages'] . '</td>
+            <td>' . $grand_total['total'] . '</td>
+        </tr></tbody></table></body></html>';
+
+        $opts = new Options();
+        $opts->set('isRemoteEnabled', false);
+        $pdf = new Dompdf($opts);
+        $pdf->loadHtml($html);
+        $pdf->setPaper('A4', 'landscape');
+        $pdf->render();
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="suivi_pmma_' . date('Ymd') . '.pdf"');
+        echo $pdf->output();
+        exit;
+    }
+}
 
 include __DIR__ . '/../templates/header.php';
 ?>
 <style>
 .pmma-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-bottom:24px}
-.pmma-card{background:white;border-radius:14px;border:1px solid var(--border);overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.05)}
-.pmma-head{padding:14px 18px;background:var(--navy);display:flex;justify-content:space-between;align-items:center}
-.pmma-site{color:white;font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;font-weight:700}
-.pmma-body{padding:16px 18px}
-.pmma-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:32px;font-weight:900}
-.pmma-lbl{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;margin-top:4px}
-.pmma-alert{background:#fee2e2;color:#991b1b;padding:6px 10px;border-radius:8px;font-size:11px;margin-top:8px;font-weight:600}
+.pmma-card{background:white;border-radius:14px;border:1px solid var(--border);overflow:hidden}
+.pmma-head{padding:12px 16px;background:var(--navy);display:flex;justify-content:space-between;align-items:center}
+.pmma-site{color:white;font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700}
+.pmma-body{padding:14px 16px}
+.pmma-alert{background:#fee2e2;color:#991b1b;padding:5px 10px;border-radius:8px;font-size:11px;margin-top:8px;font-weight:600}
+.kpi-bar{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+.kpi{background:white;border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.kpi-val{font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900;line-height:1}
+.kpi-lbl{font-size:11px;color:var(--muted);font-weight:600;margin-top:3px}
+.filter-bar{background:white;border:1px solid var(--border);border-radius:12px;padding:14px 18px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:20px}
+.filter-bar label{font-size:12px;font-weight:600;color:var(--navy);display:block;margin-bottom:4px}
+.filter-bar input,.filter-bar select{padding:8px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:white;outline:none}
+.modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(10,22,40,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:white;border-radius:16px;width:480px;max-width:95vw;max-height:92vh;overflow-y:auto;animation:mIn .22s cubic-bezier(.22,1,.36,1)}
+@keyframes mIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+.mhdr{padding:16px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:white;z-index:10}
+.mhdr h3{font-family:'Montserrat',sans-serif;font-size:16px;font-weight:700}
+.mclose{width:30px;height:30px;border-radius:7px;border:1px solid var(--border);background:none;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center}
+.mbody{padding:22px}
+.mfoot{padding:12px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;background:white}
 </style>
 
 <!-- TOOLBAR -->
-<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
   <div>
-    <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">🖨️ Stock PMMA</h2>
-    <p style="font-size:12px;color:var(--muted);margin-top:2px">Support d'impression des plaques d'immatriculation</p>
+    <h2 style="font-family:'Montserrat',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">Suivi PMMA</h2>
+    <p style="font-size:12px;color:var(--muted);margin-top:2px">Consommation depuis les points journaliers — Support plaques d'immatriculation</p>
   </div>
-  <div style="display:flex;gap:8px">
-    <?php if(!$site_force): ?>
-    <select onchange="location.href='?site='+this.value" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
-      <option value="0">Tous les sites</option>
-      <?php foreach($sites_list as $s): ?>
-      <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
-      <?php endforeach; ?>
-    </select>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="?<?= http_build_query(array_merge($_GET, ['export'=>'xlsx'])) ?>"
+       class="btn btn-secondary" style="font-size:13px;display:flex;align-items:center;gap:6px">
+      <i class="ph-duotone ph-microsoft-excel-logo" style="font-size:16px"></i> Excel
+    </a>
+    <a href="?<?= http_build_query(array_merge($_GET, ['export'=>'pdf'])) ?>"
+       class="btn btn-secondary" style="font-size:13px;display:flex;align-items:center;gap:6px">
+      <i class="ph-duotone ph-file-pdf" style="font-size:16px"></i> PDF
+    </a>
+    <?php if ($can_saisie): ?>
+    <button class="btn btn-primary" style="font-size:13px" onclick="document.getElementById('mEntree').classList.add('open')">
+      <i class="ph-duotone ph-download-simple"></i> Entrée PMMA
+    </button>
+    <button class="btn" onclick="document.getElementById('mSortie').classList.add('open')"
+      style="background:#e8f4f9;color:var(--blue);border:1.5px solid var(--blue);font-size:13px">
+      <i class="ph-duotone ph-upload-simple"></i> Sortie PMMA
+    </button>
     <?php endif; ?>
-    <button class="btn btn-primary" onclick="ouvrirEntree()">📥 Entrée PMMA</button>
-    <button class="btn" style="background:#e8f4f9;color:var(--blue);border:1.5px solid var(--blue)" onclick="ouvrirSortie()">📤 Sortie PMMA</button>
   </div>
 </div>
 
+<!-- FILTRE BAR -->
+<div class="filter-bar">
+  <div>
+    <label>Du</label>
+    <input type="date" id="fFrom" value="<?= h($f_from) ?>">
+  </div>
+  <div>
+    <label>Au</label>
+    <input type="date" id="fTo" value="<?= h($f_to) ?>">
+  </div>
+  <?php if (!$site_force): ?>
+  <div>
+    <label>Site</label>
+    <select id="fSite">
+      <option value="0">Tous les sites</option>
+      <?php foreach ($sites_list as $s): ?>
+      <option value="<?= $s['id'] ?>" <?= $f_site == $s['id'] ? 'selected' : '' ?>><?= h($s['nom']) ?></option>
+      <?php endforeach; ?>
+    </select>
+  </div>
+  <?php endif; ?>
+  <div style="display:flex;gap:8px;align-items:flex-end">
+    <button class="btn btn-primary" style="font-size:13px" onclick="appliquerFiltres()">Appliquer</button>
+    <button class="btn btn-secondary" style="font-size:13px" onclick="resetFiltres()">Réinitialiser</button>
+  </div>
+</div>
+
+<!-- KPI -->
+<div class="kpi-bar">
+  <?php
+  $total_stock = array_sum(array_column($stock_par_site, 'quantite'));
+  ?>
+  <div class="kpi">
+    <div class="kpi-val" style="color:var(--blue)"><?= fmt_number($total_stock) ?></div>
+    <div class="kpi-lbl">Total PMMA en stock</div>
+  </div>
+  <?php if ($nb_stock_bas > 0): ?>
+  <div class="kpi" style="border-color:#fca5a5;background:#fff5f5">
+    <div class="kpi-val" style="color:var(--danger)"><?= $nb_stock_bas ?></div>
+    <div class="kpi-lbl">Type(s) en stock bas</div>
+  </div>
+  <?php endif; ?>
+  <div class="kpi">
+    <div class="kpi-val" style="color:var(--navy)"><?= fmt_number($grand_total['total']) ?></div>
+    <div class="kpi-lbl">Consommés sur la période</div>
+  </div>
+  <?php if ($grand_total['endommages'] > 0): ?>
+  <div class="kpi" style="border-color:#fca5a5">
+    <div class="kpi-val" style="color:var(--danger)"><?= fmt_number($grand_total['endommages']) ?></div>
+    <div class="kpi-lbl">Endommagés sur la période</div>
+  </div>
+  <?php endif; ?>
+  <?php foreach ($totaux_type as $typ => $tot): ?>
+  <div class="kpi">
+    <div class="kpi-val" style="color:var(--blue);font-size:22px"><?= fmt_number($tot['total']) ?></div>
+    <div class="kpi-lbl">Consommés — <?= h($typ) ?></div>
+  </div>
+  <?php endforeach; ?>
+</div>
+
 <!-- STOCK PAR SITE -->
+<div style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">
+  <i class="ph-duotone ph-package" style="vertical-align:middle"></i> Stock actuel par site
+</div>
 <div class="pmma-grid">
   <?php
   $sites_grouped = [];
-  foreach($stock_par_site as $sp) {
-    $sites_grouped[$sp['site_nom']][] = $sp;
+  foreach ($stock_par_site as $sp_item) {
+      $sites_grouped[$sp_item['site_nom']][] = $sp_item;
   }
-  foreach($sites_grouped as $site_nom => $items): ?>
+  foreach ($sites_grouped as $site_nom => $items): ?>
   <div class="pmma-card">
     <div class="pmma-head">
-      <div class="pmma-site">📍 <?= h($site_nom) ?></div>
+      <div class="pmma-site"><i class="ph-duotone ph-map-pin"></i> <?= h($site_nom) ?></div>
     </div>
     <div class="pmma-body">
-      <?php foreach($items as $item): ?>
+      <?php foreach ($items as $item): if (!$item['type_pmma']) continue; ?>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
         <div>
-          <div style="font-size:13px;font-weight:600;color:var(--navy)"><?= $item['type_pmma'] ?: 'Standard' ?></div>
-          <div style="font-size:11px;color:var(--muted)">Seuil alerte : <?= $item['seuil_alerte']??10 ?></div>
+          <div style="font-size:13px;font-weight:600;color:var(--navy)"><?= h($item['type_pmma']) ?></div>
+          <div style="font-size:11px;color:var(--muted)">Seuil : <?= (int)($item['seuil_alerte'] ?? 10) ?></div>
         </div>
         <div style="text-align:right">
-          <div class="pmma-val" style="font-size:24px;color:<?= $item['quantite']<($item['seuil_alerte']??10)?'var(--danger)':'var(--blue)' ?>"><?= $item['quantite'] ?></div>
+          <div style="font-family:'Montserrat',sans-serif;font-size:26px;font-weight:900;color:<?= $item['quantite'] < ($item['seuil_alerte'] ?? 10) ? 'var(--danger)' : 'var(--blue)' ?>">
+            <?= (int)$item['quantite'] ?>
+          </div>
           <div style="font-size:10px;color:var(--muted)">unités</div>
         </div>
       </div>
-      <?php if($item['quantite'] < ($item['seuil_alerte']??10)): ?>
-      <div class="pmma-alert">⚠️ Stock bas — commander des PMMA</div>
+      <?php if ($item['quantite'] < ($item['seuil_alerte'] ?? 10)): ?>
+      <div class="pmma-alert"><i class="ph-duotone ph-warning"></i> Stock bas — commander</div>
       <?php endif; ?>
       <?php endforeach; ?>
-      <?php if(empty($items)): ?>
-      <div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">Aucun stock enregistré</div>
-      <?php endif; ?>
     </div>
   </div>
   <?php endforeach; ?>
 </div>
 
-<!-- HISTORIQUE -->
+<!-- TABLEAU CONSOMMATION -->
 <div class="card">
-  <div class="card-header"><h3>📋 Historique des mouvements</h3></div>
+  <div class="card-header">
+    <h3><i class="ph-duotone ph-clipboard-text" style="vertical-align:middle"></i>
+      Consommation PMMA — Points journaliers
+      <span style="font-size:12px;font-weight:400;color:var(--muted);margin-left:8px">
+        du <?= h(fmt_date($f_from)) ?> au <?= h(fmt_date($f_to)) ?>
+      </span>
+    </h3>
+  </div>
   <div class="table-wrap">
     <table>
-      <thead><tr><th>Date</th><th>Site</th><th>Type PMMA</th><th style="text-align:center">Mouvement</th><th style="text-align:center">Quantité</th><th>Agent</th></tr></thead>
+      <thead><tr>
+        <th>Date</th>
+        <?php if (!$site_force): ?><th>Site</th><?php endif; ?>
+        <th>Type PMMA</th>
+        <th style="text-align:center">Utilisés</th>
+        <th style="text-align:center">Endommagés</th>
+        <th style="text-align:center">Total sorti</th>
+      </tr></thead>
       <tbody>
-      <?php if(empty($historique)): ?>
-        <tr><td colspan="6" style="text-align:center;padding:30px;color:var(--muted)">Aucun mouvement.</td></tr>
-      <?php else: foreach($historique as $m): ?>
+      <?php if (empty($conso)): ?>
+        <tr><td colspan="<?= $site_force ? 5 : 6 ?>" style="text-align:center;padding:30px;color:var(--muted)">
+          Aucune consommation sur cette période.
+        </td></tr>
+      <?php else: foreach ($conso as $c): ?>
         <tr>
-          <td style="font-size:12px"><?= fmt_datetime($m['created_at']) ?></td>
-          <td><?= h($m['site_nom']??'—') ?></td>
-          <td><?= h($m['type_pmma']?:'Standard') ?></td>
-          <td style="text-align:center">
-            <span style="padding:2px 10px;border-radius:12px;font-size:11px;font-weight:700;background:<?= $m['type_mouvement']==='entree'?'#d1fae5':'#fee2e2' ?>;color:<?= $m['type_mouvement']==='entree'?'#065f46':'#991b1b' ?>">
-              <?= $m['type_mouvement']==='entree'?'📥 Entrée':'📤 Sortie' ?>
-            </span>
+          <td><?= h(fmt_date($c['date_point'])) ?></td>
+          <?php if (!$site_force): ?><td><?= h($c['site_nom']) ?></td><?php endif; ?>
+          <td><span style="background:#e0f0ff;color:#0d5c8a;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700">
+            <?= h($c['type_pmma'] ?: 'Standard') ?>
+          </span></td>
+          <td style="text-align:center;font-weight:700;color:var(--blue)"><?= (int)$c['utilises'] ?></td>
+          <td style="text-align:center;font-weight:600;color:<?= $c['endommages'] > 0 ? 'var(--danger)' : 'var(--muted)' ?>">
+            <?= (int)$c['endommages'] ?: '—' ?>
           </td>
-          <td style="text-align:center;font-weight:700;color:<?= $m['type_mouvement']==='entree'?'var(--success)':'var(--danger)' ?>">
-            <?= $m['type_mouvement']==='entree'?'+':'-' ?><?= $m['quantite'] ?>
-          </td>
-          <td style="font-size:12px"><?= h($m['agent']??'—') ?></td>
+          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px"><?= (int)$c['total_sortis'] ?></td>
         </tr>
       <?php endforeach; endif; ?>
+      <?php if (!empty($conso)): ?>
+        <tr style="background:#f0f4ff">
+          <td colspan="<?= $site_force ? 2 : 3 ?>" style="font-weight:700;color:var(--navy)">TOTAL PÉRIODE</td>
+          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;color:var(--blue)"><?= $grand_total['utilises'] ?></td>
+          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;color:var(--danger)"><?= $grand_total['endommages'] ?: '—' ?></td>
+          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;font-size:16px;color:var(--navy)"><?= $grand_total['total'] ?></td>
+        </tr>
+      <?php endif; ?>
       </tbody>
     </table>
   </div>
 </div>
 
+<?php if ($can_saisie): ?>
 <!-- MODAL ENTRÉE -->
-<div id="modalEntree" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
-  <div style="background:white;border-radius:20px;padding:28px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)">📥 Entrée PMMA</h3>
-      <button onclick="document.getElementById('modalEntree').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+<div class="modal-overlay" id="mEntree">
+  <div class="modal">
+    <div class="mhdr">
+      <h3><i class="ph-duotone ph-download-simple"></i> Entrée PMMA</h3>
+      <button class="mclose" onclick="document.getElementById('mEntree').classList.remove('open')">✕</button>
     </div>
-    <div id="alertEntree"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-      <?php if(!$site_force): ?>
-      <div class="form-group"><label>Site *</label>
-        <select class="form-control" id="eSiteId">
-          <option value="">— Sélectionner —</option>
-          <?php foreach($sites_list as $s): ?><option value="<?= $s['id'] ?>"><?= h($s['nom']) ?></option><?php endforeach; ?>
-        </select>
+    <div class="mbody">
+      <div id="alertEntree"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+        <?php if (!$site_force): ?>
+        <div class="form-group"><label>Site *</label>
+          <select class="form-control" id="eSiteId">
+            <option value="">— Sélectionner —</option>
+            <?php foreach ($sites_list as $s): ?><option value="<?= $s['id'] ?>"><?= h($s['nom']) ?></option><?php endforeach; ?>
+          </select>
+        </div>
+        <?php else: ?><input type="hidden" id="eSiteId" value="<?= $site_force ?>"><?php endif; ?>
+        <div class="form-group"><label>Type PMMA</label>
+          <input type="text" class="form-control" id="eTypePmma" placeholder="Standard, A4, A3…">
+        </div>
       </div>
-      <?php else: ?><input type="hidden" id="eSiteId" value="<?= $site_force ?>"><?php endif; ?>
-      <div class="form-group"><label>Type PMMA</label>
-        <input type="text" class="form-control" id="eTypePmma" placeholder="ex: Standard, A4, A3...">
+      <div class="form-group" style="margin-bottom:14px"><label>Quantité *</label>
+        <input type="number" class="form-control" id="eQteEntree" min="1" value="1">
+      </div>
+      <div class="form-group"><label>Notes</label>
+        <input type="text" class="form-control" id="eNotesEntree" placeholder="Fournisseur, N° BL…">
       </div>
     </div>
-    <div class="form-group" style="margin-bottom:14px"><label>Quantité *</label>
-      <input type="number" class="form-control" id="eQteEntree" min="1" value="1">
-    </div>
-    <div class="form-group" style="margin-bottom:20px"><label>Notes</label>
-      <input type="text" class="form-control" id="eNotesEntree" placeholder="Fournisseur, N° BL...">
-    </div>
-    <div style="display:flex;justify-content:flex-end;gap:10px">
-      <button class="btn btn-secondary" onclick="document.getElementById('modalEntree').style.display='none'">Annuler</button>
-      <button class="btn btn-primary" onclick="enregistrerEntree()">📥 Enregistrer</button>
+    <div class="mfoot">
+      <button class="btn btn-secondary" onclick="document.getElementById('mEntree').classList.remove('open')">Annuler</button>
+      <button class="btn btn-primary" onclick="enregistrerEntree()">Enregistrer</button>
     </div>
   </div>
 </div>
 
 <!-- MODAL SORTIE -->
-<div id="modalSortie" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
-  <div style="background:white;border-radius:20px;padding:28px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)">📤 Sortie PMMA</h3>
-      <button onclick="document.getElementById('modalSortie').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+<div class="modal-overlay" id="mSortie">
+  <div class="modal">
+    <div class="mhdr">
+      <h3><i class="ph-duotone ph-upload-simple"></i> Sortie PMMA</h3>
+      <button class="mclose" onclick="document.getElementById('mSortie').classList.remove('open')">✕</button>
     </div>
-    <div id="alertSortie"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-      <?php if(!$site_force): ?>
-      <div class="form-group"><label>Site *</label>
-        <select class="form-control" id="sSiteId">
-          <option value="">— Sélectionner —</option>
-          <?php foreach($sites_list as $s): ?><option value="<?= $s['id'] ?>"><?= h($s['nom']) ?></option><?php endforeach; ?>
-        </select>
+    <div class="mbody">
+      <div id="alertSortie"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+        <?php if (!$site_force): ?>
+        <div class="form-group"><label>Site *</label>
+          <select class="form-control" id="sSiteId">
+            <option value="">— Sélectionner —</option>
+            <?php foreach ($sites_list as $s): ?><option value="<?= $s['id'] ?>"><?= h($s['nom']) ?></option><?php endforeach; ?>
+          </select>
+        </div>
+        <?php else: ?><input type="hidden" id="sSiteId" value="<?= $site_force ?>"><?php endif; ?>
+        <div class="form-group"><label>Type PMMA</label>
+          <input type="text" class="form-control" id="sTypePmma" placeholder="Standard, A4…">
+        </div>
       </div>
-      <?php else: ?><input type="hidden" id="sSiteId" value="<?= $site_force ?>"><?php endif; ?>
-      <div class="form-group"><label>Type PMMA</label>
-        <input type="text" class="form-control" id="sTypePmma" placeholder="ex: Standard, A4...">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div class="form-group"><label>Quantité *</label>
+          <input type="number" class="form-control" id="sQteSortie" min="1" value="1">
+        </div>
+        <div class="form-group"><label>Bobine associée</label>
+          <select class="form-control" id="sBobineId">
+            <option value="">— Optionnel —</option>
+            <?php foreach ($bobines_actives as $b): ?><option value="<?= $b['id'] ?>"><?= h($b['numero']) ?></option><?php endforeach; ?>
+          </select>
+        </div>
       </div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-      <div class="form-group"><label>Quantité *</label>
-        <input type="number" class="form-control" id="sQteSortie" min="1" value="1">
-      </div>
-      <div class="form-group"><label>Bobine associée</label>
-        <select class="form-control" id="sBobineId">
-          <option value="">— Optionnel —</option>
-          <?php foreach($bobines_actives as $b): ?><option value="<?= $b['id'] ?>"><?= h($b['numero']) ?></option><?php endforeach; ?>
-        </select>
-      </div>
-    </div>
-    <div style="display:flex;justify-content:flex-end;gap:10px">
-      <button class="btn btn-secondary" onclick="document.getElementById('modalSortie').style.display='none'">Annuler</button>
-      <button class="btn" style="background:#e8f4f9;color:var(--blue);border:1.5px solid var(--blue)" onclick="enregistrerSortie()">📤 Enregistrer</button>
+    <div class="mfoot">
+      <button class="btn btn-secondary" onclick="document.getElementById('mSortie').classList.remove('open')">Annuler</button>
+      <button class="btn" onclick="enregistrerSortie()"
+        style="background:#e8f4f9;color:var(--blue);border:1.5px solid var(--blue)">Enregistrer</button>
     </div>
   </div>
 </div>
+<?php endif; ?>
 
 <script>
-function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
-function toast(m,t='success'){const el=document.createElement('div');el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white`;el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),3500);}
-function ouvrirEntree(){document.getElementById('alertEntree').innerHTML='';document.getElementById('modalEntree').style.display='flex';}
-function ouvrirSortie(){document.getElementById('alertSortie').innerHTML='';document.getElementById('modalSortie').style.display='flex';}
+function ap(d){
+    const fd=new FormData();
+    for(const[k,v] of Object.entries(d)) if(v!==undefined) fd.append(k,v);
+    return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
+}
+function appliquerFiltres(){
+    const p=new URLSearchParams();
+    p.set('from',document.getElementById('fFrom').value);
+    p.set('to',document.getElementById('fTo').value);
+    <?php if(!$site_force): ?>
+    const site=document.getElementById('fSite').value;
+    if(site!=='0') p.set('site',site);
+    <?php endif; ?>
+    location.href='?'+p.toString();
+}
+function resetFiltres(){
+    const today=new Date(),y=today.getFullYear(),m=String(today.getMonth()+1).padStart(2,'0'),d=String(today.getDate()).padStart(2,'0');
+    location.href='?from='+y+'-'+m+'-01&to='+y+'-'+m+'-'+d;
+}
+<?php if($can_saisie): ?>
 async function enregistrerEntree(){
-  const d=await ap({action:'entree',site_id:document.getElementById('eSiteId').value,type_pmma:document.getElementById('eTypePmma').value,quantite:document.getElementById('eQteEntree').value,notes:document.getElementById('eNotesEntree').value});
-  if(d.success){toast(d.message);document.getElementById('modalEntree').style.display='none';setTimeout(()=>location.reload(),800);}
-  else{document.getElementById('alertEntree').innerHTML=`<div class="alert alert-danger">${d.message}</div>`;}
+    const r=await ap({action:'entree',site_id:document.getElementById('eSiteId').value,
+        type_pmma:document.getElementById('eTypePmma').value,
+        quantite:document.getElementById('eQteEntree').value,
+        notes:document.getElementById('eNotesEntree').value});
+    if(r.success){toast(r.message,'success');document.getElementById('mEntree').classList.remove('open');setTimeout(()=>location.reload(),800);}
+    else document.getElementById('alertEntree').innerHTML=`<div class="alert alert-danger">${r.message}</div>`;
 }
 async function enregistrerSortie(){
-  const d=await ap({action:'sortie',site_id:document.getElementById('sSiteId').value,type_pmma:document.getElementById('sTypePmma').value,quantite:document.getElementById('sQteSortie').value,bobine_id:document.getElementById('sBobineId').value});
-  if(d.success){toast(d.message);document.getElementById('modalSortie').style.display='none';setTimeout(()=>location.reload(),800);}
-  else{document.getElementById('alertSortie').innerHTML=`<div class="alert alert-danger">${d.message}</div>`;}
+    const r=await ap({action:'sortie',site_id:document.getElementById('sSiteId').value,
+        type_pmma:document.getElementById('sTypePmma').value,
+        quantite:document.getElementById('sQteSortie').value,
+        bobine_id:document.getElementById('sBobineId').value});
+    if(r.success){toast(r.message,'success');document.getElementById('mSortie').classList.remove('open');setTimeout(()=>location.reload(),800);}
+    else document.getElementById('alertSortie').innerHTML=`<div class="alert alert-danger">${r.message}</div>`;
 }
+['mEntree','mSortie'].forEach(id=>document.getElementById(id)?.addEventListener('click',e=>{
+    if(e.target===e.currentTarget) e.currentTarget.classList.remove('open');
+}));
+<?php endif; ?>
 </script>
+
 <?php include __DIR__ . '/../templates/footer.php'; ?>
