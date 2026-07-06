@@ -2,6 +2,25 @@
 </div><!-- end .main-wrap -->
 
 <script>
+// ===== USER MENU =====
+function toggleUserMenu(e) {
+  e.stopPropagation();
+  const dd     = document.getElementById('user-menu-dd');
+  const caret  = document.getElementById('user-chip-caret');
+  const open   = dd.style.display !== 'none';
+  dd.style.display    = open ? 'none' : 'block';
+  caret.style.transform = open ? '' : 'rotate(180deg)';
+}
+document.addEventListener('click', function(e) {
+  const wrap = document.getElementById('user-menu-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    const dd    = document.getElementById('user-menu-dd');
+    const caret = document.getElementById('user-chip-caret');
+    if (dd)    dd.style.display     = 'none';
+    if (caret) caret.style.transform = '';
+  }
+});
+
 // ===== NOTIFICATIONS =====
 function toggleNotifs() {
   document.getElementById('notif-dropdown').classList.toggle('open');

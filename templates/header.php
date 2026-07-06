@@ -423,7 +423,55 @@ $unread = count($notifs);
   }
   .nav-item-home.active .nav-icon { background: rgba(0,174,239,.3) !important; box-shadow: 0 4px 12px rgba(0,174,239,.4) !important; }
   .nav-item-home.active .nav-icon i { color: #00AEEF !important; }
+
+  /* ===== DARK MODE ===== */
+  [data-theme="dark"] body { background: #0F172A; }
+  [data-theme="dark"] .page-content { color: #E2E8F0; }
+  [data-theme="dark"] .card { background: #1E293B; border-color: #2D4060; }
+  [data-theme="dark"] .card-header { background: #1E293B; border-color: #2D4060; }
+  [data-theme="dark"] .card-header h3 { color: #E2E8F0; }
+  [data-theme="dark"] .card-body { background: #1E293B; }
+  [data-theme="dark"] .topbar { background: #1A2848; border-color: #2D4060; box-shadow: 0 1px 8px rgba(0,0,0,.3); }
+  [data-theme="dark"] .topbar-title { color: #E2E8F0; }
+  [data-theme="dark"] .topbar-title small { color: #7A99BE; }
+  [data-theme="dark"] th { background: #162032 !important; color: #94A3B8 !important; border-color: #2D4060 !important; }
+  [data-theme="dark"] td { color: #CBD5E1; border-bottom-color: #2D4060; }
+  [data-theme="dark"] tr:hover td { background: #253349; }
+  [data-theme="dark"] .form-control { background: #0F172A; color: #E2E8F0; border-color: #334155; }
+  [data-theme="dark"] .form-control:focus { background: #162032; }
+  [data-theme="dark"] .form-group label { color: #CBD5E1; }
+  [data-theme="dark"] select.form-control option { background: #1E293B; }
+  [data-theme="dark"] .btn-secondary { background: #1E293B; color: #CBD5E1; border-color: #334155; }
+  [data-theme="dark"] .btn-secondary:hover { background: #253349; border-color: var(--primary); color: #E2E8F0; }
+  [data-theme="dark"] .alert-danger  { background: #4A1D1D; color: #FCA5A5; border-color: #F87171; }
+  [data-theme="dark"] .alert-success { background: #064E3B; color: #6EE7B7; border-color: #34D399; }
+  [data-theme="dark"] .alert-warning { background: #451A03; color: #FCD34D; border-color: #FBBF24; }
+  [data-theme="dark"] .alert-info    { background: #1C3B6E; color: #93C5FD; border-color: var(--primary); }
+  [data-theme="dark"] .badge-dark    { background: #334155; color: #94A3B8; }
+  [data-theme="dark"] .notif-dropdown { background: #1E293B; border-color: #2D4060; }
+  [data-theme="dark"] .notif-header  { border-color: #2D4060; }
+  [data-theme="dark"] .notif-header h4 { color: #E2E8F0; }
+  [data-theme="dark"] .notif-item    { border-color: #2D4060; }
+  [data-theme="dark"] .notif-item:hover { background: #253349; }
+  [data-theme="dark"] .notif-item .n-titre { color: #CBD5E1; }
+  [data-theme="dark"] #user-chip { background: #162032 !important; border-color: #2D4060 !important; }
+  [data-theme="dark"] .uc-name { color: #E2E8F0 !important; }
+  [data-theme="dark"] .uc-role { color: #7A99BE !important; }
+  [data-theme="dark"] #user-menu-dd { background: #1E293B; border-color: #2D4060; }
+  [data-theme="dark"] .um-item { color: #CBD5E1 !important; }
+  [data-theme="dark"] .um-item:hover { background: #253349 !important; }
+  [data-theme="dark"] .um-danger { color: #FCA5A5 !important; }
   </style>
+
+  <script>
+  /* Appliquer le thème sauvegardé avant le rendu pour éviter le flash */
+  (function () {
+    var pref = localStorage.getItem('ds-theme-pref') || 'auto';
+    var sys  = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    var t    = pref === 'dark' ? 'dark' : pref === 'light' ? 'light' : (sys ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', t);
+  })();
+  </script>
 </head>
 <body>
 
@@ -517,14 +565,35 @@ $unread = count($notifs);
         <?php endif; ?>
       </button>
 
-      <!-- User -->
-      <div style="display:flex;align-items:center;gap:10px;padding:6px 14px 6px 6px;background:var(--tertiary);border-radius:40px;border:1.5px solid var(--border)">
-        <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:700;font-family:'Plus Jakarta Sans',sans-serif">
-          <?= strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',0,1)) ?>
-        </div>
-        <div>
-          <div style="font-size:12.5px;font-weight:700;color:var(--navy);font-family:'Plus Jakarta Sans',sans-serif;line-height:1.2"><?= h(($user['prenom']??'').' '.($user['nom']??'')) ?></div>
-          <div style="font-size:10.5px;color:var(--muted);line-height:1.2"><?= h($user['role_nom']??'') ?></div>
+      <!-- User menu -->
+      <div style="position:relative" id="user-menu-wrap">
+        <button type="button" onclick="toggleUserMenu(event)" id="user-chip"
+                style="display:flex;align-items:center;gap:10px;padding:6px 12px 6px 6px;background:var(--tertiary);border-radius:40px;border:1.5px solid var(--border);cursor:pointer;transition:all .15s;font-family:inherit">
+          <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:700;font-family:'Plus Jakarta Sans',sans-serif;flex-shrink:0">
+            <?= strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',0,1)) ?>
+          </div>
+          <div style="text-align:left">
+            <div class="uc-name" style="font-size:12.5px;font-weight:700;color:var(--navy);font-family:'Plus Jakarta Sans',sans-serif;line-height:1.2"><?= h(($user['prenom']??'').' '.($user['nom']??'')) ?></div>
+            <div class="uc-role" style="font-size:10.5px;color:var(--muted);line-height:1.2"><?= h($user['role_nom']??'') ?></div>
+          </div>
+          <i class="ph-duotone ph-caret-down" style="font-size:12px;color:var(--muted);margin-left:2px;flex-shrink:0;transition:transform .2s" id="user-chip-caret"></i>
+        </button>
+
+        <div id="user-menu-dd"
+             style="display:none;position:absolute;top:calc(100% + 8px);right:0;width:200px;background:white;border:1.5px solid var(--border);border-radius:14px;box-shadow:0 8px 28px rgba(30,43,74,.14);z-index:300;overflow:hidden">
+          <a href="<?= APP_URL ?>/pages/mon_profil.php" class="um-item"
+             style="display:flex;align-items:center;gap:10px;padding:12px 16px;text-decoration:none;font-size:13px;font-weight:500;transition:background .12s;color:var(--text)"
+             onmouseover="this.style.background='var(--tertiary)'" onmouseout="this.style.background=''">
+            <i class="ph-duotone ph-user-circle" style="font-size:18px;color:var(--primary)"></i>
+            Mon profil
+          </a>
+          <div style="height:1px;background:var(--border)"></div>
+          <a href="<?= APP_URL ?>/logout.php" class="um-item um-danger"
+             style="display:flex;align-items:center;gap:10px;padding:12px 16px;text-decoration:none;font-size:13px;font-weight:500;transition:background .12s;color:#991B1B"
+             onmouseover="this.style.background='#FEE2E2'" onmouseout="this.style.background=''">
+            <i class="ph-duotone ph-sign-out" style="font-size:18px"></i>
+            Déconnexion
+          </a>
         </div>
       </div>
 
