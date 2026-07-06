@@ -311,16 +311,18 @@ if ($export === 'pptx') {
         $fg  = $h ? 'FFFFFF' : ($tot ? '06033A' : '222222');
         $bg  = $h ? '1B75BC' : ($tot ? 'E8EDF8' : 'FFFFFF');
         $sz  = $h  ? '1100' : '1000';
-        $ln  = '<a:ln w="9525"><a:solidFill><a:srgbClr val="CCCCCC"/></a:solidFill></a:ln>';
+        $ln  = '<a:solidFill><a:srgbClr val="CCCCCC"/></a:solidFill>';
         return '<a:tc><a:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r>'
              . '<a:rPr lang="fr-FR" b="' . $b . '" sz="' . $sz . '" dirty="0">'
              . '<a:solidFill><a:srgbClr val="' . $fg . '"/></a:solidFill></a:rPr>'
              . '<a:t>' . htmlspecialchars($txt, ENT_XML1, 'UTF-8') . '</a:t>'
              . '</a:r></a:p></a:txBody>'
              . '<a:tcPr marL="91440" marR="91440" marT="45720" marB="45720">'
+             . '<a:lnL w="9525">' . $ln . '</a:lnL>'
+             . '<a:lnR w="9525">' . $ln . '</a:lnR>'
+             . '<a:lnT w="9525">' . $ln . '</a:lnT>'
+             . '<a:lnB w="9525">' . $ln . '</a:lnB>'
              . '<a:solidFill><a:srgbClr val="' . $bg . '"/></a:solidFill>'
-             . '<a:lnL>' . $ln . '</a:lnL><a:lnR>' . $ln . '</a:lnR>'
-             . '<a:lnT>' . $ln . '</a:lnT><a:lnB>' . $ln . '</a:lnB>'
              . '</a:tcPr></a:tc>';
     };
 
