@@ -63,7 +63,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         json_response($result['success'], $result['message']);
     }
 
+    // ── Signature électronique
+    if ($action === 'save_signature') {
+        $sig = trim($_POST['signature'] ?? '');
+        if ($sig === '') {
+            db_query("UPDATE users SET signature=NULL WHERE id=?", [$user['id']]);
+            audit_log($user['id'], 'UPDATE', 'users', $user['id'], 'Signature électronique supprimée');
+            json_response(true, 'Signature supprimée.');
+        }
+        if (!preg_match('/^data:image\/(png|jpeg|jpg);base64,[a-zA-Z0-9+\/=]+$/', $sig)) {
+            json_response(false, 'Format de signature invalide.');
+        }
+        if (strlen($sig) > 300000) {
+            json_response(false, 'Image trop volumineuse (max ~220KB). Dessinez ou utilisez une image plus petite.');
+        }
+        try {
+            db_query("UPDATE users SET signature=? WHERE id=?", [$sig, $user['id']]);
+        } catch (\Throwable $e) {
+            try {
+                db_query("ALTER TABLE users ADD COLUMN IF NOT EXISTS signature LONGTEXT NULL AFTER telephone");
+                db_query("UPDATE users SET signature=? WHERE id=?", [$sig, $user['id']]);
+            } catch (\Throwable $e2) {
+                json_response(false, 'Migration requise. Exécutez migrate_signature.php.');
+            }
+        }
+        audit_log($user['id'], 'UPDATE', 'users', $user['id'], 'Signature électronique mise à jour');
+        json_response(true, 'Signature enregistrée avec succès.');
+    }
+
     json_response(false, 'Action inconnue.');
+}
+
+// Charger la signature (pas dans le cache current_user)
+try {
+    $sig_row        = db_fetch_one("SELECT signature FROM users WHERE id=?", [$user['id']]);
+    $user_signature = $sig_row['signature'] ?? '';
+} catch (\Throwable $e) {
+    $user_signature = ''; // colonne pas encore migrée
 }
 
 include __DIR__ . '/../templates/header.php';
@@ -145,6 +181,19 @@ include __DIR__ . '/../templates/header.php';
 [data-theme="dark"] .theme-opt .t-lbl { color: #CBD5E1; }
 [data-theme="dark"] .theme-opt.active .t-lbl { color: #93C5FD; }
 [data-theme="dark"] .profil-meta-val { color: #CBD5E1; }
+
+/* ── Signature ─────────────────────────────────────────────── */
+.sig-pad {
+  display: block; width: 100%; height: 150px;
+  border: 2px dashed var(--border); border-radius: 12px;
+  background: #ffffff; cursor: crosshair; touch-action: none;
+  box-sizing: border-box;
+}
+.sig-pad:hover { border-color: var(--primary); }
+.sig-toolbar { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
+.sig-current { margin-top: 16px; padding: 12px 14px; background: var(--tertiary); border-radius: 10px; border: 1px solid var(--border); }
+.sig-current-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); letter-spacing: .4px; margin-bottom: 8px; }
+[data-theme="dark"] .sig-pad { border-color: #4B6A9A; background: #ffffff; }
 </style>
 
 <div style="margin-bottom:20px">
@@ -336,6 +385,63 @@ include __DIR__ . '/../templates/header.php';
       </div>
     </div>
 
+    <!-- ── Signature électronique ── -->
+    <div class="card">
+      <div class="card-header">
+        <h3>
+          <i class="ph-duotone ph-pen-nib" style="margin-right:8px;color:var(--primary)"></i>
+          Signature électronique
+        </h3>
+      </div>
+      <div class="card-body">
+        <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
+          Votre signature sera intégrée automatiquement dans les bons de commande PDF
+          que vous émettez (demandeur) ou validez (superviseur / GSB).
+        </p>
+        <div id="alert-sig"></div>
+
+        <!-- Canvas de dessin -->
+        <div style="position:relative">
+          <canvas id="sig-canvas" class="sig-pad"></canvas>
+          <div id="sig-ph" style="position:absolute;inset:0;display:flex;align-items:center;
+               justify-content:center;pointer-events:none;color:var(--muted);font-size:13px;
+               font-style:italic">
+            Dessinez votre signature ici avec la souris ou le doigt
+          </div>
+        </div>
+
+        <div class="sig-toolbar">
+          <button type="button" class="btn btn-secondary btn-sm" onclick="clearSig()">
+            <i class="ph-duotone ph-eraser"></i> Effacer
+          </button>
+          <label class="btn btn-secondary btn-sm" style="cursor:pointer;margin:0;display:inline-flex;align-items:center;gap:6px">
+            <i class="ph-duotone ph-upload-simple"></i> Importer une image
+            <input type="file" id="sig-file" accept="image/*"
+                   style="display:none" onchange="importSigFile(this)">
+          </label>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-sig" onclick="saveSig()">
+            <i class="ph-duotone ph-floppy-disk"></i> Enregistrer la signature
+          </button>
+          <button type="button" id="btn-del-sig" class="btn btn-danger btn-sm"
+                  onclick="deleteSig()"
+                  style="<?= $user_signature ? '' : 'display:none' ?>">
+            <i class="ph-duotone ph-trash"></i> Supprimer
+          </button>
+        </div>
+
+        <!-- Aperçu de la signature enregistrée -->
+        <div id="sig-preview-wrap" class="sig-current"
+             style="<?= $user_signature ? '' : 'display:none' ?>">
+          <div class="sig-current-lbl">Signature actuellement enregistrée</div>
+          <img id="sig-preview-img"
+               src="<?= $user_signature ? h($user_signature) : '' ?>"
+               style="max-height:72px;max-width:300px;display:block;
+                      border:1px solid var(--border);border-radius:6px;
+                      padding:6px;background:#fff">
+        </div>
+      </div>
+    </div>
+
   </div><!-- /.right col -->
 </div><!-- /.profil-layout -->
 
@@ -462,6 +568,143 @@ function alertBox(id, ok, msg) {
   el.innerHTML = `<div class="alert alert-${ok ? 'success' : 'danger'}" style="margin-bottom:16px">${msg}</div>`;
   if (ok) setTimeout(() => { el.innerHTML = ''; }, 5000);
 }
+</script>
+
+<script>
+// ── Signature Canvas ──────────────────────────────────────────
+(function () {
+  const canvas  = document.getElementById('sig-canvas');
+  const ctx     = canvas.getContext('2d');
+  const ph      = document.getElementById('sig-ph');
+  let drawing   = false;
+  let lastX = 0, lastY = 0;
+  let hasDrawn  = false;
+
+  // Résolution interne du canvas indépendante de sa taille CSS
+  canvas.width  = 960;
+  canvas.height = 300;
+
+  function initCanvas() {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    <?php if ($user_signature): ?>
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      hasDrawn = true;
+      ph.style.display = 'none';
+    };
+    img.src = <?= json_encode($user_signature) ?>;
+    <?php endif; ?>
+  }
+
+  function getPos(e) {
+    const rect   = canvas.getBoundingClientRect();
+    const scaleX = canvas.width  / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return [(e.clientX - rect.left) * scaleX, (e.clientY - rect.top) * scaleY];
+  }
+
+  function draw(x, y) {
+    ctx.beginPath();
+    ctx.moveTo(lastX, lastY);
+    ctx.lineTo(x, y);
+    ctx.strokeStyle = '#06033A';
+    ctx.lineWidth   = 3;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctx.stroke();
+    [lastX, lastY] = [x, y];
+    if (!hasDrawn) { hasDrawn = true; ph.style.display = 'none'; }
+  }
+
+  canvas.addEventListener('mousedown',  e => { drawing = true;  [lastX, lastY] = getPos(e); });
+  canvas.addEventListener('mousemove',  e => { if (drawing) draw(...getPos(e)); });
+  canvas.addEventListener('mouseup',    () => drawing = false);
+  canvas.addEventListener('mouseleave', () => drawing = false);
+
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault(); drawing = true;
+    [lastX, lastY] = getPos(e.touches[0]);
+  }, { passive: false });
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (drawing) draw(...getPos(e.touches[0]));
+  }, { passive: false });
+  canvas.addEventListener('touchend', () => drawing = false);
+
+  initCanvas();
+
+  window.clearSig = function () {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    hasDrawn = false;
+    ph.style.display = '';
+  };
+
+  window.importSigFile = function (input) {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const img = new Image();
+      img.onload = () => {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const scale = Math.min(canvas.width / img.width, canvas.height / img.height, 1);
+        const w = img.width * scale, h = img.height * scale;
+        ctx.drawImage(img, (canvas.width - w) / 2, (canvas.height - h) / 2, w, h);
+        hasDrawn = true; ph.style.display = 'none';
+      };
+      img.src = ev.target.result;
+    };
+    reader.readAsDataURL(file);
+    input.value = '';
+  };
+
+  window.saveSig = async function () {
+    if (!hasDrawn) {
+      alertBox('alert-sig', false, 'Dessinez ou importez une signature avant d\'enregistrer.');
+      return;
+    }
+    const btn = document.getElementById('btn-sig');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="ph-duotone ph-spinner"></i> Enregistrement...';
+    const data = canvas.toDataURL('image/png');
+    const fd   = new FormData();
+    fd.append('action', 'save_signature');
+    fd.append('signature', data);
+    try {
+      const d = await apPost(fd);
+      alertBox('alert-sig', d.success, d.message);
+      if (d.success) {
+        const wrap = document.getElementById('sig-preview-wrap');
+        const img  = document.getElementById('sig-preview-img');
+        if (img) img.src = data;
+        if (wrap) wrap.style.display = '';
+        document.getElementById('btn-del-sig').style.display = '';
+      }
+    } catch { alertBox('alert-sig', false, 'Erreur réseau.'); }
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ph-duotone ph-floppy-disk"></i> Enregistrer la signature';
+  };
+
+  window.deleteSig = async function () {
+    if (!confirm('Supprimer votre signature électronique ?')) return;
+    const fd = new FormData();
+    fd.append('action', 'save_signature');
+    fd.append('signature', '');
+    try {
+      const d = await apPost(fd);
+      alertBox('alert-sig', d.success, d.message);
+      if (d.success) {
+        clearSig();
+        document.getElementById('sig-preview-wrap').style.display = 'none';
+        document.getElementById('btn-del-sig').style.display = 'none';
+      }
+    } catch { alertBox('alert-sig', false, 'Erreur réseau.'); }
+  };
+})();
 </script>
 
 <?php include __DIR__ . '/../templates/footer.php'; ?>

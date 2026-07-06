@@ -371,7 +371,9 @@ if (isset($_GET['export'], $_GET['id'])) {
     $cmd    = db_fetch_one(
         "SELECT c.*, s.nom AS site_nom,
                 CONCAT(u.prenom,' ',u.nom) AS agent,
-                IF(uv.id IS NOT NULL, CONCAT(uv.prenom,' ',uv.nom), '') AS validateur_nom
+                u.signature AS agent_signature,
+                IF(uv.id IS NOT NULL, CONCAT(uv.prenom,' ',uv.nom), '') AS validateur_nom,
+                uv.signature AS validateur_signature
          FROM commandes c
          LEFT JOIN sites s  ON s.id  = c.site_id
          LEFT JOIN users u  ON u.id  = c.created_by
@@ -757,13 +759,34 @@ function _bdc_pdf($cmd, $lignes, $voir_prix, array $ctx = []) {
         </div>";
     }
 
+    // Images de signature (data: URI — Dompdf les supporte nativement)
+    $agent_sig_img = '';
+    if (!empty($cmd['agent_signature'])) {
+        $enc = htmlspecialchars($cmd['agent_signature'], ENT_QUOTES, 'UTF-8');
+        $agent_sig_img = "<img src=\"$enc\" style=\"max-height:44px;max-width:180px;display:block;margin-bottom:6px\">";
+    }
+    $valid_sig_img = '';
+    if (!empty($cmd['validateur_signature'])) {
+        $enc = htmlspecialchars($cmd['validateur_signature'], ENT_QUOTES, 'UTF-8');
+        $valid_sig_img = "<img src=\"$enc\" style=\"max-height:44px;max-width:180px;display:block;margin-bottom:6px\">";
+    }
+
+    // Bloc demandeur
+    $sig_left = $agent_sig_img
+        . ($agent_sig_img ? '' : "<div style='border-bottom:1px solid #ccc;height:36px;margin-bottom:8px'></div>")
+        . "<div style='font-size:11px;font-weight:700;color:#06033A;margin-top:4px'>$agent_nom</div>"
+        . "<div style='font-size:10px;color:#888;margin-top:3px'>$create_date</div>";
+
     // Bloc validateur
-    $sig_right = $valid_nom
-        ? "<div style='border-bottom:1px solid #ccc;height:36px;margin-bottom:8px'></div>
-           <div style='font-size:11px;font-weight:700;color:#06033A'>".htmlspecialchars($valid_nom)."</div>
-           ".($valid_date ? "<div style='font-size:10px;color:#888;margin-top:3px'>$valid_date</div>" : '')
-        : "<div style='border-bottom:1px solid #ccc;height:36px;margin-bottom:8px'></div>
-           <div style='height:18px'></div>";
+    if ($valid_nom) {
+        $sig_right = $valid_sig_img
+            . ($valid_sig_img ? '' : "<div style='border-bottom:1px solid #ccc;height:36px;margin-bottom:8px'></div>")
+            . "<div style='font-size:11px;font-weight:700;color:#06033A;margin-top:4px'>".htmlspecialchars($valid_nom)."</div>"
+            . ($valid_date ? "<div style='font-size:10px;color:#888;margin-top:3px'>$valid_date</div>" : '');
+    } else {
+        $sig_right = "<div style='border-bottom:1px solid #ccc;height:36px;margin-bottom:8px'></div>"
+                   . "<div style='height:18px'></div>";
+    }
 
     $html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>BDC {$cmd['numero_commande']}</title>
     <style>
@@ -846,9 +869,7 @@ function _bdc_pdf($cmd, $lignes, $voir_prix, array $ctx = []) {
       <tr>
         <td width='50%' style='border:1.5px solid #1B75BC;padding:14px 16px;vertical-align:top'>
           <div style='font-size:11px;font-weight:bold;color:#06033A;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-bottom:12px'>Demandeur</div>
-          <div style='border-bottom:1px solid #ccc;height:36px;margin-bottom:8px'></div>
-          <div style='font-size:11px;font-weight:700;color:#06033A'>$agent_nom</div>
-          <div style='font-size:10px;color:#888;margin-top:3px'>$create_date</div>
+          $sig_left
         </td>
         <td width='50%' style='border:1.5px solid #1B75BC;padding:14px 16px;vertical-align:top'>
           <div style='font-size:11px;font-weight:bold;color:#06033A;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-bottom:12px'>Valide par (Superviseur / GSB)</div>

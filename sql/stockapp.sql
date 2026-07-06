@@ -9523,6 +9523,7 @@ CREATE TABLE `users` (
   `site_id` int(10) UNSIGNED DEFAULT NULL,
   `avatar` varchar(255) DEFAULT NULL,
   `telephone` varchar(30) DEFAULT NULL,
+  `signature` longtext DEFAULT NULL,
   `actif` tinyint(1) DEFAULT 1,
   `last_login` datetime DEFAULT NULL,
   `reset_token` varchar(100) DEFAULT NULL,
