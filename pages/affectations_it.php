@@ -35,21 +35,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $actif     = (int)($_POST['actif'] ?? 0);
 
         if (!isset($sous_roles_dispo[$sous_role])) json_response(false,'Sous-rôle invalide.');
-        $support = db_fetch_one("SELECT u.id, CONCAT(u.prenom,' ',u.nom) AS nom FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=? AND r.slug='support_it' AND u.actif=1", [$user_id]);
-        if (!$support) json_response(false,'Compte Support IT introuvable.');
-
+        $target = db_fetch_one("SELECT u.id, CONCAT(u.prenom,' ',u.nom) AS nom, r.slug AS role_slug FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=? AND u.actif=1", [$user_id]);
+        if (!$target) json_response(false,'Compte introuvable.');
+        $label = $sous_roles_dispo[$sous_role]['label'];
         if ($actif) {
+            // Promouvoir en support_it si ce n'est pas déjà le cas
+            if ($target['role_slug'] !== 'support_it') {
+                $sit_role = db_fetch_one("SELECT id FROM roles WHERE slug='support_it'");
+                if (!$sit_role) json_response(false,'Rôle support_it introuvable.');
+                db_query("UPDATE users SET role_id=? WHERE id=?", [$sit_role['id'], $user_id]);
+            }
             db_query("INSERT INTO support_it_roles (user_id,sous_role,actif,affecte_par) VALUES (?,?,1,?)
                       ON DUPLICATE KEY UPDATE actif=1, affecte_par=?",
                 [$user_id, $sous_role, $user['id'], $user['id']]);
-            // Invalider le cache session si c'est l'utilisateur lui-même
-            $label = $sous_roles_dispo[$sous_role]['label'];
-            json_response(true, "Sous-rôle '$label' affecté à {$support['nom']}.");
+            json_response(true, "Sous-rôle '$label' affecté à {$target['nom']}.");
         } else {
             db_query("UPDATE support_it_roles SET actif=0 WHERE user_id=? AND sous_role=?", [$user_id, $sous_role]);
-            json_response(true, "Sous-rôle retiré.");
+            json_response(true, "Sous-rôle '$label' retiré.");
         }
     }
+
+    if ($action === 'promouvoir') {
+        $user_id = (int)($_POST['user_id'] ?? 0);
+        $target  = db_fetch_one("SELECT u.id, CONCAT(u.prenom,' ',u.nom) AS nom, r.slug AS role_slug FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=? AND u.actif=1", [$user_id]);
+        if (!$target) json_response(false,'Compte introuvable.');
+        if ($target['role_slug'] === 'support_it') json_response(false,'Déjà un compte Support IT.');
+        $sit_role = db_fetch_one("SELECT id FROM roles WHERE slug='support_it'");
+        if (!$sit_role) json_response(false,'Rôle support_it introuvable.');
+        db_query("UPDATE users SET role_id=? WHERE id=?", [$sit_role['id'], $user_id]);
+        json_response(true, "{$target['nom']} est maintenant Support IT.");
+    }
+
     json_response(false,'Action inconnue.');
 }
 
@@ -59,6 +75,14 @@ $supports = db_fetch_all(
      FROM users u JOIN roles r ON r.id=u.role_id
      LEFT JOIN sites s ON s.id=u.site_id
      WHERE r.slug='support_it' AND u.actif=1 ORDER BY u.nom"
+);
+
+// Tous les autres utilisateurs actifs (pour promouvoir)
+$autres_users = db_fetch_all(
+    "SELECT u.id, u.prenom, u.nom, u.email, r.nom AS role_nom
+     FROM users u JOIN roles r ON r.id=u.role_id
+     WHERE r.slug != 'support_it' AND u.actif=1
+     ORDER BY u.nom"
 );
 
 // Sous-rôles actifs par user
@@ -90,9 +114,14 @@ include __DIR__ . '/../templates/header.php';
 .badge-sr{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:var(--primary-l);color:var(--primary)}
 </style>
 
-<div style="margin-bottom:20px">
-  <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">💻 Gestion des Support IT</h2>
-  <p style="font-size:13px;color:var(--muted);margin-top:4px">Affectez un ou plusieurs sous-rôles à chaque compte Support IT. Les droits sont mis à jour immédiatement.</p>
+<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+  <div>
+    <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">💻 Gestion des Support IT</h2>
+    <p style="font-size:13px;color:var(--muted);margin-top:4px">Affectez un ou plusieurs sous-rôles à chaque compte Support IT. Les droits sont mis à jour immédiatement.</p>
+  </div>
+  <button class="btn btn-primary" onclick="document.getElementById('mPromouvoir').style.display='flex'">
+    + Ajouter un compte
+  </button>
 </div>
 
 <?php if(empty($supports)): ?>
@@ -147,6 +176,33 @@ include __DIR__ . '/../templates/header.php';
 </div>
 <?php endif; ?>
 
+<!-- ═══ MODAL PROMOUVOIR EN SUPPORT IT ═══ -->
+<div id="mPromouvoir" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.5);z-index:500;align-items:center;justify-content:center">
+  <div style="background:white;border-radius:16px;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700;color:var(--navy)">💻 Promouvoir en Support IT</h3>
+      <button onclick="document.getElementById('mPromouvoir').style.display='none'" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--muted)">✕</button>
+    </div>
+    <div style="padding:22px">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Sélectionnez un compte existant à transformer en Support IT. Son rôle sera changé et vous pourrez ensuite lui affecter des sous-rôles.</p>
+      <div class="form-group" style="margin-bottom:18px">
+        <label style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--navy);display:block;margin-bottom:6px">Compte à promouvoir</label>
+        <select id="selUser" class="form-control">
+          <option value="">— Sélectionner un utilisateur —</option>
+          <?php foreach ($autres_users as $u): ?>
+          <option value="<?= $u['id'] ?>"><?= h($u['prenom'].' '.$u['nom']) ?> — <?= h($u['role_nom']) ?><?= $u['email'] ? ' ('.$u['email'].')' : '' ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div id="alertPromouvoir"></div>
+    </div>
+    <div style="padding:12px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px">
+      <button class="btn btn-secondary" onclick="document.getElementById('mPromouvoir').style.display='none'">Annuler</button>
+      <button class="btn btn-primary" onclick="promouvoir()">Promouvoir en Support IT</button>
+    </div>
+  </div>
+</div>
+
 <script>
 function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
 function toast(m,t='success'){const el=document.createElement('div');el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white;box-shadow:0 4px 20px rgba(0,0,0,.15)`;el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),3000);}
@@ -155,6 +211,20 @@ function toggle(userId, sousRole, actif){
   ap({action:'toggle',user_id:userId,sous_role:sousRole,actif:actif?1:0}).then(d=>{
     if(d.success) toast(d.message);
     else { toast(d.message,'error'); location.reload(); }
+  });
+}
+
+function promouvoir(){
+  const uid = document.getElementById('selUser').value;
+  if(!uid){document.getElementById('alertPromouvoir').innerHTML='<div class="alert alert-danger" style="font-size:13px">Sélectionnez un utilisateur.</div>';return;}
+  ap({action:'promouvoir',user_id:uid}).then(d=>{
+    if(d.success){
+      toast(d.message);
+      document.getElementById('mPromouvoir').style.display='none';
+      setTimeout(()=>location.reload(),800);
+    } else {
+      document.getElementById('alertPromouvoir').innerHTML=`<div class="alert alert-danger" style="font-size:13px">${d.message}</div>`;
+    }
   });
 }
 </script>
