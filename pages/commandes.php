@@ -369,8 +369,13 @@ if (isset($_GET['export'], $_GET['id'])) {
     $cmd_id = (int)$_GET['id'];
     $format = trim($_GET['format'] ?? 'pdf');
     $cmd    = db_fetch_one(
-        "SELECT c.*, s.nom AS site_nom, CONCAT(u.prenom,' ',u.nom) AS agent
-         FROM commandes c LEFT JOIN sites s ON s.id=c.site_id LEFT JOIN users u ON u.id=c.created_by
+        "SELECT c.*, s.nom AS site_nom,
+                CONCAT(u.prenom,' ',u.nom) AS agent,
+                IF(uv.id IS NOT NULL, CONCAT(uv.prenom,' ',uv.nom), '') AS validateur_nom
+         FROM commandes c
+         LEFT JOIN sites s  ON s.id  = c.site_id
+         LEFT JOIN users u  ON u.id  = c.created_by
+         LEFT JOIN users uv ON uv.id = c.valide_par
          WHERE c.id=?", [$cmd_id]
     );
     $lignes = db_fetch_all("SELECT * FROM commande_lignes WHERE commande_id=? ORDER BY id", [$cmd_id]);
@@ -653,133 +658,217 @@ $kpi = [
     'recu'           => count(array_filter($commandes,fn($c)=>$c['statut']==='recu')),
 ];
 
-// ── Export PDF
+// ── Export PDF (Dompdf — pas de URL navigateur, couleurs marque, signatures)
 function _bdc_pdf($cmd, $lignes, $voir_prix, array $ctx = []) {
-    $sl = ['en_attente'=>'En attente','en_attente_livraison'=>'Prêt livraison',
-           'en_cours_livraison'=>'En livraison','recu'=>'Reçu','livre'=>'Livré',
-           'rejete'=>'Rejeté','annule'=>'Annulé'];
+    $autoload = __DIR__ . '/../vendor/autoload.php';
+    if (!file_exists($autoload)) {
+        header('Content-Type: text/plain'); echo 'Dompdf non installé.'; exit;
+    }
+    require_once $autoload;
 
-    // Nombre de colonnes dynamiques pour le colspan du total
-    $nb_cols = 6; // Article, Cmd préc., Stock site, Conso/sem., Qté demandée, Unité
+    $sl = ['en_attente'=>'En attente','en_attente_livraison'=>'Pret livraison',
+           'en_cours_livraison'=>'En livraison','recu'=>'Recu','livre'=>'Livre',
+           'rejete'=>'Rejete','annule'=>'Annule'];
+
     $has_livraison = in_array($cmd['statut'], ['en_attente_livraison','en_cours_livraison','recu','livre']);
-    if ($has_livraison) $nb_cols += 2; // Qté livrée + Statut/Motif
-    if ($voir_prix)     $nb_cols += 2; // P.U. + Total
+    $statut_label  = $sl[$cmd['statut']] ?? $cmd['statut'];
 
-    header('Content-Type: text/html; charset=UTF-8');
+    // Totaux
+    $total = array_sum(array_map(fn($l) => (int)$l['quantite'] * (float)($l['prix_unitaire'] ?? 0), $lignes));
 
+    // ── Lignes du tableau
     $rows = '';
+    $odd  = true;
     foreach ($lignes as $l) {
         $c          = $ctx[$l['id']] ?? ['derniere'=>0,'stock_site'=>0,'conso'=>0];
-        $derniere   = $c['derniere']   > 0 ? $c['derniere']   : '—';
+        $derniere   = $c['derniere']   > 0 ? $c['derniere']   : '-';
         $stock_site = $c['stock_site'] > 0 ? $c['stock_site'] : '0';
-        $conso      = $c['conso']      > 0 ? $c['conso'].'/sem' : '—';
+        $conso      = $c['conso']      > 0 ? $c['conso'].'/sem' : '-';
         $qte_dem    = (int)$l['quantite'];
-        $qte_liv    = $l['quantite_livree'] !== null ? (int)$l['quantite_livree'] : '—';
-        $ecart_st   = ($l['quantite_livree'] !== null && $l['quantite_livree'] != $l['quantite'])
-                        ? 'color:#e74c3c;font-weight:700' : '';
-        $st_badges  = ['valide'=>'<span style="color:#27ae60;font-weight:700">✅</span>',
-                        'rejete'=>'<span style="color:#e74c3c;font-weight:700">❌</span>',
-                        'modifie'=>'<span style="color:#f59e0b;font-weight:700">⚠️</span>'];
-        $st_badge   = $st_badges[$l['statut_ligne'] ?? ''] ?? '';
+        $qte_liv    = $l['quantite_livree'] !== null ? (int)$l['quantite_livree'] : '-';
+        $has_ecart  = ($l['quantite_livree'] !== null && $l['quantite_livree'] != $l['quantite']);
         $motif      = htmlspecialchars($l['motif_rejet'] ?? $l['motif_ecart'] ?? '');
+        $bg         = $odd ? '#ffffff' : '#f0f4ff';
+        $odd        = !$odd;
+
+        $st_labels = ['valide'=>'OK','rejete'=>'Rejete','modifie'=>'Modifie'];
+        $st_colors = ['valide'=>'#15803d','rejete'=>'#dc2626','modifie'=>'#d97706'];
+        $st_txt    = $st_labels[$l['statut_ligne'] ?? ''] ?? '';
+        $st_col    = $st_colors[$l['statut_ligne'] ?? ''] ?? '#555';
 
         $rows .= "<tr>
-            <td><strong>".htmlspecialchars($l['libelle'])."</strong>
-                <div style='font-size:10px;color:#888'>".ucfirst($l['type_article']?:'article')." · ".htmlspecialchars($l['unite'])."</div>
+            <td style='background:$bg;padding:7px 9px;border:1px solid #d1d5db;vertical-align:middle'>
+                <strong>".htmlspecialchars($l['libelle'])."</strong>
+                <div style='font-size:9px;color:#888;font-weight:400'>".ucfirst($l['type_article']?:'article')." · ".htmlspecialchars($l['unite'])."</div>
             </td>
-            <td style='text-align:center;color:#555'>$derniere</td>
-            <td style='text-align:center;color:#555'>$stock_site</td>
-            <td style='text-align:center;color:#555'>$conso</td>
-            <td style='text-align:center;font-weight:800;font-size:15px;color:#06033A'>$qte_dem</td>";
+            <td style='background:$bg;padding:7px 9px;border:1px solid #d1d5db;text-align:center;color:#555'>$derniere</td>
+            <td style='background:$bg;padding:7px 9px;border:1px solid #d1d5db;text-align:center;color:#555'>$stock_site</td>
+            <td style='background:$bg;padding:7px 9px;border:1px solid #d1d5db;text-align:center;color:#555'>$conso</td>
+            <td style='background:$bg;padding:7px 9px;border:1px solid #d1d5db;text-align:center;font-weight:800;font-size:13px;color:#06033A'>$qte_dem</td>";
+
         if ($has_livraison) {
-            $rows .= "<td style='text-align:center;$ecart_st'>$qte_liv</td>
-                      <td>$st_badge ".($motif?"<span style='font-size:10px;color:#666'>$motif</span>":'')."</td>";
+            $ecart_s = $has_ecart ? 'color:#dc2626;font-weight:700' : 'color:#555';
+            $rows .= "<td style='background:$bg;padding:7px 9px;border:1px solid #d1d5db;text-align:center;$ecart_s'>$qte_liv</td>
+                      <td style='background:$bg;padding:7px 9px;border:1px solid #d1d5db;color:$st_col;font-size:9px;font-weight:700'>$st_txt"
+                      .($motif ? "<div style='color:#666;font-weight:400;margin-top:2px'>$motif</div>" : '')."</td>";
         }
         if ($voir_prix) {
-            $rows .= "<td style='text-align:right'>".number_format((float)$l['prix_unitaire'],0,',',' ')." F</td>
-                      <td style='text-align:right;font-weight:700'>".number_format($qte_dem*(float)$l['prix_unitaire'],0,',',' ')." F</td>";
+            $pu  = number_format((float)($l['prix_unitaire'] ?? 0), 0, ',', ' ');
+            $tot = number_format($qte_dem * (float)($l['prix_unitaire'] ?? 0), 0, ',', ' ');
+            $rows .= "<td style='background:$bg;padding:7px 9px;border:1px solid #d1d5db;text-align:right'>$pu F</td>
+                      <td style='background:$bg;padding:7px 9px;border:1px solid #d1d5db;text-align:right;font-weight:700'>$tot F</td>";
         }
         $rows .= "</tr>";
     }
 
-    $total = array_sum(array_map(fn($l) => $l['quantite'] * (float)$l['prix_unitaire'], $lignes));
-
-    // Thead dynamique
-    $th_extra = '';
-    if ($has_livraison) $th_extra .= "<th style='text-align:center'>Qté livrée</th><th>Statut</th>";
-    if ($voir_prix)     $th_extra .= "<th style='text-align:right'>P.U. (F)</th><th style='text-align:right'>Total (F)</th>";
-
+    // Ligne total
     $total_row = '';
     if ($voir_prix) {
-        $span = $nb_cols - 2;
-        $total_row = "<tr class='tot'><td colspan='$span'>TOTAL HT</td><td colspan='2' style='text-align:right'>".number_format($total,0,',',' ')." FCFA</td></tr>";
+        $nb_extra  = ($has_livraison ? 2 : 0) + 2; // prix cols
+        $nb_fixed  = 5; // article + cmd + stock + conso + qte
+        $nb_cols   = $nb_fixed + ($has_livraison ? 2 : 0) + 2;
+        $span      = $nb_cols - 2;
+        $total_fmt = number_format($total, 0, ',', ' ');
+        $total_row = "<tr>
+            <td colspan='$span' style='background:#1B75BC;color:white;font-weight:700;text-align:right;padding:8px 10px;border:1px solid #1B75BC;text-transform:uppercase;font-size:10px;letter-spacing:.5px'>TOTAL HT</td>
+            <td colspan='2' style='background:#1B75BC;color:white;font-weight:800;text-align:right;padding:8px 10px;border:1px solid #1B75BC;font-size:13px'>$total_fmt FCFA</td>
+        </tr>";
     }
 
-    $statut_label = $sl[$cmd['statut']] ?? $cmd['statut'];
+    // En-têtes colonnes dynamiques
+    $th_extra = '';
+    if ($has_livraison) $th_extra .= "<th style='background:#06033A;color:white;padding:8px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border:1px solid #1a1060;text-align:center'>Qte livree</th>
+                                      <th style='background:#06033A;color:white;padding:8px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border:1px solid #1a1060'>Statut</th>";
+    if ($voir_prix)     $th_extra .= "<th style='background:#06033A;color:white;padding:8px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border:1px solid #1a1060;text-align:right'>P.U. (F)</th>
+                                      <th style='background:#06033A;color:white;padding:8px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border:1px solid #1a1060;text-align:right'>Total (F)</th>";
 
-    echo "<!DOCTYPE html><html><head><meta charset='UTF-8'>
-    <title>BDC {$cmd['numero_commande']}</title>
+    // Données signature
+    $agent_nom   = htmlspecialchars($cmd['agent'] ?? '-');
+    $valid_nom   = trim($cmd['validateur_nom'] ?? '');
+    $valid_date  = !empty($cmd['valide_at']) ? date('d/m/Y', strtotime($cmd['valide_at'])) : '';
+    $create_date = date('d/m/Y', strtotime($cmd['created_at']));
+
+    // Notes
+    $notes_html = '';
+    if (!empty(trim($cmd['notes'] ?? ''))) {
+        $notes_html = "<div style='background:#f0f7ff;border:1px solid #bfdbfe;padding:9px 13px;margin-bottom:14px'>
+            <div style='font-size:9px;text-transform:uppercase;color:#1D4ED8;font-weight:700;letter-spacing:.5px;margin-bottom:4px'>Observations</div>
+            <div style='font-size:11px;color:#1a1a2e'>".htmlspecialchars($cmd['notes'])."</div>
+        </div>";
+    }
+
+    // Bloc validateur
+    $sig_right = $valid_nom
+        ? "<div style='border-bottom:1px solid #ccc;height:36px;margin-bottom:8px'></div>
+           <div style='font-size:11px;font-weight:700;color:#06033A'>".htmlspecialchars($valid_nom)."</div>
+           ".($valid_date ? "<div style='font-size:10px;color:#888;margin-top:3px'>$valid_date</div>" : '')
+        : "<div style='border-bottom:1px solid #ccc;height:36px;margin-bottom:8px'></div>
+           <div style='height:18px'></div>";
+
+    $html = "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>BDC {$cmd['numero_commande']}</title>
     <style>
-    *{box-sizing:border-box}
-    body{font-family:'Segoe UI',Arial,sans-serif;margin:0;padding:20px;font-size:12px;color:#222}
-    .hdr{background:linear-gradient(135deg,#06033A,#1B75BC);color:white;padding:22px 28px;border-radius:12px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:center}
-    .hdr h1{margin:0;font-size:20px;font-weight:800}.hdr .sub{color:rgba(255,255,255,.7);font-size:11px;margin-top:3px}
-    .hdr .num{font-size:22px;font-weight:900;color:#00AEEF;letter-spacing:1px}
-    .ig{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px}
-    .ib{background:#f8f9fa;border-radius:8px;padding:11px 13px;border:1px solid #e9ecef}
-    .ib label{font-size:9px;color:#888;text-transform:uppercase;font-weight:700;letter-spacing:.5px;display:block;margin-bottom:3px}
-    .ib p{margin:0;font-size:13px;font-weight:700;color:#06033A}
-    .statut-badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;background:#DBEAFE;color:#1D4ED8}
-    table{width:100%;border-collapse:collapse;margin-bottom:8px}
-    thead th{background:#06033A;color:white;padding:9px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;text-align:left}
-    tbody td{padding:8px 10px;border-bottom:1px solid #f0f0f0;vertical-align:middle}
-    tbody tr:nth-child(even)td{background:#f8f9fa}
-    tbody tr:hover td{background:#EFF6FF}
-    .tot td{background:#1B75BC;color:white;font-weight:700;padding:10px}
-    .chip{display:inline-block;background:#EFF6FF;color:#1D4ED8;padding:1px 7px;border-radius:10px;font-size:10px;font-weight:700}
-    .noprint{display:block}
-    @media print{
-      .noprint{display:none!important}
-      body{margin:0;padding:10px}
-      .hdr{border-radius:0}
-    }
-    </style></head><body>
+    @page { margin: 1.5cm 1.5cm 2cm 1.5cm; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Helvetica, Arial, sans-serif; font-size: 11px; color: #1a1a2e; }
+    </style>
+    </head><body>
 
-    <div class='noprint' style='margin-bottom:14px;display:flex;gap:10px'>
-      <button onclick='window.print()' style='background:#1B75BC;color:white;border:none;padding:9px 22px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:700'>🖨️ Imprimer / Enregistrer PDF</button>
-      <button onclick='window.close()' style='background:#f1f5f9;color:#555;border:1px solid #ddd;padding:9px 18px;border-radius:8px;cursor:pointer;font-size:13px'>✕ Fermer</button>
-    </div>
+    <!-- En-tete principal -->
+    <table width='100%' style='border-collapse:collapse;margin-bottom:0;background-color:#06033A'>
+      <tr>
+        <td style='padding:18px 22px;vertical-align:middle'>
+          <div style='color:white;font-size:17px;font-weight:bold'>BON DE COMMANDE</div>
+          <div style='color:rgba(255,255,255,0.65);font-size:10px;margin-top:3px'>DigiStock &mdash; EMUCI &nbsp;|&nbsp; Gestion des stocks</div>
+        </td>
+        <td align='right' style='padding:18px 22px;vertical-align:middle'>
+          <div style='color:#00AEEF;font-size:20px;font-weight:bold;letter-spacing:1px'>{$cmd['numero_commande']}</div>
+        </td>
+      </tr>
+    </table>
+    <div style='height:5px;background-color:#1B75BC;margin-bottom:16px'></div>
 
-    <div class='hdr'>
-      <div>
-        <h1>📦 Bon de Commande</h1>
-        <div class='sub'>DigiStock — EMUCI</div>
-      </div>
-      <div class='num'>{$cmd['numero_commande']}</div>
-    </div>
+    <!-- Grille infos -->
+    <table width='100%' style='border-collapse:collapse;margin-bottom:14px'>
+      <tr>
+        <td width='33%' style='background:#f8f9fa;border:1px solid #e2e8f0;padding:8px 12px'>
+          <div style='font-size:9px;text-transform:uppercase;color:#888;font-weight:bold;letter-spacing:.5px'>Site</div>
+          <div style='font-size:12px;font-weight:bold;color:#06033A;margin-top:3px'>".htmlspecialchars($cmd['site_nom'])."</div>
+        </td>
+        <td width='33%' style='background:#f8f9fa;border:1px solid #e2e8f0;padding:8px 12px'>
+          <div style='font-size:9px;text-transform:uppercase;color:#888;font-weight:bold;letter-spacing:.5px'>Date commande</div>
+          <div style='font-size:12px;font-weight:bold;color:#06033A;margin-top:3px'>$create_date</div>
+        </td>
+        <td width='34%' style='background:#f8f9fa;border:1px solid #e2e8f0;padding:8px 12px'>
+          <div style='font-size:9px;text-transform:uppercase;color:#888;font-weight:bold;letter-spacing:.5px'>Statut</div>
+          <div style='margin-top:3px'><span style='background:#DBEAFE;color:#1D4ED8;font-size:10px;font-weight:bold;padding:2px 8px'>$statut_label</span></div>
+        </td>
+      </tr>
+      <tr>
+        <td style='background:#f8f9fa;border:1px solid #e2e8f0;padding:8px 12px'>
+          <div style='font-size:9px;text-transform:uppercase;color:#888;font-weight:bold;letter-spacing:.5px'>Demandeur</div>
+          <div style='font-size:12px;font-weight:bold;color:#06033A;margin-top:3px'>$agent_nom</div>
+        </td>
+        <td style='background:#f8f9fa;border:1px solid #e2e8f0;padding:8px 12px'>
+          <div style='font-size:9px;text-transform:uppercase;color:#888;font-weight:bold;letter-spacing:.5px'>Nb articles</div>
+          <div style='font-size:12px;font-weight:bold;color:#06033A;margin-top:3px'>".count($lignes)."</div>
+        </td>
+        <td style='background:#f8f9fa;border:1px solid #e2e8f0;padding:8px 12px'>
+          <div style='font-size:9px;text-transform:uppercase;color:#888;font-weight:bold;letter-spacing:.5px'>"
+          .($valid_nom ? 'Valide par' : '&nbsp;')."</div>
+          <div style='font-size:12px;font-weight:bold;color:#06033A;margin-top:3px'>"
+          .($valid_nom ? htmlspecialchars($valid_nom) : '&nbsp;')."</div>
+        </td>
+      </tr>
+    </table>
 
-    <div class='ig'>
-      <div class='ib'><label>Site</label><p>".htmlspecialchars($cmd['site_nom'])."</p></div>
-      <div class='ib'><label>Date commande</label><p>".date('d/m/Y',strtotime($cmd['created_at']))."</p></div>
-      <div class='ib'><label>Statut</label><p><span class='statut-badge'>$statut_label</span></p></div>
-      <div class='ib'><label>Demandeur</label><p>".htmlspecialchars($cmd['agent'])."</p></div>
-      <div class='ib'><label>Notes</label><p style='font-weight:400;font-size:12px'>".htmlspecialchars($cmd['notes']??'—')."</p></div>
-      <div class='ib'><label>Nb articles</label><p>".count($lignes)."</p></div>
-    </div>
+    $notes_html
 
-    <table>
-      <thead><tr>
-        <th>Article</th>
-        <th style='text-align:center'>Cmd précédente</th>
-        <th style='text-align:center'>Stock site</th>
-        <th style='text-align:center'>Conso / sem.</th>
-        <th style='text-align:center'>Qté demandée</th>
-        $th_extra
-      </tr></thead>
-      <tbody>$rows$total_row</tbody>
+    <!-- Tableau articles -->
+    <table width='100%' style='border-collapse:collapse;margin-bottom:12px'>
+      <thead>
+        <tr>
+          <th style='background:#06033A;color:white;padding:8px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;text-align:left;border:1px solid #1a1060'>Article</th>
+          <th style='background:#06033A;color:white;padding:8px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;text-align:center;border:1px solid #1a1060'>Cmd preced.</th>
+          <th style='background:#06033A;color:white;padding:8px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;text-align:center;border:1px solid #1a1060'>Stock site</th>
+          <th style='background:#06033A;color:white;padding:8px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;text-align:center;border:1px solid #1a1060'>Conso/sem.</th>
+          <th style='background:#06033A;color:white;padding:8px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;text-align:center;border:1px solid #1a1060'>Qte dem.</th>
+          $th_extra
+        </tr>
+      </thead>
+      <tbody>
+        $rows
+        $total_row
+      </tbody>
+    </table>
+
+    <!-- Bloc signatures -->
+    <table width='100%' style='border-collapse:separate;border-spacing:16px 0;margin-top:28px'>
+      <tr>
+        <td width='50%' style='border:1.5px solid #1B75BC;padding:14px 16px;vertical-align:top'>
+          <div style='font-size:11px;font-weight:bold;color:#06033A;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-bottom:12px'>Demandeur</div>
+          <div style='border-bottom:1px solid #ccc;height:36px;margin-bottom:8px'></div>
+          <div style='font-size:11px;font-weight:700;color:#06033A'>$agent_nom</div>
+          <div style='font-size:10px;color:#888;margin-top:3px'>$create_date</div>
+        </td>
+        <td width='50%' style='border:1.5px solid #1B75BC;padding:14px 16px;vertical-align:top'>
+          <div style='font-size:11px;font-weight:bold;color:#06033A;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-bottom:12px'>Valide par (Superviseur / GSB)</div>
+          $sig_right
+        </td>
+      </tr>
     </table>
 
     </body></html>";
+
+    $options = new \Dompdf\Options();
+    $options->set('defaultFont', 'Helvetica');
+    $options->set('isRemoteEnabled', false);
+    $dompdf = new \Dompdf\Dompdf($options);
+    $dompdf->loadHtml($html);
+    $dompdf->setPaper('A4', 'portrait');
+    $dompdf->render();
+    $filename = 'BDC-'.preg_replace('/[^a-zA-Z0-9_-]/', '', $cmd['numero_commande']).'.pdf';
+    $dompdf->stream($filename, ['Attachment' => false]);
+    exit;
 }
 
 function _bdc_excel($cmd, $lignes, array $ctx = []) {
