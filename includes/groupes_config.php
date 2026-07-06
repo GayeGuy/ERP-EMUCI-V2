@@ -80,7 +80,8 @@ function _groupes_def(): array {
                  'url'=>'pages/rapports_gsb.php','active_keys'=>['rapports_gsb'],
                  'roles_include'=>['admin','superadmin','gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation']],
                 ['label'=>'Vue stock par site',   'icon'=>'ph-table',
-                 'url'=>'pages/stock_bobines_vue.php','active_keys'=>['stock_bobines_vue']],
+                 'url'=>'pages/stock_bobines_vue.php','active_keys'=>['stock_bobines_vue'],
+                 'roles_exclude'=>['coordinateur_site']],
             ],
         ],
 
