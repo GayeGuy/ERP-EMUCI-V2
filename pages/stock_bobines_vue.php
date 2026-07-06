@@ -19,7 +19,7 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx as XlsxWriter;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Style\Border;
-use PhpOffice\PhpSpreadsheet\Util\Coordinate;
+use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
