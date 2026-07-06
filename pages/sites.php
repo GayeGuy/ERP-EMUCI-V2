@@ -400,11 +400,16 @@ $type_colors = [
 .sites-table tr.inactive td{opacity:.55}
 .type-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
 .stat-pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;padding:2px 9px;border-radius:10px}
-.action-btn{width:30px;height:30px;border-radius:7px;border:1px solid var(--border);background:white;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:14px;transition:all .15s;color:var(--navy)}
-.action-btn:hover{background:var(--navy);color:white;border-color:var(--navy)}
-.action-btn.warn:hover{background:#f59e0b;color:white;border-color:#f59e0b}
-.action-btn.danger:hover{background:var(--danger);color:white;border-color:var(--danger)}
-.action-btn.success:hover{background:var(--success);color:white;border-color:var(--success)}
+.action-btn{width:32px;height:32px;border-radius:8px;border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;transition:all .15s;background:#EFF6FF;color:#1B75BC}
+.action-btn:hover{background:#1B75BC;color:white;transform:scale(1.08)}
+.action-btn.edit-btn{background:#F0FDF4;color:#166534}
+.action-btn.edit-btn:hover{background:#166534;color:white}
+.action-btn.warn{background:#FFF7ED;color:#C2410C}
+.action-btn.warn:hover{background:#C2410C;color:white}
+.action-btn.success{background:#F0FDF4;color:#15803D}
+.action-btn.success:hover{background:#15803D;color:white}
+.action-btn.danger{background:#FEF2F2;color:#DC2626}
+.action-btn.danger:hover{background:#DC2626;color:white}
 /* Modals */
 .modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(13,31,53,.5);backdrop-filter:blur(4px);align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
@@ -607,7 +612,7 @@ $type_colors = [
                 <i class="ph-duotone ph-eye"></i>
               </button>
               <?php if (can('sites','can_update')): ?>
-              <button class="action-btn" onclick="editS(<?= $s['id'] ?>)" title="Modifier">
+              <button class="action-btn edit-btn" onclick="editS(<?= $s['id'] ?>)" title="Modifier">
                 <i class="ph-duotone ph-pencil-simple"></i>
               </button>
               <?php if ($s['actif']): ?>
