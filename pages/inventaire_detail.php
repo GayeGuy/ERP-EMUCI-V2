@@ -3,6 +3,15 @@
 //  pages/inventaire_detail.php  —  Saisie inventaire bobines
 //  Page dédiée : stock physique + écart connu éditables
 // ============================================================
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx as XlsxWriter;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use Dompdf\Dompdf;
+use Dompdf\Options;
+
+require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/audit.php';
@@ -254,6 +263,166 @@ $nb_saisis    = count(array_filter($lignes, fn($l)=>$l['stock_physique']>0||$l['
 $nb_ecarts    = count(array_filter($lignes, fn($l)=>$l['ecart']!=0));
 $nb_non_saisi = count($lignes) - $nb_saisis;
 
+// ============================================================
+//  EXPORTS
+// ============================================================
+$export = trim($_GET['export'] ?? '');
+
+if ($export === 'xlsx') {
+    $sp = new Spreadsheet();
+    $sh = $sp->getActiveSheet()->setTitle('Inventaire');
+
+    $titre = 'Inventaire ' . $inv['type_inventaire'] . ' — ' . fmt_date($inv['date_inventaire']) . ' — ' . ($inv['site_nom'] ?? 'Tous');
+    $sh->mergeCells('A1:L1');
+    $sh->setCellValue('A1', $titre);
+    $sh->getStyle('A1:L1')->applyFromArray([
+        'font'      => ['bold'=>true,'size'=>13,'color'=>['argb'=>'FFFFFFFF']],
+        'fill'      => ['fillType'=>Fill::FILL_SOLID,'startColor'=>['argb'=>'FF06033A']],
+        'alignment' => ['horizontal'=>Alignment::HORIZONTAL_CENTER],
+    ]);
+    $sh->getRowDimension(1)->setRowHeight(24);
+
+    $headers = ['Numéro','Type','Site','Qté Système','Qté Physique','Écart Mesuré','Conso/jour','Jours restants','Date épuisement','Statut Bobine','Notes'];
+    foreach ($headers as $i => $h) {
+        $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
+        $sh->setCellValue("{$col}2", $h);
+        $sh->getStyle("{$col}2")->applyFromArray([
+            'font'      => ['bold'=>true,'color'=>['argb'=>'FFFFFFFF']],
+            'fill'      => ['fillType'=>Fill::FILL_SOLID,'startColor'=>['argb'=>'FF1B75BC']],
+            'alignment' => ['horizontal'=>Alignment::HORIZONTAL_CENTER,'wrapText'=>true],
+        ]);
+    }
+    $sh->getRowDimension(2)->setRowHeight(28);
+
+    $row = 3;
+    foreach ($lignes as $l) {
+        $ecart = (int)$l['ecart'];
+        $sh->setCellValue("A$row", $l['numero']);
+        $sh->setCellValue("B$row", $l['type_code']);
+        $sh->setCellValue("C$row", $l['site_nom'] ?? '—');
+        $sh->setCellValue("D$row", (int)$l['stock_systeme']);
+        $sh->setCellValue("E$row", $l['stock_physique'] !== null ? (int)$l['stock_physique'] : '');
+        $sh->setCellValue("F$row", $ecart);
+        $sh->setCellValue("G$row", $l['conso_moy_realtime'] ? round((float)$l['conso_moy_realtime'], 1) : '');
+        $sh->setCellValue("H$row", $l['jours_restants_physique'] ?? '');
+        $sh->setCellValue("I$row", $l['date_epuisement_estime'] ? fmt_date($l['date_epuisement_estime']) : '');
+        $sh->setCellValue("J$row", $l['bob_statut'] ?? '');
+        $sh->setCellValue("K$row", $l['notes'] ?? '');
+
+        if ($ecart < 0) {
+            $sh->getStyle("F$row")->getFont()->getColor()->setARGB('FFDC2626');
+            $sh->getStyle("F$row")->getFont()->setBold(true);
+        } elseif ($ecart > 0) {
+            $sh->getStyle("F$row")->getFont()->getColor()->setARGB('FF16A34A');
+            $sh->getStyle("F$row")->getFont()->setBold(true);
+        }
+        if ($row % 2 === 0) {
+            $sh->getStyle("A$row:K$row")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFF8FAFC');
+        }
+        $row++;
+    }
+
+    // Ligne totaux
+    $total_sys = array_sum(array_column($lignes,'stock_systeme'));
+    $total_phy = array_sum(array_filter(array_column($lignes,'stock_physique'), fn($v)=>$v!==null));
+    $total_eca = array_sum(array_column($lignes,'ecart'));
+    $sh->setCellValue("A$row", 'TOTAL');
+    $sh->setCellValue("D$row", $total_sys);
+    $sh->setCellValue("E$row", $total_phy);
+    $sh->setCellValue("F$row", $total_eca);
+    $sh->getStyle("A$row:K$row")->applyFromArray([
+        'font' => ['bold'=>true],
+        'fill' => ['fillType'=>Fill::FILL_SOLID,'startColor'=>['argb'=>'FFE8F0FE']],
+    ]);
+
+    $widths = [16,10,18,14,14,14,12,14,16,14,28];
+    foreach ($widths as $i => $w) {
+        $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
+        $sh->getColumnDimension($col)->setWidth($w);
+    }
+    $sh->getStyle("A2:K$row")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="inventaire_' . $inv_id . '_' . date('Ymd') . '.xlsx"');
+    header('Cache-Control: max-age=0');
+    $writer = new XlsxWriter($sp);
+    $tmp = tempnam(sys_get_temp_dir(), 'inv_');
+    $writer->save($tmp); readfile($tmp); unlink($tmp);
+    exit;
+}
+
+if ($export === 'pdf') {
+    $rows_html = '';
+    $total_sys = 0; $total_phy = 0; $total_eca = 0;
+    foreach ($lignes as $l) {
+        $ecart = (int)$l['ecart'];
+        $total_sys += (int)$l['stock_systeme'];
+        $total_phy += $l['stock_physique'] !== null ? (int)$l['stock_physique'] : 0;
+        $total_eca += $ecart;
+        $ec = $ecart < 0 ? '#DC2626' : ($ecart > 0 ? '#16A34A' : '#94a3b8');
+        $rows_html .= '<tr>
+            <td style="font-weight:700">' . htmlspecialchars($l['numero']) . '</td>
+            <td>' . htmlspecialchars($l['type_code']) . '</td>
+            <td>' . htmlspecialchars($l['site_nom'] ?? '—') . '</td>
+            <td style="text-align:right">' . number_format((int)$l['stock_systeme']) . '</td>
+            <td style="text-align:right">' . ($l['stock_physique'] !== null ? number_format((int)$l['stock_physique']) : '—') . '</td>
+            <td style="text-align:right;font-weight:700;color:' . $ec . '">' . ($ecart != 0 ? ($ecart > 0 ? '+' : '') . $ecart : '—') . '</td>
+            <td style="text-align:center">' . ($l['jours_restants_physique'] ?? '—') . '</td>
+            <td style="text-align:center">' . ($l['date_epuisement_estime'] ? fmt_date($l['date_epuisement_estime'], 'd/m/Y') : '—') . '</td>
+            <td>' . htmlspecialchars($l['notes'] ?? '') . '</td>
+        </tr>';
+    }
+    $statut_color = $inv['statut'] === 'valide' ? '#065f46' : '#92400e';
+    $statut_bg    = $inv['statut'] === 'valide' ? '#d1fae5' : '#fef3c7';
+    $statut_txt   = $inv['statut'] === 'valide' ? 'Validé' : 'En cours';
+    $html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    body{font-family:Arial,sans-serif;font-size:9px;margin:15px}
+    h1{font-size:13px;color:#06033A;margin:0 0 2px}
+    .meta{font-size:9px;color:#64748b;margin-bottom:12px;display:flex;gap:16px}
+    .badge{padding:2px 8px;border-radius:8px;font-size:8px;font-weight:700}
+    table{width:100%;border-collapse:collapse}
+    th{background:#06033A;color:#fff;padding:6px 7px;font-size:8px;text-align:left}
+    td{padding:4px 7px;border-bottom:1px solid #e2e8f0;font-size:8.5px}
+    tr:nth-child(even) td{background:#f8fafc}
+    tr.tot td{background:#e8f0fe;font-weight:700;font-size:9px}
+    </style></head><body>
+    <h1>Inventaire ' . htmlspecialchars($inv['type_inventaire']) . ' — ' . fmt_date($inv['date_inventaire']) . '</h1>
+    <div class="meta">
+      <span>' . htmlspecialchars($inv['site_nom'] ?? 'Tous les sites') . '</span>
+      <span>' . count($lignes) . ' bobines</span>
+      <span>Créé par ' . htmlspecialchars($inv['createur'] ?? '—') . '</span>
+      <span><span class="badge" style="background:' . $statut_bg . ';color:' . $statut_color . '">' . $statut_txt . '</span></span>
+      <span>Généré le ' . date('d/m/Y H:i') . '</span>
+    </div>
+    <table>
+      <thead><tr>
+        <th>Numéro</th><th>Type</th><th>Site</th>
+        <th style="text-align:right">Qté Système</th>
+        <th style="text-align:right">Qté Physique</th>
+        <th style="text-align:right">Écart</th>
+        <th style="text-align:center">Jours rest.</th>
+        <th style="text-align:center">Date épuis.</th>
+        <th>Notes</th>
+      </tr></thead>
+      <tbody>' . $rows_html . '
+      <tr class="tot">
+        <td colspan="3">TOTAL</td>
+        <td style="text-align:right">' . number_format($total_sys) . '</td>
+        <td style="text-align:right">' . number_format($total_phy) . '</td>
+        <td style="text-align:right;color:' . ($total_eca < 0 ? '#DC2626' : ($total_eca > 0 ? '#16A34A' : '#06033A')) . '">' . ($total_eca != 0 ? ($total_eca > 0 ? '+' : '') . $total_eca : '—') . '</td>
+        <td colspan="3"></td>
+      </tr>
+      </tbody>
+    </table></body></html>';
+
+    $opts = new Options(); $opts->set('isRemoteEnabled', false);
+    $pdf = new Dompdf($opts);
+    $pdf->loadHtml($html); $pdf->setPaper('A4','landscape'); $pdf->render();
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: attachment; filename="inventaire_' . $inv_id . '_' . date('Ymd') . '.pdf"');
+    echo $pdf->output(); exit;
+}
+
 include __DIR__ . '/../templates/header.php';
 ?>
 <style>
@@ -302,8 +471,13 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
       <?= h($inv['site_nom']??'Tous les sites') ?> · <strong><?= count($lignes) ?></strong> bobines · Créé par <?= h($inv['createur']??'—') ?>
     </div>
   </div>
-  <?php if($can_edit || $can_validate): ?>
-  <div style="display:flex;gap:8px">
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <a href="?id=<?= $inv_id ?>&export=xlsx" class="btn btn-secondary" style="font-size:13px;display:flex;align-items:center;gap:5px">
+      <i class="ph-duotone ph-microsoft-excel-logo"></i> Excel
+    </a>
+    <a href="?id=<?= $inv_id ?>&export=pdf" class="btn btn-secondary" style="font-size:13px;display:flex;align-items:center;gap:5px">
+      <i class="ph-duotone ph-file-pdf"></i> PDF
+    </a>
     <?php if($can_edit): ?>
     <button class="btn btn-secondary" id="btnSauverTout" onclick="sauverTout()">💾 Tout sauver</button>
     <?php endif; ?>
@@ -311,7 +485,6 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
     <button class="btn btn-success" onclick="validerInventaire()">✅ Valider l'inventaire</button>
     <?php endif; ?>
   </div>
-  <?php endif; ?>
 </div>
 
 <!-- STATS -->
