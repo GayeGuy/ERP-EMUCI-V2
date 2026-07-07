@@ -711,7 +711,7 @@ function _bdc_pdf($cmd, $lignes, $voir_prix, array $ctx = []) {
         $bg         = $odd ? '#ffffff' : '#f0f4ff';
         $odd        = !$odd;
 
-        $st_labels = ['valide'=>'OK','rejete'=>'Rejete','modifie'=>'Modifie'];
+        $st_labels = ['valide'=>'Livré','rejete'=>'Rejeté','modifie'=>'Modifié'];
         $st_colors = ['valide'=>'#15803d','rejete'=>'#dc2626','modifie'=>'#d97706'];
         $st_txt    = $st_labels[$l['statut_ligne'] ?? ''] ?? '';
         $st_col    = $st_colors[$l['statut_ligne'] ?? ''] ?? '#555';
