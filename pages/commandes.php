@@ -781,12 +781,12 @@ function _bdc_pdf($cmd, $lignes, $voir_prix, array $ctx = []) {
     $agent_sig_img = '';
     if (!empty($cmd['agent_signature'])) {
         $enc = htmlspecialchars($cmd['agent_signature'], ENT_QUOTES, 'UTF-8');
-        $agent_sig_img = "<img src=\"$enc\" style=\"max-height:44px;max-width:180px;display:block;margin-bottom:6px\">";
+        $agent_sig_img = "<img src=\"$enc\" style=\"max-height:72px;max-width:240px;display:block;margin-bottom:6px\">";
     }
     $valid_sig_img = '';
     if (!empty($cmd['validateur_signature'])) {
         $enc = htmlspecialchars($cmd['validateur_signature'], ENT_QUOTES, 'UTF-8');
-        $valid_sig_img = "<img src=\"$enc\" style=\"max-height:44px;max-width:180px;display:block;margin-bottom:6px\">";
+        $valid_sig_img = "<img src=\"$enc\" style=\"max-height:72px;max-width:240px;display:block;margin-bottom:6px\">";
     }
 
     // Bloc demandeur
