@@ -1083,10 +1083,6 @@ include __DIR__ . '/../templates/header.php';
               <i class="ph-duotone ph-eye"></i>
             </button>
             <a href="?id=<?= $cmd['id'] ?>&export=1&format=pdf" target="_blank" class="btn btn-secondary btn-sm" title="Imprimer PDF">🖨️</a>
-            <?php if($is_superviseur && $cmd['statut']==='en_attente'): ?>
-              <button class="btn btn-primary btn-sm" onclick="ouvrirValidation(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>')">✅ Valider</button>
-              <button class="btn btn-danger btn-sm" onclick="ouvrirRejet(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>')">❌ Rejeter</button>
-            <?php endif; ?>
             <?php if($is_gestionnaire && $cmd['statut']==='en_attente_livraison'): ?>
               <button class="btn btn-primary btn-sm" onclick="ouvrirLivraison(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>')">🚚 Expédier</button>
             <?php endif; ?>
