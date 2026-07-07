@@ -96,7 +96,7 @@ if (empty($stock_par_site) && !$f_site) {
 // ── CONSOMMATION (depuis les points journaliers)
 $ws_site = $f_site ? "AND p.site_id = $f_site" : '';
 $conso = db_fetch_all(
-    "SELECT p.date_point, s.nom AS site_nom, pu.type_pmma,
+    "SELECT p.date_point, p.site_id, s.nom AS site_nom, pu.type_pmma,
             SUM(pu.utilises) AS utilises,
             SUM(pu.endommages) AS endommages,
             SUM(pu.utilises + pu.endommages) AS total_sortis
@@ -108,6 +108,19 @@ $conso = db_fetch_all(
      ORDER BY p.date_point DESC",
     [$f_from, $f_to]
 );
+
+// Lookup stock actuel : site_id_type → quantite
+$stock_map = [];
+foreach ($stock_par_site as $sp) {
+    $key = $sp['site_id'] . '_' . ($sp['type_pmma'] ?: 'Standard');
+    $stock_map[$key] = (int)$sp['quantite'];
+}
+// Lookup stock actuel par type (pour PDF mensuel)
+$stock_type_map = [];
+foreach ($stock_par_site as $sp) {
+    $t = $sp['type_pmma'] ?: 'Standard';
+    $stock_type_map[$t] = ($stock_type_map[$t] ?? 0) + (int)$sp['quantite'];
+}
 
 // ── SYNTHÈSE PAR TYPE SUR LA PÉRIODE
 $totaux_type = [];
@@ -152,7 +165,7 @@ if (isset($_GET['export'])) {
         // Feuille 1 : Consommation détail
         $sh1 = $spreadsheet->getActiveSheet();
         $sh1->setTitle('Consommation');
-        $headers1 = ['Date', 'Site', 'Type PMMA', 'Utilisés', 'Endommagés', 'Total sorti'];
+        $headers1 = ['Date', 'Site', 'Type PMMA', 'Utilisés', 'Endommagés', 'Total sorti', 'Stock restant'];
         foreach ($headers1 as $i => $h) {
             $col = chr(65 + $i);
             $sh1->setCellValue("{$col}1", $h);
@@ -170,6 +183,7 @@ if (isset($_GET['export'])) {
             $sh1->setCellValue("D$row", (int)$c['utilises']);
             $sh1->setCellValue("E$row", (int)$c['endommages']);
             $sh1->setCellValue("F$row", (int)$c['total_sortis']);
+            $sh1->setCellValue("G$row", $stock_map[$c['site_id'] . '_' . ($c['type_pmma'] ?: 'Standard')] ?? '');
             $row++;
         }
         // Ligne total
@@ -181,7 +195,7 @@ if (isset($_GET['export'])) {
             'font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
             'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '1B75BC']],
         ]);
-        foreach (range('A', 'F') as $col) $sh1->getColumnDimension($col)->setAutoSize(true);
+        foreach (range('A', 'G') as $col) $sh1->getColumnDimension($col)->setAutoSize(true);
 
         // Feuille 2 : Stock actuel
         $spreadsheet->createSheet();
@@ -227,6 +241,8 @@ if (isset($_GET['export'])) {
         $rows_html = '';
         foreach ($conso as $c) {
             $endomm_color = $c['endommages'] > 0 ? '#991b1b' : '#64748b';
+            $restant_pdf  = $stock_map[$c['site_id'] . '_' . ($c['type_pmma'] ?: 'Standard')] ?? '—';
+            $rest_color   = is_int($restant_pdf) && $restant_pdf < 10 ? '#991b1b' : '#06033A';
             $rows_html .= '<tr>
                 <td>' . h(fmt_date($c['date_point'])) . '</td>
                 <td>' . h($c['site_nom']) . '</td>
@@ -234,6 +250,7 @@ if (isset($_GET['export'])) {
                 <td style="text-align:center">' . (int)$c['utilises'] . '</td>
                 <td style="text-align:center;color:' . $endomm_color . '">' . (int)$c['endommages'] . '</td>
                 <td style="text-align:center;font-weight:700">' . (int)$c['total_sortis'] . '</td>
+                <td style="text-align:center;font-weight:700;color:' . $rest_color . '">' . $restant_pdf . '</td>
             </tr>';
         }
         $html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>
@@ -255,13 +272,14 @@ if (isset($_GET['export'])) {
         </tr></table>
         <div class="sub">Période : ' . h($f_from) . ' → ' . h($f_to) . ' &nbsp;|&nbsp; Site : ' . h($site_label) . ' &nbsp;|&nbsp; Généré le ' . date('d/m/Y H:i') . '</div>
         <table><thead><tr>
-            <th>Date</th><th>Site</th><th>Type PMMA</th><th>Utilisés</th><th>Endommagés</th><th>Total sorti</th>
+            <th>Date</th><th>Site</th><th>Type PMMA</th><th>Utilisés</th><th>Endommagés</th><th>Total sorti</th><th>Stock restant</th>
         </tr></thead><tbody>
         ' . $rows_html . '
         <tr class="total-row"><td colspan="3">TOTAL PÉRIODE</td>
             <td>' . $grand_total['utilises'] . '</td>
             <td>' . $grand_total['endommages'] . '</td>
             <td>' . $grand_total['total'] . '</td>
+            <td></td>
         </tr></tbody></table></body></html>';
 
         $opts = new Options();
@@ -308,12 +326,15 @@ if (isset($_GET['export'])) {
             $cur_mois  = $row['mois'];
             $bg        = $is_new ? '#f0f4ff' : '#ffffff';
             $ec        = $row['endommages'] > 0 ? '#991b1b' : '#64748b';
+            $rest_m = $stock_type_map[$row['type_pmma']] ?? '—';
+            $rest_m_color = is_int($rest_m) && $rest_m < 10 ? '#991b1b' : '#06033A';
             $rows_html .= '<tr style="background:' . $bg . '">
                 <td style="font-weight:' . ($is_new ? '700' : '400') . ';color:#06033A">' . ($is_new ? $row['mois_label'] : '') . '</td>
                 <td>' . h($row['type_pmma']) . '</td>
                 <td style="text-align:center;font-weight:700">' . $row['utilises'] . '</td>
                 <td style="text-align:center;color:' . $ec . '">' . $row['endommages'] . '</td>
                 <td style="text-align:center;font-weight:800;color:#06033A">' . $row['total'] . '</td>
+                <td style="text-align:center;font-weight:700;color:' . $rest_m_color . '">' . $rest_m . '</td>
             </tr>';
         }
 
@@ -336,14 +357,15 @@ if (isset($_GET['export'])) {
         </tr></table>
         <div class="sub">Période : ' . h($f_from) . ' → ' . h($f_to) . ' &nbsp;|&nbsp; Site : ' . h($site_label) . ' &nbsp;|&nbsp; Généré le ' . date('d/m/Y H:i') . '</div>
         <table><thead><tr>
-            <th style="text-align:left">Mois</th><th>Type PMMA</th><th>Utilisés</th><th>Endommagés</th><th>Total sorti</th>
+            <th style="text-align:left">Mois</th><th>Type PMMA</th><th>Utilisés</th><th>Endommagés</th><th>Total sorti</th><th>Stock restant</th>
         </tr></thead><tbody>
-        ' . ($rows_html ?: '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:20px">Aucune donnée sur cette période</td></tr>') . '
+        ' . ($rows_html ?: '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:20px">Aucune donnée sur cette période</td></tr>') . '
         <tr class="total-row">
             <td colspan="2">TOTAL PÉRIODE</td>
             <td>' . $grand_total['utilises'] . '</td>
             <td>' . $grand_total['endommages'] . '</td>
             <td>' . $grand_total['total'] . '</td>
+            <td></td>
         </tr></tbody></table></body></html>';
 
         $opts = new Options();
@@ -536,13 +558,15 @@ include __DIR__ . '/../templates/header.php';
         <th style="text-align:center">Utilisés</th>
         <th style="text-align:center">Endommagés</th>
         <th style="text-align:center">Total sorti</th>
+        <th style="text-align:center">Stock restant</th>
       </tr></thead>
       <tbody>
       <?php if (empty($conso)): ?>
-        <tr><td colspan="<?= $site_force ? 5 : 6 ?>" style="text-align:center;padding:30px;color:var(--muted)">
+        <tr><td colspan="<?= $site_force ? 6 : 7 ?>" style="text-align:center;padding:30px;color:var(--muted)">
           Aucune consommation sur cette période.
         </td></tr>
       <?php else: foreach ($conso as $c): ?>
+        <?php $restant = $stock_map[$c['site_id'] . '_' . ($c['type_pmma'] ?: 'Standard')] ?? '—'; ?>
         <tr>
           <td><?= h(fmt_date($c['date_point'])) ?></td>
           <?php if (!$site_force): ?><td><?= h($c['site_nom']) ?></td><?php endif; ?>
@@ -554,6 +578,9 @@ include __DIR__ . '/../templates/header.php';
             <?= (int)$c['endommages'] ?: '—' ?>
           </td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px"><?= (int)$c['total_sortis'] ?></td>
+          <td style="text-align:center;font-weight:700;color:<?= is_int($restant) && $restant < 10 ? 'var(--danger)' : 'var(--navy)' ?>">
+            <?= is_int($restant) ? $restant : $restant ?>
+          </td>
         </tr>
       <?php endforeach; endif; ?>
       <?php if (!empty($conso)): ?>
@@ -562,6 +589,7 @@ include __DIR__ . '/../templates/header.php';
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;color:var(--blue)"><?= $grand_total['utilises'] ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;color:var(--danger)"><?= $grand_total['endommages'] ?: '—' ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;font-size:16px;color:var(--navy)"><?= $grand_total['total'] ?></td>
+          <td></td>
         </tr>
       <?php endif; ?>
       </tbody>
