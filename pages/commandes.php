@@ -781,28 +781,30 @@ function _bdc_pdf($cmd, $lignes, $voir_prix, array $ctx = []) {
     $agent_sig_img = '';
     if (!empty($cmd['agent_signature'])) {
         $enc = htmlspecialchars($cmd['agent_signature'], ENT_QUOTES, 'UTF-8');
-        $agent_sig_img = "<img src=\"$enc\" style=\"max-height:72px;max-width:240px;display:block;margin-bottom:6px\">";
+        $agent_sig_img = "<img src=\"$enc\" style=\"max-height:100px;max-width:280px;display:block;margin:0 auto 8px auto\">";
     }
     $valid_sig_img = '';
     if (!empty($cmd['validateur_signature'])) {
         $enc = htmlspecialchars($cmd['validateur_signature'], ENT_QUOTES, 'UTF-8');
-        $valid_sig_img = "<img src=\"$enc\" style=\"max-height:72px;max-width:240px;display:block;margin-bottom:6px\">";
+        $valid_sig_img = "<img src=\"$enc\" style=\"max-height:100px;max-width:280px;display:block;margin:0 auto 8px auto\">";
     }
 
     // Bloc demandeur
-    $sig_left = $agent_sig_img
-        . ($agent_sig_img ? '' : "<div style='border-bottom:1px solid #ccc;height:36px;margin-bottom:8px'></div>")
-        . "<div style='font-size:11px;font-weight:700;color:#06033A;margin-top:4px'>$agent_nom</div>"
-        . "<div style='font-size:10px;color:#888;margin-top:3px'>$create_date</div>";
+    $sig_left = "<div style='text-align:center'>"
+        . ($agent_sig_img ?: "<div style='border-bottom:1px solid #ccc;height:50px;margin-bottom:8px'></div>")
+        . "<div style='font-size:11px;font-weight:700;color:#06033A;margin-top:6px'>$agent_nom</div>"
+        . "<div style='font-size:10px;color:#888;margin-top:3px'>$create_date</div>"
+        . "</div>";
 
     // Bloc validateur
     if ($valid_nom) {
-        $sig_right = $valid_sig_img
-            . ($valid_sig_img ? '' : "<div style='border-bottom:1px solid #ccc;height:36px;margin-bottom:8px'></div>")
-            . "<div style='font-size:11px;font-weight:700;color:#06033A;margin-top:4px'>".htmlspecialchars($valid_nom)."</div>"
-            . ($valid_date ? "<div style='font-size:10px;color:#888;margin-top:3px'>$valid_date</div>" : '');
+        $sig_right = "<div style='text-align:center'>"
+            . ($valid_sig_img ?: "<div style='border-bottom:1px solid #ccc;height:50px;margin-bottom:8px'></div>")
+            . "<div style='font-size:11px;font-weight:700;color:#06033A;margin-top:6px'>".htmlspecialchars($valid_nom)."</div>"
+            . ($valid_date ? "<div style='font-size:10px;color:#888;margin-top:3px'>$valid_date</div>" : '')
+            . "</div>";
     } else {
-        $sig_right = "<div style='border-bottom:1px solid #ccc;height:36px;margin-bottom:8px'></div>"
+        $sig_right = "<div style='border-bottom:1px solid #ccc;height:50px;margin-bottom:8px'></div>"
                    . "<div style='height:18px'></div>";
     }
 
