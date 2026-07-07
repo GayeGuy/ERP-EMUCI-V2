@@ -239,6 +239,16 @@ include __DIR__ . '/../../templates/header.php';
 .filter-bar{background:white;border:1px solid var(--border);border-radius:12px;padding:12px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:20px}
 .filter-bar label{font-size:12px;font-weight:600;color:var(--navy);display:block;margin-bottom:4px}
 .filter-bar input,.filter-bar select{padding:8px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:white;outline:none}
+.kpi-bar{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px}
+.kpi{background:white;border:1px solid var(--border);border-radius:12px;padding:14px 16px}
+.kpi-val{font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900;line-height:1}
+.kpi-lbl{font-size:11px;color:var(--muted);font-weight:600;margin-top:3px}
+.pmma-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-bottom:24px}
+.pmma-card{background:white;border-radius:14px;border:1px solid var(--border);overflow:hidden}
+.pmma-head{padding:12px 16px;background:var(--navy);display:flex;justify-content:space-between;align-items:center}
+.pmma-site{color:white;font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700}
+.pmma-body{padding:14px 16px}
+.pmma-alert{background:#fee2e2;color:#991b1b;padding:5px 10px;border-radius:8px;font-size:11px;margin-top:8px;font-weight:600}
 .modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(10,22,40,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
 .modal{background:white;border-radius:16px;width:480px;max-width:95vw;max-height:92vh;overflow-y:auto;animation:mIn .25s cubic-bezier(.22,1,.36,1)}
@@ -302,32 +312,71 @@ include __DIR__ . '/../../templates/header.php';
   </div>
 </div>
 
-<!-- STOCK CARDS -->
-<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin-bottom:24px">
-<?php foreach($stocks as $s):
-  $pct   = $s['quantite']>0 ? min(100,round($s['quantite']/5000*100)) : 0;
-  $color = $s['quantite']<200 ? 'var(--danger)' : ($s['quantite']<1000 ? 'var(--warning)' : 'var(--success)');
-  $is_gonfl  = ($s['type_rivet'] === 'gonflable');
-  $icon      = $is_gonfl ? '🔵' : '🔴';
-  $type_lbl  = $is_gonfl ? 'Gonflables' : 'Éclatés';
-  $bg_header = $is_gonfl ? '#e3f2fd' : '#fce4ec';
-  $dispo_lbl = $is_gonfl ? 'rivets gonflables disponibles' : 'rivets éclatés disponibles';
+<!-- KPI -->
+<?php
+$kpi_gonfl  = array_sum(array_map(fn($r) => $r['type_rivet']==='gonflable' ? (int)$r['quantite'] : 0, $stocks));
+$kpi_eclat  = array_sum(array_map(fn($r) => $r['type_rivet']==='eclate'    ? (int)$r['quantite'] : 0, $stocks));
+$kpi_mois   = array_sum(array_column($stocks, 'utilises_mois'));
+$nb_bas     = count(array_filter($stocks, fn($r) => (int)$r['quantite'] < 200));
 ?>
-<div style="background:white;border:1px solid var(--border);border-radius:14px;overflow:hidden">
-  <div style="padding:16px;border-bottom:1px solid var(--border);background:<?= $bg_header ?>;display:flex;align-items:center;gap:12px">
-    <div style="font-size:28px"><?= $icon ?></div>
-    <div style="flex:1">
-      <div style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;color:var(--navy)"><?= h($s['nom']) ?></div>
-      <div style="font-size:12px;color:var(--muted);font-weight:600"><?= $type_lbl ?></div>
-    </div>
+<div class="kpi-bar">
+  <div class="kpi">
+    <div class="kpi-val" style="color:var(--blue)"><?= fmt_number($kpi_gonfl) ?></div>
+    <div class="kpi-lbl">Gonflables en stock</div>
   </div>
-  <div style="padding:16px">
-    <div style="font-family:'Montserrat',sans-serif;font-size:36px;font-weight:900;color:<?= $color ?>;line-height:1"><?= fmt_number($s['quantite']) ?></div>
-    <div style="font-size:12px;color:var(--muted);margin-bottom:10px"><?= $dispo_lbl ?></div>
-    <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-bottom:10px">
-      <div style="width:<?= $pct ?>%;height:100%;background:<?= $color ?>;border-radius:3px"></div>
+  <div class="kpi">
+    <div class="kpi-val" style="color:var(--navy)"><?= fmt_number($kpi_eclat) ?></div>
+    <div class="kpi-lbl">Éclatés en stock</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-val" style="color:var(--muted)"><?= fmt_number($kpi_mois) ?></div>
+    <div class="kpi-lbl">Utilisés ce mois</div>
+  </div>
+  <?php if ($nb_bas > 0): ?>
+  <div class="kpi" style="border-color:#fca5a5;background:#fff5f5">
+    <div class="kpi-val" style="color:var(--danger)"><?= $nb_bas ?></div>
+    <div class="kpi-lbl">Type(s) en stock bas</div>
+  </div>
+  <?php endif; ?>
+</div>
+
+<!-- STOCK CARDS -->
+<div style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">
+  <i class="ph-duotone ph-package" style="vertical-align:middle"></i> Stock actuel par site
+</div>
+<?php
+$rivets_grouped = [];
+foreach ($stocks as $r) {
+    $rivets_grouped[$r['nom']][] = $r;
+}
+?>
+<div class="pmma-grid">
+<?php foreach ($rivets_grouped as $site_nom => $items): ?>
+<div class="pmma-card">
+  <div class="pmma-head">
+    <div class="pmma-site"><i class="ph-duotone ph-map-pin"></i> <?= h($site_nom) ?></div>
+  </div>
+  <div class="pmma-body">
+    <?php foreach ($items as $item):
+      $lbl     = $item['type_rivet'] === 'gonflable' ? 'Gonflables' : 'Éclatés';
+      $qty     = (int)$item['quantite'];
+      $low     = $qty < 200;
+      $clr     = $low ? 'var(--danger)' : 'var(--blue)';
+    ?>
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+      <div>
+        <div style="font-size:13px;font-weight:600;color:var(--navy)"><?= $lbl ?></div>
+        <div style="font-size:11px;color:var(--muted)">Ce mois : <?= fmt_number($item['utilises_mois']) ?></div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-family:'Montserrat',sans-serif;font-size:26px;font-weight:900;color:<?= $clr ?>"><?= fmt_number($qty) ?></div>
+        <div style="font-size:10px;color:var(--muted)">unités</div>
+      </div>
     </div>
-    <div style="font-size:12px;color:var(--muted)">Utilisés ce mois : <strong><?= fmt_number($s['utilises_mois']) ?></strong></div>
+    <?php if ($low): ?>
+    <div class="pmma-alert"><i class="ph-duotone ph-warning"></i> Stock bas — réapprovisionner</div>
+    <?php endif; ?>
+    <?php endforeach; ?>
   </div>
 </div>
 <?php endforeach; ?>
