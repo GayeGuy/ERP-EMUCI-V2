@@ -11,10 +11,13 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/groupes_config.php';
+require_once __DIR__ . '/../includes/notifications.php';
 
 require_auth();
 
-$user = current_user();
+$user   = current_user();
+$notifs = notif_get_unread($user['id']);
+$unread = count($notifs);
 
 // ── Sélection d'un groupe → mémorise en session et redirige
 if (!empty($_GET['set_groupe'])) {
@@ -105,6 +108,48 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
       font-family: 'Plus Jakarta Sans', sans-serif;
       font-size: 14px; font-weight: 600; color: var(--blue);
     }
+
+    /* ── Notifications ── */
+    .notif-wrap { position: relative; }
+    .notif-btn {
+      width: 38px; height: 38px; border-radius: 10px;
+      background: transparent; border: 1.5px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      cursor: pointer; transition: background .15s, border-color .15s;
+      position: relative;
+    }
+    .notif-btn:hover { background: var(--primary-l); border-color: var(--primary); }
+    .notif-count {
+      position: absolute; top: -5px; right: -5px;
+      min-width: 18px; height: 18px; padding: 0 4px;
+      background: #EF4444; color: white;
+      font-size: 10px; font-weight: 700;
+      border-radius: 9px; display: flex; align-items: center; justify-content: center;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    .notif-dropdown {
+      display: none; position: absolute;
+      top: calc(100% + 8px); right: 0;
+      width: 340px; background: white;
+      border: 1.5px solid var(--border); border-radius: 16px;
+      box-shadow: 0 8px 28px rgba(6,3,58,.14); z-index: 200;
+      overflow: hidden;
+    }
+    .notif-dropdown.open { display: block; animation: dropDown .2s ease; }
+    @keyframes dropDown { from { opacity:0; transform:translateY(-8px); } to { opacity:1; transform:translateY(0); } }
+    .notif-header {
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .notif-header h4 { font-size: 14px; font-weight: 700; color: var(--navy); font-family: 'Plus Jakarta Sans', sans-serif; }
+    .notif-header a  { font-size: 12px; color: var(--blue); text-decoration: none; font-weight: 600; }
+    .notif-list { max-height: 320px; overflow-y: auto; }
+    .notif-item { padding: 12px 18px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .15s; }
+    .notif-item:hover { background: #F8FAFC; }
+    .notif-item:last-child { border-bottom: none; }
+    .notif-item .n-titre { font-size: 13px; font-weight: 600; color: var(--navy); }
+    .notif-item .n-date  { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .notif-empty { padding: 28px; text-align: center; color: var(--muted); font-size: 13px; }
 
     /* ── User chip (dropdown) ── */
     .uc-wrap { position: relative; }
@@ -285,7 +330,38 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
     <span class="navbar-accueil">Accueil</span>
   </a>
 
-  <!-- Droite : Chip utilisateur avec dropdown -->
+  <!-- Droite : Notifications + Chip utilisateur -->
+  <div style="display:flex;align-items:center;gap:10px">
+
+  <!-- Cloche notifications -->
+  <div class="notif-wrap">
+    <button class="notif-btn" onclick="toggleNotifs()" title="Notifications">
+      <i class="ph-duotone ph-bell" style="font-size:20px;color:var(--muted)"></i>
+      <?php if ($unread > 0): ?>
+        <span class="notif-count"><?= $unread > 9 ? '9+' : $unread ?></span>
+      <?php endif; ?>
+    </button>
+    <div class="notif-dropdown" id="notif-dropdown">
+      <div class="notif-header">
+        <h4>Notifications <?php if ($unread): ?><span style="color:#EF4444">(<?= $unread ?>)</span><?php endif; ?></h4>
+        <a href="javascript:void(0)" onclick="markAllRead()">Tout marquer lu</a>
+      </div>
+      <div class="notif-list" id="notif-list">
+        <?php if (empty($notifs)): ?>
+          <div class="notif-empty">✅ Aucune notification</div>
+        <?php else: ?>
+          <?php foreach ($notifs as $n): ?>
+            <div class="notif-item" onclick="readNotif(<?= $n['id'] ?>, '<?= h($n['lien']??'') ?>')">
+              <div class="n-titre"><?= h($n['titre']??'') ?></div>
+              <div class="n-date"><?= fmt_datetime($n['created_at']??'') ?></div>
+            </div>
+          <?php endforeach; ?>
+        <?php endif; ?>
+      </div>
+    </div>
+  </div>
+
+  <!-- Chip utilisateur avec dropdown -->
   <div class="uc-wrap">
     <button type="button" class="uc-btn" onclick="toggleUcMenu(event)">
       <div class="uc-avatar"><?= $initiales ?></div>
@@ -308,6 +384,8 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
       </a>
     </div>
   </div>
+
+  </div><!-- /.navbar-right -->
 
 </nav>
 
@@ -340,6 +418,62 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
 </div>
 
 <script>
+const _APP_URL = '<?= APP_URL ?>';
+
+// ── Notifications ─────────────────────────────────────────────
+function toggleNotifs() {
+  document.getElementById('notif-dropdown').classList.toggle('open');
+}
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.notif-wrap') && !e.target.closest('.uc-wrap')) {
+    document.getElementById('notif-dropdown').classList.remove('open');
+  }
+});
+function readNotif(id, lien) {
+  fetch(_APP_URL + '/api/notifications.php', {
+    method: 'POST',
+    headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'action=mark_read&id=' + id
+  }).then(() => { if (lien) window.location.href = _APP_URL + lien; else refreshNotifs(); });
+}
+function markAllRead() {
+  fetch(_APP_URL + '/api/notifications.php', {
+    method: 'POST',
+    headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: 'action=mark_all'
+  }).then(() => refreshNotifs());
+}
+function refreshNotifs() {
+  fetch(_APP_URL + '/api/notifications.php?action=get', {
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  }).then(r => r.json()).then(d => {
+    if (!d.success) return;
+    const count  = d.data.count || 0;
+    const badge  = document.querySelector('.notif-count');
+    const btn    = document.querySelector('.notif-btn');
+    if (badge) { badge.textContent = count > 9 ? '9+' : count; badge.style.display = count > 0 ? '' : 'none'; }
+    else if (count > 0 && btn) {
+      const s = document.createElement('span');
+      s.className = 'notif-count'; s.textContent = count > 9 ? '9+' : count;
+      btn.appendChild(s);
+    }
+    const list = document.getElementById('notif-list');
+    if (!list) return;
+    if (count === 0) { list.innerHTML = '<div class="notif-empty">✅ Aucune notification</div>'; return; }
+    const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    list.innerHTML = d.data.data.map(n => `
+      <div class="notif-item" data-id="${n.id}" data-lien="${esc(n.lien||'')}">
+        <div class="n-titre">${esc(n.titre)}</div>
+        <div class="n-date">${esc(n.created_at)}</div>
+      </div>`).join('');
+    list.querySelectorAll('.notif-item').forEach(el => {
+      el.addEventListener('click', () => readNotif(el.dataset.id, el.dataset.lien));
+    });
+  }).catch(() => {});
+}
+setInterval(refreshNotifs, 60000);
+
+// ── User chip ─────────────────────────────────────────────────
 function toggleUcMenu(e) {
   e.stopPropagation();
   const dd    = document.getElementById('uc-dd');
