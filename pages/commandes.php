@@ -1347,11 +1347,19 @@ include __DIR__ . '/../templates/header.php';
     </div>
 
     <!-- Pied -->
-    <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px">
-      <button class="btn btn-secondary" onclick="fermer('Detail')">Fermer</button>
-      <a id="detail-pdf-link" href="#" target="_blank" class="btn btn-primary">
-        <i class="ph-duotone ph-printer"></i> Imprimer PDF
+    <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px">
+      <a id="detail-pdf-link" href="#" target="_blank" class="btn btn-secondary" style="font-size:12px">
+        <i class="ph-duotone ph-printer"></i> PDF
       </a>
+      <div style="display:flex;gap:10px">
+        <button id="detail-btn-valider" style="display:none" class="btn btn-primary" onclick="validerDepuisDetail()">
+          <i class="ph-duotone ph-check-circle"></i> Valider
+        </button>
+        <button id="detail-btn-rejeter" style="display:none" class="btn btn-danger" onclick="rejeterDepuisDetail()">
+          <i class="ph-duotone ph-x-circle"></i> Rejeter
+        </button>
+        <button class="btn btn-secondary" onclick="fermer('Detail')">Fermer</button>
+      </div>
     </div>
 
   </div>
@@ -1364,12 +1372,14 @@ const bobinesData  = <?= json_encode(array_values($bobines_list)) ?>;
 const pmmaData     = <?= json_encode(array_values($pmma_list)) ?>;
 const rivetData    = <?= json_encode($rivet_data) ?>;
 const equipData    = <?= json_encode(array_values($equipements_list)) ?>;
-const voirPrix     = <?= $voir_prix?'true':'false' ?>;
-const siteForce    = <?= $site_force ?>;
+const voirPrix       = <?= $voir_prix?'true':'false' ?>;
+const siteForce      = <?= $site_force ?>;
+const isSuperviseur  = <?= $is_superviseur?'true':'false' ?>;
 
 let lignes = [];
 let currentCmdId = null, lignesCmd = [];
 let currentRejetId = null;
+let currentDetailId = null, currentDetailNumero = '';
 
 function ap(d){
   const fd=new FormData();
@@ -1392,7 +1402,11 @@ async function voirDetail(id, numero) {
   document.getElementById('detail-numero').textContent = numero;
   document.getElementById('detail-statut-badge').textContent = '';
   document.getElementById('detail-statut-badge').className = 'st-badge';
+  currentDetailId     = id;
+  currentDetailNumero = numero;
   document.getElementById('detail-pdf-link').href = window.location.pathname + '?id=' + id + '&export=1&format=pdf';
+  document.getElementById('detail-btn-valider').style.display = 'none';
+  document.getElementById('detail-btn-rejeter').style.display = 'none';
 
   const d = await ap({action:'get_detail', cmd_id: id});
   if (!d.success) { toast(d.message || 'Erreur', 'danger'); fermer('Detail'); return; }
@@ -1405,6 +1419,12 @@ async function voirDetail(id, numero) {
   const sb = document.getElementById('detail-statut-badge');
   sb.textContent  = _SL[cmd.statut] || cmd.statut;
   sb.className    = 'st-badge ' + (_SC[cmd.statut] || '');
+
+  // Boutons action selon rôle + statut
+  if (isSuperviseur && cmd.statut === 'en_attente') {
+    document.getElementById('detail-btn-valider').style.display = '';
+    document.getElementById('detail-btn-rejeter').style.display = '';
+  }
 
   // Infos
   document.getElementById('detail-site').textContent  = cmd.site_nom || '—';
@@ -1487,6 +1507,14 @@ async function voirDetail(id, numero) {
 document.getElementById('modalDetail').addEventListener('click', function(e) {
   if (e.target === this) fermer('Detail');
 });
+function validerDepuisDetail() {
+  fermer('Detail');
+  ouvrirValidation(currentDetailId, currentDetailNumero);
+}
+function rejeterDepuisDetail() {
+  fermer('Detail');
+  ouvrirRejet(currentDetailId, currentDetailNumero);
+}
 function filtrer(s){document.getElementById('selStatut').value=s;document.getElementById('frmFiltres').submit();}
 
 // ── Nouvelle commande
