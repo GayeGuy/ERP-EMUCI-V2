@@ -171,6 +171,14 @@ $unread = count($notifs);
       border-radius: 12px;
       background: rgba(255,255,255,.06);
     }
+    .user-card-link {
+      display: flex; align-items: center; gap: 10px;
+      flex: 1; min-width: 0;
+      text-decoration: none; border-radius: 8px;
+      padding: 4px 6px; margin: -4px -6px;
+      transition: background .15s;
+    }
+    .user-card-link:hover { background: rgba(255,255,255,.10); }
     .user-avatar {
       width: 36px; height: 36px; border-radius: 10px;
       background: linear-gradient(135deg, var(--primary), #A5D8FF);
@@ -680,11 +688,13 @@ $unread = count($notifs);
   </nav>
   <div class="sidebar-footer">
     <div class="user-card">
-      <div class="user-avatar"><?= strtoupper(substr($user['prenom'],0,1) . substr($user['nom'],0,1)) ?></div>
-      <div class="user-info">
-        <div class="name"><?= h($user['prenom'] . ' ' . $user['nom']) ?></div>
-        <div class="role"><?= h($user['role_nom']) ?></div>
-      </div>
+      <a href="<?= APP_URL ?>/pages/mon_profil.php" class="user-card-link" title="Mon profil">
+        <div class="user-avatar"><?= strtoupper(substr($user['prenom'],0,1) . substr($user['nom'],0,1)) ?></div>
+        <div class="user-info">
+          <div class="name"><?= h($user['prenom'] . ' ' . $user['nom']) ?></div>
+          <div class="role"><?= h($user['role_nom']) ?></div>
+        </div>
+      </a>
       <a href="<?= APP_URL ?>/logout.php" class="logout-btn" title="Déconnexion">
         <i class="ph-duotone ph-sign-out"></i>
       </a>
