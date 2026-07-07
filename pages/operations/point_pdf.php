@@ -153,6 +153,8 @@ ob_start();
   <div class="header">
     <div class="header-top">
       <div class="header-left">
+        <?= pdf_logo_img('34px') ?>
+        <div style="height:6px"></div>
         <div class="site-name"><?= h($point['site_nom']) ?></div>
         <div class="type-lbl"><?= h($type_lbl[$point['type_point']] ?? $point['type_point']) ?></div>
         <div class="date-lbl"><?= h($date_str) ?></div>

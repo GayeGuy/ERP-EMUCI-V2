@@ -315,7 +315,12 @@ if ($export) {
 
         if ($export === 'pdf_journalier') {
             $conso = get_consommations($date_from, $date_to, $f_site);
-            echo "<h1>Rapport journalier — " . htmlspecialchars($label_site) . "</h1>";
+            echo '<table width="100%" style="border-collapse:collapse;margin-bottom:10px"><tr>'
+               . '<td style="vertical-align:middle;width:85px;padding-right:10px">' . pdf_logo_img('38px') . '</td>'
+               . '<td style="vertical-align:middle;padding-left:12px;border-left:3px solid #06033A">'
+               . '<div style="font-size:16px;font-weight:bold;color:#06033A">Rapport journalier — ' . htmlspecialchars($label_site) . '</div>'
+               . '<div style="font-size:9px;color:#64748b;margin-top:2px">Express Multiservices CI</div>'
+               . '</td></tr></table>';
             echo "<p class='subtitle'>Période : $label_periode · Généré le " . date('d/m/Y à H:i') . "</p>";
 
             echo "<p class='section-title'>Détail des consommations</p>";
@@ -359,7 +364,12 @@ if ($export) {
                 $par_mois_site[$key]['nb_points']++;
             }
 
-            echo "<h1>Rapport mensuel — " . htmlspecialchars($label_site) . "</h1>";
+            echo '<table width="100%" style="border-collapse:collapse;margin-bottom:10px"><tr>'
+               . '<td style="vertical-align:middle;width:85px;padding-right:10px">' . pdf_logo_img('38px') . '</td>'
+               . '<td style="vertical-align:middle;padding-left:12px;border-left:3px solid #06033A">'
+               . '<div style="font-size:16px;font-weight:bold;color:#06033A">Rapport mensuel — ' . htmlspecialchars($label_site) . '</div>'
+               . '<div style="font-size:9px;color:#64748b;margin-top:2px">Express Multiservices CI</div>'
+               . '</td></tr></table>';
             echo "<p class='subtitle'>Période : $label_periode · Généré le " . date('d/m/Y à H:i') . "</p>";
             echo "<p class='section-title'>Synthèse mensuelle</p>";
             echo "<table><thead><tr><th>Mois</th><th>Site</th><th>Films utilisés</th><th>Endommagés</th><th>Bobines actives</th><th>Points saisis</th></tr></thead><tbody>";
@@ -384,7 +394,12 @@ if ($export) {
                 'valide_auto'=>'badge-ok','valide_gsb'=>'badge-ok',
                 'autorise_ecart'=>'badge-warn','reajuste'=>'badge-blue','refuse'=>'badge-red',
             ];
-            echo "<h1>Historique des validations — " . htmlspecialchars($label_site) . "</h1>";
+            echo '<table width="100%" style="border-collapse:collapse;margin-bottom:10px"><tr>'
+               . '<td style="vertical-align:middle;width:85px;padding-right:10px">' . pdf_logo_img('38px') . '</td>'
+               . '<td style="vertical-align:middle;padding-left:12px;border-left:3px solid #06033A">'
+               . '<div style="font-size:16px;font-weight:bold;color:#06033A">Historique des validations — ' . htmlspecialchars($label_site) . '</div>'
+               . '<div style="font-size:9px;color:#64748b;margin-top:2px">Express Multiservices CI</div>'
+               . '</td></tr></table>';
             echo "<p class='subtitle'>Période : $label_periode · Généré le " . date('d/m/Y à H:i') . "</p>";
             echo "<table><thead><tr><th>Date</th><th>Site</th><th>Statut</th><th>Écarts</th><th>Validé par</th><th>Heure</th><th>Commentaire</th></tr></thead><tbody>";
             foreach ($validat as $v) {

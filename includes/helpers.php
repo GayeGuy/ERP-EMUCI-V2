@@ -100,4 +100,12 @@ function pagination(int $total, int $per_page, int $current, string $base_url): 
     return $html;
 }
 
+// Retourne une balise <img> avec le logo EMUCI encodé en base64 pour les PDFs Dompdf
+function pdf_logo_img(string $height = '44px'): string {
+    $path = __DIR__ . '/../assets/logo.jpeg';
+    if (!file_exists($path)) return '';
+    $b64 = 'data:image/jpeg;base64,' . base64_encode(file_get_contents($path));
+    return "<img src=\"$b64\" style=\"height:$height;max-width:120px;object-fit:contain;display:block\">";
+}
+
 // json_response définie dans session.php

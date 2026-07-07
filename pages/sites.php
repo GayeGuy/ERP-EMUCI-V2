@@ -362,7 +362,13 @@ if (isset($_GET['export'])) {
         td{padding:5px 8px;border-bottom:1px solid #e2e8f0;font-size:9px}
         tr:nth-child(even) td{background:#f8fafc}
         </style></head><body>
-        <h1>Liste des Sites</h1>
+        <table width="100%" style="border-collapse:collapse;margin-bottom:10px"><tr>
+          <td style="vertical-align:middle;width:85px;padding-right:10px">' . pdf_logo_img('38px') . '</td>
+          <td style="vertical-align:middle;padding-left:12px;border-left:3px solid #06033A">
+            <div style="font-size:14px;font-weight:bold;color:#06033A">Liste des Sites</div>
+            <div style="font-size:9px;color:#64748b;margin-top:2px">Express Multiservices CI</div>
+          </td>
+        </tr></table>
         <div class="sub">Total : ' . count($sites) . ' site(s) — Généré le ' . date('d/m/Y H:i') . '</div>
         <table><thead><tr><th>Code</th><th>Nom</th><th>Type</th><th>Ville</th><th>Équip.</th><th>Util.</th><th>Responsable</th><th>Statut</th></tr></thead>
         <tbody>' . $rows_html . '</tbody></table></body></html>';

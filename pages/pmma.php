@@ -246,7 +246,13 @@ if (isset($_GET['export'])) {
         tr:nth-child(even) td{background:#f8fafc}
         .total-row td{background:#06033A!important;color:#fff!important;font-weight:bold;text-align:center}
         </style></head><body>
-        <h1>Suivi Consommation PMMA</h1>
+        <table width="100%" style="border-collapse:collapse;margin-bottom:10px"><tr>
+          <td style="vertical-align:middle;width:85px;padding-right:10px">' . pdf_logo_img('38px') . '</td>
+          <td style="vertical-align:middle;padding-left:12px;border-left:3px solid #06033A">
+            <div style="font-size:15px;font-weight:bold;color:#06033A">Suivi Consommation PMMA</div>
+            <div style="font-size:9px;color:#64748b;margin-top:2px">Express Multiservices CI</div>
+          </td>
+        </tr></table>
         <div class="sub">Période : ' . h($f_from) . ' → ' . h($f_to) . ' &nbsp;|&nbsp; Site : ' . h($site_label) . ' &nbsp;|&nbsp; Généré le ' . date('d/m/Y H:i') . '</div>
         <table><thead><tr>
             <th>Date</th><th>Site</th><th>Type PMMA</th><th>Utilisés</th><th>Endommagés</th><th>Total sorti</th>

@@ -817,11 +817,16 @@ function _bdc_pdf($cmd, $lignes, $voir_prix, array $ctx = []) {
     <!-- En-tete principal -->
     <table width='100%' style='border-collapse:collapse;margin-bottom:0;background-color:#06033A'>
       <tr>
-        <td style='padding:18px 22px;vertical-align:middle'>
-          <div style='color:white;font-size:17px;font-weight:bold'>BON DE COMMANDE</div>
-          <div style='color:rgba(255,255,255,0.65);font-size:10px;margin-top:3px'>DigiStock &mdash; EMUCI &nbsp;|&nbsp; Gestion des stocks</div>
+        <td style='padding:14px 18px;vertical-align:middle;width:110px'>
+          <div style='background:white;border-radius:6px;padding:5px 8px;display:inline-block'>
+            ".pdf_logo_img('38px')."
+          </div>
         </td>
-        <td align='right' style='padding:18px 22px;vertical-align:middle'>
+        <td style='padding:14px 18px;vertical-align:middle'>
+          <div style='color:white;font-size:17px;font-weight:bold'>BON DE COMMANDE</div>
+          <div style='color:rgba(255,255,255,0.65);font-size:10px;margin-top:3px'>Express Multiservices CI &mdash; EMUCI &nbsp;|&nbsp; Gestion des stocks</div>
+        </td>
+        <td align='right' style='padding:14px 18px;vertical-align:middle'>
           <div style='color:#00AEEF;font-size:20px;font-weight:bold;letter-spacing:1px'>{$cmd['numero_commande']}</div>
         </td>
       </tr>

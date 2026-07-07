@@ -386,7 +386,13 @@ if ($export === 'pdf') {
     tr:nth-child(even) td{background:#f8fafc}
     tr.tot td{background:#e8f0fe;font-weight:700;font-size:9px}
     </style></head><body>
-    <h1>Inventaire ' . htmlspecialchars($inv['type_inventaire']) . ' — ' . fmt_date($inv['date_inventaire']) . '</h1>
+    <table width="100%" style="border-collapse:collapse;margin-bottom:8px"><tr>
+      <td style="vertical-align:middle;width:85px;padding-right:10px">' . pdf_logo_img('38px') . '</td>
+      <td style="vertical-align:middle;padding-left:12px;border-left:3px solid #06033A">
+        <div style="font-size:13px;font-weight:bold;color:#06033A">Inventaire ' . htmlspecialchars($inv['type_inventaire']) . ' — ' . fmt_date($inv['date_inventaire']) . '</div>
+        <div style="font-size:9px;color:#64748b;margin-top:2px">Express Multiservices CI</div>
+      </td>
+    </tr></table>
     <div class="meta">
       <span>' . htmlspecialchars($inv['site_nom'] ?? 'Tous les sites') . '</span>
       <span>' . count($lignes) . ' bobines</span>

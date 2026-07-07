@@ -622,7 +622,13 @@ if ($export === 'pdf') {
     thead tr.hdr2 th{background:#1B75BC;color:#fff;padding:5px 8px;font-size:8px;text-align:center}
     td{padding:4px 8px;border-bottom:1px solid #e2e8f0;font-size:9px}
     </style></head><body>
-    <h1>Vue Stock Bobines</h1>
+    <table width="100%" style="border-collapse:collapse;margin-bottom:10px"><tr>
+      <td style="vertical-align:middle;width:85px;padding-right:10px">' . pdf_logo_img('38px') . '</td>
+      <td style="vertical-align:middle;padding-left:12px;border-left:3px solid #06033A">
+        <div style="font-size:13px;font-weight:bold;color:#06033A">Vue Stock Bobines</div>
+        <div style="font-size:8px;color:#64748b;margin-top:2px">Express Multiservices CI</div>
+      </td>
+    </tr></table>
     <div class="sub">Généré le ' . date('d/m/Y H:i') . $filtre_txt . ' &nbsp;·&nbsp; ' . count(array_keys($par_site)) . ' site(s) &nbsp;·&nbsp; ' . $total_bobines . ' bobines &nbsp;·&nbsp; ' . number_format($total_films) . ' films</div>
     <table>
       <thead>
