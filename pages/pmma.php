@@ -275,6 +275,88 @@ if (isset($_GET['export'])) {
         echo $pdf->output();
         exit;
     }
+
+    // ── PDF SYNTHÈSE MENSUELLE
+    if ($export === 'pdf_mensuel') {
+        $mois_fr = ['01'=>'Janvier','02'=>'Février','03'=>'Mars','04'=>'Avril','05'=>'Mai','06'=>'Juin',
+                    '07'=>'Juillet','08'=>'Août','09'=>'Septembre','10'=>'Octobre','11'=>'Novembre','12'=>'Décembre'];
+
+        // Grouper par mois × type PMMA
+        $par_mois = [];
+        foreach ($conso as $c) {
+            $m    = substr($c['date_point'], 0, 7); // YYYY-MM
+            $type = $c['type_pmma'] ?: 'Standard';
+            $key  = $m . '|' . $type;
+            if (!isset($par_mois[$key])) {
+                $par_mois[$key] = [
+                    'mois'       => $m,
+                    'mois_label' => ($mois_fr[substr($m,5,2)] ?? substr($m,5,2)) . ' ' . substr($m,0,4),
+                    'type_pmma'  => $type,
+                    'utilises'   => 0, 'endommages' => 0, 'total' => 0,
+                ];
+            }
+            $par_mois[$key]['utilises']   += (int)$c['utilises'];
+            $par_mois[$key]['endommages'] += (int)$c['endommages'];
+            $par_mois[$key]['total']      += (int)$c['total_sortis'];
+        }
+        ksort($par_mois);
+
+        $rows_html = '';
+        $cur_mois  = '';
+        foreach ($par_mois as $row) {
+            $is_new    = $row['mois'] !== $cur_mois;
+            $cur_mois  = $row['mois'];
+            $bg        = $is_new ? '#f0f4ff' : '#ffffff';
+            $ec        = $row['endommages'] > 0 ? '#991b1b' : '#64748b';
+            $rows_html .= '<tr style="background:' . $bg . '">
+                <td style="font-weight:' . ($is_new ? '700' : '400') . ';color:#06033A">' . ($is_new ? $row['mois_label'] : '') . '</td>
+                <td>' . h($row['type_pmma']) . '</td>
+                <td style="text-align:center;font-weight:700">' . $row['utilises'] . '</td>
+                <td style="text-align:center;color:' . $ec . '">' . $row['endommages'] . '</td>
+                <td style="text-align:center;font-weight:800;color:#06033A">' . $row['total'] . '</td>
+            </tr>';
+        }
+
+        $html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+        body{font-family:Arial,sans-serif;font-size:11px;margin:20px}
+        .sub{font-size:9px;color:#64748b;margin-bottom:14px}
+        table{width:100%;border-collapse:collapse}
+        th{background:#06033A;color:#fff;padding:7px 10px;font-size:10px;text-align:center}
+        th:first-child{text-align:left}
+        td{padding:6px 10px;border-bottom:1px solid #e2e8f0;font-size:11px}
+        .total-row td{background:#1B75BC!important;color:#fff!important;font-weight:bold;text-align:center}
+        .total-row td:first-child{text-align:left}
+        </style></head><body>
+        <table width="100%" style="border-collapse:collapse;margin-bottom:10px"><tr>
+          <td style="vertical-align:middle;width:85px;padding-right:10px">' . pdf_logo_img('38px') . '</td>
+          <td style="vertical-align:middle;padding-left:12px;border-left:3px solid #06033A">
+            <div style="font-size:15px;font-weight:bold;color:#06033A">Synthèse mensuelle PMMA</div>
+            <div style="font-size:9px;color:#64748b;margin-top:2px">Express Multiservices CI</div>
+          </td>
+        </tr></table>
+        <div class="sub">Période : ' . h($f_from) . ' → ' . h($f_to) . ' &nbsp;|&nbsp; Site : ' . h($site_label) . ' &nbsp;|&nbsp; Généré le ' . date('d/m/Y H:i') . '</div>
+        <table><thead><tr>
+            <th style="text-align:left">Mois</th><th>Type PMMA</th><th>Utilisés</th><th>Endommagés</th><th>Total sorti</th>
+        </tr></thead><tbody>
+        ' . ($rows_html ?: '<tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:20px">Aucune donnée sur cette période</td></tr>') . '
+        <tr class="total-row">
+            <td colspan="2">TOTAL PÉRIODE</td>
+            <td>' . $grand_total['utilises'] . '</td>
+            <td>' . $grand_total['endommages'] . '</td>
+            <td>' . $grand_total['total'] . '</td>
+        </tr></tbody></table></body></html>';
+
+        $opts = new Options();
+        $opts->set('isRemoteEnabled', false);
+        $pdf = new Dompdf($opts);
+        $pdf->loadHtml($html);
+        $pdf->setPaper('A4', 'portrait');
+        $pdf->render();
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="pmma_mensuel_' . date('Ymd') . '.pdf"');
+        echo $pdf->output();
+        exit;
+    }
 }
 
 include __DIR__ . '/../templates/header.php';
@@ -316,8 +398,14 @@ include __DIR__ . '/../templates/header.php';
       <i class="ph-duotone ph-microsoft-excel-logo" style="font-size:16px"></i> Excel
     </a>
     <a href="?<?= http_build_query(array_merge($_GET, ['export'=>'pdf'])) ?>"
-       class="btn btn-secondary" style="font-size:13px;display:flex;align-items:center;gap:6px">
-      <i class="ph-duotone ph-file-pdf" style="font-size:16px"></i> PDF
+       class="btn btn-secondary" style="font-size:13px;display:flex;align-items:center;gap:6px"
+       title="Détail jour par jour">
+      <i class="ph-duotone ph-file-pdf" style="font-size:16px"></i> PDF Détail
+    </a>
+    <a href="?<?= http_build_query(array_merge($_GET, ['export'=>'pdf_mensuel'])) ?>"
+       class="btn btn-secondary" style="font-size:13px;display:flex;align-items:center;gap:6px"
+       title="Synthèse groupée par mois">
+      <i class="ph-duotone ph-calendar-blank" style="font-size:16px"></i> PDF Mensuel
     </a>
     <?php if ($can_saisie): ?>
     <button class="btn btn-primary" style="font-size:13px" onclick="document.getElementById('mEntree').classList.add('open')">
