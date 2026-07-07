@@ -340,6 +340,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         json_response(true,'Commande annulée.');
     }
 
+    // ── Détail complet commande (modal)
+    if ($action === 'get_detail') {
+        $cmd_id = (int)($_POST['cmd_id'] ?? 0);
+        $det = db_fetch_one(
+            "SELECT c.*, s.nom AS site_nom,
+                    CONCAT(u.prenom,' ',u.nom) AS agent,
+                    IF(uv.id IS NOT NULL, CONCAT(uv.prenom,' ',uv.nom), '') AS validateur_nom
+             FROM commandes c
+             LEFT JOIN sites s  ON s.id  = c.site_id
+             LEFT JOIN users u  ON u.id  = c.created_by
+             LEFT JOIN users uv ON uv.id = c.valide_par
+             WHERE c.id=?", [$cmd_id]
+        );
+        if (!$det) json_response(false,'Commande introuvable.');
+        $lgns = db_fetch_all("SELECT * FROM commande_lignes WHERE commande_id=? ORDER BY id", [$cmd_id]);
+        json_response(true, '', ['cmd' => $det, 'lignes' => $lgns]);
+    }
+
     // ── Charger lignes commande (pour modals)
     if ($action === 'get_lignes') {
         $cmd_id = (int)($_POST['cmd_id'] ?? 0);
@@ -1060,7 +1078,11 @@ include __DIR__ . '/../templates/header.php';
           <td style="font-size:12px"><?= h($cmd['agent']??'—') ?></td>
           <td style="text-align:center;white-space:nowrap">
             <div style="display:flex;gap:4px;justify-content:center">
-            <a href="?id=<?= $cmd['id'] ?>&export=1&format=pdf" target="_blank" class="btn btn-secondary btn-sm" title="Imprimer">🖨️</a>
+            <button class="btn btn-secondary btn-sm" title="Voir détails"
+                    onclick="voirDetail(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>')">
+              <i class="ph-duotone ph-eye"></i>
+            </button>
+            <a href="?id=<?= $cmd['id'] ?>&export=1&format=pdf" target="_blank" class="btn btn-secondary btn-sm" title="Imprimer PDF">🖨️</a>
             <?php if($is_superviseur && $cmd['statut']==='en_attente'): ?>
               <button class="btn btn-primary btn-sm" onclick="ouvrirValidation(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>')">✅ Valider</button>
               <button class="btn btn-danger btn-sm" onclick="ouvrirRejet(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>')">❌ Rejeter</button>
@@ -1257,6 +1279,84 @@ include __DIR__ . '/../templates/header.php';
 </div>
 <?php endif; ?>
 
+<!-- ═══ MODAL DÉTAIL COMMANDE ═══ -->
+<div id="modalDetail" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.55);z-index:1000;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto">
+  <div style="background:white;border-radius:18px;width:860px;max-width:96vw;box-shadow:0 20px 60px rgba(0,0,0,.25);margin:auto;overflow:hidden">
+
+    <!-- En-tête -->
+    <div id="detail-header" style="background:#06033A;padding:18px 24px;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="color:rgba(255,255,255,.6);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:2px">Bon de Commande</div>
+        <div id="detail-numero" style="color:#00AEEF;font-size:20px;font-weight:900;font-family:'Plus Jakarta Sans',sans-serif;letter-spacing:.5px"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span id="detail-statut-badge" class="st-badge"></span>
+        <button onclick="fermer('Detail')" style="background:rgba(255,255,255,.12);border:none;color:white;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center">✕</button>
+      </div>
+    </div>
+
+    <!-- Contenu -->
+    <div style="padding:22px 24px">
+
+      <!-- Loading -->
+      <div id="detail-loading" style="text-align:center;padding:40px;color:var(--muted)">
+        <i class="ph-duotone ph-spinner" style="font-size:28px"></i><br>Chargement...
+      </div>
+
+      <div id="detail-content" style="display:none">
+
+        <!-- Grille infos -->
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px">
+          <div style="background:var(--tertiary);border-radius:10px;padding:10px 13px;border:1px solid var(--border)">
+            <div style="font-size:9px;text-transform:uppercase;color:var(--muted);font-weight:700;letter-spacing:.5px;margin-bottom:3px">Site</div>
+            <div id="detail-site" style="font-size:13px;font-weight:700;color:var(--navy)"></div>
+          </div>
+          <div style="background:var(--tertiary);border-radius:10px;padding:10px 13px;border:1px solid var(--border)">
+            <div style="font-size:9px;text-transform:uppercase;color:var(--muted);font-weight:700;letter-spacing:.5px;margin-bottom:3px">Date commande</div>
+            <div id="detail-date" style="font-size:13px;font-weight:700;color:var(--navy)"></div>
+          </div>
+          <div style="background:var(--tertiary);border-radius:10px;padding:10px 13px;border:1px solid var(--border)">
+            <div style="font-size:9px;text-transform:uppercase;color:var(--muted);font-weight:700;letter-spacing:.5px;margin-bottom:3px">Demandeur</div>
+            <div id="detail-agent" style="font-size:13px;font-weight:700;color:var(--navy)"></div>
+          </div>
+          <div id="detail-validateur-box" style="background:var(--tertiary);border-radius:10px;padding:10px 13px;border:1px solid var(--border);display:none">
+            <div style="font-size:9px;text-transform:uppercase;color:var(--muted);font-weight:700;letter-spacing:.5px;margin-bottom:3px">Validé par</div>
+            <div id="detail-validateur" style="font-size:13px;font-weight:700;color:var(--navy)"></div>
+          </div>
+          <div id="detail-notes-box" style="background:#f0f7ff;border-radius:10px;padding:10px 13px;border:1px solid #bfdbfe;grid-column:span 2;display:none">
+            <div style="font-size:9px;text-transform:uppercase;color:#1D4ED8;font-weight:700;letter-spacing:.5px;margin-bottom:3px">Notes / Observations</div>
+            <div id="detail-notes" style="font-size:12.5px;color:var(--navy)"></div>
+          </div>
+        </div>
+
+        <!-- Tableau des articles -->
+        <div class="table-wrap">
+          <table id="detail-table" style="width:100%;border-collapse:collapse">
+            <thead id="detail-thead"></thead>
+            <tbody id="detail-tbody"></tbody>
+          </table>
+        </div>
+
+        <!-- Total HT -->
+        <div id="detail-total-wrap" style="display:none;margin-top:10px;text-align:right">
+          <span style="font-size:13px;font-weight:700;color:var(--muted);margin-right:8px">TOTAL HT</span>
+          <span id="detail-total" style="font-size:16px;font-weight:900;color:var(--navy);font-family:'Plus Jakarta Sans',sans-serif"></span>
+        </div>
+
+      </div><!-- /#detail-content -->
+    </div>
+
+    <!-- Pied -->
+    <div style="padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px">
+      <button class="btn btn-secondary" onclick="fermer('Detail')">Fermer</button>
+      <a id="detail-pdf-link" href="#" target="_blank" class="btn btn-primary">
+        <i class="ph-duotone ph-printer"></i> Imprimer PDF
+      </a>
+    </div>
+
+  </div>
+</div>
+
 <script>
 // ── Data
 const articlesData = <?= json_encode(array_values($articles_dispo)) ?>;
@@ -1277,6 +1377,116 @@ function ap(d){
   return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
 }
 function fermer(m){document.getElementById('modal'+m).style.display='none';}
+
+// ── Voir détail commande ───────────────────────────────────────
+const _SL = {'en_attente':'⏳ À valider','en_attente_livraison':'📋 À préparer','en_cours_livraison':'🚚 En livraison','recu':'✅ Reçu','livre':'✅ Livré','rejete':'❌ Rejeté','annule':'Annulé'};
+const _SC = {'en_attente':'st-en_attente','en_attente_livraison':'st-en_attente_livraison','en_cours_livraison':'st-en_cours_livraison','recu':'st-recu','rejete':'st-rejete'};
+const _LS = {'valide':'✅ OK','rejete':'❌ Rejeté','modifie':'⚠️ Modifié'};
+const _LC = {'valide':'#15803d','rejete':'#dc2626','modifie':'#d97706'};
+
+async function voirDetail(id, numero) {
+  const modal = document.getElementById('modalDetail');
+  modal.style.display = 'flex';
+  document.getElementById('detail-loading').style.display = '';
+  document.getElementById('detail-content').style.display = 'none';
+  document.getElementById('detail-numero').textContent = numero;
+  document.getElementById('detail-statut-badge').textContent = '';
+  document.getElementById('detail-statut-badge').className = 'st-badge';
+  document.getElementById('detail-pdf-link').href = window.location.pathname + '?id=' + id + '&export=1&format=pdf';
+
+  const d = await ap({action:'get_detail', cmd_id: id});
+  if (!d.success) { toast(d.message || 'Erreur', 'danger'); fermer('Detail'); return; }
+
+  const cmd    = d.data.cmd;
+  const lignes = d.data.lignes;
+  const hasLiv = ['en_attente_livraison','en_cours_livraison','recu','livre'].includes(cmd.statut);
+
+  // Statut badge
+  const sb = document.getElementById('detail-statut-badge');
+  sb.textContent  = _SL[cmd.statut] || cmd.statut;
+  sb.className    = 'st-badge ' + (_SC[cmd.statut] || '');
+
+  // Infos
+  document.getElementById('detail-site').textContent  = cmd.site_nom || '—';
+  document.getElementById('detail-date').textContent  = cmd.created_at ? cmd.created_at.substring(0,10).split('-').reverse().join('/') : '—';
+  document.getElementById('detail-agent').textContent = cmd.agent || '—';
+
+  const vBox = document.getElementById('detail-validateur-box');
+  if (cmd.validateur_nom) {
+    document.getElementById('detail-validateur').textContent = cmd.validateur_nom
+      + (cmd.valide_at ? ' — ' + cmd.valide_at.substring(0,10).split('-').reverse().join('/') : '');
+    vBox.style.display = '';
+  } else { vBox.style.display = 'none'; }
+
+  const nBox = document.getElementById('detail-notes-box');
+  if (cmd.notes && cmd.notes.trim()) {
+    document.getElementById('detail-notes').textContent = cmd.notes;
+    nBox.style.display = '';
+  } else { nBox.style.display = 'none'; }
+
+  // En-têtes tableau
+  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  let thHtml = `<tr style="background:#06033A">
+    <th style="color:white;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;text-align:left">Article</th>
+    <th style="color:white;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;text-align:center">Qté dem.</th>`;
+  if (hasLiv) thHtml += `<th style="color:white;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;text-align:center">Qté livrée</th>
+    <th style="color:white;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase">Statut</th>`;
+  if (voirPrix) thHtml += `<th style="color:white;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;text-align:right">P.U.</th>
+    <th style="color:white;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;text-align:right">Total</th>`;
+  thHtml += '</tr>';
+  document.getElementById('detail-thead').innerHTML = thHtml;
+
+  // Lignes
+  let total = 0;
+  const fmtN = n => Number(n).toLocaleString('fr-FR');
+  const tbHtml = lignes.map((l, i) => {
+    const bg       = i % 2 === 0 ? '#ffffff' : '#f8f9ff';
+    const qte      = parseInt(l.quantite) || 0;
+    const pu       = parseFloat(l.prix_unitaire) || 0;
+    const qLiv     = l.quantite_livree !== null ? parseInt(l.quantite_livree) : null;
+    const hasEcart = qLiv !== null && qLiv !== qte;
+    const stLigne  = l.statut_ligne || '';
+    const motif    = l.motif_rejet || l.motif_ecart || '';
+    if (voirPrix) total += qte * pu;
+
+    let row = `<tr>
+      <td style="background:${bg};padding:8px 10px;border-bottom:1px solid var(--border);font-weight:700">
+        ${esc(l.libelle)}
+        <div style="font-size:10px;color:var(--muted);font-weight:400">${esc(l.type_article||'article')} · ${esc(l.unite)}</div>
+      </td>
+      <td style="background:${bg};padding:8px 10px;border-bottom:1px solid var(--border);text-align:center;font-weight:800;font-size:14px;color:var(--navy)">${qte}</td>`;
+
+    if (hasLiv) {
+      const ecartStyle = hasEcart ? 'color:#dc2626;font-weight:700' : '';
+      row += `<td style="background:${bg};padding:8px 10px;border-bottom:1px solid var(--border);text-align:center;${ecartStyle}">${qLiv !== null ? qLiv : '—'}</td>
+        <td style="background:${bg};padding:8px 10px;border-bottom:1px solid var(--border);font-size:12px">
+          <span style="font-weight:700;color:${_LC[stLigne]||'var(--muted)'}">${_LS[stLigne]||'—'}</span>
+          ${motif ? `<div style="font-size:10px;color:var(--muted)">${esc(motif)}</div>` : ''}
+        </td>`;
+    }
+    if (voirPrix) {
+      row += `<td style="background:${bg};padding:8px 10px;border-bottom:1px solid var(--border);text-align:right;color:var(--muted)">${fmtN(pu)} F</td>
+        <td style="background:${bg};padding:8px 10px;border-bottom:1px solid var(--border);text-align:right;font-weight:700">${fmtN(qte*pu)} F</td>`;
+    }
+    return row + '</tr>';
+  }).join('');
+  document.getElementById('detail-tbody').innerHTML = tbHtml || '<tr><td colspan="10" style="text-align:center;padding:20px;color:var(--muted)">Aucun article.</td></tr>';
+
+  // Total
+  const tw = document.getElementById('detail-total-wrap');
+  if (voirPrix && total > 0) {
+    document.getElementById('detail-total').textContent = fmtN(total) + ' FCFA';
+    tw.style.display = '';
+  } else { tw.style.display = 'none'; }
+
+  document.getElementById('detail-loading').style.display = 'none';
+  document.getElementById('detail-content').style.display = '';
+}
+
+// Fermer modal détail en cliquant fond
+document.getElementById('modalDetail').addEventListener('click', function(e) {
+  if (e.target === this) fermer('Detail');
+});
 function filtrer(s){document.getElementById('selStatut').value=s;document.getElementById('frmFiltres').submit();}
 
 // ── Nouvelle commande
