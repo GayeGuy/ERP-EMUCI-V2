@@ -758,7 +758,7 @@ function _bdc_pdf($cmd, $lignes, $voir_prix, array $ctx = []) {
     // En-têtes colonnes dynamiques
     $th_extra = '';
     if ($has_livraison) $th_extra .= "<th style='background:#06033A;color:white;padding:8px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border:1px solid #1a1060;text-align:center'>Qte livree</th>
-                                      <th style='background:#06033A;color:white;padding:8px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border:1px solid #1a1060'>Statut</th>";
+                                      <th style='background:#06033A;color:white;padding:8px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border:1px solid #1a1060'>Statut ligne</th>";
     if ($voir_prix)     $th_extra .= "<th style='background:#06033A;color:white;padding:8px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border:1px solid #1a1060;text-align:right'>P.U. (F)</th>
                                       <th style='background:#06033A;color:white;padding:8px 9px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;border:1px solid #1a1060;text-align:right'>Total (F)</th>";
 
@@ -847,7 +847,7 @@ function _bdc_pdf($cmd, $lignes, $voir_prix, array $ctx = []) {
           <div style='font-size:12px;font-weight:bold;color:#06033A;margin-top:3px'>$create_date</div>
         </td>
         <td width='34%' style='background:#f8f9fa;border:1px solid #e2e8f0;padding:8px 12px'>
-          <div style='font-size:9px;text-transform:uppercase;color:#888;font-weight:bold;letter-spacing:.5px'>Statut</div>
+          <div style='font-size:9px;text-transform:uppercase;color:#888;font-weight:bold;letter-spacing:.5px'>Statut commande</div>
           <div style='margin-top:3px'><span style='background:#DBEAFE;color:#1D4ED8;font-size:10px;font-weight:bold;padding:2px 8px'>$statut_label</span></div>
         </td>
       </tr>
