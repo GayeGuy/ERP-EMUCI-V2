@@ -34,12 +34,16 @@ $groupes = get_groupes_utilisateur();
 include __DIR__ . '/../templates/header.php';
 ?>
 <style>
-/* ── Grille des espaces ───────────────────────────────────── */
+/* Masquer les items nav — les cartes ci-dessous sont la navigation */
+.sidebar nav { display: none; }
+
+/* ── Grille des espaces ─────────────────────────────────── */
 .groupes-list {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
   gap: 16px;
-  max-width: 900px;
+  max-width: 860px;
+  margin: 0 auto;
 }
 
 .groupe-bloc {
@@ -63,11 +67,9 @@ include __DIR__ . '/../templates/header.php';
 }
 .groupe-bloc::after {
   content: '';
-  position: absolute;
-  inset: 0;
+  position: absolute; inset: 0;
   background: var(--g-gradient);
-  opacity: 0;
-  transition: opacity .2s;
+  opacity: 0; transition: opacity .2s;
   border-radius: 18px;
 }
 .groupe-bloc:hover {
@@ -75,12 +77,11 @@ include __DIR__ . '/../templates/header.php';
   box-shadow: 0 10px 32px rgba(6,3,58,.16);
   transform: translateY(-4px);
 }
-.groupe-bloc:hover::after        { opacity: 1; }
+.groupe-bloc:hover::after           { opacity: 1; }
 .groupe-bloc:hover .groupe-icon-box { background: rgba(255,255,255,.22); box-shadow: none; }
 .groupe-bloc:hover .groupe-text h3  { color: #fff; }
 .groupe-bloc:hover .groupe-text p   { color: rgba(255,255,255,.72); }
 
-/* Contenu au-dessus du ::after */
 .groupe-icon-box, .groupe-text { position: relative; z-index: 1; }
 
 .groupe-icon-box {
@@ -100,43 +101,42 @@ include __DIR__ . '/../templates/header.php';
   font-size: 13.5px; font-weight: 700;
   color: var(--navy);
   margin-bottom: 4px;
-  transition: color .2s;
-  line-height: 1.2;
+  transition: color .2s; line-height: 1.2;
 }
 .groupe-text p {
-  font-size: 11px;
-  color: var(--muted);
-  line-height: 1.4;
-  transition: color .2s;
+  font-size: 11px; color: var(--muted);
+  line-height: 1.4; transition: color .2s;
 }
 
-/* Dashboard : toujours avec fond coloré */
 .bloc-dashboard {
   background: linear-gradient(135deg, #06033A 0%, #1B75BC 100%);
   border-color: transparent;
   box-shadow: 0 4px 18px rgba(6,3,58,.25);
 }
-.bloc-dashboard::after { display: none; }
-.bloc-dashboard .groupe-text h3 { color: #fff; }
-.bloc-dashboard .groupe-text p  { color: rgba(255,255,255,.65); }
-.bloc-dashboard .groupe-icon-box { background: rgba(255,255,255,.2); box-shadow: none; }
-.bloc-dashboard:hover { box-shadow: 0 12px 36px rgba(6,3,58,.35); transform: translateY(-4px); }
+.bloc-dashboard::after              { display: none; }
+.bloc-dashboard .groupe-text h3     { color: #fff; }
+.bloc-dashboard .groupe-text p      { color: rgba(255,255,255,.65); }
+.bloc-dashboard .groupe-icon-box    { background: rgba(255,255,255,.2); box-shadow: none; }
+.bloc-dashboard:hover               { box-shadow: 0 12px 36px rgba(6,3,58,.35); transform: translateY(-4px); }
 
 /* Dark mode */
-[data-theme="dark"] .groupe-bloc { background: #1E293B; border-color: #2D4060; }
-[data-theme="dark"] .groupe-text h3 { color: #CBD5E1; }
-[data-theme="dark"] .groupe-text p  { color: #64748B; }
-[data-theme="dark"] .bloc-dashboard { background: linear-gradient(135deg, #06033A 0%, #1B75BC 100%); }
+[data-theme="dark"] .groupe-bloc            { background: #1E293B; border-color: #2D4060; }
+[data-theme="dark"] .groupe-text h3         { color: #CBD5E1; }
+[data-theme="dark"] .groupe-text p          { color: #64748B; }
+[data-theme="dark"] .bloc-dashboard         { background: linear-gradient(135deg, #06033A 0%, #1B75BC 100%); }
 [data-theme="dark"] .bloc-dashboard .groupe-text h3 { color: #fff; }
 [data-theme="dark"] .bloc-dashboard .groupe-text p  { color: rgba(255,255,255,.65); }
+
+@media (max-width: 540px) {
+  .groupes-list { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .groupe-text p { display: none; }
+}
 </style>
 
-<!-- En-tête section -->
-<div style="margin-bottom:22px">
-  <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;
-              letter-spacing:1.2px;display:flex;align-items:center;gap:10px">
-    Mes espaces (<?= count($groupes) ?>)
-    <span style="flex:1;height:1px;background:var(--border);display:block"></span>
+<!-- Titre section -->
+<div style="text-align:center;margin-bottom:28px">
+  <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px">
+    Mes espaces &nbsp;·&nbsp; <?= count($groupes) ?> disponible<?= count($groupes) > 1 ? 's' : '' ?>
   </div>
 </div>
 
