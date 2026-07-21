@@ -80,10 +80,10 @@ if (isset($_GET['export'])) {
 
     } elseif ($type === 'mensuel') {
         $ws->setTitle('Résumé Mensuel');
-        $where = ["DATE_FORMAT(p.date_point,'%Y-%m')=?"]; $params = [$f_mois];
+        $where = ["TO_CHAR(p.date_point,'YYYY-MM')=?"]; $params = [$f_mois];
         if ($f_site) { $where[] = "p.site_id=?"; $params[] = $f_site; }
         $data = db_fetch_all(
-            "SELECT s.nom AS site, DATE_FORMAT(p.date_point,'%Y-%m') AS mois,
+            "SELECT s.nom AS site, TO_CHAR(p.date_point,'YYYY-MM') AS mois,
                     COUNT(*) AS nb_points,
                     SUM(p.total_plaques) AS total_plaques,
                     SUM(p.total_engins) AS total_engins,
@@ -163,7 +163,7 @@ if ($f_vue === 'journalier') {
 $pj_mois = [];
 $graph_mois = [];
 if ($f_vue === 'mensuel') {
-    $where = ["DATE_FORMAT(p.date_point,'%Y-%m')=?"]; $params = [$f_mois];
+    $where = ["TO_CHAR(p.date_point,'YYYY-MM')=?"]; $params = [$f_mois];
     if ($f_site) { $where[] = "p.site_id=?"; $params[] = $f_site; }
     $pj_mois = db_fetch_all(
         "SELECT s.nom AS site_nom, p.site_id,
@@ -185,7 +185,7 @@ if ($f_vue === 'mensuel') {
     $graph_mois = db_fetch_all(
         "SELECT p.date_point, SUM(p.total_plaques) AS plaques, SUM(p.total_engins) AS engins
          FROM op_points_journaliers p
-         WHERE DATE_FORMAT(p.date_point,'%Y-%m')=?" . ($f_site?" AND p.site_id=$f_site":"") . "
+         WHERE TO_CHAR(p.date_point,'YYYY-MM')=?" . ($f_site?" AND p.site_id=$f_site":"") . "
          GROUP BY p.date_point ORDER BY p.date_point",
         [$f_mois]
     );
@@ -194,10 +194,10 @@ if ($f_vue === 'mensuel') {
 // ── VUE ANNUELLE
 $pj_annee = [];
 if ($f_vue === 'annuel') {
-    $where = ["YEAR(p.date_point)=?"]; $params = [$f_annee];
+    $where = ["EXTRACT(YEAR FROM p.date_point)=?"]; $params = [$f_annee];
     if ($f_site) { $where[] = "p.site_id=?"; $params[] = $f_site; }
     $pj_annee = db_fetch_all(
-        "SELECT DATE_FORMAT(p.date_point,'%Y-%m') AS mois,
+        "SELECT TO_CHAR(p.date_point,'YYYY-MM') AS mois,
                 SUM(p.total_plaques) AS total_plaques,
                 SUM(p.total_engins) AS total_engins,
                 COUNT(*) AS nb_points,

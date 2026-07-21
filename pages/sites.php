@@ -260,14 +260,14 @@ $sites = db_fetch_all(
      LEFT JOIN equipements e  ON e.site_id=s.id AND e.actif=1
      LEFT JOIN users us ON us.site_id=s.id AND us.actif=1
      WHERE $wsql
-     GROUP BY s.id ORDER BY s.actif DESC, s.nom ASC",
+     GROUP BY s.id, u.prenom, u.nom ORDER BY s.actif DESC, s.nom ASC",
     $params
 );
 
 // Stats globales (indépendantes des filtres)
 $stats_type = db_fetch_all(
     "SELECT type, COUNT(*) AS total, SUM(actif) AS actifs
-     FROM sites GROUP BY type ORDER BY FIELD(type,'saisie','pose','mixte','entrepot','siege')"
+     FROM sites GROUP BY type ORDER BY array_position(ARRAY['saisie','pose','mixte','entrepot','siege']::text[], (type)::text)"
 );
 $stats_ville = db_fetch_all(
     "SELECT ville, COUNT(*) AS n FROM sites WHERE actif=1 AND ville IS NOT NULL AND ville != ''

@@ -7,11 +7,15 @@
 !/uploads/fiches/.gitkeep
 !/uploads/bl/.gitkeep
 
-# Database credentials & local config
-/includes/db.php
+# includes/db.php ne contient PLUS de secrets (config via variables
+# d'environnement) : il DOIT être versionné pour le déploiement Render.
 
 # Database dumps (may contain sensitive data)
 /database.sql
+
+# Verrous LibreOffice / sauvegardes
+.~lock.*#
+*.bak
 
 # Test & install scripts
 /test_db.php
@@ -28,3 +32,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Config locale Claude Code (ne pas versionner)
+.claude/settings.local.json

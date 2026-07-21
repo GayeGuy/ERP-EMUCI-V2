@@ -39,7 +39,7 @@ if ($role_slug === 'coordinateur_site' && $site_force) {
     $kpi_equip_op     = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND categorie='operationnel' AND site_id=?", [$sid]);
     $kpi_equip_bon    = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND etat IN ('neuf','bon') AND site_id=?", [$sid]);
     $kpi_equip_hs     = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND etat='hs' AND site_id=?", [$sid]);
-    $kpi_fin_cycle    = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle BETWEEN CURDATE() AND DATE_ADD(CURDATE(),INTERVAL 30 DAY) AND site_id=?", [$sid]);
+    $kpi_fin_cycle    = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 DAY') AND site_id=?", [$sid]);
     $kpi_receptions_attente = (int)db_fetch_value("SELECT COUNT(*) FROM receptions_site WHERE site_id=? AND statut='en_attente'", [$sid]);
     $kpi_receptions_litige  = (int)db_fetch_value("SELECT COUNT(*) FROM receptions_site WHERE site_id=? AND statut='litige'", [$sid]);
 
@@ -50,10 +50,10 @@ if ($role_slug === 'coordinateur_site' && $site_force) {
          FROM livraisons_consommables lc
          JOIN sites s ON s.id=lc.site_id
          WHERE lc.site_id=?
-         AND lc.date_livraison >= DATE_SUB(CURDATE(),INTERVAL 12 MONTH)
+         AND lc.date_livraison >= (CURRENT_DATE - INTERVAL '12 MONTH')
          GROUP BY s.id ORDER BY montant DESC", [$sid]
     );
-    $fin_cycle_list = db_fetch_all("SELECT e.numero_serie_interne,e.date_fin_cycle,e.etat,n.libelle AS type_equip,DATEDIFF(e.date_fin_cycle,CURDATE()) AS jours_restants FROM equipements e JOIN nomenclatures n ON n.id=e.nomenclature_id WHERE e.actif=1 AND e.site_id=? AND e.date_fin_cycle IS NOT NULL AND e.date_fin_cycle<=DATE_ADD(CURDATE(),INTERVAL 60 DAY) ORDER BY e.date_fin_cycle ASC LIMIT 10", [$sid]);
+    $fin_cycle_list = db_fetch_all("SELECT e.numero_serie_interne,e.date_fin_cycle,e.etat,n.libelle AS type_equip,((e.date_fin_cycle)::date - (CURRENT_DATE)::date) AS jours_restants FROM equipements e JOIN nomenclatures n ON n.id=e.nomenclature_id WHERE e.actif=1 AND e.site_id=? AND e.date_fin_cycle IS NOT NULL AND e.date_fin_cycle<=(CURRENT_DATE + INTERVAL '60 DAY') ORDER BY e.date_fin_cycle ASC LIMIT 10", [$sid]);
     $receptions_recentes = db_fetch_all("SELECT rs.*,c.libelle AS conso_lib,c.unite,e.numero_serie_interne AS equip_num,n.libelle AS equip_type FROM receptions_site rs LEFT JOIN consommables c ON c.id=rs.consommable_id LEFT JOIN equipements e ON e.id=rs.equipement_id LEFT JOIN nomenclatures n ON n.id=e.nomenclature_id WHERE rs.site_id=? ORDER BY rs.created_at DESC LIMIT 8", [$sid]);
     $stock_conso_site = db_fetch_all("SELECT c.libelle,c.unite,sc.quantite,c.seuil_alerte FROM stock_consommables_site sc JOIN consommables c ON c.id=sc.consommable_id WHERE sc.site_id=? ORDER BY c.libelle", [$sid]);
 
@@ -67,7 +67,7 @@ if ($role_slug === 'coordinateur_site' && $site_force) {
     $bobines_par_site = db_fetch_all("SELECT s.nom AS site_nom, COUNT(b.id) AS nb_bobines, COALESCE(SUM(b.stock_systeme),0) AS total_films FROM sites s LEFT JOIN op_bobines b ON b.site_id=s.id AND b.statut IN ('en_cours','en_stock') WHERE s.actif=1 AND s.id=? GROUP BY s.id", [$sid]);
     $rivets_par_site  = db_fetch_all("SELECT sr.type_rivet, COALESCE(sr.quantite,0) AS stock_rivets FROM op_stock_rivets sr WHERE sr.site_id=? ORDER BY sr.type_rivet", [$sid]);
     $pj_rivets_recents = db_fetch_all("SELECT date_point, type_point, rivets_utilises, rivets_endommages, COALESCE(rivets_gonflables,0) AS rivets_gonflables, COALESCE(rivets_eclates,0) AS rivets_eclates FROM op_points_journaliers WHERE site_id=? ORDER BY date_point DESC, type_point DESC LIMIT 5", [$sid]);
-    $interv_par_site  = db_fetch_all("SELECT s.nom AS site_nom, COUNT(im.id) AS nb_interv FROM sites s LEFT JOIN interventions_maintenance im ON im.site_id=s.id AND YEAR(im.date_intervention)=YEAR(CURDATE()) AND MONTH(im.date_intervention)=MONTH(CURDATE()) WHERE s.actif=1 AND s.id=? GROUP BY s.id", [$sid]);
+    $interv_par_site  = db_fetch_all("SELECT s.nom AS site_nom, COUNT(im.id) AS nb_interv FROM sites s LEFT JOIN interventions_maintenance im ON im.site_id=s.id AND EXTRACT(YEAR FROM im.date_intervention)=EXTRACT(YEAR FROM CURRENT_DATE) AND EXTRACT(MONTH FROM im.date_intervention)=EXTRACT(MONTH FROM CURRENT_DATE) WHERE s.actif=1 AND s.id=? GROUP BY s.id", [$sid]);
 
 // ── MAINTENANCE INFORMATIQUE : tout filtré catégorie=informatique
 } elseif ($role_slug === 'maintenance_info') {
@@ -76,7 +76,7 @@ if ($role_slug === 'coordinateur_site' && $site_force) {
     $kpi_equip_op     = 0;
     $kpi_equip_bon    = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND categorie='informatique' AND etat IN ('neuf','bon')");
     $kpi_equip_hs     = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND categorie='informatique' AND etat='hs'");
-    $kpi_fin_cycle    = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND categorie='informatique' AND date_fin_cycle BETWEEN CURDATE() AND DATE_ADD(CURDATE(),INTERVAL 30 DAY)");
+    $kpi_fin_cycle    = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND categorie='informatique' AND date_fin_cycle BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 DAY')");
     $kpi_sites_actifs = (int)db_fetch_value("SELECT COUNT(DISTINCT site_id) FROM equipements WHERE actif=1 AND categorie='informatique'");
     $kpi_users_actifs = null;
     $kpi_conso_alertes= null;
@@ -84,7 +84,7 @@ if ($role_slug === 'coordinateur_site' && $site_force) {
     $equip_par_etat  = db_fetch_all("SELECT etat, COUNT(*) AS total FROM equipements WHERE actif=1 AND categorie='informatique' GROUP BY etat");
     $equip_par_type  = db_fetch_all("SELECT n.libelle, COUNT(e.id) AS total FROM equipements e JOIN nomenclatures n ON n.id=e.nomenclature_id WHERE e.actif=1 AND e.categorie='informatique' GROUP BY n.id ORDER BY total DESC LIMIT 8");
     $sites_par_type  = db_fetch_all("SELECT type, COUNT(*) AS nb FROM sites WHERE actif=1 GROUP BY type ORDER BY nb DESC");
-    $fin_cycle_list  = db_fetch_all("SELECT e.numero_serie_interne,e.date_fin_cycle,e.etat,n.libelle AS type_equip,s.nom AS site_nom,DATEDIFF(e.date_fin_cycle,CURDATE()) AS jours_restants FROM equipements e JOIN nomenclatures n ON n.id=e.nomenclature_id LEFT JOIN sites s ON s.id=e.site_id WHERE e.actif=1 AND e.categorie='informatique' AND e.date_fin_cycle IS NOT NULL AND e.date_fin_cycle<=DATE_ADD(CURDATE(),INTERVAL 60 DAY) ORDER BY e.date_fin_cycle ASC LIMIT 10");
+    $fin_cycle_list  = db_fetch_all("SELECT e.numero_serie_interne,e.date_fin_cycle,e.etat,n.libelle AS type_equip,s.nom AS site_nom,((e.date_fin_cycle)::date - (CURRENT_DATE)::date) AS jours_restants FROM equipements e JOIN nomenclatures n ON n.id=e.nomenclature_id LEFT JOIN sites s ON s.id=e.site_id WHERE e.actif=1 AND e.categorie='informatique' AND e.date_fin_cycle IS NOT NULL AND e.date_fin_cycle<=(CURRENT_DATE + INTERVAL '60 DAY') ORDER BY e.date_fin_cycle ASC LIMIT 10");
     $conso_fcfa_site = [];
     $stock_bas_list  = [];
     $derniers_audit  = db_fetch_all("SELECT al.action,al.module,al.description,al.created_at,CONCAT(u.prenom,' ',u.nom) AS user_nom FROM audit_log al LEFT JOIN users u ON u.id=al.user_id WHERE al.module='equipements' ORDER BY al.created_at DESC LIMIT 8");
@@ -113,14 +113,14 @@ if ($role_slug === 'coordinateur_site' && $site_force) {
     $equip_par_etat  = db_fetch_all("SELECT etat, COUNT(*) AS total FROM equipements WHERE actif=1 GROUP BY etat");
     $equip_par_type  = [];
     $sites_par_type  = db_fetch_all("SELECT type, COUNT(*) AS nb FROM sites WHERE actif=1 GROUP BY type ORDER BY nb DESC");
-    $interv_par_site = db_fetch_all("SELECT s.nom AS site_nom, COUNT(im.id) AS nb_interv FROM sites s LEFT JOIN interventions_maintenance im ON im.site_id=s.id AND YEAR(im.date_intervention)=YEAR(CURDATE()) AND MONTH(im.date_intervention)=MONTH(CURDATE()) WHERE s.actif=1 GROUP BY s.id ORDER BY nb_interv DESC LIMIT 10");
+    $interv_par_site = db_fetch_all("SELECT s.nom AS site_nom, COUNT(im.id) AS nb_interv FROM sites s LEFT JOIN interventions_maintenance im ON im.site_id=s.id AND EXTRACT(YEAR FROM im.date_intervention)=EXTRACT(YEAR FROM CURRENT_DATE) AND EXTRACT(MONTH FROM im.date_intervention)=EXTRACT(MONTH FROM CURRENT_DATE) WHERE s.actif=1 GROUP BY s.id ORDER BY nb_interv DESC LIMIT 10");
     $bobines_par_site= db_fetch_all("SELECT s.nom AS site_nom, COUNT(b.id) AS nb_bobines, COALESCE(SUM(b.stock_systeme),0) AS total_films FROM sites s LEFT JOIN op_bobines b ON b.site_id=s.id AND b.statut IN ('en_cours','en_stock') WHERE s.actif=1 GROUP BY s.id ORDER BY nb_bobines DESC LIMIT 10");
     $rivets_par_site = db_fetch_all("SELECT s.nom AS site_nom, COALESCE(SUM(sr.quantite),0) AS stock_rivets FROM sites s LEFT JOIN op_stock_rivets sr ON sr.site_id=s.id WHERE s.actif=1 GROUP BY s.id, s.nom ORDER BY stock_rivets DESC LIMIT 10");
     $conso_fcfa_site = db_fetch_all(
         "SELECT s.nom AS site_nom, COALESCE(SUM(lc.prix_total),0) AS montant
          FROM livraisons_consommables lc
          JOIN sites s ON s.id=lc.site_id
-         WHERE lc.date_livraison >= DATE_SUB(CURDATE(),INTERVAL 12 MONTH)
+         WHERE lc.date_livraison >= (CURRENT_DATE - INTERVAL '12 MONTH')
          GROUP BY s.id
          ORDER BY montant DESC"
     );
@@ -148,13 +148,13 @@ if ($role_slug === 'coordinateur_site' && $site_force) {
     $kpi_equip_op     = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND categorie='operationnel'");
     $kpi_equip_bon    = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND etat IN ('neuf','bon')");
     $kpi_equip_hs     = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND etat='hs'");
-    $kpi_fin_cycle    = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle IS NOT NULL AND date_fin_cycle BETWEEN CURDATE() AND DATE_ADD(CURDATE(),INTERVAL 30 DAY)");
+    $kpi_fin_cycle    = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle IS NOT NULL AND date_fin_cycle BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 DAY')");
     $kpi_sites_actifs = (int)db_fetch_value("SELECT COUNT(*) FROM sites WHERE actif=1");
     $kpi_users_actifs = (int)db_fetch_value("SELECT COUNT(*) FROM users WHERE actif=1");
     $kpi_conso_alertes= (int)db_fetch_value("SELECT COUNT(*) FROM consommables WHERE stock_global<=seuil_alerte");
     $bobines_par_site = db_fetch_all("SELECT s.nom AS site_nom, COUNT(b.id) AS nb_bobines, COALESCE(SUM(b.stock_systeme),0) AS total_films FROM sites s LEFT JOIN op_bobines b ON b.site_id=s.id AND b.statut IN ('en_cours','en_stock') WHERE s.actif=1 GROUP BY s.id ORDER BY nb_bobines DESC LIMIT 10");
     $rivets_par_site  = db_fetch_all("SELECT s.nom AS site_nom, COALESCE(SUM(sr.quantite),0) AS stock_rivets FROM sites s LEFT JOIN op_stock_rivets sr ON sr.site_id=s.id WHERE s.actif=1 GROUP BY s.id, s.nom ORDER BY stock_rivets DESC LIMIT 10");
-    $interv_par_site  = db_fetch_all("SELECT s.nom AS site_nom, COUNT(im.id) AS nb_interv FROM sites s LEFT JOIN interventions_maintenance im ON im.site_id=s.id AND YEAR(im.date_intervention)=YEAR(CURDATE()) AND MONTH(im.date_intervention)=MONTH(CURDATE()) WHERE s.actif=1 GROUP BY s.id ORDER BY nb_interv DESC LIMIT 10");
+    $interv_par_site  = db_fetch_all("SELECT s.nom AS site_nom, COUNT(im.id) AS nb_interv FROM sites s LEFT JOIN interventions_maintenance im ON im.site_id=s.id AND EXTRACT(YEAR FROM im.date_intervention)=EXTRACT(YEAR FROM CURRENT_DATE) AND EXTRACT(MONTH FROM im.date_intervention)=EXTRACT(MONTH FROM CURRENT_DATE) WHERE s.actif=1 GROUP BY s.id ORDER BY nb_interv DESC LIMIT 10");
     $equip_par_etat  = db_fetch_all("SELECT etat, COUNT(*) AS total FROM equipements WHERE actif=1 GROUP BY etat ORDER BY total DESC");
     $equip_par_type  = db_fetch_all("SELECT n.libelle, COUNT(e.id) AS total FROM equipements e JOIN nomenclatures n ON n.id=e.nomenclature_id WHERE e.actif=1 GROUP BY n.id ORDER BY total DESC LIMIT 8");
     $sites_par_type  = db_fetch_all("SELECT type, COUNT(*) AS nb FROM sites WHERE actif=1 GROUP BY type ORDER BY nb DESC");
@@ -162,11 +162,11 @@ if ($role_slug === 'coordinateur_site' && $site_force) {
         "SELECT s.nom AS site_nom, COALESCE(SUM(lc.prix_total),0) AS montant
          FROM livraisons_consommables lc
          JOIN sites s ON s.id=lc.site_id
-         WHERE lc.date_livraison >= DATE_SUB(CURDATE(),INTERVAL 12 MONTH)
+         WHERE lc.date_livraison >= (CURRENT_DATE - INTERVAL '12 MONTH')
          GROUP BY s.id
          ORDER BY montant DESC"
     );
-    $fin_cycle_list  = db_fetch_all("SELECT e.numero_serie_interne,e.date_fin_cycle,e.etat,n.libelle AS type_equip,s.nom AS site_nom,CONCAT(u.prenom,' ',u.nom) AS utilisateur,DATEDIFF(e.date_fin_cycle,CURDATE()) AS jours_restants FROM equipements e JOIN nomenclatures n ON n.id=e.nomenclature_id LEFT JOIN sites s ON s.id=e.site_id LEFT JOIN users u ON u.id=e.utilisateur_id WHERE e.actif=1 AND e.date_fin_cycle IS NOT NULL AND e.date_fin_cycle<=DATE_ADD(CURDATE(),INTERVAL 60 DAY) ORDER BY e.date_fin_cycle ASC LIMIT 10");
+    $fin_cycle_list  = db_fetch_all("SELECT e.numero_serie_interne,e.date_fin_cycle,e.etat,n.libelle AS type_equip,s.nom AS site_nom,CONCAT(u.prenom,' ',u.nom) AS utilisateur,((e.date_fin_cycle)::date - (CURRENT_DATE)::date) AS jours_restants FROM equipements e JOIN nomenclatures n ON n.id=e.nomenclature_id LEFT JOIN sites s ON s.id=e.site_id LEFT JOIN users u ON u.id=e.utilisateur_id WHERE e.actif=1 AND e.date_fin_cycle IS NOT NULL AND e.date_fin_cycle<=(CURRENT_DATE + INTERVAL '60 DAY') ORDER BY e.date_fin_cycle ASC LIMIT 10");
     $stock_bas_list  = db_fetch_all("SELECT libelle, stock_global, seuil_alerte, unite FROM consommables WHERE stock_global<=seuil_alerte ORDER BY (stock_global/seuil_alerte) ASC LIMIT 6");
     // Gestionnaire de stock : pas d'audit dans le dashboard
     $derniers_audit  = $role_slug === 'gestionnaire_stock' ? [] : db_fetch_all("SELECT al.action,al.module,al.description,al.created_at,CONCAT(u.prenom,' ',u.nom) AS user_nom FROM audit_log al LEFT JOIN users u ON u.id=al.user_id ORDER BY al.created_at DESC LIMIT 8");

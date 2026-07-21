@@ -1,0 +1,32 @@
+# ============================================================
+#  Render Blueprint — ERP EMUCI / StockApp (PHP + PostgreSQL/Neon)
+#  https://render.com/docs/blueprint-spec
+#  La base de données est hébergée sur Neon (externe) : les variables
+#  DB_* sont marquées sync:false et à renseigner dans le dashboard Render.
+# ============================================================
+services:
+  - type: web
+    name: erp-emuci
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: frankfurt
+    healthCheckPath: /login.php
+    autoDeploy: true
+    envVars:
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASS
+        sync: false
+      - key: DB_SSLMODE
+        value: require
+      - key: APP_URL
+        sync: false
+      - key: APP_TIMEZONE
+        value: Africa/Abidjan

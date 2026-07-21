@@ -81,7 +81,7 @@ if ($type==='equipements') {
 // ── CONSOMMABLES ─────────────────────────────────────────────
 elseif ($type==='consommables') {
     require_permission('consommables','can_export');
-    $rows=db_fetch_all("SELECT c.code,c.libelle,c.unite,c.stock_global,c.seuil_alerte,GROUP_CONCAT(DISTINCT s.nom ORDER BY s.nom SEPARATOR ', ') AS sites FROM consommables c LEFT JOIN stock_consommables_site sc ON sc.consommable_id=c.id LEFT JOIN sites s ON s.id=sc.site_id GROUP BY c.id ORDER BY c.libelle");
+    $rows=db_fetch_all("SELECT c.code,c.libelle,c.unite,c.stock_global,c.seuil_alerte,STRING_AGG(DISTINCT s.nom, ', ' ORDER BY s.nom) AS sites FROM consommables c LEFT JOIN stock_consommables_site sc ON sc.consommable_id=c.id LEFT JOIN sites s ON s.id=sc.site_id GROUP BY c.id ORDER BY c.libelle");
     $sheet->setTitle('Consommables');
     $sheet->fromArray(['Code','Libellé','Unité','Stock Global','Seuil Alerte','Sites'],null,'A1');
     apply_header($sp,'A1:F1');
@@ -233,7 +233,7 @@ elseif ($type==='bilan_mensuel') {
          FROM livraisons_consommables lc
          JOIN sites s ON s.id=lc.site_id
          JOIN consommables c ON c.id=lc.consommable_id
-         WHERE YEAR(lc.date_livraison)=? AND MONTH(lc.date_livraison)=?
+         WHERE EXTRACT(YEAR FROM lc.date_livraison)=? AND EXTRACT(MONTH FROM lc.date_livraison)=?
            AND lc.prix_total > 0
          GROUP BY s.id, c.id ORDER BY s.nom, cout_total DESC",
         [$annee, $mois]
@@ -295,7 +295,7 @@ elseif ($type==='interventions') {
     // Maintenance_info ne voit que ses propres interventions
     if ($user['role_slug']==='maintenance_info') { $where[]='im.technicien_id=?'; $params[]=$user['id']; }
     if ($f_site) { $where[]='im.site_id=?'; $params[]=$f_site; }
-    if ($f_mois) { $where[]='DATE_FORMAT(im.date_intervention,"%Y-%m")=?'; $params[]=$f_mois; }
+    if ($f_mois) { $where[]="TO_CHAR(im.date_intervention,'YYYY-MM')=?"; $params[]=$f_mois; }
     $rows = db_fetch_all(
         "SELECT im.date_intervention, s.nom AS site, im.type_action, im.description,
                 e.numero_serie_interne AS equipement, im.probleme_signale, im.solution_apportee,

@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 db_query("UPDATE users SET role_id=? WHERE id=?", [$sit_role['id'], $user_id]);
             }
             db_query("INSERT INTO support_it_roles (user_id,sous_role,actif,affecte_par) VALUES (?,?,1,?)
-                      ON DUPLICATE KEY UPDATE actif=1, affecte_par=?",
+                      ON CONFLICT (user_id,sous_role) DO UPDATE SET actif=1, affecte_par=?",
                 [$user_id, $sous_role, $user['id'], $user['id']]);
             json_response(true, "Sous-rôle '$label' affecté à {$target['nom']}.");
         } else {

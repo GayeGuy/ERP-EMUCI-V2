@@ -316,7 +316,7 @@ $commandes = db_fetch_all(
             CONCAT(us.prenom,' ',us.nom) AS sup_nom,
             CONCAT(ug.prenom,' ',ug.nom) AS gsb_nom,
             (SELECT COUNT(*) FROM commandes_bobines_lignes l WHERE l.commande_id=cb.id) AS nb_bobines,
-            (SELECT GROUP_CONCAT(l.numero_bobine ORDER BY l.numero_bobine SEPARATOR ', ')
+            (SELECT STRING_AGG(l.numero_bobine, ', ' ORDER BY l.numero_bobine)
              FROM commandes_bobines_lignes l WHERE l.commande_id=cb.id) AS numeros_bobines
      FROM commandes_bobines cb
      JOIN sites s ON s.id=cb.site_id

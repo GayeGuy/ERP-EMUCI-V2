@@ -29,7 +29,7 @@ $ops = db_fetch_one(
         COALESCE(SUM(rivets_utilises),0) AS rivets_utilises,
         COALESCE(ROUND(AVG(NULLIF(moyenne_prod,0)),1),0) AS moy_prod
      FROM op_points_journaliers
-     WHERE DATE_FORMAT(date_point,'%Y-%m')=? AND statut != 'brouillon'",
+     WHERE TO_CHAR(date_point,'YYYY-MM')=? AND statut != 'brouillon'",
     [$mois]
 );
 
@@ -42,7 +42,7 @@ $prod_par_site = db_fetch_all(
             COALESCE(ROUND(AVG(NULLIF(p.moyenne_prod,0)),1),0) AS moy_vh,
             SUM(CASE WHEN p.statut='en_attente_validation' THEN 1 ELSE 0 END) AS en_attente
      FROM sites s
-     LEFT JOIN op_points_journaliers p ON p.site_id=s.id AND DATE_FORMAT(p.date_point,'%Y-%m')=? AND p.statut != 'brouillon'
+     LEFT JOIN op_points_journaliers p ON p.site_id=s.id AND TO_CHAR(p.date_point,'YYYY-MM')=? AND p.statut != 'brouillon'
      WHERE s.actif=1
      GROUP BY s.id ORDER BY engins DESC",
     [$mois]
@@ -53,7 +53,7 @@ $rivets = db_fetch_all(
     "SELECT s.nom, sr.type_rivet, COALESCE(sr.quantite,0) AS quantite
      FROM sites s
      JOIN op_stock_rivets sr ON sr.site_id=s.id
-     WHERE s.actif=1 ORDER BY s.nom, FIELD(sr.type_rivet,'gonflable','eclate')"
+     WHERE s.actif=1 ORDER BY s.nom, array_position(ARRAY['gonflable','eclate']::text[], (sr.type_rivet)::text)"
 );
 
 // ── BOBINES ─────────────────────────────────────────────────
@@ -72,7 +72,7 @@ $films_mois = (int)db_fetch_value(
     "SELECT COALESCE(SUM(fu.films_utilises),0)
      FROM op_films_utilises fu
      JOIN op_points_journaliers p ON p.id=fu.point_id
-     WHERE DATE_FORMAT(p.date_point,'%Y-%m')=?",
+     WHERE TO_CHAR(p.date_point,'YYYY-MM')=?",
     [$mois]
 );
 
@@ -82,7 +82,7 @@ $cmd_stats = db_fetch_one(
         SUM(CASE WHEN statut='en_attente' THEN 1 ELSE 0 END) AS en_attente,
         SUM(CASE WHEN statut='en_attente_livraison' THEN 1 ELSE 0 END) AS a_livrer,
         SUM(CASE WHEN statut='en_cours_livraison' THEN 1 ELSE 0 END) AS en_route,
-        SUM(CASE WHEN statut='livre' AND DATE_FORMAT(created_at,'%Y-%m')=? THEN 1 ELSE 0 END) AS livrees_mois
+        SUM(CASE WHEN statut='livre' AND TO_CHAR(created_at,'YYYY-MM')=? THEN 1 ELSE 0 END) AS livrees_mois
      FROM commandes",
     [$mois]
 );
@@ -99,12 +99,12 @@ $cmd_en_attente = (int)($cmd_stats['en_attente'] ?? 0);
 
 // ── ÉVOLUTION MENSUELLE (6 derniers mois) ───────────────────
 $evol = db_fetch_all(
-    "SELECT DATE_FORMAT(date_point,'%Y-%m') AS mois,
+    "SELECT TO_CHAR(date_point,'YYYY-MM') AS mois,
             SUM(total_engins) AS engins,
             COUNT(*) AS points
      FROM op_points_journaliers
-     WHERE date_point >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH) AND statut != 'brouillon'
-     GROUP BY DATE_FORMAT(date_point,'%Y-%m') ORDER BY mois ASC"
+     WHERE date_point >= (CURRENT_DATE - INTERVAL '6 MONTH') AND statut != 'brouillon'
+     GROUP BY TO_CHAR(date_point,'YYYY-MM') ORDER BY mois ASC"
 );
 
 include __DIR__ . '/../templates/header.php';

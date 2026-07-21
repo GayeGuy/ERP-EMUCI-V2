@@ -66,7 +66,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         db_query(
             "INSERT INTO interventions_maintenance
              (technicien_id,site_id,equipement_id,date_intervention,type_action,description,probleme_signale,statut_apres)
-             VALUES (?,?,?,CURDATE(),'maintenance_corrective',?,?,'en_attente')",
+             VALUES (?,?,?,CURRENT_DATE,'maintenance_corrective',?,?,'en_attente')",
             [$user['id'], $site_id ?: null, $equipement_id ?: null,
              "Panne signalée par coordinateur: $description", $description]
         );
@@ -82,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         );
         $equip_nom = $equipement_id
             ? (db_fetch_value(
-                "SELECT CONCAT(numero_serie_interne, IF(marque IS NOT NULL, CONCAT(' — ', marque, ' ', COALESCE(modele,'')), ''))
+                "SELECT CONCAT(numero_serie_interne, CASE WHEN marque IS NOT NULL THEN CONCAT(' — ', marque, ' ', COALESCE(modele,'')) ELSE '' END)
                  FROM equipements WHERE id=?", [$equipement_id]) ?? 'Équipement non spécifié')
             : 'Équipement non spécifié';
         $site_nom  = $site_id ? db_fetch_value("SELECT nom FROM sites WHERE id=?",[$site_id]) : '';

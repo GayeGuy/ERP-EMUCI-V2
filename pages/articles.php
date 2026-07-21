@@ -128,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             }
 
             // Mettre à jour stock global
-            db_query("UPDATE articles SET stock_global = stock_global + ?, prix_unitaire = IF(?> 0, ?, prix_unitaire) WHERE id=?",
+            db_query("UPDATE articles SET stock_global = stock_global + ?, prix_unitaire = CASE WHEN ? > 0 THEN ? ELSE prix_unitaire END WHERE id=?",
                 [$qte, $prix_unit, $prix_unit, $article_id]);
 
             // Enregistrer mouvement
@@ -208,11 +208,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             // Stock global -
             db_query("UPDATE articles SET stock_global = stock_global - ? WHERE id=?", [$qte, $article_id]);
             // Stock site +
-            db_query("INSERT INTO stock_site (article_id,site_id,quantite) VALUES (?,?,?) ON DUPLICATE KEY UPDATE quantite = quantite + ?",
+            db_query("INSERT INTO stock_site (article_id,site_id,quantite) VALUES (?,?,?) ON CONFLICT (article_id,site_id) DO UPDATE SET quantite = stock_site.quantite + ?",
                 [$article_id,$site_id,$qte,$qte]);
 
             // compat legacy stock_consommables_site
-            db_query("INSERT INTO stock_consommables_site (consommable_id,site_id,quantite) VALUES (?,?,?) ON DUPLICATE KEY UPDATE quantite = quantite + ?",
+            db_query("INSERT INTO stock_consommables_site (consommable_id,site_id,quantite) VALUES (?,?,?) ON CONFLICT (consommable_id,site_id) DO UPDATE SET quantite = stock_consommables_site.quantite + ?",
                 [$article_id,$site_id,$qte,$qte]);
 
             // Réception site en_attente
@@ -291,7 +291,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $diff = $new_qte - $old_qte;
         db_begin();
         try {
-            db_query("INSERT INTO stock_site (article_id,site_id,quantite) VALUES (?,?,?) ON DUPLICATE KEY UPDATE quantite=?",
+            db_query("INSERT INTO stock_site (article_id,site_id,quantite) VALUES (?,?,?) ON CONFLICT (article_id,site_id) DO UPDATE SET quantite=?",
                 [$article_id,$site_id,$new_qte,$new_qte]);
             db_query("UPDATE articles SET stock_global = stock_global + ? WHERE id=?", [$diff, $article_id]);
             audit_log($user['id'],'UPDATE','articles',$article_id,
@@ -328,10 +328,10 @@ $articles_list = db_fetch_all(
             COUNT(DISTINCT ss.site_id) AS nb_sites,
             COALESCE((SELECT SUM(quantite) FROM receptions_consommables r
                       WHERE r.consommable_id=a.id
-                        AND r.date_reception >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)),0) AS receptions_30j,
+                        AND r.date_reception >= (CURRENT_DATE - INTERVAL '30 DAY')),0) AS receptions_30j,
             COALESCE((SELECT SUM(quantite) FROM livraisons_consommables l
                       WHERE l.consommable_id=a.id AND l.type_mouvement='distribution'
-                        AND l.date_livraison >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)),0) AS distributions_30j
+                        AND l.date_livraison >= (CURRENT_DATE - INTERVAL '30 DAY')),0) AS distributions_30j
      FROM articles a
      LEFT JOIN stock_site ss ON ss.article_id=a.id
      WHERE $wsql GROUP BY a.id ORDER BY a.type_article, a.libelle", $params
@@ -341,8 +341,8 @@ $sites_list  = db_fetch_all("SELECT id,nom,type FROM sites WHERE actif=1 ORDER B
 
 $kpi_total   = count($articles_list);
 $kpi_alertes = count(array_filter($articles_list, fn($a) => $a['stock_global'] <= $a['seuil_alerte']));
-$kpi_receptions_mois = (int)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM receptions_consommables WHERE date_reception >= DATE_FORMAT(CURDATE(),'%Y-%m-01')");
-$kpi_distrib_mois    = (int)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM livraisons_consommables WHERE type_mouvement='distribution' AND date_livraison >= DATE_FORMAT(CURDATE(),'%Y-%m-01')");
+$kpi_receptions_mois = (int)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM receptions_consommables WHERE date_reception >= date_trunc('month',CURRENT_DATE)::date");
+$kpi_distrib_mois    = (int)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM livraisons_consommables WHERE type_mouvement='distribution' AND date_livraison >= date_trunc('month',CURRENT_DATE)::date");
 
 include __DIR__ . '/../templates/header.php';
 ?>

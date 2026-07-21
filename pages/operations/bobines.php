@@ -268,7 +268,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         $id = (int)($_POST['id'] ?? 0);
         $bob = db_fetch_one("SELECT b.*,s.nom AS site_nom,tv.libelle AS type_vehicule FROM op_bobines b LEFT JOIN sites s ON s.id=b.site_id LEFT JOIN op_types_vehicule tv ON tv.id=b.type_vehicule_id WHERE b.id=?",[$id]);
         if (!$bob) json_response(false,'Introuvable.');
-        $conso_moy = (float)db_fetch_value("SELECT COALESCE(SUM(quantite)/GREATEST(DATEDIFF(NOW(),MIN(date_conso)),1),0) FROM consommations_bobines WHERE bobine_id=? AND date_conso>=DATE_SUB(CURDATE(),INTERVAL 30 DAY)",[$id]);
+        $conso_moy = (float)db_fetch_value("SELECT COALESCE(SUM(quantite)/GREATEST(((NOW())::date - (MIN(date_conso)::date)),1),0) FROM consommations_bobines WHERE bobine_id=? AND date_conso>=(CURRENT_DATE - INTERVAL '30 DAY')",[$id]);
         $jours_restants = $conso_moy > 0 ? (int)ceil($bob['stock_systeme']/$conso_moy) : null;
         $date_epuisement = $jours_restants ? date('Y-m-d',strtotime("+{$jours_restants} days")) : null;
         $consos = db_fetch_all("SELECT date_conso,quantite,stock_avant,stock_apres,notes,CONCAT(u.prenom,' ',u.nom) AS agent FROM consommations_bobines cb LEFT JOIN users u ON u.id=cb.created_by WHERE cb.bobine_id=? ORDER BY date_conso DESC LIMIT 30",[$id]);
@@ -314,7 +314,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
                 [$user['id'],$notes,$ecart_id]);
             if ($ajuster) {
                 $phy = (int)$ec['stock_physique'];
-                db_query("UPDATE op_bobines SET stock_systeme=?,films_restants=?,statut=IF(?>0,'en_cours','epuisee') WHERE id=?",
+                db_query("UPDATE op_bobines SET stock_systeme=?,films_restants=?,statut=CASE WHEN ?>0 THEN 'en_cours' ELSE 'epuisee' END WHERE id=?",
                     [$phy,$phy,$phy,$ec['bobine_id']]);
                 db_query("INSERT INTO mouvements_bobines (bobine_id,type,quantite,stock_avant,stock_apres,motif,created_by) VALUES (?,?,?,?,?,?,?)",
                     [$ec['bobine_id'],'ajustement_inventaire',$ec['ecart'],(int)$ec['stock_systeme'],$phy,"Résolution écart #$ecart_id",$user['id']]);
@@ -384,8 +384,8 @@ $stats_map = array_column($stats,null,'statut');
 $total_stock = array_sum(array_column($stats,'stock_total'));
 
 $conso_today_where = $site_force ? "AND cb.site_id=$site_force" : '';
-$conso_today = (int)db_fetch_value("SELECT COALESCE(SUM(cb.quantite),0) FROM consommations_bobines cb WHERE cb.date_conso=CURDATE() $conso_today_where");
-$conso_mois  = (int)db_fetch_value("SELECT COALESCE(SUM(cb.quantite),0) FROM consommations_bobines cb WHERE YEAR(cb.date_conso)=YEAR(CURDATE()) AND MONTH(cb.date_conso)=MONTH(CURDATE()) $conso_today_where");
+$conso_today = (int)db_fetch_value("SELECT COALESCE(SUM(cb.quantite),0) FROM consommations_bobines cb WHERE cb.date_conso=CURRENT_DATE $conso_today_where");
+$conso_mois  = (int)db_fetch_value("SELECT COALESCE(SUM(cb.quantite),0) FROM consommations_bobines cb WHERE EXTRACT(YEAR FROM cb.date_conso)=EXTRACT(YEAR FROM CURRENT_DATE) AND EXTRACT(MONTH FROM cb.date_conso)=EXTRACT(MONTH FROM CURRENT_DATE) $conso_today_where");
 
 // Écarts ouverts
 $ecart_site_where = $site_force ? "AND b.site_id=$site_force" : '';
@@ -1021,7 +1021,7 @@ endif;
      LEFT JOIN users u ON u.id=d.demande_par
      LEFT JOIN users t ON t.id=d.traite_par
      WHERE 1=1 " . ($site_force?"AND d.site_id=$site_force":"") . "
-     ORDER BY FIELD(d.statut,'en_attente','approuvee','refusee'), d.created_at DESC LIMIT 50"
+     ORDER BY array_position(ARRAY['en_attente','approuvee','refusee']::text[], (d.statut)::text), d.created_at DESC LIMIT 50"
   );
   $is_gsb = in_array($role_slug,['gestionnaire_stock_bobines','admin','superadmin']);
   ?>

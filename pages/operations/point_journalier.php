@@ -610,7 +610,7 @@ $points = db_fetch_all(
      FROM op_points_journaliers p
      JOIN sites s ON s.id=p.site_id
      LEFT JOIN users u ON u.id=p.created_by
-     WHERE DATE_FORMAT(p.date_point,'%Y-%m')=?
+     WHERE TO_CHAR(p.date_point,'YYYY-MM')=?
        AND (? = 0 OR p.site_id=?)
        $filtre_brouillon
      ORDER BY p.date_point DESC, p.type_point DESC",

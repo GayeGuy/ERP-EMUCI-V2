@@ -50,7 +50,7 @@ function auth_login(string $email, string $password): array {
         db_query(
             "INSERT INTO sessions (id, user_id, ip_address, user_agent, last_activity)
              VALUES (?, ?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE last_activity = VALUES(last_activity)",
+             ON CONFLICT (id) DO UPDATE SET last_activity = EXCLUDED.last_activity",
             [session_id(), $user['id'], get_ip(), $_SERVER['HTTP_USER_AGENT'] ?? '', time()]
         );
     } catch (Exception $e) { /* table sessions optionnelle */ }

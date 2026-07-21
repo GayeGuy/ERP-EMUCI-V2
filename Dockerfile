@@ -1,13 +1,13 @@
 FROM php:8.2-cli
 
-# Extensions PHP requises
+# Extensions PHP requises (PostgreSQL / Neon)
 RUN apt-get update && apt-get install -y \
     libpng-dev libjpeg-dev libfreetype6-dev \
-    libzip-dev libonig-dev libxml2-dev \
+    libzip-dev libonig-dev libxml2-dev libpq-dev \
     unzip git curl \
     && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
-        gd zip pdo pdo_mysql mysqli mbstring \
+        gd zip pdo pdo_pgsql pgsql mbstring \
         exif fileinfo opcache \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
@@ -27,5 +27,5 @@ RUN composer install --optimize-autoloader --no-dev --no-interaction --ignore-pl
 
 EXPOSE 8080
 
-# Utiliser un script de démarrage qui exporte les variables
-CMD ["/bin/sh", "-c", "php -d variables_order=EGPCS -S 0.0.0.0:8080 -t /var/www/html"]
+# Render fournit le port via $PORT (8080 par défaut en local)
+CMD ["/bin/sh", "-c", "php -d variables_order=EGPCS -S 0.0.0.0:${PORT:-8080} -t /var/www/html"]

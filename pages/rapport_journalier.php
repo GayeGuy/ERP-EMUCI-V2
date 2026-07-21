@@ -142,7 +142,7 @@ $rapports = db_fetch_all(
      FROM rapports_journaliers_info r
      JOIN sites s ON s.id=r.site_id
      LEFT JOIN users u ON u.id=r.technicien_id
-     WHERE DATE_FORMAT(r.date_rapport,'%Y-%m')=?
+     WHERE TO_CHAR(r.date_rapport,'YYYY-MM')=?
        AND (? = 0 OR r.site_id=?)
      ORDER BY r.date_rapport DESC",
     [$f_mois, $f_site, $f_site]
@@ -153,7 +153,7 @@ $where_kpi = $site_force ? "AND site_id=$site_force" : '';
 $kpi_total     = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND categorie='informatique' $where_kpi");
 $kpi_hs        = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND categorie='informatique' AND etat='hs' $where_kpi");
 $kpi_maint     = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND categorie='informatique' AND etat='maintenance' $where_kpi");
-$kpi_interv    = (int)db_fetch_value("SELECT COUNT(*) FROM interventions_maintenance WHERE DATE_FORMAT(date_intervention,'%Y-%m')=? AND technicien_id=?", [date('Y-m'),$user['id']]);
+$kpi_interv    = (int)db_fetch_value("SELECT COUNT(*) FROM interventions_maintenance WHERE TO_CHAR(date_intervention,'YYYY-MM')=? AND technicien_id=?", [date('Y-m'),$user['id']]);
 
 include __DIR__ . '/../templates/header.php';
 ?>
