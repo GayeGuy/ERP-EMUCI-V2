@@ -249,6 +249,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                     // Supprimer import du même jour
                     db_query("DELETE FROM import_optoplate WHERE date_import=?", [$date_import]);
 
+                    try {
                     db_begin();
                     foreach ($all_rows as $row) {
                         if (count($row) < 5) continue;
@@ -304,6 +305,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                     $auto_msg = $nb_valide_auto>0?" · ✅ $nb_valide_auto site(s) validé(s) automatiquement":'';
                     $bloc_msg = $nb_bloque>0?" · ⚠️ $nb_bloque site(s) bloqué(s) — validation GSB requise":'';
                     $msg_optoplate = ['type'=>'success','text'=>"Import terminé : $nb_ok plaques importées.".($nb_err?" ($nb_err ignorées)":'').$auto_msg.$bloc_msg];
+                    } catch (Exception $e) {
+                        // PostgreSQL : indispensable de rollback, sinon la connexion
+                        // reste en transaction annulée (25P02) pour toute la page.
+                        db_rollback();
+                        $msg_optoplate = ['type'=>'danger','text'=>'Erreur import : '.$e->getMessage()];
+                    }
                 }
             }
         }
@@ -536,6 +543,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         'text'=>"Import terminé : $nb_ok lignes importées.".($nb_err?" ($nb_err ignorées)":'').$stock_msg.$auto_msg.$bloc_msg];
 
                 } catch (Exception $e) {
+                    // PostgreSQL : rollback obligatoire pour sortir de l'état 25P02
+                    db_rollback();
                     $msg_optotrace = ['type'=>'danger','text'=>'Erreur : '.$e->getMessage()];
                 }
             }

@@ -10911,4 +10911,22 @@ CREATE TABLE IF NOT EXISTS op_pmma_utilises (
 );
 CREATE INDEX IF NOT EXISTS op_pmma_utilises_idx_point_id ON op_pmma_utilises (point_id);
 
+-- plate_number : colonne legacy absente des INSERT actuels (MySQL laxiste la
+-- remplissait par ''). Nullable en PostgreSQL pour ne pas bloquer l'import OptoTrace.
+ALTER TABLE import_optotrace ALTER COLUMN plate_number DROP NOT NULL;
+
+-- Sequences manquantes (tables creees avec AUTO_INCREMENT inline dans le dump)
+CREATE SEQUENCE IF NOT EXISTS demandes_correction_saisie_id_seq;
+ALTER TABLE demandes_correction_saisie ALTER COLUMN id SET DEFAULT nextval('demandes_correction_saisie_id_seq');
+ALTER SEQUENCE demandes_correction_saisie_id_seq OWNED BY demandes_correction_saisie.id;
+SELECT setval('demandes_correction_saisie_id_seq', GREATEST((SELECT COALESCE(MAX(id),0) FROM demandes_correction_saisie), 1));
+CREATE SEQUENCE IF NOT EXISTS stock_fin_mois_id_seq;
+ALTER TABLE stock_fin_mois ALTER COLUMN id SET DEFAULT nextval('stock_fin_mois_id_seq');
+ALTER SEQUENCE stock_fin_mois_id_seq OWNED BY stock_fin_mois.id;
+SELECT setval('stock_fin_mois_id_seq', GREATEST((SELECT COALESCE(MAX(id),0) FROM stock_fin_mois), 1));
+CREATE SEQUENCE IF NOT EXISTS corrections_bobines_id_seq;
+ALTER TABLE corrections_bobines ALTER COLUMN id SET DEFAULT nextval('corrections_bobines_id_seq');
+ALTER SEQUENCE corrections_bobines_id_seq OWNED BY corrections_bobines.id;
+SELECT setval('corrections_bobines_id_seq', GREATEST((SELECT COALESCE(MAX(id),0) FROM corrections_bobines), 1));
+
 COMMIT;
