@@ -10900,5 +10900,15 @@ ALTER TABLE distributions_site ADD COLUMN IF NOT EXISTS created_by integer DEFAU
 ALTER TABLE distribution_lignes ADD COLUMN IF NOT EXISTS commande_ligne_id integer DEFAULT NULL;
 ALTER TABLE distribution_lignes ADD COLUMN IF NOT EXISTS quantite_recue integer DEFAULT 0;
 ALTER TABLE distribution_lignes ADD COLUMN IF NOT EXISTS unite varchar(20) DEFAULT 'unite';
+-- op_pmma_utilises (PMMA par point journalier ; creee par fix_columns.php cote MySQL)
+CREATE TABLE IF NOT EXISTS op_pmma_utilises (
+  id SERIAL PRIMARY KEY,
+  point_id integer NOT NULL,
+  type_pmma varchar(50) NOT NULL,
+  utilises integer NOT NULL DEFAULT 0,
+  endommages integer NOT NULL DEFAULT 0,
+  created_at timestamp DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS op_pmma_utilises_idx_point_id ON op_pmma_utilises (point_id);
 
 COMMIT;
