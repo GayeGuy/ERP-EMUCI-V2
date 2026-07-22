@@ -1,5 +1,10 @@
 # Dependencies
-/vendor/
+# NOTE (branche vps-mysql) : vendor/ est VOLONTAIREMENT versionné ici pour un
+# déploiement VPS sans `composer install`. Sur main (Render), il reste ignoré.
+# /vendor/
+
+# Secrets locaux (identifiants DB / APP_URL) — jamais committer
+/.env
 
 # Uploaded files (user content, not code)
 /uploads/fiches/*

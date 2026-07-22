@@ -153,7 +153,7 @@ $rows = db_fetch_all(
      LEFT JOIN sites s ON s.id=u.site_id
      LEFT JOIN audit_log al ON al.user_id=u.id
      WHERE $wsql
-     GROUP BY u.id, r.nom, r.slug, r.id, s.nom
+     GROUP BY u.id
      ORDER BY u.actif DESC, r.id ASC, u.nom ASC
      LIMIT ? OFFSET ?",
     array_merge($params, [$per_page, $offset])

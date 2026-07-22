@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         if (!$site_id || $qte <= 0) json_response(false,'Site et quantité obligatoires.');
         $site = db_fetch_one("SELECT nom FROM sites WHERE id=?",[$site_id]);
         db_query("INSERT INTO op_stock_rivets (site_id,quantite) VALUES (?,?)
-                  ON CONFLICT (site_id,type_rivet) DO UPDATE SET quantite=op_stock_rivets.quantite+?",[$site_id,$qte,$qte]);
+                  ON DUPLICATE KEY UPDATE quantite=quantite+?",[$site_id,$qte,$qte]);
         audit_log($user['id'],'CREATE','operations',$site_id,"Approvisionnement $qte rivets → {$site['nom']} ($notes)");
         $nouveau = (int)db_fetch_value("SELECT quantite FROM op_stock_rivets WHERE site_id=?",[$site_id]);
         json_response(true,"$qte rivets ajoutés. Stock total : $nouveau.");
@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         $new_qte = (int)($_POST['new_qte']  ?? 0);
         $motif   = trim($_POST['motif']      ?? '');
         $old     = (int)db_fetch_value("SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=?",[$site_id]);
-        db_query("INSERT INTO op_stock_rivets (site_id,quantite) VALUES (?,?) ON CONFLICT (site_id,type_rivet) DO UPDATE SET quantite=?",
+        db_query("INSERT INTO op_stock_rivets (site_id,quantite) VALUES (?,?) ON DUPLICATE KEY UPDATE quantite=?",
             [$site_id,$new_qte,$new_qte]);
         audit_log($user['id'],'UPDATE','operations',$site_id,"Ajustement rivets site:$site_id : $old → $new_qte ($motif)");
         json_response(true,'Stock ajusté.');
@@ -67,11 +67,11 @@ $stocks = db_fetch_all(
             COALESCE(sr.quantite,0) AS quantite,
             COALESCE((SELECT SUM(p.rivets_utilises+p.rivets_endommages)
                       FROM op_points_journaliers p
-                      WHERE p.site_id=s.id AND TO_CHAR(p.date_point,'YYYY-MM')=TO_CHAR(CURRENT_DATE,'YYYY-MM')),0) AS utilises_mois
+                      WHERE p.site_id=s.id AND DATE_FORMAT(p.date_point,'%Y-%m')=DATE_FORMAT(CURDATE(),'%Y-%m')),0) AS utilises_mois
      FROM sites s
      JOIN op_stock_rivets sr ON sr.site_id=s.id
      WHERE s.actif=1 " . ($site_force_r ? "AND s.id=$site_force_r" : "") . "
-     ORDER BY s.nom, array_position(ARRAY['gonflable','eclate']::text[], (sr.type_rivet)::text)"
+     ORDER BY s.nom, FIELD(sr.type_rivet,'gonflable','eclate')"
 );
 
 // ── HISTORIQUE CONSOMMATION (points journaliers)

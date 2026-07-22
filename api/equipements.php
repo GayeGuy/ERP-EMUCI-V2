@@ -32,7 +32,7 @@ switch ($action) {
         if (!empty($_GET['nomenclature_id'])) { $where[] = 'e.nomenclature_id = ?'; $params[] = (int)$_GET['nomenclature_id']; }
         if (!empty($_GET['site_id']))          { $where[] = 'e.site_id = ?';          $params[] = (int)$_GET['site_id']; }
         if (!empty($_GET['etat']))             { $where[] = 'e.etat = ?';             $params[] = $_GET['etat']; }
-        if (!empty($_GET['fin_cycle']))        { $where[] = "e.date_fin_cycle <= (CURRENT_DATE + INTERVAL '30 DAY')"; }
+        if (!empty($_GET['fin_cycle']))        { $where[] = 'e.date_fin_cycle <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)'; }
 
         $ws    = implode(' AND ', $where);
         $total = (int)db_fetch_value("SELECT COUNT(*) FROM equipements e WHERE $ws", $params);
@@ -44,7 +44,7 @@ switch ($action) {
                     n.libelle AS type_equip, n.code AS type_code, n.duree_vie_mois,
                     s.nom AS site_nom,
                     CONCAT(u.prenom,' ',u.nom) AS utilisateur_nom,
-                    ((e.date_fin_cycle)::date - (CURRENT_DATE)::date) AS jours_fin_cycle
+                    DATEDIFF(e.date_fin_cycle, CURDATE()) AS jours_fin_cycle
              FROM equipements e
              JOIN nomenclatures n ON n.id = e.nomenclature_id
              LEFT JOIN sites s ON s.id = e.site_id

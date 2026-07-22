@@ -80,7 +80,7 @@ $actions_list = ['CREATE','READ','UPDATE','DELETE','LOGIN','LOGOUT','EXPORT','TR
 // Stats rapides
 $stats = db_fetch_all(
     "SELECT action, COUNT(*) AS n FROM audit_log
-     WHERE created_at >= (CURRENT_DATE - INTERVAL '7 DAY')
+     WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 7 DAY)
      GROUP BY action ORDER BY n DESC"
 );
 $stats_map = array_column($stats, 'n', 'action');

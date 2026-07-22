@@ -80,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
             foreach ($bobines as $b) {
                 $conso_moy = (float)db_fetch_value(
-                    "SELECT COALESCE(SUM(quantite)/GREATEST(((NOW())::date - (MIN(date_conso)::date)),1),0) FROM consommations_bobines WHERE bobine_id=? AND date_conso>=(CURRENT_DATE - INTERVAL '30 DAY')",
+                    "SELECT COALESCE(SUM(quantite)/GREATEST(DATEDIFF(NOW(),MIN(date_conso)),1),0) FROM consommations_bobines WHERE bobine_id=? AND date_conso>=DATE_SUB(CURDATE(),INTERVAL 30 DAY)",
                     [$b['id']]
                 );
                 $ecart_connu = (int)db_fetch_value("SELECT COALESCE(SUM(ecart),0) FROM ecarts_bobines WHERE bobine_id=? AND statut='ouvert'", [$b['id']]);
@@ -116,7 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 if ($l['ecart'] != 0) {
                     $nb_ecarts++;
                     $phy = (int)$l['stock_physique'];
-                    db_query("UPDATE op_bobines SET stock_systeme=?,films_restants=?,statut=CASE WHEN ?>0 THEN (CASE WHEN statut='retiree' THEN 'retiree' ELSE 'en_cours' END) ELSE 'epuisee' END WHERE id=?",[$phy,$phy,$phy,$l['bobine_id']]);
+                    db_query("UPDATE op_bobines SET stock_systeme=?,films_restants=?,statut=IF(?>0,IF(statut='retiree','retiree','en_cours'),'epuisee') WHERE id=?",[$phy,$phy,$phy,$l['bobine_id']]);
                     db_query("INSERT INTO mouvements_bobines (bobine_id,type,quantite,stock_avant,stock_apres,motif,ref_id,created_by) VALUES (?,?,?,?,?,?,?,?)",
                         [$l['bobine_id'],'ajustement_inventaire',$l['ecart'],$l['stock_systeme'],$phy,"Inventaire #{$inv_id} ({$inv['type_inventaire']})",$inv_id,$user['id']]);
                     db_query("INSERT INTO ecarts_bobines (bobine_id,date_constat,stock_systeme,stock_physique,ecart,motif,source,inventaire_id,statut,resolu_at,resolu_par,created_by) VALUES (?,?,?,?,?,?,?,?,'resolu',NOW(),?,?)",
@@ -125,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             }
             if ($inv['type_inventaire'] === 'mensuel') {
                 $mois = date('Y-m', strtotime($inv['date_inventaire']));
-                db_query("INSERT INTO bilans_mensuels_bobines (site_id,mois,inventaire_id,stock_fin_mois,nb_ajustements,statut,valide_par,valide_at) VALUES (?,?,?,?,?,'valide',?,NOW()) ON CONFLICT (site_id,mois) DO UPDATE SET stock_fin_mois=EXCLUDED.stock_fin_mois,nb_ajustements=bilans_mensuels_bobines.nb_ajustements+EXCLUDED.nb_ajustements,statut='valide',valide_par=EXCLUDED.valide_par,valide_at=NOW()",
+                db_query("INSERT INTO bilans_mensuels_bobines (site_id,mois,inventaire_id,stock_fin_mois,nb_ajustements,statut,valide_par,valide_at) VALUES (?,?,?,?,?,'valide',?,NOW()) ON DUPLICATE KEY UPDATE stock_fin_mois=VALUES(stock_fin_mois),nb_ajustements=nb_ajustements+VALUES(nb_ajustements),statut='valide',valide_par=VALUES(valide_par),valide_at=NOW()",
                     [$inv['site_id'],$mois,$inv_id,$total_physique,$nb_ecarts,$user['id']]);
             }
             db_query("UPDATE inventaires_bobines SET statut='valide',nb_ecarts=?,total_films_physique=?,valide_par=?,valide_at=NOW() WHERE id=?",
@@ -150,7 +150,7 @@ $where = ['1=1']; $params = [];
 if ($site_force)  { $where[] = 'i.site_id=?'; $params[] = $site_force; }
 elseif ($f_site)  { $where[] = 'i.site_id=?'; $params[] = $f_site; }
 if ($f_type)      { $where[] = 'i.type_inventaire=?'; $params[] = $f_type; }
-if ($f_mois)      { $where[] = "TO_CHAR(i.date_inventaire,'YYYY-MM')=?"; $params[] = $f_mois; }
+if ($f_mois)      { $where[] = "DATE_FORMAT(i.date_inventaire,'%Y-%m')=?"; $params[] = $f_mois; }
 
 $inventaires = db_fetch_all(
     "SELECT i.*, s.nom AS site_nom, CONCAT(u.prenom,' ',u.nom) AS createur

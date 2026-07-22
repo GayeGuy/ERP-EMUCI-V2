@@ -7192,7 +7192,7 @@ CREATE TABLE `op_bobines` (
   `stock_systeme` int(10) UNSIGNED NOT NULL DEFAULT 500 COMMENT 'Stock calculé par le système (basé sur les consommations saisies)',
   `stock_physique` int(10) UNSIGNED DEFAULT NULL COMMENT 'Dernier stock physique constaté lors d un inventaire',
   `dernier_inventaire_id` int(10) UNSIGNED DEFAULT NULL,
-  `date_creation` date DEFAULT curdate(),
+  `date_creation` date DEFAULT (curdate()),
   `format` varchar(50) DEFAULT NULL COMMENT 'Format de la bobine (ex: A4, A3, rouleau 80m...)',
   `notes_perte` text DEFAULT NULL COMMENT 'Motif de la perte'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -10866,3 +10866,89 @@ COMMIT;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+
+
+-- ============================================================
+-- Alignement du schéma de base sur la production (VPS MySQL).
+-- Équivalent MySQL des patches fix_columns.php / create_missing_tables.php.
+-- Idempotent : la procédure n'ajoute une colonne que si la table existe
+-- et que la colonne est absente. Ré-exécutable sans erreur.
+-- ============================================================
+DROP PROCEDURE IF EXISTS _add_col;
+DELIMITER $$
+CREATE PROCEDURE _add_col(IN tbl VARCHAR(64), IN col VARCHAR(64), IN ddl VARCHAR(255))
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables
+             WHERE table_schema = DATABASE() AND table_name = tbl)
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = DATABASE() AND table_name = tbl AND column_name = col) THEN
+    SET @s = CONCAT('ALTER TABLE `', tbl, '` ADD COLUMN `', col, '` ', ddl);
+    PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+  END IF;
+END$$
+DELIMITER ;
+
+CALL _add_col('op_stock_rivets','type_rivet',"varchar(20) NOT NULL DEFAULT 'gonflable'");
+CALL _add_col('op_points_journaliers','correction_gp','int DEFAULT NULL');
+CALL _add_col('op_points_journaliers','motif_correction_gp','varchar(500) DEFAULT NULL');
+CALL _add_col('op_points_journaliers','corrected_by_gp','int DEFAULT NULL');
+CALL _add_col('op_points_journaliers','corrected_at','datetime DEFAULT NULL');
+CALL _add_col('op_points_journaliers','rivets_gonflables','int NOT NULL DEFAULT 0');
+CALL _add_col('op_points_journaliers','rivets_eclates','int NOT NULL DEFAULT 0');
+CALL _add_col('op_points_journaliers','motif_rejet','text DEFAULT NULL');
+CALL _add_col('import_optotrace','batch','varchar(100) DEFAULT NULL');
+CALL _add_col('import_optotrace','project','varchar(100) DEFAULT NULL');
+CALL _add_col('import_optotrace','article','varchar(100) DEFAULT NULL');
+CALL _add_col('import_optotrace','box','varchar(50) DEFAULT NULL');
+CALL _add_col('import_optotrace','type_trace','varchar(50) DEFAULT NULL');
+CALL _add_col('import_optotrace','first_use','datetime DEFAULT NULL');
+CALL _add_col('import_optotrace','last_use','datetime DEFAULT NULL');
+CALL _add_col('import_optotrace','sended_on','datetime DEFAULT NULL');
+CALL _add_col('import_optotrace','received_on','datetime DEFAULT NULL');
+CALL _add_col('import_optotrace','canceled_on','datetime DEFAULT NULL');
+CALL _add_col('import_optotrace','importe_par','int DEFAULT NULL');
+CALL _add_col('import_optoplate','date_installation','datetime DEFAULT NULL');
+CALL _add_col('import_optoplate','numero_dossier','varchar(50) DEFAULT NULL');
+CALL _add_col('import_optoplate','vin','varchar(20) DEFAULT NULL');
+CALL _add_col('import_optoplate','type_plaque','varchar(60) DEFAULT NULL');
+CALL _add_col('import_optoplate','position','varchar(10) DEFAULT NULL');
+CALL _add_col('import_optoplate','num_consommable','varchar(30) DEFAULT NULL');
+CALL _add_col('import_optoplate','site_id_emuci','varchar(20) DEFAULT NULL');
+CALL _add_col('import_optoplate','importe_par','int DEFAULT NULL');
+CALL _add_col('sites','nom_emuci','varchar(150) DEFAULT NULL');
+CALL _add_col('commandes','valide_par','int DEFAULT NULL');
+CALL _add_col('commandes','valide_at','datetime DEFAULT NULL');
+CALL _add_col('commandes','motif_rejet_global','text DEFAULT NULL');
+CALL _add_col('distributions_site','recu_at','datetime DEFAULT NULL');
+CALL _add_col('distributions_site','recu_par','int DEFAULT NULL');
+CALL _add_col('distributions_site','expedie_at','datetime DEFAULT NULL');
+CALL _add_col('distributions_site','fichier_bl','varchar(255) DEFAULT NULL');
+CALL _add_col('distributions_site','notes','text DEFAULT NULL');
+CALL _add_col('distributions_site','created_by','int DEFAULT NULL');
+CALL _add_col('distribution_lignes','commande_ligne_id','int DEFAULT NULL');
+CALL _add_col('distribution_lignes','quantite_recue','int DEFAULT 0');
+CALL _add_col('distribution_lignes','unite',"varchar(20) DEFAULT 'unite'");
+DROP PROCEDURE IF EXISTS _add_col;
+
+-- Contrainte unique (site_id, type_rivet) sur op_stock_rivets, idempotente.
+DROP PROCEDURE IF EXISTS _fix_rivets_uq;
+DELIMITER $$
+CREATE PROCEDURE _fix_rivets_uq()
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables
+             WHERE table_schema = DATABASE() AND table_name = 'op_stock_rivets') THEN
+    IF EXISTS (SELECT 1 FROM information_schema.statistics
+               WHERE table_schema = DATABASE() AND table_name = 'op_stock_rivets'
+               AND index_name = 'op_stock_rivets_uq_site') THEN
+      ALTER TABLE op_stock_rivets DROP INDEX op_stock_rivets_uq_site;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.statistics
+               WHERE table_schema = DATABASE() AND table_name = 'op_stock_rivets'
+               AND index_name = 'op_stock_rivets_uq_site_type') THEN
+      ALTER TABLE op_stock_rivets ADD CONSTRAINT op_stock_rivets_uq_site_type UNIQUE (site_id, type_rivet);
+    END IF;
+  END IF;
+END$$
+DELIMITER ;
+CALL _fix_rivets_uq();
+DROP PROCEDURE IF EXISTS _fix_rivets_uq;

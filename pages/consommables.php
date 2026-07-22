@@ -94,7 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 [$conso_id, $qte, $prix_unit, $prix_tot, $date_rec, $fourn, $bon, $notes, $user['id']]
             );
             // Mettre à jour le stock global (+)
-            db_query("UPDATE consommables SET stock_global = stock_global + ?, prix_unitaire = CASE WHEN ? > 0 THEN ? ELSE prix_unitaire END WHERE id=?",
+            db_query("UPDATE consommables SET stock_global = stock_global + ?, prix_unitaire = IF(?> 0, ?, prix_unitaire) WHERE id=?",
                 [$qte, $prix_unit, $prix_unit, $conso_id]);
 
             audit_log($user['id'], 'CREATE', 'consommables', $conso_id,
@@ -154,7 +154,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             // Stock par site augmente
             db_query(
                 "INSERT INTO stock_consommables_site (consommable_id,site_id,quantite)
-                 VALUES (?,?,?) ON CONFLICT (consommable_id,site_id) DO UPDATE SET quantite = stock_consommables_site.quantite + ?",
+                 VALUES (?,?,?) ON DUPLICATE KEY UPDATE quantite = quantite + ?",
                 [$conso_id, $site_id, $qte, $qte]
             );
 
@@ -199,7 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         db_begin();
         try {
             db_query("INSERT INTO stock_consommables_site (consommable_id,site_id,quantite) VALUES (?,?,?)
-                      ON CONFLICT (consommable_id,site_id) DO UPDATE SET quantite=?", [$conso_id, $site_id, $new_qte, $new_qte]);
+                      ON DUPLICATE KEY UPDATE quantite=?", [$conso_id, $site_id, $new_qte, $new_qte]);
             db_query("UPDATE consommables SET stock_global = stock_global + ? WHERE id=?", [$diff, $conso_id]);
             audit_log($user['id'], 'UPDATE', 'consommables', $conso_id,
                 "Ajustement {$conso['code']} site:$site_id : $old_site_qte → $new_qte ($motif)");
@@ -232,9 +232,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
              WHERE lc.consommable_id=? AND lc.type_mouvement='distribution'
              ORDER BY lc.date_livraison DESC LIMIT 8", [$id]);
         $row['conso_mensuelle'] = db_fetch_all(
-            "SELECT TO_CHAR(date_livraison,'YYYY-MM') AS mois, SUM(quantite) AS total
+            "SELECT DATE_FORMAT(date_livraison,'%Y-%m') AS mois, SUM(quantite) AS total
              FROM livraisons_consommables
-             WHERE consommable_id=? AND date_livraison >= (CURRENT_DATE - INTERVAL '6 MONTH')
+             WHERE consommable_id=? AND date_livraison >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
                AND type_mouvement='distribution'
              GROUP BY mois ORDER BY mois ASC", [$id]);
         json_response(true, '', $row);
@@ -266,10 +266,10 @@ $consos = db_fetch_all(
             COUNT(DISTINCT sc.site_id) AS nb_sites,
             COALESCE((SELECT SUM(quantite) FROM receptions_consommables r
                       WHERE r.consommable_id=c.id
-                        AND r.date_reception >= (CURRENT_DATE - INTERVAL '30 DAY')),0) AS receptions_30j,
+                        AND r.date_reception >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)),0) AS receptions_30j,
             COALESCE((SELECT SUM(quantite) FROM livraisons_consommables l
                       WHERE l.consommable_id=c.id AND l.type_mouvement='distribution'
-                        AND l.date_livraison >= (CURRENT_DATE - INTERVAL '30 DAY')),0) AS distributions_30j
+                        AND l.date_livraison >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)),0) AS distributions_30j
      FROM consommables c
      LEFT JOIN stock_consommables_site sc ON sc.consommable_id=c.id
      WHERE $wsql GROUP BY c.id ORDER BY c.libelle", $params
@@ -302,8 +302,8 @@ $unites     = ['unite'=>'Unité','kg'=>'Kilogramme','litre'=>'Litre','boite'=>'B
 
 $kpi_total_consos    = count($consos);
 $kpi_alertes         = count(array_filter($consos, fn($c)=>$c['stock_global']<=$c['seuil_alerte']));
-$kpi_receptions_mois = (float)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM receptions_consommables WHERE date_reception >= date_trunc('month',CURRENT_DATE)::date");
-$kpi_distrib_mois    = (float)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM livraisons_consommables WHERE type_mouvement='distribution' AND date_livraison >= date_trunc('month',CURRENT_DATE)::date");
+$kpi_receptions_mois = (float)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM receptions_consommables WHERE date_reception >= DATE_FORMAT(CURDATE(),'%Y-%m-01')");
+$kpi_distrib_mois    = (float)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM livraisons_consommables WHERE type_mouvement='distribution' AND date_livraison >= DATE_FORMAT(CURDATE(),'%Y-%m-01')");
 
 include __DIR__ . '/../templates/header.php';
 ?>

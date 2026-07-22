@@ -66,14 +66,14 @@ $cols_pj_gp = [
 ];
 foreach ($cols_pj_gp as $col => $def) {
     $m = '';
-    safe_exec($db, "ALTER TABLE op_points_journaliers ADD COLUMN `$col` $def", $m);
+    safe_exec($db, "ALTER TABLE `op_points_journaliers` ADD COLUMN `$col` $def", $m);
     $results[] = "op_points_journaliers.$col : $m";
 }
 
 // ── import_session_id INT → VARCHAR(36) ───────────────────────
 foreach (['import_optotrace', 'import_optoplate'] as $tbl) {
     $m = '';
-    safe_exec($db, "ALTER TABLE `$tbl` MODIFY COLUMN import_session_id varchar(36) DEFAULT NULL", $m);
+    safe_exec($db, "ALTER TABLE `$tbl` MODIFY COLUMN `import_session_id` varchar(36) DEFAULT NULL", $m);
     $results[] = "$tbl.import_session_id → varchar(36) : $m";
 }
 
@@ -93,7 +93,7 @@ $cols_optotrace = [
 ];
 foreach ($cols_optotrace as $col => $def) {
     $m = '';
-    safe_exec($db, "ALTER TABLE import_optotrace ADD COLUMN `$col` $def", $m);
+    safe_exec($db, "ALTER TABLE `import_optotrace` ADD COLUMN `$col` $def", $m);
     $results[] = "import_optotrace.$col : $m";
 }
 
@@ -110,13 +110,13 @@ $cols_optoplate = [
 ];
 foreach ($cols_optoplate as $col => $def) {
     $m = '';
-    safe_exec($db, "ALTER TABLE import_optoplate ADD COLUMN `$col` $def", $m);
+    safe_exec($db, "ALTER TABLE `import_optoplate` ADD COLUMN `$col` $def", $m);
     $results[] = "import_optoplate.$col : $m";
 }
 
 // ── sites — nom_emuci ─────────────────────────────────────────
 $m = '';
-safe_exec($db, "ALTER TABLE sites ADD COLUMN nom_emuci varchar(150) DEFAULT NULL", $m);
+safe_exec($db, "ALTER TABLE `sites` ADD COLUMN `nom_emuci` varchar(150) DEFAULT NULL", $m);
 $results[] = "sites.nom_emuci : $m";
 
 // ── emuci_sites_inconnus — dédupliquer + UNIQUE sur nom_emuci ────────────────
@@ -133,11 +133,11 @@ $results[] = "emuci_sites_inconnus UNIQUE(nom_emuci) : $m";
 
 // ── emuci_sites_inconnus — renommer nom_site → nom_emuci + ajouter type_import ──
 $m = '';
-safe_exec($db, "ALTER TABLE emuci_sites_inconnus CHANGE COLUMN nom_site nom_emuci varchar(255) NOT NULL", $m);
+safe_exec($db, "ALTER TABLE `emuci_sites_inconnus` CHANGE COLUMN `nom_site` `nom_emuci` varchar(255) NOT NULL", $m);
 $results[] = "emuci_sites_inconnus.nom_site → nom_emuci : $m";
 
 $m = '';
-safe_exec($db, "ALTER TABLE emuci_sites_inconnus ADD COLUMN type_import varchar(20) DEFAULT NULL", $m);
+safe_exec($db, "ALTER TABLE `emuci_sites_inconnus` ADD COLUMN `type_import` varchar(20) DEFAULT NULL", $m);
 $results[] = "emuci_sites_inconnus.type_import : $m";
 
 // ── Corriger statuts bobines selon quantité réelle ───────────────
@@ -173,13 +173,13 @@ $results[] = "op_bobines.site_id mis à jour depuis import_optotrace : $m";
 
 // ── op_types_bobines — créer si absente ───────────────────────
 $m = '';
-safe_exec($db, "CREATE TABLE IF NOT EXISTS op_types_bobines (
-  id int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-  code varchar(20) NOT NULL,
-  libelle varchar(150) NOT NULL,
-  serie char(4) NOT NULL,
-  actif tinyint(1) DEFAULT 1,
-  PRIMARY KEY (id)
+safe_exec($db, "CREATE TABLE IF NOT EXISTS `op_types_bobines` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `code` varchar(20) NOT NULL,
+  `libelle` varchar(150) NOT NULL,
+  `serie` char(4) NOT NULL,
+  `actif` tinyint(1) DEFAULT 1,
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", $m);
 $results[] = "op_types_bobines (CREATE IF NOT EXISTS) : $m";
 
@@ -239,40 +239,40 @@ foreach ([
     'motif_rejet_global' => "text DEFAULT NULL",
 ] as $col => $def) {
     $m = '';
-    safe_exec($db, "ALTER TABLE commandes ADD COLUMN `$col` $def", $m);
+    safe_exec($db, "ALTER TABLE `commandes` ADD COLUMN `$col` $def", $m);
     $results[] = "commandes.$col : $m";
 }
 
 // ── Corriger ENUMs statut — créer tables manquantes si besoin ─
-safe_exec($db, "CREATE TABLE IF NOT EXISTS distributions_site (
-  id int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-  numero_distribution varchar(50) NOT NULL,
-  commande_id int(10) UNSIGNED DEFAULT NULL,
-  site_id int(10) UNSIGNED NOT NULL,
-  date_distribution date NOT NULL,
-  statut varchar(50) DEFAULT 'en_cours_livraison',
-  notes text DEFAULT NULL,
-  fichier_bl varchar(255) DEFAULT NULL,
-  created_by int(10) UNSIGNED DEFAULT NULL,
-  expedie_at datetime DEFAULT NULL,
-  recu_at datetime DEFAULT NULL,
-  recu_par int(10) UNSIGNED DEFAULT NULL,
-  created_at datetime DEFAULT current_timestamp(),
-  PRIMARY KEY (id)
+safe_exec($db, "CREATE TABLE IF NOT EXISTS `distributions_site` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `numero_distribution` varchar(50) NOT NULL,
+  `commande_id` int(10) UNSIGNED DEFAULT NULL,
+  `site_id` int(10) UNSIGNED NOT NULL,
+  `date_distribution` date NOT NULL,
+  `statut` varchar(50) DEFAULT 'en_cours_livraison',
+  `notes` text DEFAULT NULL,
+  `fichier_bl` varchar(255) DEFAULT NULL,
+  `created_by` int(10) UNSIGNED DEFAULT NULL,
+  `expedie_at` datetime DEFAULT NULL,
+  `recu_at` datetime DEFAULT NULL,
+  `recu_par` int(10) UNSIGNED DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", $m);
 $results[] = "distributions_site (CREATE IF NOT EXISTS) : $m";
 
-safe_exec($db, "CREATE TABLE IF NOT EXISTS distribution_lignes (
-  id int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-  distribution_id int(10) UNSIGNED NOT NULL,
-  article_id int(10) UNSIGNED DEFAULT NULL,
-  commande_ligne_id int(10) UNSIGNED DEFAULT NULL,
-  libelle varchar(200) DEFAULT NULL,
-  quantite_envoyee int(11) DEFAULT 0,
-  quantite_recue int(11) DEFAULT 0,
-  unite varchar(20) DEFAULT 'unite',
-  statut varchar(50) DEFAULT 'en_cours_livraison',
-  PRIMARY KEY (id)
+safe_exec($db, "CREATE TABLE IF NOT EXISTS `distribution_lignes` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `distribution_id` int(10) UNSIGNED NOT NULL,
+  `article_id` int(10) UNSIGNED DEFAULT NULL,
+  `commande_ligne_id` int(10) UNSIGNED DEFAULT NULL,
+  `libelle` varchar(200) DEFAULT NULL,
+  `quantite_envoyee` int(11) DEFAULT 0,
+  `quantite_recue` int(11) DEFAULT 0,
+  `unite` varchar(20) DEFAULT 'unite',
+  `statut` varchar(50) DEFAULT 'en_cours_livraison',
+  PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", $m);
 $results[] = "distribution_lignes (CREATE IF NOT EXISTS) : $m";
 
@@ -286,7 +286,7 @@ foreach ([
     'created_by' => "int(10) UNSIGNED DEFAULT NULL",
 ] as $col => $def) {
     $m = '';
-    safe_exec($db, "ALTER TABLE distributions_site ADD COLUMN `$col` $def", $m);
+    safe_exec($db, "ALTER TABLE `distributions_site` ADD COLUMN `$col` $def", $m);
     $results[] = "distributions_site.$col : $m";
 }
 
@@ -297,7 +297,7 @@ foreach ([
     'unite'             => "varchar(20) DEFAULT 'unite'",
 ] as $col => $def) {
     $m = '';
-    safe_exec($db, "ALTER TABLE distribution_lignes ADD COLUMN `$col` $def", $m);
+    safe_exec($db, "ALTER TABLE `distribution_lignes` ADD COLUMN `$col` $def", $m);
     $results[] = "distribution_lignes.$col : $m";
 }
 
@@ -308,78 +308,78 @@ foreach ([
     'distribution_lignes' => 'en_cours_livraison',
 ] as $tbl => $default) {
     $m = '';
-    safe_exec($db, "UPDATE `$tbl` SET statut='$default' WHERE statut='' OR statut IS NULL", $m);
+    safe_exec($db, "UPDATE `$tbl` SET `statut`='$default' WHERE `statut`='' OR `statut` IS NULL", $m);
     $results[] = "$tbl.statut nettoyage : $m";
 }
 
 // ── Appliquer les ENUMs corrects ──────────────────────────────
 $m = '';
 safe_exec($db,
-    "ALTER TABLE commandes MODIFY COLUMN statut
+    "ALTER TABLE `commandes` MODIFY COLUMN `statut`
      ENUM('en_attente','en_attente_livraison','en_cours_livraison','livre','recu','rejete','annule')
      NOT NULL DEFAULT 'en_attente'", $m);
 $results[] = "commandes.statut ENUM : $m";
 
 $m = '';
 safe_exec($db,
-    "ALTER TABLE distributions_site MODIFY COLUMN statut
+    "ALTER TABLE `distributions_site` MODIFY COLUMN `statut`
      ENUM('en_cours_livraison','livre','annule')
      DEFAULT 'en_cours_livraison'", $m);
 $results[] = "distributions_site.statut ENUM : $m";
 
 $m = '';
 safe_exec($db,
-    "ALTER TABLE distribution_lignes MODIFY COLUMN statut
+    "ALTER TABLE `distribution_lignes` MODIFY COLUMN `statut`
      ENUM('en_cours_livraison','livre','litige')
      DEFAULT 'en_cours_livraison'", $m);
 $results[] = "distribution_lignes.statut ENUM : $m";
 
 $m = '';
 safe_exec($db,
-    "ALTER TABLE commande_lignes MODIFY COLUMN statut_ligne
+    "ALTER TABLE `commande_lignes` MODIFY COLUMN `statut_ligne`
      ENUM('en_attente','valide','modifie','rejete')
      NOT NULL DEFAULT 'en_attente'", $m);
 $results[] = "commande_lignes.statut_ligne ENUM : $m";
 
 $m = '';
 safe_exec($db,
-    "ALTER TABLE commande_lignes MODIFY COLUMN type_article
+    "ALTER TABLE `commande_lignes` MODIFY COLUMN `type_article`
      ENUM('article','consommable','bobine','pmma','rivet','equipement','autre')
      NOT NULL DEFAULT 'article'", $m);
 $results[] = "commande_lignes.type_article ENUM : $m";
 
 // ── stock_pmma_site — créer si absente + UNIQUE KEY ──────────
-safe_exec($db, "CREATE TABLE IF NOT EXISTS stock_pmma_site (
-  id int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-  site_id int(10) UNSIGNED NOT NULL,
-  type_pmma varchar(50) DEFAULT 'Standard',
-  quantite int(10) UNSIGNED NOT NULL DEFAULT 0,
-  seuil_alerte int(10) UNSIGNED DEFAULT 10,
-  updated_at datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
-  PRIMARY KEY (id),
-  UNIQUE KEY uq_site_type (site_id,type_pmma)
+safe_exec($db, "CREATE TABLE IF NOT EXISTS `stock_pmma_site` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `site_id` int(10) UNSIGNED NOT NULL,
+  `type_pmma` varchar(50) DEFAULT 'Standard',
+  `quantite` int(10) UNSIGNED NOT NULL DEFAULT 0,
+  `seuil_alerte` int(10) UNSIGNED DEFAULT 10,
+  `updated_at` datetime DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_site_type` (`site_id`,`type_pmma`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4", $m);
 $results[] = "stock_pmma_site (CREATE IF NOT EXISTS) : $m";
 
 // distribution_id existe sur Railway mais pas localement — s'assurer qu'il est nullable
 $m = '';
-safe_exec($db, "ALTER TABLE commande_lignes MODIFY COLUMN distribution_id INT UNSIGNED DEFAULT NULL", $m);
+safe_exec($db, "ALTER TABLE `commande_lignes` MODIFY COLUMN `distribution_id` INT UNSIGNED DEFAULT NULL", $m);
 $results[] = "commande_lignes.distribution_id nullable : $m";
 
 // ── op_stock_rivets — ajouter type_rivet ─────────────────────
 $m = '';
-safe_exec($db, "ALTER TABLE op_stock_rivets ADD COLUMN type_rivet varchar(20) NOT NULL DEFAULT 'gonflable'", $m);
+safe_exec($db, "ALTER TABLE `op_stock_rivets` ADD COLUMN `type_rivet` varchar(20) NOT NULL DEFAULT 'gonflable'", $m);
 $results[] = "op_stock_rivets.type_rivet : $m";
 
 // SUPPRIMER l'ancienne UNIQUE KEY uq_site (site_id seul) — elle fait que ON DUPLICATE KEY UPDATE
 // touche la ligne gonflable au lieu de créer une ligne eclate
 $m = '';
-safe_exec($db, "ALTER TABLE op_stock_rivets DROP INDEX uq_site", $m);
+safe_exec($db, "ALTER TABLE `op_stock_rivets` DROP INDEX `uq_site`", $m);
 $results[] = "op_stock_rivets DROP INDEX uq_site : $m";
 
 // Ajouter UNIQUE KEY (site_id, type_rivet) pour ON DUPLICATE KEY UPDATE correct par type
 $m = '';
-safe_exec($db, "ALTER TABLE op_stock_rivets ADD UNIQUE KEY uq_site_type (site_id, type_rivet)", $m);
+safe_exec($db, "ALTER TABLE `op_stock_rivets` ADD UNIQUE KEY uq_site_type (site_id, type_rivet)", $m);
 $results[] = "op_stock_rivets UNIQUE(site_id,type_rivet) : $m";
 
 // Créer une ligne 'eclate' pour chaque site qui a déjà une ligne 'gonflable'
@@ -391,21 +391,21 @@ $results[] = "op_stock_rivets lignes éclatés créées : $m";
 
 // ── demandes_bobines — créer si absente ───────────────────────
 $m = '';
-safe_exec($db, "CREATE TABLE IF NOT EXISTS demandes_bobines (
-  id int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-  bobine_id int(10) UNSIGNED NOT NULL,
-  site_id int(10) UNSIGNED NOT NULL,
-  demande_par int(10) UNSIGNED NOT NULL,
-  motif text NOT NULL,
-  statut enum('en_attente','approuvee','refusee') NOT NULL DEFAULT 'en_attente',
-  traite_par int(10) UNSIGNED DEFAULT NULL,
-  traite_at datetime DEFAULT NULL,
-  motif_reponse text DEFAULT NULL,
-  created_at datetime DEFAULT current_timestamp(),
-  PRIMARY KEY (id),
-  KEY idx_bobine (bobine_id),
-  KEY idx_site (site_id),
-  KEY idx_statut (statut)
+safe_exec($db, "CREATE TABLE IF NOT EXISTS `demandes_bobines` (
+  `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+  `bobine_id` int(10) UNSIGNED NOT NULL,
+  `site_id` int(10) UNSIGNED NOT NULL,
+  `demande_par` int(10) UNSIGNED NOT NULL,
+  `motif` text NOT NULL,
+  `statut` enum('en_attente','approuvee','refusee') NOT NULL DEFAULT 'en_attente',
+  `traite_par` int(10) UNSIGNED DEFAULT NULL,
+  `traite_at` datetime DEFAULT NULL,
+  `motif_reponse` text DEFAULT NULL,
+  `created_at` datetime DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_bobine` (`bobine_id`),
+  KEY `idx_site` (`site_id`),
+  KEY `idx_statut` (`statut`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", $m);
 $results[] = "demandes_bobines (CREATE IF NOT EXISTS) : $m";
 
@@ -417,13 +417,13 @@ try {
 
 // ── op_points_journaliers — ENUM type_point (3-step) ─────────────
 $m = '';
-safe_exec($db, "ALTER TABLE op_points_journaliers MODIFY COLUMN type_point VARCHAR(30) NOT NULL DEFAULT 'final'", $m);
+safe_exec($db, "ALTER TABLE `op_points_journaliers` MODIFY COLUMN `type_point` VARCHAR(30) NOT NULL DEFAULT 'final'", $m);
 $results[] = "op_points_journaliers.type_point → varchar : $m";
 $m = '';
-safe_exec($db, "UPDATE op_points_journaliers SET type_point='final' WHERE type_point IS NULL OR type_point='' OR type_point NOT IN ('point_9h','point_13h','point_18h','final','intermediaire')", $m);
+safe_exec($db, "UPDATE `op_points_journaliers` SET type_point='final' WHERE type_point IS NULL OR type_point='' OR type_point NOT IN ('point_9h','point_13h','point_18h','final','intermediaire')", $m);
 $results[] = "op_points_journaliers.type_point normalize : $m";
 $m = '';
-safe_exec($db, "ALTER TABLE op_points_journaliers MODIFY COLUMN type_point ENUM('point_9h','point_13h','point_18h','final','intermediaire') NOT NULL DEFAULT 'final'", $m);
+safe_exec($db, "ALTER TABLE `op_points_journaliers` MODIFY COLUMN `type_point` ENUM('point_9h','point_13h','point_18h','final','intermediaire') NOT NULL DEFAULT 'final'", $m);
 $results[] = "op_points_journaliers.type_point ENUM : $m";
 
 // ── op_points_journaliers — diagnostic après fix ─────────────────
@@ -434,51 +434,51 @@ try {
 
 // ── op_points_journaliers — ENUM statut ──────────────────────────
 $m = '';
-safe_exec($db, "ALTER TABLE op_points_journaliers MODIFY COLUMN statut VARCHAR(30) NOT NULL DEFAULT 'brouillon'", $m);
+safe_exec($db, "ALTER TABLE `op_points_journaliers` MODIFY COLUMN `statut` VARCHAR(30) NOT NULL DEFAULT 'brouillon'", $m);
 $results[] = "op_points_journaliers.statut → varchar : $m";
 $m = '';
-safe_exec($db, "UPDATE op_points_journaliers SET statut='brouillon' WHERE statut IS NULL OR statut='' OR statut NOT IN ('brouillon','valide','en_attente_validation','suivi')", $m);
+safe_exec($db, "UPDATE `op_points_journaliers` SET statut='brouillon' WHERE statut IS NULL OR statut='' OR statut NOT IN ('brouillon','valide','en_attente_validation','suivi')", $m);
 $results[] = "op_points_journaliers.statut normalize : $m";
 $m = '';
-safe_exec($db, "ALTER TABLE op_points_journaliers MODIFY COLUMN statut ENUM('brouillon','valide','en_attente_validation','suivi') NOT NULL DEFAULT 'brouillon'", $m);
+safe_exec($db, "ALTER TABLE `op_points_journaliers` MODIFY COLUMN `statut` ENUM('brouillon','valide','en_attente_validation','suivi') NOT NULL DEFAULT 'brouillon'", $m);
 $results[] = "op_points_journaliers.statut ENUM : $m";
 
 // ── op_points_journaliers — colonnes per-type rivets ──────────────
 $m = '';
-safe_exec($db, "ALTER TABLE op_points_journaliers ADD COLUMN rivets_gonflables INT NOT NULL DEFAULT 0", $m);
+safe_exec($db, "ALTER TABLE `op_points_journaliers` ADD COLUMN `rivets_gonflables` INT NOT NULL DEFAULT 0", $m);
 $results[] = "op_points_journaliers.rivets_gonflables : $m";
 $m = '';
-safe_exec($db, "ALTER TABLE op_points_journaliers ADD COLUMN rivets_eclates INT NOT NULL DEFAULT 0", $m);
+safe_exec($db, "ALTER TABLE `op_points_journaliers` ADD COLUMN `rivets_eclates` INT NOT NULL DEFAULT 0", $m);
 $results[] = "op_points_journaliers.rivets_eclates : $m";
 
 // ── Colonne motif_rejet (rejet superviseur) ─────────────────────
 $m = '';
-safe_exec($db, "ALTER TABLE op_points_journaliers ADD COLUMN motif_rejet TEXT DEFAULT NULL", $m);
+safe_exec($db, "ALTER TABLE `op_points_journaliers` ADD COLUMN `motif_rejet` TEXT DEFAULT NULL", $m);
 $results[] = "op_points_journaliers.motif_rejet : $m";
 
 // ── ENUM statut : ajouter 'rejete' ─────────────────────────────
 // 3 étapes : VARCHAR → normaliser → ENUM avec rejete
 $m = '';
-safe_exec($db, "ALTER TABLE op_points_journaliers MODIFY COLUMN statut VARCHAR(30) NOT NULL DEFAULT 'brouillon'", $m);
+safe_exec($db, "ALTER TABLE `op_points_journaliers` MODIFY COLUMN `statut` VARCHAR(30) NOT NULL DEFAULT 'brouillon'", $m);
 $results[] = "op_points_journaliers.statut → varchar : $m";
 $m = '';
-safe_exec($db, "UPDATE op_points_journaliers SET statut='brouillon' WHERE statut IS NULL OR statut='' OR statut NOT IN ('brouillon','en_attente_validation','valide','suivi','rejete')", $m);
+safe_exec($db, "UPDATE `op_points_journaliers` SET statut='brouillon' WHERE statut IS NULL OR statut='' OR statut NOT IN ('brouillon','en_attente_validation','valide','suivi','rejete')", $m);
 $results[] = "op_points_journaliers.statut normalise : $m";
 $m = '';
-safe_exec($db, "ALTER TABLE op_points_journaliers MODIFY COLUMN statut ENUM('brouillon','en_attente_validation','valide','suivi','rejete') NOT NULL DEFAULT 'brouillon'", $m);
+safe_exec($db, "ALTER TABLE `op_points_journaliers` MODIFY COLUMN `statut` ENUM('brouillon','en_attente_validation','valide','suivi','rejete') NOT NULL DEFAULT 'brouillon'", $m);
 $results[] = "op_points_journaliers.statut → ENUM+rejete : $m";
 
 // ── Table op_pmma_utilises (PMMA par point journalier) ──────────────
 $m = '';
-safe_exec($db, "CREATE TABLE IF NOT EXISTS op_pmma_utilises (
-    id         INT UNSIGNED NOT NULL AUTO_INCREMENT,
-    point_id   INT UNSIGNED NOT NULL,
-    type_pmma  VARCHAR(50)  NOT NULL,
-    utilises   INT UNSIGNED NOT NULL DEFAULT 0,
-    endommages INT UNSIGNED NOT NULL DEFAULT 0,
-    created_at DATETIME     DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (id),
-    KEY idx_point_id (point_id)
+safe_exec($db, "CREATE TABLE IF NOT EXISTS `op_pmma_utilises` (
+    `id`         INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    `point_id`   INT UNSIGNED NOT NULL,
+    `type_pmma`  VARCHAR(50)  NOT NULL,
+    `utilises`   INT UNSIGNED NOT NULL DEFAULT 0,
+    `endommages` INT UNSIGNED NOT NULL DEFAULT 0,
+    `created_at` DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_point_id` (`point_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci", $m);
 $results[] = "op_pmma_utilises (CREATE IF NOT EXISTS) : $m";
 
@@ -486,7 +486,7 @@ $db->exec("SET FOREIGN_KEY_CHECKS=1");
 
 // ── Snapshot bobines dans validations_stock_matin
 $m = '';
-safe_exec($db, "ALTER TABLE validations_stock_matin ADD COLUMN bobines_snapshot LONGTEXT DEFAULT NULL", $m);
+safe_exec($db, "ALTER TABLE `validations_stock_matin` ADD COLUMN `bobines_snapshot` LONGTEXT DEFAULT NULL", $m);
 $results[] = "validations_stock_matin.bobines_snapshot : $m";
 
 // ── Fix cohérence equipements: site_id/statut_stock
@@ -502,36 +502,36 @@ foreach ($results as $r) echo $r . "\n";
 
 // Diagnostic : lister les colonnes réelles des tables concernées
 echo "\n--- Colonnes réelles dans 'sites' ---\n";
-foreach ($db->query("SHOW COLUMNS FROM sites") as $c) echo $c['Field'] . "\n";
+foreach ($db->query("SHOW COLUMNS FROM `sites`") as $c) echo $c['Field'] . "\n";
 
 echo "\n--- Colonnes réelles dans 'import_optotrace' ---\n";
-foreach ($db->query("SHOW COLUMNS FROM import_optotrace") as $c) echo $c['Field'] . "\n";
+foreach ($db->query("SHOW COLUMNS FROM `import_optotrace`") as $c) echo $c['Field'] . "\n";
 
 echo "\n--- Colonnes réelles dans 'import_optoplate' ---\n";
-foreach ($db->query("SHOW COLUMNS FROM import_optoplate") as $c) echo $c['Field'] . "\n";
+foreach ($db->query("SHOW COLUMNS FROM `import_optoplate`") as $c) echo $c['Field'] . "\n";
 
 echo "\n--- Colonnes réelles dans 'emuci_sites_inconnus' ---\n";
 try {
-    foreach ($db->query("SHOW COLUMNS FROM emuci_sites_inconnus") as $c) echo $c['Field'] . "\n";
+    foreach ($db->query("SHOW COLUMNS FROM `emuci_sites_inconnus`") as $c) echo $c['Field'] . "\n";
 } catch (PDOException $e) {
     echo "❌ Table introuvable : " . $e->getMessage() . "\n";
 }
 
 echo "\n--- ENUM statut dans 'commande_lignes' ---\n";
 try {
-    foreach ($db->query("SHOW COLUMNS FROM commande_lignes") as $c)
+    foreach ($db->query("SHOW COLUMNS FROM `commande_lignes`") as $c)
         echo "{$c['Field']} | {$c['Type']}\n";
 } catch (PDOException $e) { echo "❌ " . $e->getMessage() . "\n"; }
 
 echo "\n--- ENUM statut dans 'distributions_site' ---\n";
 try {
-    foreach ($db->query("SHOW COLUMNS FROM distributions_site WHERE Field='statut'") as $c)
+    foreach ($db->query("SHOW COLUMNS FROM `distributions_site` WHERE Field='statut'") as $c)
         echo "{$c['Field']} | {$c['Type']}\n";
 } catch (PDOException $e) { echo "❌ " . $e->getMessage() . "\n"; }
 
 echo "\n--- ENUM statut dans 'distribution_lignes' ---\n";
 try {
-    foreach ($db->query("SHOW COLUMNS FROM distribution_lignes WHERE Field='statut'") as $c)
+    foreach ($db->query("SHOW COLUMNS FROM `distribution_lignes` WHERE Field='statut'") as $c)
         echo "{$c['Field']} | {$c['Type']}\n";
 } catch (PDOException $e) { echo "❌ " . $e->getMessage() . "\n"; }
 

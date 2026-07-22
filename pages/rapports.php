@@ -31,8 +31,8 @@ $kpi = [
     'total_users'    => (int)db_fetch_value("SELECT COUNT(*) FROM users WHERE actif=1"),
     'equip_hs'       => (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND etat='hs'"),
     'equip_neuf'     => (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND etat='neuf'"),
-    'fin_cycle_30j'  => (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 DAY')"),
-    'fin_cycle_exp'  => (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle < CURRENT_DATE"),
+    'fin_cycle_30j'  => (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle BETWEEN CURDATE() AND DATE_ADD(CURDATE(),INTERVAL 30 DAY)"),
+    'fin_cycle_exp'  => (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle < CURDATE()"),
     'conso_alertes'  => (int)db_fetch_value("SELECT COUNT(*) FROM consommables WHERE stock_global<=seuil_alerte"),
 ];
 
@@ -41,7 +41,7 @@ $conso_where  = $f_site ? "AND lc.site_id=$f_site" : '';
 $conso_global = db_fetch_all(
     "SELECT c.code, c.libelle, c.unite,
             COALESCE(SUM(lc.quantite),0) AS total_periode,
-            COALESCE(SUM(CASE WHEN EXTRACT(MONTH FROM lc.date_livraison)=EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM lc.date_livraison)=EXTRACT(YEAR FROM CURRENT_DATE) THEN lc.quantite ELSE 0 END),0) AS total_mois
+            COALESCE(SUM(CASE WHEN MONTH(lc.date_livraison)=MONTH(CURDATE()) AND YEAR(lc.date_livraison)=YEAR(CURDATE()) THEN lc.quantite ELSE 0 END),0) AS total_mois
      FROM consommables c
      LEFT JOIN livraisons_consommables lc ON lc.consommable_id=c.id
          AND lc.date_livraison BETWEEN ? AND ? $conso_where
@@ -51,10 +51,10 @@ $conso_global = db_fetch_all(
 
 // ── CONSOMMATION MENSUELLE (12 mois glissants)
 $conso_mensuelle_12 = db_fetch_all(
-    "SELECT TO_CHAR(date_livraison,'YYYY-MM') AS mois,
+    "SELECT DATE_FORMAT(date_livraison,'%Y-%m') AS mois,
             COALESCE(SUM(quantite),0) AS total
      FROM livraisons_consommables
-     WHERE date_livraison >= (CURRENT_DATE - INTERVAL '12 MONTH')
+     WHERE date_livraison >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
      GROUP BY mois ORDER BY mois ASC"
 );
 
@@ -95,9 +95,9 @@ $equip_etat_site = db_fetch_all(
 
 // ── MOUVEMENTS PAR MOIS
 $mouvements_mois = db_fetch_all(
-    "SELECT TO_CHAR(created_at,'YYYY-MM') AS mois, type, COUNT(*) AS nb
+    "SELECT DATE_FORMAT(created_at,'%Y-%m') AS mois, type, COUNT(*) AS nb
      FROM mouvements_equipements
-     WHERE created_at >= (CURRENT_DATE - INTERVAL '12 MONTH')
+     WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
      GROUP BY mois, type ORDER BY mois ASC"
 );
 
@@ -105,12 +105,12 @@ $mouvements_mois = db_fetch_all(
 $fin_cycle_soon = db_fetch_all(
     "SELECT e.numero_serie_interne, n.libelle AS type, s.nom AS site,
             e.date_fin_cycle,
-            ((e.date_fin_cycle)::date - (CURRENT_DATE)::date) AS jours
+            DATEDIFF(e.date_fin_cycle, CURDATE()) AS jours
      FROM equipements e
      JOIN nomenclatures n ON n.id=e.nomenclature_id
      LEFT JOIN sites s ON s.id=e.site_id
      WHERE e.actif=1 AND e.date_fin_cycle IS NOT NULL
-       AND e.date_fin_cycle <= (CURRENT_DATE + INTERVAL '90 DAY')
+       AND e.date_fin_cycle <= DATE_ADD(CURDATE(), INTERVAL 90 DAY)
      ORDER BY e.date_fin_cycle ASC LIMIT 15"
 );
 
@@ -124,12 +124,12 @@ $activite_users = db_fetch_all(
          AND al.created_at BETWEEN ? AND ?
      JOIN roles r ON r.id=u.role_id
      WHERE u.actif=1
-     GROUP BY u.id, r.nom ORDER BY nb_actions DESC LIMIT 10",
+     GROUP BY u.id ORDER BY nb_actions DESC LIMIT 10",
     [$date_debut.' 00:00:00', $date_fin.' 23:59:59']
 );
 
 // ── ANNÉES DISPONIBLES
-$annees_dispo = db_fetch_all("SELECT DISTINCT EXTRACT(YEAR FROM date_livraison) AS a FROM livraisons_consommables ORDER BY a DESC");
+$annees_dispo = db_fetch_all("SELECT DISTINCT YEAR(date_livraison) AS a FROM livraisons_consommables ORDER BY a DESC");
 
 // ============================================================
 //  NOUVELLES REQUÊTES : COÛTS EN FCFA PAR SITE
@@ -149,7 +149,7 @@ $kpi_cout_periode   = (float)db_fetch_value(
     [$date_debut, $date_fin]
 );
 $kpi_cout_mois_cur  = (float)db_fetch_value(
-    "SELECT COALESCE(SUM(prix_total),0) FROM livraisons_consommables WHERE EXTRACT(YEAR FROM date_livraison)=EXTRACT(YEAR FROM CURRENT_DATE) AND EXTRACT(MONTH FROM date_livraison)=EXTRACT(MONTH FROM CURRENT_DATE)"
+    "SELECT COALESCE(SUM(prix_total),0) FROM livraisons_consommables WHERE YEAR(date_livraison)=YEAR(CURDATE()) AND MONTH(date_livraison)=MONTH(CURDATE())"
 );
 $kpi_cout_semaine   = (float)db_fetch_value(
     "SELECT COALESCE(SUM(prix_total),0) FROM livraisons_consommables WHERE date_livraison BETWEEN ? AND ?",
@@ -209,12 +209,12 @@ $detail_article_site = db_fetch_all(
 
 // ── ÉVOLUTION MENSUELLE DES COÛTS PAR SITE (12 mois glissants)
 $evolution_cout_sites = db_fetch_all(
-    "SELECT TO_CHAR(lc.date_livraison,'YYYY-MM') AS mois,
+    "SELECT DATE_FORMAT(lc.date_livraison,'%Y-%m') AS mois,
             s.nom AS site_nom,
             COALESCE(SUM(lc.prix_total),0) AS cout
      FROM livraisons_consommables lc
      JOIN sites s ON s.id=lc.site_id
-     WHERE lc.date_livraison >= (CURRENT_DATE - INTERVAL '12 MONTH')
+     WHERE lc.date_livraison >= DATE_SUB(CURDATE(), INTERVAL 12 MONTH)
        AND lc.prix_total > 0
      GROUP BY mois, s.id
      ORDER BY mois ASC, cout DESC"
@@ -230,8 +230,8 @@ $bilan_mois_cur = db_fetch_all(
      FROM livraisons_consommables lc
      JOIN sites s ON s.id=lc.site_id
      JOIN consommables c ON c.id=lc.consommable_id
-     WHERE EXTRACT(YEAR FROM lc.date_livraison)=EXTRACT(YEAR FROM CURRENT_DATE)
-       AND EXTRACT(MONTH FROM lc.date_livraison)=EXTRACT(MONTH FROM CURRENT_DATE)
+     WHERE YEAR(lc.date_livraison)=YEAR(CURDATE())
+       AND MONTH(lc.date_livraison)=MONTH(CURDATE())
        AND lc.prix_total > 0
      GROUP BY s.id, c.id
      ORDER BY s.nom, cout_total DESC"

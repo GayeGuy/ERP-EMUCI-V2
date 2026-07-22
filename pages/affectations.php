@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             if ($site_id && $type_mouv === 'transfert') {
                 db_query(
                     "INSERT INTO receptions_site (site_id,type_reception,equipement_id,mouvement_ref_id,date_reception,statut,created_by)
-                     VALUES (?,?,?,?,CURRENT_DATE,?,?)",
+                     VALUES (?,?,?,?,CURDATE(),?,?)",
                     [$site_id, 'equipement', $equip_id, db_last_id(), 'en_attente', $user['id']]
                 );
             }

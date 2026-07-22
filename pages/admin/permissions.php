@@ -49,10 +49,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 db_query(
                     "INSERT INTO permissions (role_id,module,can_create,can_read,can_update,can_delete,can_export)
                      VALUES (?,?,?,?,?,?,?)
-                     ON CONFLICT (role_id,module) DO UPDATE SET
-                       can_create=EXCLUDED.can_create, can_read=EXCLUDED.can_read,
-                       can_update=EXCLUDED.can_update, can_delete=EXCLUDED.can_delete,
-                       can_export=EXCLUDED.can_export",
+                     ON DUPLICATE KEY UPDATE
+                       can_create=VALUES(can_create), can_read=VALUES(can_read),
+                       can_update=VALUES(can_update), can_delete=VALUES(can_delete),
+                       can_export=VALUES(can_export)",
                     [$role_id, $module, $perms['can_create'], $perms['can_read'],
                      $perms['can_update'], $perms['can_delete'], $perms['can_export']]
                 );
