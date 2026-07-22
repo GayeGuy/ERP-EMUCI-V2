@@ -104,7 +104,7 @@ $conso = db_fetch_all(
      JOIN op_points_journaliers p ON p.id = pu.point_id
      JOIN sites s ON s.id = p.site_id
      WHERE p.date_point BETWEEN ? AND ? $ws_site
-     GROUP BY p.date_point, p.site_id, pu.type_pmma
+     GROUP BY p.date_point, p.site_id, s.nom, pu.type_pmma
      ORDER BY p.date_point DESC",
     [$f_from, $f_to]
 );
