@@ -18,6 +18,13 @@ $active_page = 'demandes_new';
 // ── AJAX : création / soumission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     header('Content-Type: application/json');
+    $is_admin_role = in_array($user['role_slug'] ?? '', ['admin', 'superadmin'], true);
+    $has_dept = (bool)db_fetch_value(
+        "SELECT COUNT(*) FROM user_departements WHERE user_id=?", [$user['id']]
+    );
+    if (!$has_dept && !$is_admin_role) {
+        json_response(false, 'Vous devez être rattaché à un département pour soumettre une demande.');
+    }
     $type      = trim($_POST['type_code'] ?? '');
     $champs    = $_POST['champs'] ?? [];
     $soumettre = ($_POST['action'] ?? '') === 'soumettre';
@@ -33,6 +40,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 $types = di_types_actifs();
 $sel   = trim($_GET['type'] ?? '');
 $sel_type = $sel !== '' ? di_type($sel) : null;
+
+// Vérifier si l'utilisateur a un département assigné
+$user_dept = db_fetch_one(
+    "SELECT d.label FROM user_departements ud JOIN departements d ON d.id=ud.departement_id WHERE ud.user_id=?",
+    [$user['id']]
+);
+$has_dept = $user_dept !== null;
+
+// Admin et superadmin peuvent toujours soumettre (pas soumis au circuit N+1)
+$is_admin_role = in_array($user['role_slug'] ?? '', ['admin', 'superadmin'], true);
+$can_submit = $has_dept || $is_admin_role;
 
 include __DIR__ . '/../templates/header.php';
 ?>
@@ -64,7 +82,22 @@ include __DIR__ . '/../templates/header.php';
 </style>
 
 <div class="di-wrap">
-<?php if (!$sel_type): ?>
+
+<?php if (!$can_submit): ?>
+  <div style="text-align:center;padding:60px 20px;background:white;border:1.5px solid var(--border,#e2e8f0);border-radius:16px">
+    <div style="width:56px;height:56px;border-radius:16px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;font-size:26px;color:#94a3b8">
+      <i class="ph-duotone ph-lock"></i>
+    </div>
+    <div style="font-family:'Montserrat',sans-serif;font-size:17px;font-weight:800;color:var(--navy,#06033A);margin-bottom:8px">
+      Département non assigné
+    </div>
+    <div style="font-size:13px;color:var(--muted,#94a3b8);max-width:380px;margin:0 auto;line-height:1.6">
+      Vous devez être rattaché à un département avant de pouvoir soumettre une demande interne.<br>
+      Contactez un administrateur pour qu'il vous assigne à votre département.
+    </div>
+  </div>
+
+<?php elseif (!$sel_type): ?>
   <h2 style="margin:0 0 6px">Nouvelle demande interne</h2>
   <p style="color:var(--muted,#7f8c8d);margin:0 0 22px">Choisissez le type de demande à soumettre.</p>
   <div class="di-types">
