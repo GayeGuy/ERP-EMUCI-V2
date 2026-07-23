@@ -88,9 +88,14 @@ $films_detail_raw = db_fetch_all(
      GROUP BY s.id, s.nom, b.type_code ORDER BY s.nom, b.type_code",
     [$mois]
 );
-$films_by_site = [];
-foreach ($films_detail_raw as $d) $films_by_site[$d['site']][] = ['type'=>$d['type_code'],'films'=>(int)$d['films']];
-$js_films_detail = json_encode(array_values(array_map(fn($r)=>$films_by_site[$r['nom']]??[], $films_par_site)));
+$films_par_type = [];
+$films_by_type  = [];
+foreach ($films_detail_raw as $d) {
+    $films_par_type[$d['type_code']] = ($films_par_type[$d['type_code']] ?? 0) + (int)$d['films'];
+    $films_by_type[$d['type_code']][] = ['site'=>$d['site'],'films'=>(int)$d['films']];
+}
+arsort($films_par_type);
+$js_films_detail = json_encode(array_values(array_map(fn($t)=>$films_by_type[$t]??[], array_keys($films_par_type))));
 
 // ── COMMANDES
 $cmd_stats = db_fetch_one(
@@ -161,8 +166,8 @@ $js_evol_labels  = json_encode(array_map(fn($r) => ($mc[substr($r['mois'],5,2)]?
 $js_evol_engins  = json_encode(array_map(fn($r) => (int)$r['engins'], $evol));
 $js_evol_plaques = json_encode(array_map(fn($r) => (int)$r['plaques'], $evol));
 $js_statuts      = json_encode([(int)($ops['points_valides']??0),(int)($ops['points_attente']??0),(int)($ops['points_rejetes']??0)]);
-$js_films_labels = json_encode(array_map(fn($r) => $r['nom'], $films_par_site));
-$js_films_values = json_encode(array_map(fn($r) => (int)$r['films'], $films_par_site));
+$js_films_labels = json_encode(array_keys($films_par_type));
+$js_films_values = json_encode(array_values($films_par_type));
 $js_bobines      = json_encode([(int)($bobines_stats['en_cours']??0),(int)($bobines_stats['en_stock']??0),(int)($bobines_stats['epuisees']??0)]);
 $js_cmds         = json_encode([(int)($cmd_stats['en_attente']??0),(int)(($cmd_stats['a_livrer']??0)+($cmd_stats['en_route']??0)),(int)($cmd_stats['livrees_mois']??0)]);
 $max_engins      = empty($prod_par_site) ? 1 : max(1, ...array_column($prod_par_site, 'engins'));
@@ -187,7 +192,7 @@ $js_riv_totals  = json_encode([$riv_total_gonfl, $riv_total_eclat]);
 $js_riv_detail  = json_encode($riv_type_detail);
 $pmma_ch_h      = max(160, count($pmma_par_type) * 46);
 $riv_ch_h       = 120;
-$films_ch_h     = max(160, count($films_par_site) * 46);
+$films_ch_h     = max(160, count($films_par_type) * 46);
 
 include __DIR__ . '/../templates/header.php';
 ?>
@@ -800,20 +805,15 @@ function setupHover() {
             const rect = ef.getBoundingClientRect();
             const idx  = Math.floor((e.clientY - rect.top) / (rect.height / filmsLabels.length));
             if (idx >= 0 && idx < filmsLabels.length) {
-                const d   = filmsDetail[idx] || [];
-                const pct = filmsTotal > 0 ? Math.round(filmsValues[idx] / filmsTotal * 100) : 0;
-                let html  = `<div style="font-weight:700;color:#06033A;font-size:13px;margin-bottom:6px">${filmsLabels[idx]}</div>`;
-                d.forEach(t => {
+                const d  = filmsDetail[idx] || [];
+                let html = `<div style="font-weight:700;color:#06033A;font-size:13px;margin-bottom:6px">${filmsLabels[idx]}</div>`;
+                d.forEach(s => {
                     html += `<div style="display:flex;justify-content:space-between;gap:16px;color:#374151">
-                        <span style="color:#64748b">${t.type}</span>
-                        <span style="font-weight:700">${fmtN(t.films)}</span>
+                        <span>${s.site}</span>
+                        <span style="font-weight:700">${fmtN(s.films)} <span style="font-weight:400;color:#94a3b8">/ ${fmtN(filmsValues[idx])}</span></span>
                     </div>`;
                 });
-                html += `<div style="display:flex;justify-content:space-between;gap:16px;border-top:1px solid #e2e8f0;margin-top:5px;padding-top:5px">
-                    <span style="font-weight:700;color:#06033A">Total</span>
-                    <span style="font-weight:700">${fmtN(filmsValues[idx])} <span style="font-weight:400;color:#94a3b8">/ ${fmtN(filmsTotal)}</span></span>
-                </div>
-                <div style="text-align:right;color:#7c3aed;font-weight:700;margin-top:2px">${pct}%</div>`;
+                if (!d.length) html += `<div style="color:#94a3b8">Aucune donnée</div>`;
                 showTip(e, html);
             } else hideTip();
         });
