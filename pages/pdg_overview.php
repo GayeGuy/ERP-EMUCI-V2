@@ -78,6 +78,19 @@ $films_par_site = db_fetch_all(
      GROUP BY s.id, s.nom ORDER BY films DESC",
     [$mois]
 );
+$films_detail_raw = db_fetch_all(
+    "SELECT s.nom AS site, b.type_code, COALESCE(SUM(fu.films_utilises),0) AS films
+     FROM sites s
+     JOIN op_points_journaliers p ON p.site_id=s.id AND TO_CHAR(p.date_point,'YYYY-MM')=?
+     JOIN op_films_utilises fu ON fu.point_id=p.id
+     JOIN op_bobines b ON b.id=fu.bobine_id
+     WHERE s.actif=1
+     GROUP BY s.id, s.nom, b.type_code ORDER BY s.nom, b.type_code",
+    [$mois]
+);
+$films_by_site = [];
+foreach ($films_detail_raw as $d) $films_by_site[$d['site']][] = ['type'=>$d['type_code'],'films'=>(int)$d['films']];
+$js_films_detail = json_encode(array_values(array_map(fn($r)=>$films_by_site[$r['nom']]??[], $films_par_site)));
 
 // ── COMMANDES
 $cmd_stats = db_fetch_one(
@@ -567,8 +580,9 @@ include __DIR__ . '/../templates/header.php';
 <script>
 const evolLabels  = <?= $js_evol_labels ?>;
 const evolEngins  = <?= $js_evol_engins ?>;
-const filmsLabels = <?= $js_films_labels ?>;
-const filmsValues = <?= $js_films_values ?>;
+const filmsLabels  = <?= $js_films_labels ?>;
+const filmsValues  = <?= $js_films_values ?>;
+const filmsDetail  = <?= $js_films_detail ?>;
 const statutsData = <?= $js_statuts ?>;
 const bobinesData = <?= $js_bobines ?>;
 const cmdsData    = <?= $js_cmds ?>;
@@ -786,16 +800,20 @@ function setupHover() {
             const rect = ef.getBoundingClientRect();
             const idx  = Math.floor((e.clientY - rect.top) / (rect.height / filmsLabels.length));
             if (idx >= 0 && idx < filmsLabels.length) {
+                const d   = filmsDetail[idx] || [];
                 const pct = filmsTotal > 0 ? Math.round(filmsValues[idx] / filmsTotal * 100) : 0;
-                const html = `<div style="font-weight:700;color:#06033A;font-size:13px;margin-bottom:6px">${filmsLabels[idx]}</div>
-                    <div style="display:flex;justify-content:space-between;gap:14px;color:#374151">
-                        <span>Films utilisés</span>
-                        <span style="font-weight:700">${fmtN(filmsValues[idx])} <span style="font-weight:400;color:#94a3b8">/ ${fmtN(filmsTotal)}</span></span>
-                    </div>
-                    <div style="display:flex;justify-content:space-between;gap:14px;color:#374151;margin-top:3px">
-                        <span>Part du total</span>
-                        <span style="font-weight:700;color:#7c3aed">${pct}%</span>
+                let html  = `<div style="font-weight:700;color:#06033A;font-size:13px;margin-bottom:6px">${filmsLabels[idx]}</div>`;
+                d.forEach(t => {
+                    html += `<div style="display:flex;justify-content:space-between;gap:16px;color:#374151">
+                        <span style="color:#64748b">${t.type}</span>
+                        <span style="font-weight:700">${fmtN(t.films)}</span>
                     </div>`;
+                });
+                html += `<div style="display:flex;justify-content:space-between;gap:16px;border-top:1px solid #e2e8f0;margin-top:5px;padding-top:5px">
+                    <span style="font-weight:700;color:#06033A">Total</span>
+                    <span style="font-weight:700">${fmtN(filmsValues[idx])} <span style="font-weight:400;color:#94a3b8">/ ${fmtN(filmsTotal)}</span></span>
+                </div>
+                <div style="text-align:right;color:#7c3aed;font-weight:700;margin-top:2px">${pct}%</div>`;
                 showTip(e, html);
             } else hideTip();
         });
