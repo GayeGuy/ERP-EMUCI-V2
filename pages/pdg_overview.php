@@ -580,7 +580,7 @@ include __DIR__ . '/../templates/header.php';
   </div>
 </div>
 
-<div id="pdg-tip" style="display:none;position:fixed;z-index:1000;background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;box-shadow:0 8px 24px rgba(0,0,0,.13);pointer-events:none;min-width:170px;font-size:12px;line-height:1.7"></div>
+<div id="pdg-tip" style="display:none;position:fixed;z-index:3000;background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;box-shadow:0 8px 24px rgba(0,0,0,.13);pointer-events:none;min-width:170px;font-size:12px;line-height:1.7"></div>
 
 <script>
 const evolLabels  = <?= $js_evol_labels ?>;
