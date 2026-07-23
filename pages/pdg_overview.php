@@ -743,23 +743,21 @@ function drawPmma() {
     const rowH = h / n;
     const max = Math.max(...pmmaTotals, 1);
     pmmaLabels.forEach((lbl, i) => {
-        const y  = i * rowH;
-        const bh = Math.min(rowH * 0.44, 20);
-        const by = y + (rowH - bh) / 2;
-        const bw = Math.max((pmmaTotals[i] / max) * bArea, pmmaTotals[i] > 0 ? 4 : 0);
+        const y   = i * rowH;
+        const bh  = Math.min(rowH * 0.44, 20);
+        const by  = y + (rowH - bh) / 2;
+        const tot = pmmaTotals[i];
+        const bw  = Math.max((tot / max) * bArea, tot > 0 ? 4 : 0);
         const low = pmmaBas[i] > 0;
-        ctx.fillStyle = '#06033A'; ctx.font = '11px DM Sans,sans-serif';
+        ctx.fillStyle = low ? '#dc2626' : '#06033A';
+        ctx.font = '11px DM Sans,sans-serif';
         ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
         ctx.fillText(lbl.length > 12 ? lbl.substring(0,12)+'…' : lbl, lw - 8, y + rowH / 2);
         ctx.fillStyle = low ? '#dc2626' : '#0891b2';
         ctx.fillRect(lw, by, bw, bh);
         ctx.fillStyle = '#64748b'; ctx.font = '10px DM Sans,sans-serif';
         ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-        ctx.fillText(fmtN(pmmaTotals[i]), lw + bw + 4, y + rowH / 2);
-        if (low) {
-            ctx.fillStyle = '#dc2626'; ctx.font = 'bold 11px DM Sans,sans-serif';
-            ctx.textAlign = 'right'; ctx.fillText('⚠', lw - 2, y + rowH / 2);
-        }
+        ctx.fillText(fmtN(tot), lw + bw + 4, y + rowH / 2);
     });
 }
 
@@ -777,19 +775,24 @@ function drawRivets() {
         const bh  = Math.min(rowH * 0.44, 20);
         const y   = i * rowH;
         const by  = y + (rowH - bh) / 2;
-        const bw  = Math.max((rivTotals[i] / max) * bArea, rivTotals[i] > 0 ? 4 : 0);
-        const bas = (rivDetail[i] || []).filter(s => s.qty < 200).length;
-        ctx.fillStyle = '#06033A'; ctx.font = '11px DM Sans,sans-serif';
+        const tot = rivTotals[i];
+        const bw  = Math.max((tot / max) * bArea, tot > 0 ? 4 : 0);
+        // alerte seulement si le site A du stock mais sous le seuil (pas si qty=0)
+        const bas = (rivDetail[i] || []).filter(s => s.qty > 0 && s.qty < 200).length;
+        ctx.fillStyle = bas > 0 ? '#dc2626' : '#06033A';
+        ctx.font = '11px DM Sans,sans-serif';
         ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
         ctx.fillText(lbl, lw - 8, y + rowH / 2);
-        ctx.fillStyle = bas > 0 ? '#dc2626' : colors[i];
-        ctx.fillRect(lw, by, bw, bh);
-        ctx.fillStyle = '#64748b'; ctx.font = '10px DM Sans,sans-serif';
-        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-        ctx.fillText(fmtN(rivTotals[i]), lw + bw + 4, y + rowH / 2);
-        if (bas > 0) {
-            ctx.fillStyle = '#dc2626'; ctx.font = 'bold 11px DM Sans,sans-serif';
-            ctx.textAlign = 'right'; ctx.fillText('⚠', lw - 2, y + rowH / 2);
+        if (tot > 0) {
+            ctx.fillStyle = bas > 0 ? '#dc2626' : colors[i];
+            ctx.fillRect(lw, by, bw, bh);
+            ctx.fillStyle = '#64748b'; ctx.font = '10px DM Sans,sans-serif';
+            ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+            ctx.fillText(fmtN(tot), lw + bw + 4, y + rowH / 2);
+        } else {
+            ctx.fillStyle = '#94a3b8'; ctx.font = '11px DM Sans,sans-serif';
+            ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+            ctx.fillText('—', lw + 6, y + rowH / 2);
         }
     });
 }
