@@ -43,6 +43,11 @@ function di_workflow(string $typeCode): array {
 function di_type(string $typeCode): ?array {
     return db_fetch_one("SELECT * FROM di_types WHERE code = ?", [$typeCode]);
 }
+
+// ── Plateformes NSIIV actives (pour les champs de type 'plateformes')
+function di_plateformes(): array {
+    return db_fetch_all("SELECT code, label FROM di_plateformes WHERE actif = 1 ORDER BY ordre ASC");
+}
 function di_types_actifs(): array {
     return db_fetch_all("SELECT * FROM di_types WHERE actif = 1 ORDER BY ordre ASC");
 }

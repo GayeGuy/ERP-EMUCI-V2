@@ -76,8 +76,8 @@ function di_pdf_html(array $d): string {
     $rows = '';
     foreach ($fields as $f) {
         $val = $champs[$f['key']] ?? '';
-        if ($val === '' || $val === null) continue;
-        $rows .= '<tr><td class="k">'.h($f['label']).'</td><td class="v">'.h((string)$val).'</td></tr>';
+        if (di_value_empty($val)) continue;
+        $rows .= '<tr><td class="k">'.h($f['label']).'</td><td class="v">'.di_display_value($f, $val).'</td></tr>';
     }
     $sigs = '';
     foreach ($d['signatures'] as $s) {
@@ -207,8 +207,8 @@ include __DIR__ . '/../templates/header.php';
   <div class="di-card">
     <h4 style="margin:0 0 14px">Détails de la demande</h4>
     <div class="di-kv">
-      <?php foreach ($fields as $f): $v = $detail['champs'][$f['key']] ?? ''; if ($v==='') continue; ?>
-        <div class="k"><?= h($f['label']) ?></div><div><?= nl2br(h((string)$v)) ?></div>
+      <?php foreach ($fields as $f): $v = $detail['champs'][$f['key']] ?? ''; if (di_value_empty($v)) continue; ?>
+        <div class="k"><?= h($f['label']) ?></div><div><?= nl2br(di_display_value($f, $v)) ?></div>
       <?php endforeach; ?>
     </div>
   </div>
