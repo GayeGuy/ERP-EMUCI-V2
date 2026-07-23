@@ -54,8 +54,18 @@ function di_types_actifs(): array {
 
 // ── Rôles de validation d'un utilisateur ERP (n1, raf, dg, ...)
 function di_user_roles(int $userId): array {
-    $rows = db_fetch_all("SELECT role_code FROM di_user_roles WHERE user_id = ?", [$userId]);
-    return array_column($rows, 'role_code');
+    $rows  = db_fetch_all("SELECT role_code FROM di_user_roles WHERE user_id = ?", [$userId]);
+    $roles = array_column($rows, 'role_code');
+
+    // Auto-liaison : profil ERP raf/daf/lecteur → rôle di sans entrée manuelle
+    static $erp_auto = ['raf' => 'raf', 'daf' => 'daf', 'lecteur' => 'dg'];
+    $erp_slug = db_fetch_value(
+        "SELECT r.slug FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=?", [$userId]
+    );
+    if ($erp_slug && isset($erp_auto[$erp_slug])) {
+        $roles[] = $erp_auto[$erp_slug];
+    }
+    return array_unique($roles);
 }
 
 // ── Demandes que CET utilisateur peut viser (étape courante = un de ses rôles).

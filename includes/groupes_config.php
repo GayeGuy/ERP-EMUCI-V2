@@ -228,6 +228,9 @@ function get_groupes_pour_role(string $role_slug): array {
         'gestionnaire_stock_bobines' => ['DASHBOARD','OPERATIONS','BOBINES','STOCK'],
         // Lecture seule
         'lecteur'                    => ['DASHBOARD','OPERATIONS','BOBINES','STOCK','RAPPORTS'],
+        // RAF / DAF — validation administrative et financière
+        'raf'                        => ['DASHBOARD','RAPPORTS'],
+        'daf'                        => ['DASHBOARD','RAPPORTS'],
         // Admin
         'admin'                      => $all,
         'superadmin'                 => $all,
