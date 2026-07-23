@@ -165,6 +165,9 @@ function _groupes_def(): array {
                  'url'=>'pages/demandes_new.php','active_keys'=>['demandes_new']],
                 ['label'=>'À valider',       'icon'=>'ph-seal-check',
                  'url'=>'pages/demandes_a_valider.php','active_keys'=>['demandes_valider']],
+                ['label'=>'Rôles valideurs', 'icon'=>'ph-user-gear',
+                 'url'=>'pages/demandes_roles.php','active_keys'=>['demandes_roles'],
+                 'roles_include'=>['admin','superadmin']],
             ],
         ],
 
