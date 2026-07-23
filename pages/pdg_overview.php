@@ -165,6 +165,7 @@ $js_riv_gonfl   = json_encode(array_map(fn($t)=>$t['gonflable']??0, array_values
 $js_riv_eclat   = json_encode(array_map(fn($t)=>$t['eclate']??0, array_values($rps)));
 $pmma_ch_h      = max(160, count($pmma_par_site) * 46);
 $riv_ch_h       = max(160, count($rps) * 60);
+$films_ch_h     = max(160, count($films_par_site) * 46);
 
 include __DIR__ . '/../templates/header.php';
 ?>
@@ -409,7 +410,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="ch2">
       <div class="ch-box">
         <div class="ch-ttl">Films utilisés par site — <?= h($mois_display) ?></div>
-        <div class="ch-wrap"><canvas id="cFilms" height="200"></canvas></div>
+        <div class="ch-wrap"><canvas id="cFilms" height="<?= $films_ch_h ?>"></canvas></div>
       </div>
       <div class="ch-box">
         <div class="ch-ttl">État des bobines</div>
@@ -591,25 +592,24 @@ function drawHBar(id, labels, values, color) {
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText('Aucune donnée', w/2, h/2); return;
     }
-    const lw = 90, rw = 35;
+    const lw = 110, rw = 38;
     const bArea = w - lw - rw;
     const rh = h / labels.length;
+    const bh = Math.min(rh * 0.45, 20);
     const max = Math.max(...values, 1);
     labels.forEach((lbl, i) => {
-        const y   = i*rh;
-        const bh  = Math.min(rh*0.5, 18);
-        const by  = y + (rh-bh)/2;
-        const bw  = (values[i]/max)*bArea;
-        ctx.fillStyle='#06033A'; ctx.font='11px DM Sans,sans-serif';
-        ctx.textAlign='right'; ctx.textBaseline='middle';
-        const sl = lbl.length>11?lbl.substring(0,11)+'…':lbl;
-        ctx.fillText(sl, lw-6, y+rh/2);
-        ctx.fillStyle=color;
+        const y  = i * rh;
+        const by = y + (rh - bh) / 2;
+        const bw = Math.max((values[i] / max) * bArea, values[i] > 0 ? 4 : 0);
+        ctx.fillStyle = '#06033A'; ctx.font = '11px DM Sans,sans-serif';
+        ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+        ctx.fillText(lbl.length > 14 ? lbl.substring(0,14)+'…' : lbl, lw - 8, y + rh / 2);
+        ctx.fillStyle = color;
         ctx.fillRect(lw, by, bw, bh);
-        if (values[i]>0) {
-            ctx.fillStyle='#64748b'; ctx.font='10px DM Sans,sans-serif';
-            ctx.textAlign='left'; ctx.textBaseline='middle';
-            ctx.fillText(values[i], lw+bw+4, y+rh/2);
+        if (values[i] > 0) {
+            ctx.fillStyle = '#64748b'; ctx.font = '10px DM Sans,sans-serif';
+            ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+            ctx.fillText(values[i], lw + bw + 4, y + rh / 2);
         }
     });
 }
