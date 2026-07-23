@@ -78,8 +78,38 @@ function di_champs_config(): array {
             ['key'=>'duree',         'label'=>'Durée (si temporaire)',    'type'=>'text'],
             ['key'=>'date_effet',    'label'=>"Date de prise d'effet",    'type'=>'date', 'required'=>true],
         ],
-        // Phase 2 (suite) : creation_site,
-        // changement_geolocalisation, imputation_courrier, exceptionnel.
+        'creation_site' => [
+            ['key'=>'nom_site',    'label'=>'Nom du site',   'type'=>'text', 'required'=>true],
+            ['key'=>'localisation','label'=>'Localisation',  'type'=>'text', 'required'=>true],
+            ['key'=>'usage',       'label'=>'Usage',         'type'=>'select',
+             'options'=>['' =>'— Choisir —', 'POSE'=>'POSE', 'SAISIE'=>'SAISIE', 'POSE et SAISIE'=>'POSE et SAISIE']],
+            ['key'=>'operation',   'label'=>'Opération',     'type'=>'text'],
+            ['key'=>'duree',       'label'=>'Durée',         'type'=>'text'],
+            ['key'=>'timeout',     'label'=>'Timeout',       'type'=>'text'],
+            ['key'=>'longitude',   'label'=>'Longitude',     'type'=>'text'],
+            ['key'=>'latitude',    'label'=>'Latitude',      'type'=>'text'],
+            ['key'=>'date_demande','label'=>'Date de la demande','type'=>'date'],
+        ],
+        'imputation_courrier' => [
+            ['key'=>'reference',      'label'=>'Référence du courrier', 'type'=>'text'],
+            ['key'=>'date_reception', 'label'=>'Date de réception',     'type'=>'date'],
+            ['key'=>'expediteur',     'label'=>'Expéditeur',            'type'=>'text', 'required'=>true],
+            ['key'=>'objet',          'label'=>'Objet du courrier',     'type'=>'text', 'required'=>true, 'span'=>true],
+            ['key'=>'resume',         'label'=>'Résumé du contenu',     'type'=>'textarea', 'span'=>true],
+            ['key'=>'service_impute', 'label'=>'Service / Personne imputé(e)', 'type'=>'text', 'required'=>true, 'span'=>true],
+            ['key'=>'motif_imputation','label'=>"Motif de l'imputation",'type'=>'text', 'span'=>true],
+            ['key'=>'priorite',       'label'=>'Niveau de priorité',    'type'=>'select',
+             'options'=>['' =>'— Choisir —', 'Urgent'=>'Urgent', 'Normal'=>'Normal', 'Faible'=>'Faible']],
+            ['key'=>'type_traitement','label'=>'Type de traitement attendu','type'=>'select',
+             'options'=>['' =>'— Choisir —', 'Réponse'=>'Réponse', 'Analyse'=>'Analyse', 'Classement'=>'Classement', 'Suivi'=>'Suivi', 'Autre'=>'Autre']],
+            ['key'=>'echeance',       'label'=>'Échéance de traitement', 'type'=>'date'],
+        ],
+        'exceptionnel' => [
+            ['key'=>'date_souhaitee','label'=>'Date souhaitée',       'type'=>'date'],
+            ['key'=>'objet',         'label'=>'Objet de la demande',  'type'=>'text', 'required'=>true],
+            ['key'=>'motif',         'label'=>'Motif (obligatoire)',  'type'=>'textarea', 'required'=>true, 'span'=>true],
+        ],
+        // Reste (Phase 2) : changement_geolocalisation (necessite le type de champ select_site).
     ];
 }
 
