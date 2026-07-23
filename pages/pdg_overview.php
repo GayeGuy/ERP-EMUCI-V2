@@ -301,6 +301,9 @@ include __DIR__ . '/../templates/header.php';
   <div class="bloc-hdr">
     <div class="bloc-ico bloc-ico-navy"><i class="ph-duotone ph-lightning"></i></div>
     <div><div class="bloc-ttl">Opérations</div><div class="bloc-stl">Points journaliers — <?= h($mois_display) ?></div></div>
+    <button onclick="document.getElementById('modal-ops').style.display='flex'" style="margin-left:auto;display:flex;align-items:center;gap:6px;padding:7px 14px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:700;color:#06033A;cursor:pointer;white-space:nowrap">
+      <i class="ph-duotone ph-table"></i> Détails
+    </button>
   </div>
   <div class="bloc-body">
 
@@ -350,38 +353,6 @@ include __DIR__ . '/../templates/header.php';
       </div>
     </div>
 
-    <div style="overflow-x:auto">
-      <table class="stbl">
-        <thead><tr>
-          <th>Site</th>
-          <th style="min-width:100px">Progression</th>
-          <th style="text-align:right">Engins</th>
-          <th style="text-align:right">Plaques</th>
-          <th style="text-align:right">Moy V/H</th>
-          <th style="text-align:right">Points</th>
-          <th style="text-align:center">Statut</th>
-        </tr></thead>
-        <tbody>
-        <?php foreach($prod_par_site as $s):
-          $pct = round($s['engins'] / $max_engins * 100);
-        ?>
-        <tr>
-          <td><div style="font-weight:700;color:var(--navy)"><?= h($s['nom']) ?></div><div style="font-size:11px;color:var(--muted)"><?= h($s['type']??'') ?></div></td>
-          <td><div style="display:flex;align-items:center;gap:8px"><div class="pb-wrap" style="flex:1"><div class="pb-fill" style="width:<?= $pct ?>%"></div></div><span style="font-size:11px;color:var(--muted)"><?= $pct ?>%</span></div></td>
-          <td style="text-align:right;font-family:'Montserrat',sans-serif;font-weight:800;color:var(--navy)"><?= fmt_number($s['engins']) ?></td>
-          <td style="text-align:right;font-weight:700;color:#1565c0"><?= fmt_number($s['plaques']) ?></td>
-          <td style="text-align:right;font-weight:700;color:<?= $s['moy_vh']>=10?'#16a34a':($s['moy_vh']>=5?'#d97706':'#dc2626') ?>"><?= $s['moy_vh'] ?></td>
-          <td style="text-align:right;color:var(--muted)"><?= $s['nb_points'] ?></td>
-          <td style="text-align:center">
-            <?php if($s['en_attente']>0): ?><span class="pill p-orange"><?= $s['en_attente'] ?> att.</span>
-            <?php elseif($s['nb_points']>0): ?><span class="pill p-green">OK</span>
-            <?php else: ?><span class="pill p-blue">—</span><?php endif; ?>
-          </td>
-        </tr>
-        <?php endforeach; ?>
-        </tbody>
-      </table>
-    </div>
   </div>
 </div>
 
@@ -514,6 +485,66 @@ include __DIR__ . '/../templates/header.php';
   </div>
 </div>
 <?php endif; ?>
+
+<!-- ═══════ MODAL DÉTAILS OPÉRATIONS ═══════ -->
+<div id="modal-ops" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(6,3,58,.5);align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:white;border-radius:16px;width:100%;max-width:860px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <div style="display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid #e2e8f0;flex-shrink:0">
+      <div style="width:34px;height:34px;border-radius:10px;background:#eef0f8;display:flex;align-items:center;justify-content:center;color:#06033A;font-size:16px">
+        <i class="ph-duotone ph-table"></i>
+      </div>
+      <div>
+        <div style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;color:#06033A">Détails par site — Opérations</div>
+        <div style="font-size:12px;color:#94a3b8">Points journaliers — <?= h($mois_display) ?></div>
+      </div>
+      <button onclick="document.getElementById('modal-ops').style.display='none'" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:22px;line-height:1;padding:4px 8px">&times;</button>
+    </div>
+    <div style="overflow:auto;padding:0 20px 20px">
+      <table class="stbl" style="margin-top:0">
+        <thead><tr>
+          <th>Site</th>
+          <th style="min-width:110px">Progression engins</th>
+          <th style="text-align:right">Engins</th>
+          <th style="text-align:right">Plaques</th>
+          <th style="text-align:right">Moy V/H</th>
+          <th style="text-align:right">Points</th>
+          <th style="text-align:center">Statut</th>
+        </tr></thead>
+        <tbody>
+        <?php foreach($prod_par_site as $s):
+          $pct = $max_engins > 0 ? round($s['engins'] / $max_engins * 100) : 0;
+        ?>
+        <tr>
+          <td>
+            <div style="font-weight:700;color:var(--navy)"><?= h($s['nom']) ?></div>
+            <div style="font-size:11px;color:var(--muted)"><?= h($s['type']??'') ?></div>
+          </td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="pb-wrap" style="flex:1"><div class="pb-fill" style="width:<?= $pct ?>%"></div></div>
+              <span style="font-size:11px;color:var(--muted);min-width:30px"><?= $pct ?>%</span>
+            </div>
+          </td>
+          <td style="text-align:right;font-family:'Montserrat',sans-serif;font-weight:800;color:var(--navy)"><?= fmt_number($s['engins']) ?></td>
+          <td style="text-align:right;font-weight:700;color:#1565c0"><?= fmt_number($s['plaques']) ?></td>
+          <td style="text-align:right;font-weight:700;color:<?= $s['moy_vh']>=10?'#16a34a':($s['moy_vh']>=5?'#d97706':'#dc2626') ?>"><?= $s['moy_vh'] ?></td>
+          <td style="text-align:right;color:var(--muted)"><?= $s['nb_points'] ?></td>
+          <td style="text-align:center">
+            <?php if($s['en_attente']>0): ?>
+              <span class="pill p-orange"><?= $s['en_attente'] ?> att.</span>
+            <?php elseif($s['nb_points']>0): ?>
+              <span class="pill p-green">OK</span>
+            <?php else: ?>
+              <span class="pill p-blue">—</span>
+            <?php endif; ?>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
 
 <div id="pdg-tip" style="display:none;position:fixed;z-index:1000;background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;box-shadow:0 8px 24px rgba(0,0,0,.13);pointer-events:none;min-width:170px;font-size:12px;line-height:1.7"></div>
 
