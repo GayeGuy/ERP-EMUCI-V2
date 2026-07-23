@@ -115,7 +115,7 @@ function di_generate_numero(): string {
 function di_notify(int $userId, string $message, ?int $demandeId = null): void {
     $lien = $demandeId ? '/pages/demandes.php?id=' . $demandeId : '/pages/demandes.php';
     db_query(
-        "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?, 'demande', 'Demande interne', ?, ?)",
+        "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?, 'info', 'Demande interne', ?, ?)",
         [$userId, $message, $lien]
     );
 }
