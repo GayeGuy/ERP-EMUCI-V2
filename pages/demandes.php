@@ -123,7 +123,12 @@ if (!empty($_GET['id'])) {
     if ($detail) {
         $owner = (int)$detail['demandeur_id'] === (int)$user['id'];
         $wf = di_workflow_of($detail);
-        $isValidator = false; foreach ($wf as $st) if (in_array($st['role'],$my_roles,true)) $isValidator=true;
+        $isValidator = false;
+        foreach ($wf as $st) if (in_array($st['role'], $my_roles, true)) $isValidator = true;
+        // N+1 département : accès si l'utilisateur est le N+1 résolu de cette demande
+        if (!$isValidator && isset($detail['n1_user_id']) && (int)$detail['n1_user_id'] === (int)$user['id']) {
+            $isValidator = true;
+        }
         if (!$owner && !$isValidator && !$is_admin) { $detail = null; }
     }
 }
