@@ -61,8 +61,14 @@ function di_user_roles(int $userId): array {
 // ── Demandes que CET utilisateur peut viser (étape courante = un de ses rôles).
 //    Enrichit chaque demande de _etape_label et _demandeur.
 function di_a_valider(array $user): array {
-    $roles = di_user_roles((int)$user['id']);
-    if (!$roles) return [];
+    $roles    = di_user_roles((int)$user['id']);
+    // Un N+1 de département peut valider même sans rôle global dans di_user_roles
+    $is_n1_dept = (bool)db_fetch_value(
+        "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND is_n1=1",
+        [(int)$user['id']]
+    );
+    if (!$roles && !$is_n1_dept) return [];
+
     $pending = db_fetch_all(
         "SELECT id FROM di_demandes WHERE statut IN ('en_attente','en_cours') AND demandeur_id <> ? ORDER BY created_at ASC",
         [$user['id']]
