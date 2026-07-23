@@ -11,6 +11,23 @@ require_once __DIR__ . '/db.php';
 // ── Statuts
 const DI_STATUTS = ['brouillon','en_attente','en_cours','approuve','approuve_traitement','rejete','a_revoir'];
 
+// ── Libellé + couleurs d'un statut  => [label, couleur_texte, couleur_fond]
+function di_statut_label(string $s): array {
+    return [
+        'brouillon'           => ['Brouillon','#7f8c8d','#f0f4f8'],
+        'en_attente'          => ['En attente','#e67e22','#fef9e7'],
+        'en_cours'            => ['En cours','#1B75BC','#eaf3fb'],
+        'approuve'            => ['Approuvée','#27ae60','#eafaf1'],
+        'approuve_traitement' => ['Approuvée — traitement IT','#16a085','#e8f8f5'],
+        'rejete'              => ['Rejetée','#e74c3c','#fdf0ef'],
+        'a_revoir'            => ['À revoir','#8e44ad','#f5eefa'],
+    ][$s] ?? [$s,'#7f8c8d','#f0f4f8'];
+}
+function di_badge(string $s): string {
+    [$lbl,$c,$bg] = di_statut_label($s);
+    return '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;color:'.$c.';background:'.$bg.'">'.h($lbl).'</span>';
+}
+
 // ── Charge le circuit (étapes ordonnées) d'un type de demande
 function di_workflow(string $typeCode): array {
     $rows = db_fetch_all(
