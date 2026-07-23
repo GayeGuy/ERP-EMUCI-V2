@@ -40,9 +40,20 @@ function di_champs_config(): array {
             ['key'=>'date_demande',   'label'=>'Date de la demande',       'type'=>'date'],
             ['key'=>'plateformes',    'label'=>'Accès aux plateformes',    'type'=>'plateformes', 'span'=>true],
         ],
-        // Phase 2 (suite) : basculement_acces, basculement_compte,
-        // transfert_agent, creation_site, changement_geolocalisation,
-        // imputation_courrier, exceptionnel.
+        'basculement_acces' => [
+            ['key'=>'agent_nom',     'label'=>"Nom & Prénoms de l'agent", 'type'=>'text',  'required'=>true],
+            ['key'=>'agent_email',   'label'=>"Email de l'agent",         'type'=>'email'],
+            ['key'=>'agent_fonction','label'=>"Fonction de l'agent",      'type'=>'text'],
+            ['key'=>'periode_acces', 'label'=>"Période d'accès",          'type'=>'daterange', 'span'=>true],
+            ['key'=>'site_origine',  'label'=>"Site d'origine",           'type'=>'text',  'required'=>true],
+            ['key'=>'nouveau_site',  'label'=>'Nouveau site',             'type'=>'text',  'required'=>true],
+            ['key'=>'ancien_role',   'label'=>'Ancien rôle',              'type'=>'text',  'required'=>true],
+            ['key'=>'nouveau_role',  'label'=>'Nouveau rôle',             'type'=>'text',  'required'=>true],
+            ['key'=>'date_demande',  'label'=>'Date de la demande',       'type'=>'date'],
+            ['key'=>'plateformes',   'label'=>'Accès aux plateformes',    'type'=>'plateformes', 'span'=>true],
+        ],
+        // Phase 2 (suite) : basculement_compte, transfert_agent, creation_site,
+        // changement_geolocalisation, imputation_courrier, exceptionnel.
     ];
 }
 
