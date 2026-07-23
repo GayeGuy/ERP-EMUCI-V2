@@ -192,6 +192,8 @@ function _groupes_def(): array {
                  'url'=>'pages/delegations.php','active_keys'=>['delegations']],
                 ['label'=>'Sites',         'icon'=>'ph-buildings',
                  'url'=>'pages/sites.php','active_keys'=>['sites']],
+                ['label'=>'Départements',  'icon'=>'ph-tree-structure',
+                 'url'=>'pages/admin/departements.php','active_keys'=>['departements']],
             ],
         ],
     ];

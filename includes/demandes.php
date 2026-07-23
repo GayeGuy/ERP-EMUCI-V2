@@ -71,7 +71,8 @@ function di_a_valider(array $user): array {
     foreach ($pending as $p) {
         $d  = di_get((int)$p['id']);
         $wf = di_workflow_of($d);
-        if (di_can_validate($roles, (int)$user['id'], $wf, (int)$d['etape_actuelle'], (int)$d['demandeur_id'])) {
+        $n1Id = isset($d['n1_user_id']) && $d['n1_user_id'] ? (int)$d['n1_user_id'] : null;
+        if (di_can_validate($roles, (int)$user['id'], $wf, (int)$d['etape_actuelle'], (int)$d['demandeur_id'], $n1Id)) {
             $d['_etape_label'] = $wf[(int)$d['etape_actuelle']]['label'] ?? '';
             $d['_demandeur']   = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$d['demandeur_id']]);
             $out[] = $d;
@@ -88,10 +89,16 @@ function di_next_step(array $workflow, int $currentStep): ?int {
 }
 
 // ── Le validateur peut-il agir sur l'étape courante ?
-function di_can_validate(array $userRoles, int $userId, array $workflow, int $currentStep, int $demandeurId): bool {
+// $n1UserId : ID du N+1 résolu au moment de la soumission (null si aucun département défini)
+function di_can_validate(array $userRoles, int $userId, array $workflow, int $currentStep, int $demandeurId, ?int $n1UserId = null): bool {
     if ($currentStep < 0 || $currentStep >= count($workflow)) return false;
-    if ($userId === $demandeurId) return false;                 // jamais sa propre demande
-    return in_array($workflow[$currentStep]['role'], $userRoles, true);
+    if ($userId === $demandeurId) return false;
+    $role = $workflow[$currentStep]['role'];
+    if ($role === 'n1') {
+        // N+1 résolu spécifiquement pour cette demande — ou fallback rôle global si non défini
+        return $n1UserId !== null ? $userId === $n1UserId : in_array('n1', $userRoles, true);
+    }
+    return in_array($role, $userRoles, true);
 }
 
 // ── Numéro lisible : DEM-YYYYMMDD-NNN
@@ -133,13 +140,26 @@ function di_creer(array $user, string $typeCode, array $champs, bool $soumettre,
     $etape   = $soumettre ? 0 : -1;
     $hist    = [['action' => $soumettre ? 'soumis' : 'brouillon', 'par' => $user['id'], 'nom' => $nom, 'date' => $now]];
 
+    // Résoudre le N+1 du département du demandeur au moment de la soumission
+    $n1UserId = null;
+    if ($soumettre) {
+        $n1Row = db_fetch_one(
+            "SELECT user_id FROM user_departements
+             WHERE departement_id = (SELECT departement_id FROM user_departements WHERE user_id = ? LIMIT 1)
+               AND is_n1 = 1 AND user_id != ?
+             LIMIT 1",
+            [$user['id'], $user['id']]
+        );
+        $n1UserId = $n1Row ? (int)$n1Row['user_id'] : null;
+    }
+
     $numero = di_generate_numero();
     db_query(
         "INSERT INTO di_demandes
-         (numero, type_code, statut, etape_actuelle, demandeur_id, champs, historique, signatures,
+         (numero, type_code, statut, etape_actuelle, demandeur_id, n1_user_id, champs, historique, signatures,
           workflow_snapshot, priorite, submitted_at, created_at, updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        [$numero, $typeCode, $statut, $etape, $user['id'],
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        [$numero, $typeCode, $statut, $etape, $user['id'], $n1UserId,
          json_encode($champs, JSON_UNESCAPED_UNICODE),
          json_encode($hist, JSON_UNESCAPED_UNICODE),
          '[]',
@@ -149,8 +169,13 @@ function di_creer(array $user, string $typeCode, array $champs, bool $soumettre,
     $id = (int) db_last_id();
 
     if ($soumettre && $workflow) {
-        di_notify_role($workflow[0]['role'],
-            "Nouvelle demande « {$type['label']} » de $nom ($numero)", $id);
+        // Si la première étape est N+1 et qu'on a un N+1 résolu, notifier spécifiquement
+        if ($workflow[0]['role'] === 'n1' && $n1UserId) {
+            di_notify($n1UserId, "Nouvelle demande « {$type['label']} » de $nom ($numero) à valider", $id);
+        } else {
+            di_notify_role($workflow[0]['role'],
+                "Nouvelle demande « {$type['label']} » de $nom ($numero)", $id);
+        }
     }
     return $id;
 }
@@ -174,7 +199,8 @@ function di_workflow_of(array $demande): array {
 function di_valider(array $demande, array $user, string $commentaire = ''): void {
     $wf = di_workflow_of($demande);
     $cur = (int)$demande['etape_actuelle'];
-    if (!di_can_validate(di_user_roles((int)$user['id']), (int)$user['id'], $wf, $cur, (int)$demande['demandeur_id'])) {
+    $n1Id = isset($demande['n1_user_id']) && $demande['n1_user_id'] ? (int)$demande['n1_user_id'] : null;
+    if (!di_can_validate(di_user_roles((int)$user['id']), (int)$user['id'], $wf, $cur, (int)$demande['demandeur_id'], $n1Id)) {
         throw new Exception("Vous ne pouvez pas valider cette étape.");
     }
     if (!in_array($demande['statut'], ['en_attente','en_cours'], true)) {
@@ -224,7 +250,8 @@ function di_valider(array $demande, array $user, string $commentaire = ''): void
 function di_rejeter(array $demande, array $user, string $motif): void {
     $wf = di_workflow_of($demande);
     $cur = (int)$demande['etape_actuelle'];
-    if (!di_can_validate(di_user_roles((int)$user['id']), (int)$user['id'], $wf, $cur, (int)$demande['demandeur_id'])) {
+    $n1Id = isset($demande['n1_user_id']) && $demande['n1_user_id'] ? (int)$demande['n1_user_id'] : null;
+    if (!di_can_validate(di_user_roles((int)$user['id']), (int)$user['id'], $wf, $cur, (int)$demande['demandeur_id'], $n1Id)) {
         throw new Exception("Vous ne pouvez pas rejeter cette étape.");
     }
     if (trim($motif) === '') throw new Exception('Le motif de rejet est obligatoire.');

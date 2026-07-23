@@ -189,7 +189,8 @@ include __DIR__ . '/../templates/header.php';
     $type = di_type($detail['type_code']);
     $wf   = di_workflow_of($detail);
     $cur  = (int)$detail['etape_actuelle'];
-    $canV = di_can_validate($my_roles, (int)$user['id'], $wf, $cur, (int)$detail['demandeur_id'])
+    $n1Id = isset($detail['n1_user_id']) && $detail['n1_user_id'] ? (int)$detail['n1_user_id'] : null;
+    $canV = di_can_validate($my_roles, (int)$user['id'], $wf, $cur, (int)$detail['demandeur_id'], $n1Id)
             && in_array($detail['statut'], ['en_attente','en_cours'], true);
     $fields = di_champs_of($detail['type_code']);
     $demandeur = db_fetch_one("SELECT prenom, nom FROM users WHERE id=?", [$detail['demandeur_id']]);
