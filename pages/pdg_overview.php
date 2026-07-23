@@ -361,6 +361,9 @@ include __DIR__ . '/../templates/header.php';
   <div class="bloc-hdr">
     <div class="bloc-ico bloc-ico-purple"><i class="ph-duotone ph-film-strip"></i></div>
     <div><div class="bloc-ttl">Bobines &amp; Films</div><div class="bloc-stl">État des bobines et consommation films</div></div>
+    <button onclick="openFilmsModal()" style="margin-left:auto;display:flex;align-items:center;gap:6px;padding:7px 14px;background:#f5f3ff;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:700;color:#7c3aed;cursor:pointer;white-space:nowrap">
+      <i class="ph-duotone ph-chart-bar-horizontal"></i> Films par site
+    </button>
   </div>
   <div class="bloc-body">
 
@@ -387,20 +390,14 @@ include __DIR__ . '/../templates/header.php';
       </div>
     </div>
 
-    <div class="ch2">
-      <div class="ch-box">
-        <div class="ch-ttl">Films utilisés par site — <?= h($mois_display) ?></div>
-        <div class="ch-wrap"><canvas id="cFilms" height="<?= $films_ch_h ?>"></canvas></div>
-      </div>
-      <div class="ch-box">
-        <div class="ch-ttl">État des bobines</div>
-        <div class="donut-row" style="margin-top:10px">
-          <canvas id="cBobines" width="140" height="140" style="width:140px!important;flex-shrink:0"></canvas>
-          <div class="legend">
-            <div class="leg-item"><div class="leg-dot" style="background:#7c3aed"></div>En cours (<?= $bobines_stats['en_cours']??0 ?>)</div>
-            <div class="leg-item"><div class="leg-dot" style="background:#1B75BC"></div>En stock (<?= $bobines_stats['en_stock']??0 ?>)</div>
-            <div class="leg-item"><div class="leg-dot" style="background:#94a3b8"></div>Épuisées (<?= $bobines_stats['epuisees']??0 ?>)</div>
-          </div>
+    <div class="ch-box" style="max-width:380px">
+      <div class="ch-ttl">État des bobines</div>
+      <div class="donut-row" style="margin-top:10px">
+        <canvas id="cBobines" width="140" height="140" style="width:140px!important;flex-shrink:0"></canvas>
+        <div class="legend">
+          <div class="leg-item"><div class="leg-dot" style="background:#7c3aed"></div>En cours (<?= $bobines_stats['en_cours']??0 ?>)</div>
+          <div class="leg-item"><div class="leg-dot" style="background:#1B75BC"></div>En stock (<?= $bobines_stats['en_stock']??0 ?>)</div>
+          <div class="leg-item"><div class="leg-dot" style="background:#94a3b8"></div>Épuisées (<?= $bobines_stats['epuisees']??0 ?>)</div>
         </div>
       </div>
     </div>
@@ -485,6 +482,25 @@ include __DIR__ . '/../templates/header.php';
   </div>
 </div>
 <?php endif; ?>
+
+<!-- ═══════ MODAL FILMS PAR SITE ═══════ -->
+<div id="modal-films" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(6,3,58,.5);align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:white;border-radius:16px;width:100%;max-width:680px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <div style="display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid #e2e8f0;flex-shrink:0">
+      <div style="width:34px;height:34px;border-radius:10px;background:#f5f3ff;display:flex;align-items:center;justify-content:center;color:#7c3aed;font-size:16px">
+        <i class="ph-duotone ph-chart-bar-horizontal"></i>
+      </div>
+      <div>
+        <div style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;color:#06033A">Films utilisés par site</div>
+        <div style="font-size:12px;color:#94a3b8"><?= h($mois_display) ?></div>
+      </div>
+      <button onclick="document.getElementById('modal-films').style.display='none'" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:22px;line-height:1;padding:4px 8px">&times;</button>
+    </div>
+    <div style="overflow:auto;padding:20px">
+      <div class="ch-wrap"><canvas id="cFilms" height="<?= $films_ch_h ?>"></canvas></div>
+    </div>
+  </div>
+</div>
 
 <!-- ═══════ MODAL DÉTAILS OPÉRATIONS ═══════ -->
 <div id="modal-ops" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(6,3,58,.5);align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.style.display='none'">
@@ -835,9 +851,13 @@ function setupHover() {
     }
 }
 
+function openFilmsModal() {
+    document.getElementById('modal-films').style.display = 'flex';
+    setTimeout(() => drawHBar('cFilms', filmsLabels, filmsValues, '#7c3aed'), 40);
+}
+
 function render() {
     drawBar('cEvol',   evolLabels,  evolEngins,  '#1B75BC');
-    drawHBar('cFilms', filmsLabels, filmsValues, '#7c3aed');
     drawDonut('cStatuts', statutsData, ['#16a34a','#d97706','#dc2626']);
     drawDonut('cBobines', bobinesData, ['#7c3aed','#1B75BC','#94a3b8']);
     drawDonut('cCmds',    cmdsData,    ['#d97706','#1B75BC','#16a34a']);
