@@ -100,20 +100,20 @@ $rps = [];
 foreach ($rivets as $r) $rps[$r['nom']][$r['type_rivet']] = (int)$r['quantite'];
 
 // ── PMMA
-$pmma_par_site = db_fetch_all(
-    "SELECT s.nom,
+$pmma_par_type = db_fetch_all(
+    "SELECT sp.type_pmma,
             COALESCE(SUM(sp.quantite),0) AS total,
             COUNT(CASE WHEN sp.quantite < sp.seuil_alerte THEN 1 END) AS nb_bas
-     FROM sites s
-     LEFT JOIN stock_pmma_site sp ON sp.site_id=s.id
+     FROM stock_pmma_site sp
+     JOIN sites s ON s.id=sp.site_id
      WHERE s.actif=1
-     GROUP BY s.id, s.nom ORDER BY total DESC"
+     GROUP BY sp.type_pmma ORDER BY total DESC"
 );
 $pmma_detail = db_fetch_all(
     "SELECT s.nom, sp.type_pmma, COALESCE(sp.quantite,0) AS quantite, COALESCE(sp.seuil_alerte,10) AS seuil
      FROM sites s
      JOIN stock_pmma_site sp ON sp.site_id=s.id
-     WHERE s.actif=1 ORDER BY s.nom, sp.type_pmma"
+     WHERE s.actif=1 ORDER BY sp.type_pmma, s.nom"
 );
 
 // ── ALERTES
@@ -154,16 +154,16 @@ $js_bobines      = json_encode([(int)($bobines_stats['en_cours']??0),(int)($bobi
 $js_cmds         = json_encode([(int)($cmd_stats['en_attente']??0),(int)(($cmd_stats['a_livrer']??0)+($cmd_stats['en_route']??0)),(int)($cmd_stats['livrees_mois']??0)]);
 $max_engins      = empty($prod_par_site) ? 1 : max(1, ...array_column($prod_par_site, 'engins'));
 // PMMA + Rivets charts
-$pmma_by_site = [];
-foreach ($pmma_detail as $d) $pmma_by_site[$d['nom']][] = ['type'=>$d['type_pmma'],'qty'=>(int)$d['quantite'],'seuil'=>(int)$d['seuil']];
-$js_pmma_labels = json_encode(array_map(fn($r)=>$r['nom'], $pmma_par_site));
-$js_pmma_totals = json_encode(array_map(fn($r)=>(int)$r['total'], $pmma_par_site));
-$js_pmma_bas    = json_encode(array_map(fn($r)=>(int)$r['nb_bas'], $pmma_par_site));
-$js_pmma_detail = json_encode(array_values(array_map(fn($r)=>$pmma_by_site[$r['nom']]??[], $pmma_par_site)));
+$pmma_by_type = [];
+foreach ($pmma_detail as $d) $pmma_by_type[$d['type_pmma']][] = ['site'=>$d['nom'],'qty'=>(int)$d['quantite'],'seuil'=>(int)$d['seuil']];
+$js_pmma_labels = json_encode(array_map(fn($r)=>$r['type_pmma'], $pmma_par_type));
+$js_pmma_totals = json_encode(array_map(fn($r)=>(int)$r['total'], $pmma_par_type));
+$js_pmma_bas    = json_encode(array_map(fn($r)=>(int)$r['nb_bas'], $pmma_par_type));
+$js_pmma_detail = json_encode(array_values(array_map(fn($r)=>$pmma_by_type[$r['type_pmma']]??[], $pmma_par_type)));
 $js_riv_labels  = json_encode(array_keys($rps));
 $js_riv_gonfl   = json_encode(array_map(fn($t)=>$t['gonflable']??0, array_values($rps)));
 $js_riv_eclat   = json_encode(array_map(fn($t)=>$t['eclate']??0, array_values($rps)));
-$pmma_ch_h      = max(160, count($pmma_par_site) * 46);
+$pmma_ch_h      = max(160, count($pmma_par_type) * 46);
 $riv_ch_h       = max(160, count($rps) * 60);
 $films_ch_h     = max(160, count($films_par_site) * 46);
 
@@ -436,7 +436,7 @@ include __DIR__ . '/../templates/header.php';
   <div class="bloc-body">
     <div class="ch2">
       <div class="ch-box">
-        <div class="ch-ttl"><i class="ph-duotone ph-printer" style="vertical-align:middle"></i> PMMA par site <span style="font-size:10px;color:var(--muted);font-weight:400">— survoler pour détail</span></div>
+        <div class="ch-ttl"><i class="ph-duotone ph-printer" style="vertical-align:middle"></i> PMMA par type <span style="font-size:10px;color:var(--muted);font-weight:400">— survoler pour détail par site</span></div>
         <div class="ch-wrap"><canvas id="cPmma" height="<?= $pmma_ch_h ?>"></canvas></div>
       </div>
       <div class="ch-box">
@@ -734,15 +734,15 @@ function setupHover() {
             if (idx >= 0 && idx < pmmaLabels.length) {
                 const d = pmmaDetail[idx] || [];
                 let html = `<div style="font-weight:700;color:#06033A;font-size:13px;margin-bottom:6px">${pmmaLabels[idx]}</div>`;
-                d.forEach(t => {
-                    const low = t.qty < t.seuil;
+                d.forEach(s => {
+                    const low = s.qty < s.seuil;
                     html += `<div style="display:flex;justify-content:space-between;gap:14px;color:${low?'#dc2626':'#374151'}">
-                        <span>${t.type||'—'}</span>
-                        <span style="font-weight:700">${fmtN(t.qty)} <span style="font-weight:400;color:#94a3b8">/ ${t.seuil}</span></span>
+                        <span>${s.site||'—'}</span>
+                        <span style="font-weight:700">${fmtN(s.qty)} <span style="font-weight:400;color:#94a3b8">/ ${s.seuil}</span></span>
                     </div>`;
                 });
-                if (!d.length) html += `<div style="color:#94a3b8">Aucun type PMMA</div>`;
-                if (pmmaBas[idx] > 0) html += `<div style="margin-top:5px;color:#dc2626;font-size:11px;font-weight:600">⚠ Stock bas</div>`;
+                if (!d.length) html += `<div style="color:#94a3b8">Aucun stock</div>`;
+                if (pmmaBas[idx] > 0) html += `<div style="margin-top:5px;color:#dc2626;font-size:11px;font-weight:600">⚠ ${pmmaBas[idx]} site(s) en stock bas</div>`;
                 showTip(e, html);
             } else hideTip();
         });
