@@ -58,6 +58,28 @@ function di_user_roles(int $userId): array {
     return array_column($rows, 'role_code');
 }
 
+// ── Demandes que CET utilisateur peut viser (étape courante = un de ses rôles).
+//    Enrichit chaque demande de _etape_label et _demandeur.
+function di_a_valider(array $user): array {
+    $roles = di_user_roles((int)$user['id']);
+    if (!$roles) return [];
+    $pending = db_fetch_all(
+        "SELECT id FROM di_demandes WHERE statut IN ('en_attente','en_cours') AND demandeur_id <> ? ORDER BY created_at ASC",
+        [$user['id']]
+    );
+    $out = [];
+    foreach ($pending as $p) {
+        $d  = di_get((int)$p['id']);
+        $wf = di_workflow_of($d);
+        if (di_can_validate($roles, (int)$user['id'], $wf, (int)$d['etape_actuelle'], (int)$d['demandeur_id'])) {
+            $d['_etape_label'] = $wf[(int)$d['etape_actuelle']]['label'] ?? '';
+            $d['_demandeur']   = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$d['demandeur_id']]);
+            $out[] = $d;
+        }
+    }
+    return $out;
+}
+
 // ── Étape suivante (ou null si terminé) — logique identique à l'app source
 function di_next_step(array $workflow, int $currentStep): ?int {
     if ($currentStep === -1) return 0;

@@ -136,11 +136,29 @@ $mes = $detail ? [] : db_fetch_all(
 $type_labels = [];
 foreach (di_types_actifs() as $t) $type_labels[$t['code']] = $t['label'];
 
+// ── Mini-dashboard (vue liste uniquement)
+$di_stats = ['en_attente'=>0,'en_cours'=>0,'approuve'=>0,'rejete'=>0,'brouillon'=>0];
+$nb_a_valider = 0;
+if (!$detail) {
+    foreach (db_fetch_all("SELECT statut, COUNT(*) AS n FROM di_demandes WHERE demandeur_id=? GROUP BY statut", [$user['id']]) as $r) {
+        $k = $r['statut'] === 'approuve_traitement' ? 'approuve' : $r['statut'];
+        if (isset($di_stats[$k])) $di_stats[$k] += (int)$r['n'];
+    }
+    $nb_a_valider = count(di_a_valider($user));
+}
+
 include __DIR__ . '/../templates/header.php';
 ?>
 <style>
   .di-wrap{max-width:960px;margin:0 auto}
   .di-topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+  .di-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:20px}
+  .di-stat{background:var(--card,#fff);border:1.5px solid var(--border,#e2e8f0);border-radius:14px;padding:16px 18px;text-decoration:none}
+  .di-stat .n{font-size:26px;font-weight:800;line-height:1;color:var(--text,#2c3e50)}
+  .di-stat .l{font-size:12px;color:var(--muted,#7f8c8d);margin-top:5px}
+  .di-stat-action{background:linear-gradient(135deg,#3B4FBE,#7C92FF);border-color:transparent;color:#fff;transition:.15s}
+  .di-stat-action:hover{transform:translateY(-2px);box-shadow:0 8px 22px rgba(59,79,190,.28)}
+  .di-stat-action .n,.di-stat-action .l{color:#fff}
   .di-btn{padding:10px 18px;border:none;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;text-decoration:none;
     display:inline-flex;align-items:center;gap:7px;font-family:inherit}
   .di-btn-primary{background:linear-gradient(135deg,#3B4FBE,#7C92FF);color:#fff}
@@ -244,6 +262,18 @@ include __DIR__ . '/../templates/header.php';
     <h2 style="margin:0">Mes demandes</h2>
     <a href="<?= APP_URL ?>/pages/demandes_new.php" class="di-btn di-btn-primary"><i class="ph-duotone ph-plus"></i> Nouvelle demande</a>
   </div>
+
+  <div class="di-stats">
+    <?php if ($nb_a_valider > 0): ?>
+      <a href="<?= APP_URL ?>/pages/demandes_a_valider.php" class="di-stat di-stat-action">
+        <div class="n"><?= $nb_a_valider ?></div><div class="l">À valider par vous</div></a>
+    <?php endif; ?>
+    <div class="di-stat"><div class="n" style="color:#e67e22"><?= $di_stats['en_attente'] + $di_stats['en_cours'] ?></div><div class="l">En cours</div></div>
+    <div class="di-stat"><div class="n" style="color:#27ae60"><?= $di_stats['approuve'] ?></div><div class="l">Approuvées</div></div>
+    <div class="di-stat"><div class="n" style="color:#e74c3c"><?= $di_stats['rejete'] ?></div><div class="l">Rejetées</div></div>
+    <div class="di-stat"><div class="n" style="color:#7f8c8d"><?= $di_stats['brouillon'] ?></div><div class="l">Brouillons</div></div>
+  </div>
+
   <?php if (empty($mes)): ?>
     <div class="di-card di-empty">
       <i class="ph-duotone ph-tray" style="font-size:44px;color:#cbd5e1"></i>

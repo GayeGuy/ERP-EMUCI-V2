@@ -14,25 +14,8 @@ $_SESSION['groupe_actif'] = 'DEMANDES';
 $page_title  = 'Demandes à valider';
 $active_page = 'demandes_valider';
 
-$my_roles = di_user_roles((int)$user['id']);
-
-// Demandes en attente que CE validateur peut viser (étape courante = un de ses rôles)
-$a_valider = [];
-if ($my_roles) {
-    $pending = db_fetch_all(
-        "SELECT id FROM di_demandes WHERE statut IN ('en_attente','en_cours') AND demandeur_id <> ? ORDER BY created_at ASC",
-        [$user['id']]
-    );
-    foreach ($pending as $p) {
-        $d = di_get((int)$p['id']);
-        $wf = di_workflow_of($d);
-        if (di_can_validate($my_roles, (int)$user['id'], $wf, (int)$d['etape_actuelle'], (int)$d['demandeur_id'])) {
-            $d['_etape_label'] = $wf[(int)$d['etape_actuelle']]['label'] ?? '';
-            $d['_demandeur']   = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$d['demandeur_id']]);
-            $a_valider[] = $d;
-        }
-    }
-}
+$my_roles  = di_user_roles((int)$user['id']);
+$a_valider = di_a_valider($user);
 $type_labels = [];
 foreach (di_types_actifs() as $t) $type_labels[$t['code']] = $t['label'];
 
