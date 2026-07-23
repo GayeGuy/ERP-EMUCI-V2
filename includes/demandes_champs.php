@@ -52,7 +52,22 @@ function di_champs_config(): array {
             ['key'=>'date_demande',  'label'=>'Date de la demande',       'type'=>'date'],
             ['key'=>'plateformes',   'label'=>'Accès aux plateformes',    'type'=>'plateformes', 'span'=>true],
         ],
-        // Phase 2 (suite) : basculement_compte, transfert_agent, creation_site,
+        'basculement_compte' => [
+            ['key'=>'agent_nom',      'label'=>"Nom & Prénom de l'agent", 'type'=>'text', 'required'=>true],
+            ['key'=>'agent_matricule','label'=>"Matricule de l'agent",    'type'=>'text'],
+            ['key'=>'site',           'label'=>'Site',                    'type'=>'text', 'required'=>true],
+            ['key'=>'ancien_poste',   'label'=>'Ancien poste',            'type'=>'text', 'required'=>true],
+            ['key'=>'nouveau_poste',  'label'=>'Nouveau poste',           'type'=>'text', 'required'=>true],
+            ['key'=>'login',          'label'=>"Nom d'utilisateur / Login",'type'=>'text'],
+            ['key'=>'email_pro',      'label'=>'Adresse email professionnelle','type'=>'email'],
+            ['key'=>'applications',   'label'=>'Application(s) concernée(s)','type'=>'text', 'span'=>true],
+            ['key'=>'profil',         'label'=>'Profil',                  'type'=>'text'],
+            ['key'=>'date_demande',   'label'=>'Date de la demande',      'type'=>'date'],
+            ['key'=>'motif',          'label'=>'Motif du basculement',    'type'=>'select', 'required'=>true, 'span'=>true,
+             'options'=>['' =>'— Choisir —', 'Mutation interne'=>'Mutation interne', 'Renfort temporaire'=>'Renfort temporaire',
+                'Réorganisation des équipes'=>'Réorganisation des équipes', 'Autre'=>'Autre']],
+        ],
+        // Phase 2 (suite) : transfert_agent, creation_site,
         // changement_geolocalisation, imputation_courrier, exceptionnel.
     ];
 }
