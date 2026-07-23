@@ -109,7 +109,20 @@ function di_champs_config(): array {
             ['key'=>'objet',         'label'=>'Objet de la demande',  'type'=>'text', 'required'=>true],
             ['key'=>'motif',         'label'=>'Motif (obligatoire)',  'type'=>'textarea', 'required'=>true, 'span'=>true],
         ],
-        // Reste (Phase 2) : changement_geolocalisation (necessite le type de champ select_site).
+        'changement_geolocalisation' => [
+            ['key'=>'ancien_nom_site',      'label'=>'Site actuel',        'type'=>'select_site', 'required'=>true],
+            ['key'=>'nouveau_nom_site',     'label'=>'Nouveau site',       'type'=>'select_site'],
+            ['key'=>'ancienne_localisation','label'=>'Adresse actuelle',   'type'=>'text'],
+            ['key'=>'nouvelle_localisation','label'=>'Nouvelle adresse',   'type'=>'text'],
+            ['key'=>'ancienne_longitude',   'label'=>'Longitude actuelle', 'type'=>'text'],
+            ['key'=>'ancienne_latitude',    'label'=>'Latitude actuelle',  'type'=>'text'],
+            ['key'=>'nouvelle_longitude',   'label'=>'Nouvelle longitude', 'type'=>'text'],
+            ['key'=>'nouvelle_latitude',    'label'=>'Nouvelle latitude',  'type'=>'text'],
+            ['key'=>'date_effet',           'label'=>"Date d'effet",       'type'=>'date'],
+            ['key'=>'motif',                'label'=>'Motif du changement','type'=>'select',
+             'options'=>['' =>'— Choisir —', 'Erreur de saisie'=>'Erreur de saisie', 'Déménagement'=>'Déménagement', 'Réorganisation'=>'Réorganisation', 'Autre'=>'Autre']],
+            ['key'=>'commentaires',         'label'=>'Commentaires',       'type'=>'textarea', 'span'=>true],
+        ],
     ];
 }
 
@@ -146,6 +159,13 @@ function di_render_field(array $f, $value = ''): string {
                 <input type=\"date\" name=\"champs[$key][debut]\" value=\"$vd\" style=\"flex:1\">
                 <span style=\"color:#7f8c8d\">→</span>
                 <input type=\"date\" name=\"champs[$key][fin]\" value=\"$vf\" style=\"flex:1\"></div>";
+    } elseif ($type === 'select_site') {
+        echo "<select id=\"f_$key\" name=\"champs[$key]\"$reqA><option value=\"\">— Choisir un site —</option>";
+        foreach (db_fetch_all("SELECT nom FROM sites WHERE actif=1 ORDER BY nom") as $s) {
+            $sel = ((string)$value === (string)$s['nom']) ? ' selected' : '';
+            echo '<option value="'.h($s['nom']).'"'.$sel.'>'.h($s['nom']).'</option>';
+        }
+        echo "</select>";
     } elseif ($type === 'plateformes') {
         $sel = is_array($value) ? $value : [];
         echo '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">';
