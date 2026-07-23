@@ -96,6 +96,8 @@ $rivets = db_fetch_all(
      WHERE s.actif=1
      ORDER BY s.nom, array_position(ARRAY['gonflable','eclate']::text[], (sr.type_rivet)::text)"
 );
+$rps = [];
+foreach ($rivets as $r) $rps[$r['nom']][$r['type_rivet']] = (int)$r['quantite'];
 
 // ── PMMA
 $pmma_par_site = db_fetch_all(
@@ -106,6 +108,12 @@ $pmma_par_site = db_fetch_all(
      LEFT JOIN stock_pmma_site sp ON sp.site_id=s.id
      WHERE s.actif=1
      GROUP BY s.id, s.nom ORDER BY total DESC"
+);
+$pmma_detail = db_fetch_all(
+    "SELECT s.nom, sp.type_pmma, COALESCE(sp.quantite,0) AS quantite, COALESCE(sp.seuil_alerte,10) AS seuil
+     FROM sites s
+     JOIN stock_pmma_site sp ON sp.site_id=s.id
+     WHERE s.actif=1 ORDER BY s.nom, sp.type_pmma"
 );
 
 // ── ALERTES
@@ -145,6 +153,18 @@ $js_films_values = json_encode(array_map(fn($r) => (int)$r['films'], $films_par_
 $js_bobines      = json_encode([(int)($bobines_stats['en_cours']??0),(int)($bobines_stats['en_stock']??0),(int)($bobines_stats['epuisees']??0)]);
 $js_cmds         = json_encode([(int)($cmd_stats['en_attente']??0),(int)(($cmd_stats['a_livrer']??0)+($cmd_stats['en_route']??0)),(int)($cmd_stats['livrees_mois']??0)]);
 $max_engins      = empty($prod_par_site) ? 1 : max(1, ...array_column($prod_par_site, 'engins'));
+// PMMA + Rivets charts
+$pmma_by_site = [];
+foreach ($pmma_detail as $d) $pmma_by_site[$d['nom']][] = ['type'=>$d['type_pmma'],'qty'=>(int)$d['quantite'],'seuil'=>(int)$d['seuil']];
+$js_pmma_labels = json_encode(array_map(fn($r)=>$r['nom'], $pmma_par_site));
+$js_pmma_totals = json_encode(array_map(fn($r)=>(int)$r['total'], $pmma_par_site));
+$js_pmma_bas    = json_encode(array_map(fn($r)=>(int)$r['nb_bas'], $pmma_par_site));
+$js_pmma_detail = json_encode(array_values(array_map(fn($r)=>$pmma_by_site[$r['nom']]??[], $pmma_par_site)));
+$js_riv_labels  = json_encode(array_keys($rps));
+$js_riv_gonfl   = json_encode(array_map(fn($t)=>$t['gonflable']??0, array_values($rps)));
+$js_riv_eclat   = json_encode(array_map(fn($t)=>$t['eclate']??0, array_values($rps)));
+$pmma_ch_h      = max(160, count($pmma_par_site) * 46);
+$riv_ch_h       = max(160, count($rps) * 60);
 
 include __DIR__ . '/../templates/header.php';
 ?>
@@ -413,50 +433,18 @@ include __DIR__ . '/../templates/header.php';
     <div><div class="bloc-ttl">Stock matériel</div><div class="bloc-stl">PMMA et rivets par site</div></div>
   </div>
   <div class="bloc-body">
-    <div class="s2col">
-      <div>
-        <div class="s-bloc-ttl"><i class="ph-duotone ph-printer" style="vertical-align:middle"></i> PMMA par site</div>
-        <?php foreach($pmma_par_site as $site): ?>
-        <div class="s-card">
-          <div class="s-card-hdr"><?= h($site['nom']) ?></div>
-          <div class="s-card-body">
-            <div class="s-row">
-              <span style="color:var(--muted);font-size:12px">Total PMMA</span>
-              <span class="s-val" style="color:<?= $site['total']<10?'#dc2626':'#1B75BC' ?>"><?= fmt_number($site['total']) ?></span>
-            </div>
-            <?php if($site['nb_bas']>0): ?>
-            <div class="s-alrt"><i class="ph-duotone ph-warning"></i> <?= $site['nb_bas'] ?> type(s) en stock bas</div>
-            <?php endif; ?>
-          </div>
-        </div>
-        <?php endforeach; ?>
+    <div class="ch2">
+      <div class="ch-box">
+        <div class="ch-ttl"><i class="ph-duotone ph-printer" style="vertical-align:middle"></i> PMMA par site <span style="font-size:10px;color:var(--muted);font-weight:400">— survoler pour détail</span></div>
+        <div class="ch-wrap"><canvas id="cPmma" height="<?= $pmma_ch_h ?>"></canvas></div>
       </div>
-      <div>
-        <div class="s-bloc-ttl"><i class="ph-duotone ph-nut" style="vertical-align:middle"></i> Rivets par site</div>
-        <?php
-        $rps = [];
-        foreach($rivets as $r) $rps[$r['nom']][$r['type_rivet']] = (int)$r['quantite'];
-        foreach($rps as $nom => $types):
-          $gonfl  = $types['gonflable'] ?? 0;
-          $eclate = $types['eclate'] ?? 0;
-        ?>
-        <div class="s-card">
-          <div class="s-card-hdr"><?= h($nom) ?></div>
-          <div class="s-card-body">
-            <div class="s-row">
-              <span style="color:var(--muted);font-size:12px">Gonflables</span>
-              <span class="s-val" style="color:<?= $gonfl<200?'#dc2626':'#1B75BC' ?>"><?= fmt_number($gonfl) ?></span>
-            </div>
-            <div class="s-row">
-              <span style="color:var(--muted);font-size:12px">Éclatés</span>
-              <span class="s-val" style="color:<?= $eclate<200?'#dc2626':'#06033A' ?>"><?= fmt_number($eclate) ?></span>
-            </div>
-            <?php if($gonfl<200 || $eclate<200): ?>
-            <div class="s-alrt"><i class="ph-duotone ph-warning"></i> Stock bas — réapprovisionner</div>
-            <?php endif; ?>
-          </div>
+      <div class="ch-box">
+        <div class="ch-ttl"><i class="ph-duotone ph-nut" style="vertical-align:middle"></i> Rivets par site <span style="font-size:10px;color:var(--muted);font-weight:400">— survoler pour détail</span></div>
+        <div class="ch-wrap"><canvas id="cRivets" height="<?= $riv_ch_h ?>"></canvas></div>
+        <div class="legend" style="flex-direction:row;margin-top:8px">
+          <div class="leg-item"><div class="leg-dot" style="background:#1B75BC"></div>Gonflables</div>
+          <div class="leg-item"><div class="leg-dot" style="background:#06033A"></div>Éclatés</div>
         </div>
-        <?php endforeach; ?>
       </div>
     </div>
   </div>
@@ -521,6 +509,8 @@ include __DIR__ . '/../templates/header.php';
 </div>
 <?php endif; ?>
 
+<div id="pdg-tip" style="display:none;position:fixed;z-index:1000;background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;box-shadow:0 8px 24px rgba(0,0,0,.13);pointer-events:none;min-width:170px;font-size:12px;line-height:1.7"></div>
+
 <script>
 const evolLabels  = <?= $js_evol_labels ?>;
 const evolEngins  = <?= $js_evol_engins ?>;
@@ -529,6 +519,13 @@ const filmsValues = <?= $js_films_values ?>;
 const statutsData = <?= $js_statuts ?>;
 const bobinesData = <?= $js_bobines ?>;
 const cmdsData    = <?= $js_cmds ?>;
+const pmmaLabels  = <?= $js_pmma_labels ?>;
+const pmmaTotals  = <?= $js_pmma_totals ?>;
+const pmmaBas     = <?= $js_pmma_bas ?>;
+const pmmaDetail  = <?= $js_pmma_detail ?>;
+const rivLabels   = <?= $js_riv_labels ?>;
+const rivGonfl    = <?= $js_riv_gonfl ?>;
+const rivEclat    = <?= $js_riv_eclat ?>;
 
 const DPR = window.devicePixelRatio || 1;
 
@@ -650,15 +647,144 @@ function drawDonut(id, values, colors) {
     ctx.fillText(total, cx, cy);
 }
 
+// ── TOOLTIP
+function showTip(e, html) {
+    const tip = document.getElementById('pdg-tip');
+    tip.innerHTML = html;
+    tip.style.display = 'block';
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    const x  = e.clientX + 14;
+    const y  = e.clientY - 10;
+    tip.style.left = (x + tw > window.innerWidth - 8 ? x - tw - 28 : x) + 'px';
+    tip.style.top  = (y + th > window.innerHeight - 8 ? y - th + 20 : y) + 'px';
+}
+function hideTip() { document.getElementById('pdg-tip').style.display = 'none'; }
+
+function fmtN(n) { return Number(n).toLocaleString('fr-FR'); }
+
+// ── PMMA CHART
+function drawPmma() {
+    const c = initCv('cPmma'); if (!c) return;
+    const {ctx, w, h} = c;
+    const lw = 96, rw = 38;
+    const bArea = w - lw - rw;
+    const n = pmmaLabels.length || 1;
+    const rowH = h / n;
+    const max = Math.max(...pmmaTotals, 1);
+    pmmaLabels.forEach((lbl, i) => {
+        const y  = i * rowH;
+        const bh = Math.min(rowH * 0.44, 20);
+        const by = y + (rowH - bh) / 2;
+        const bw = Math.max((pmmaTotals[i] / max) * bArea, pmmaTotals[i] > 0 ? 4 : 0);
+        const low = pmmaBas[i] > 0;
+        ctx.fillStyle = '#06033A'; ctx.font = '11px DM Sans,sans-serif';
+        ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+        ctx.fillText(lbl.length > 12 ? lbl.substring(0,12)+'…' : lbl, lw - 8, y + rowH / 2);
+        ctx.fillStyle = low ? '#dc2626' : '#0891b2';
+        ctx.fillRect(lw, by, bw, bh);
+        ctx.fillStyle = '#64748b'; ctx.font = '10px DM Sans,sans-serif';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(fmtN(pmmaTotals[i]), lw + bw + 4, y + rowH / 2);
+        if (low) {
+            ctx.fillStyle = '#dc2626'; ctx.font = 'bold 11px DM Sans,sans-serif';
+            ctx.textAlign = 'right'; ctx.fillText('⚠', lw - 2, y + rowH / 2);
+        }
+    });
+}
+
+// ── RIVETS CHART (grouped)
+function drawRivets() {
+    const c = initCv('cRivets'); if (!c) return;
+    const {ctx, w, h} = c;
+    const lw = 96, rw = 38;
+    const bArea = w - lw - rw;
+    const n = rivLabels.length || 1;
+    const rowH = h / n;
+    const max = Math.max(...rivGonfl, ...rivEclat, 1);
+    const bh  = Math.min(rowH * 0.28, 13);
+    const gap = 4;
+    rivLabels.forEach((lbl, i) => {
+        const y   = i * rowH;
+        const by1 = y + rowH / 2 - bh - gap / 2;
+        const by2 = y + rowH / 2 + gap / 2;
+        const bw1 = Math.max((rivGonfl[i] / max) * bArea, rivGonfl[i] > 0 ? 4 : 0);
+        const bw2 = Math.max((rivEclat[i]  / max) * bArea, rivEclat[i]  > 0 ? 4 : 0);
+        ctx.fillStyle = '#06033A'; ctx.font = '11px DM Sans,sans-serif';
+        ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+        ctx.fillText(lbl.length > 12 ? lbl.substring(0,12)+'…' : lbl, lw - 8, y + rowH / 2);
+        ctx.fillStyle = rivGonfl[i] < 200 ? '#dc2626' : '#1B75BC';
+        ctx.fillRect(lw, by1, bw1, bh);
+        ctx.fillStyle = rivEclat[i] < 200 ? '#dc2626' : '#06033A';
+        ctx.fillRect(lw, by2, bw2, bh);
+        ctx.fillStyle = '#94a3b8'; ctx.font = '9px DM Sans,sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        if (rivGonfl[i] > 0) ctx.fillText(fmtN(rivGonfl[i]), lw + bw1 + 3, by1 + bh/2);
+        if (rivEclat[i]  > 0) ctx.fillText(fmtN(rivEclat[i]),  lw + bw2 + 3, by2 + bh/2);
+    });
+}
+
+// ── HOVER SETUP
+function setupHover() {
+    // PMMA
+    const ep = document.getElementById('cPmma');
+    if (ep && pmmaLabels.length) {
+        ep.style.cursor = 'crosshair';
+        ep.addEventListener('mousemove', e => {
+            const rect = ep.getBoundingClientRect();
+            const idx  = Math.floor((e.clientY - rect.top) / (rect.height / pmmaLabels.length));
+            if (idx >= 0 && idx < pmmaLabels.length) {
+                const d = pmmaDetail[idx] || [];
+                let html = `<div style="font-weight:700;color:#06033A;font-size:13px;margin-bottom:6px">${pmmaLabels[idx]}</div>`;
+                d.forEach(t => {
+                    const low = t.qty < t.seuil;
+                    html += `<div style="display:flex;justify-content:space-between;gap:14px;color:${low?'#dc2626':'#374151'}">
+                        <span>${t.type||'—'}</span>
+                        <span style="font-weight:700">${fmtN(t.qty)} <span style="font-weight:400;color:#94a3b8">/ ${t.seuil}</span></span>
+                    </div>`;
+                });
+                if (!d.length) html += `<div style="color:#94a3b8">Aucun type PMMA</div>`;
+                if (pmmaBas[idx] > 0) html += `<div style="margin-top:5px;color:#dc2626;font-size:11px;font-weight:600">⚠ Stock bas</div>`;
+                showTip(e, html);
+            } else hideTip();
+        });
+        ep.addEventListener('mouseleave', hideTip);
+    }
+    // Rivets
+    const er = document.getElementById('cRivets');
+    if (er && rivLabels.length) {
+        er.style.cursor = 'crosshair';
+        er.addEventListener('mousemove', e => {
+            const rect = er.getBoundingClientRect();
+            const idx  = Math.floor((e.clientY - rect.top) / (rect.height / rivLabels.length));
+            if (idx >= 0 && idx < rivLabels.length) {
+                const g = rivGonfl[idx]||0, ec = rivEclat[idx]||0;
+                const html = `<div style="font-weight:700;color:#06033A;font-size:13px;margin-bottom:6px">${rivLabels[idx]}</div>
+                    <div style="display:flex;justify-content:space-between;gap:14px;color:${g<200?'#dc2626':'#374151'}">
+                        <span>Gonflables</span><span style="font-weight:700">${fmtN(g)}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;gap:14px;color:${ec<200?'#dc2626':'#374151'}">
+                        <span>Éclatés</span><span style="font-weight:700">${fmtN(ec)}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;gap:14px;border-top:1px solid #e2e8f0;margin-top:5px;padding-top:5px;font-weight:700">
+                        <span>Total</span><span>${fmtN(g+ec)}</span>
+                    </div>`;
+                showTip(e, html);
+            } else hideTip();
+        });
+        er.addEventListener('mouseleave', hideTip);
+    }
+}
+
 function render() {
     drawBar('cEvol',   evolLabels,  evolEngins,  '#1B75BC');
     drawHBar('cFilms', filmsLabels, filmsValues, '#7c3aed');
     drawDonut('cStatuts', statutsData, ['#16a34a','#d97706','#dc2626']);
     drawDonut('cBobines', bobinesData, ['#7c3aed','#1B75BC','#94a3b8']);
     drawDonut('cCmds',    cmdsData,    ['#d97706','#1B75BC','#16a34a']);
+    drawPmma();
+    drawRivets();
 }
 
-window.addEventListener('load', () => setTimeout(render, 60));
+window.addEventListener('load', () => { setTimeout(render, 60); setTimeout(setupHover, 120); });
 let _rt; window.addEventListener('resize', () => { clearTimeout(_rt); _rt=setTimeout(render,200); });
 </script>
 
