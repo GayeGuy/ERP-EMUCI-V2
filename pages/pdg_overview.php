@@ -160,11 +160,20 @@ $js_pmma_labels = json_encode(array_map(fn($r)=>$r['type_pmma'], $pmma_par_type)
 $js_pmma_totals = json_encode(array_map(fn($r)=>(int)$r['total'], $pmma_par_type));
 $js_pmma_bas    = json_encode(array_map(fn($r)=>(int)$r['nb_bas'], $pmma_par_type));
 $js_pmma_detail = json_encode(array_values(array_map(fn($r)=>$pmma_by_type[$r['type_pmma']]??[], $pmma_par_type)));
-$js_riv_labels  = json_encode(array_keys($rps));
-$js_riv_gonfl   = json_encode(array_map(fn($t)=>$t['gonflable']??0, array_values($rps)));
-$js_riv_eclat   = json_encode(array_map(fn($t)=>$t['eclate']??0, array_values($rps)));
+$riv_type_detail = [[], []];
+$riv_total_gonfl = 0; $riv_total_eclat = 0;
+foreach ($rps as $site => $types) {
+    $g = (int)($types['gonflable'] ?? 0);
+    $e = (int)($types['eclate'] ?? 0);
+    $riv_total_gonfl += $g; $riv_total_eclat += $e;
+    $riv_type_detail[0][] = ['site' => $site, 'qty' => $g];
+    $riv_type_detail[1][] = ['site' => $site, 'qty' => $e];
+}
+$js_riv_labels  = json_encode(['Gonflable', 'Éclaté']);
+$js_riv_totals  = json_encode([$riv_total_gonfl, $riv_total_eclat]);
+$js_riv_detail  = json_encode($riv_type_detail);
 $pmma_ch_h      = max(160, count($pmma_par_type) * 46);
-$riv_ch_h       = max(160, count($rps) * 60);
+$riv_ch_h       = 120;
 $films_ch_h     = max(160, count($films_par_site) * 46);
 
 include __DIR__ . '/../templates/header.php';
@@ -440,12 +449,8 @@ include __DIR__ . '/../templates/header.php';
         <div class="ch-wrap"><canvas id="cPmma" height="<?= $pmma_ch_h ?>"></canvas></div>
       </div>
       <div class="ch-box">
-        <div class="ch-ttl"><i class="ph-duotone ph-nut" style="vertical-align:middle"></i> Rivets par site <span style="font-size:10px;color:var(--muted);font-weight:400">— survoler pour détail</span></div>
+        <div class="ch-ttl"><i class="ph-duotone ph-nut" style="vertical-align:middle"></i> Rivets par type <span style="font-size:10px;color:var(--muted);font-weight:400">— survoler pour détail par site</span></div>
         <div class="ch-wrap"><canvas id="cRivets" height="<?= $riv_ch_h ?>"></canvas></div>
-        <div class="legend" style="flex-direction:row;margin-top:8px">
-          <div class="leg-item"><div class="leg-dot" style="background:#1B75BC"></div>Gonflables</div>
-          <div class="leg-item"><div class="leg-dot" style="background:#06033A"></div>Éclatés</div>
-        </div>
       </div>
     </div>
   </div>
@@ -525,8 +530,8 @@ const pmmaTotals  = <?= $js_pmma_totals ?>;
 const pmmaBas     = <?= $js_pmma_bas ?>;
 const pmmaDetail  = <?= $js_pmma_detail ?>;
 const rivLabels   = <?= $js_riv_labels ?>;
-const rivGonfl    = <?= $js_riv_gonfl ?>;
-const rivEclat    = <?= $js_riv_eclat ?>;
+const rivTotals   = <?= $js_riv_totals ?>;
+const rivDetail   = <?= $js_riv_detail ?>;
 
 const DPR = window.devicePixelRatio || 1;
 
@@ -692,7 +697,7 @@ function drawPmma() {
     });
 }
 
-// ── RIVETS CHART (grouped)
+// ── RIVETS CHART (par type)
 function drawRivets() {
     const c = initCv('cRivets'); if (!c) return;
     const {ctx, w, h} = c;
@@ -700,30 +705,55 @@ function drawRivets() {
     const bArea = w - lw - rw;
     const n = rivLabels.length || 1;
     const rowH = h / n;
-    const max = Math.max(...rivGonfl, ...rivEclat, 1);
-    const bh  = Math.min(rowH * 0.28, 13);
-    const gap = 4;
+    const max = Math.max(...rivTotals, 1);
+    const colors = ['#1B75BC', '#06033A'];
     rivLabels.forEach((lbl, i) => {
+        const bh  = Math.min(rowH * 0.44, 20);
         const y   = i * rowH;
-        const by1 = y + rowH / 2 - bh - gap / 2;
-        const by2 = y + rowH / 2 + gap / 2;
-        const bw1 = Math.max((rivGonfl[i] / max) * bArea, rivGonfl[i] > 0 ? 4 : 0);
-        const bw2 = Math.max((rivEclat[i]  / max) * bArea, rivEclat[i]  > 0 ? 4 : 0);
+        const by  = y + (rowH - bh) / 2;
+        const bw  = Math.max((rivTotals[i] / max) * bArea, rivTotals[i] > 0 ? 4 : 0);
+        const bas = (rivDetail[i] || []).filter(s => s.qty < 200).length;
         ctx.fillStyle = '#06033A'; ctx.font = '11px DM Sans,sans-serif';
         ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-        ctx.fillText(lbl.length > 12 ? lbl.substring(0,12)+'…' : lbl, lw - 8, y + rowH / 2);
-        ctx.fillStyle = rivGonfl[i] < 200 ? '#dc2626' : '#1B75BC';
-        ctx.fillRect(lw, by1, bw1, bh);
-        ctx.fillStyle = rivEclat[i] < 200 ? '#dc2626' : '#06033A';
-        ctx.fillRect(lw, by2, bw2, bh);
-        ctx.fillStyle = '#94a3b8'; ctx.font = '9px DM Sans,sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-        if (rivGonfl[i] > 0) ctx.fillText(fmtN(rivGonfl[i]), lw + bw1 + 3, by1 + bh/2);
-        if (rivEclat[i]  > 0) ctx.fillText(fmtN(rivEclat[i]),  lw + bw2 + 3, by2 + bh/2);
+        ctx.fillText(lbl, lw - 8, y + rowH / 2);
+        ctx.fillStyle = bas > 0 ? '#dc2626' : colors[i];
+        ctx.fillRect(lw, by, bw, bh);
+        ctx.fillStyle = '#64748b'; ctx.font = '10px DM Sans,sans-serif';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(fmtN(rivTotals[i]), lw + bw + 4, y + rowH / 2);
+        if (bas > 0) {
+            ctx.fillStyle = '#dc2626'; ctx.font = 'bold 11px DM Sans,sans-serif';
+            ctx.textAlign = 'right'; ctx.fillText('⚠', lw - 2, y + rowH / 2);
+        }
     });
 }
 
 // ── HOVER SETUP
 function setupHover() {
+    // Films
+    const ef = document.getElementById('cFilms');
+    if (ef && filmsLabels.length) {
+        ef.style.cursor = 'crosshair';
+        const filmsTotal = filmsValues.reduce((a, b) => a + b, 0);
+        ef.addEventListener('mousemove', e => {
+            const rect = ef.getBoundingClientRect();
+            const idx  = Math.floor((e.clientY - rect.top) / (rect.height / filmsLabels.length));
+            if (idx >= 0 && idx < filmsLabels.length) {
+                const pct = filmsTotal > 0 ? Math.round(filmsValues[idx] / filmsTotal * 100) : 0;
+                const html = `<div style="font-weight:700;color:#06033A;font-size:13px;margin-bottom:6px">${filmsLabels[idx]}</div>
+                    <div style="display:flex;justify-content:space-between;gap:14px;color:#374151">
+                        <span>Films utilisés</span>
+                        <span style="font-weight:700">${fmtN(filmsValues[idx])} <span style="font-weight:400;color:#94a3b8">/ ${fmtN(filmsTotal)}</span></span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;gap:14px;color:#374151;margin-top:3px">
+                        <span>Part du total</span>
+                        <span style="font-weight:700;color:#7c3aed">${pct}%</span>
+                    </div>`;
+                showTip(e, html);
+            } else hideTip();
+        });
+        ef.addEventListener('mouseleave', hideTip);
+    }
     // PMMA
     const ep = document.getElementById('cPmma');
     if (ep && pmmaLabels.length) {
@@ -738,7 +768,7 @@ function setupHover() {
                     const low = s.qty < s.seuil;
                     html += `<div style="display:flex;justify-content:space-between;gap:14px;color:${low?'#dc2626':'#374151'}">
                         <span>${s.site||'—'}</span>
-                        <span style="font-weight:700">${fmtN(s.qty)} <span style="font-weight:400;color:#94a3b8">/ ${s.seuil}</span></span>
+                        <span style="font-weight:700">${fmtN(s.qty)} <span style="font-weight:400;color:#94a3b8">/ ${fmtN(pmmaTotals[idx])}</span></span>
                     </div>`;
                 });
                 if (!d.length) html += `<div style="color:#94a3b8">Aucun stock</div>`;
@@ -756,17 +786,17 @@ function setupHover() {
             const rect = er.getBoundingClientRect();
             const idx  = Math.floor((e.clientY - rect.top) / (rect.height / rivLabels.length));
             if (idx >= 0 && idx < rivLabels.length) {
-                const g = rivGonfl[idx]||0, ec = rivEclat[idx]||0;
-                const html = `<div style="font-weight:700;color:#06033A;font-size:13px;margin-bottom:6px">${rivLabels[idx]}</div>
-                    <div style="display:flex;justify-content:space-between;gap:14px;color:${g<200?'#dc2626':'#374151'}">
-                        <span>Gonflables</span><span style="font-weight:700">${fmtN(g)}</span>
-                    </div>
-                    <div style="display:flex;justify-content:space-between;gap:14px;color:${ec<200?'#dc2626':'#374151'}">
-                        <span>Éclatés</span><span style="font-weight:700">${fmtN(ec)}</span>
-                    </div>
-                    <div style="display:flex;justify-content:space-between;gap:14px;border-top:1px solid #e2e8f0;margin-top:5px;padding-top:5px;font-weight:700">
-                        <span>Total</span><span>${fmtN(g+ec)}</span>
+                const d = rivDetail[idx] || [];
+                let html = `<div style="font-weight:700;color:#06033A;font-size:13px;margin-bottom:6px">${rivLabels[idx]}</div>`;
+                d.forEach(s => {
+                    const low = s.qty < 200;
+                    html += `<div style="display:flex;justify-content:space-between;gap:14px;color:${low?'#dc2626':'#374151'}">
+                        <span>${s.site}</span>
+                        <span style="font-weight:700">${fmtN(s.qty)} <span style="font-weight:400;color:#94a3b8">/ ${fmtN(rivTotals[idx])}</span></span>
                     </div>`;
+                });
+                const bas = d.filter(s => s.qty < 200).length;
+                if (bas > 0) html += `<div style="margin-top:5px;color:#dc2626;font-size:11px;font-weight:600">⚠ ${bas} site(s) sous seuil (200)</div>`;
                 showTip(e, html);
             } else hideTip();
         });
