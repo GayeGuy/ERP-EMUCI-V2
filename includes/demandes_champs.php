@@ -67,7 +67,18 @@ function di_champs_config(): array {
              'options'=>['' =>'— Choisir —', 'Mutation interne'=>'Mutation interne', 'Renfort temporaire'=>'Renfort temporaire',
                 'Réorganisation des équipes'=>'Réorganisation des équipes', 'Autre'=>'Autre']],
         ],
-        // Phase 2 (suite) : transfert_agent, creation_site,
+        'transfert_agent' => [
+            ['key'=>'agent_nom',     'label'=>"Nom & Prénoms de l'agent", 'type'=>'text', 'required'=>true],
+            ['key'=>'agent_fonction','label'=>"Fonction de l'agent",      'type'=>'text'],
+            ['key'=>'site_origine',  'label'=>"Site d'origine",           'type'=>'text', 'required'=>true],
+            ['key'=>'nouveau_site',  'label'=>'Nouveau site',             'type'=>'text', 'required'=>true],
+            ['key'=>'motif',         'label'=>'Motif',                    'type'=>'textarea', 'required'=>true, 'span'=>true],
+            ['key'=>'type_transfert','label'=>'Type de transfert',        'type'=>'select', 'required'=>true,
+             'options'=>['' =>'— Choisir —', 'Temporaire'=>'Temporaire', 'Définitif'=>'Définitif']],
+            ['key'=>'duree',         'label'=>'Durée (si temporaire)',    'type'=>'text'],
+            ['key'=>'date_effet',    'label'=>"Date de prise d'effet",    'type'=>'date', 'required'=>true],
+        ],
+        // Phase 2 (suite) : creation_site,
         // changement_geolocalisation, imputation_courrier, exceptionnel.
     ];
 }
