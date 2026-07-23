@@ -126,9 +126,17 @@ function di_champs_config(): array {
     ];
 }
 
-// Champs d'un type (array vide si non encore porté)
+// Formulaire générique par défaut (types créés via l'admin, sans config dédiée)
+function di_champs_defaut(): array {
+    return [
+        ['key'=>'objet',   'label'=>'Objet de la demande', 'type'=>'text',     'required'=>true],
+        ['key'=>'details', 'label'=>'Détails',             'type'=>'textarea', 'required'=>true, 'span'=>true],
+    ];
+}
+
+// Champs d'un type (formulaire générique par défaut si pas de config dédiée)
 function di_champs_of(string $typeCode): array {
-    return di_champs_config()[$typeCode] ?? [];
+    return di_champs_config()[$typeCode] ?? di_champs_defaut();
 }
 
 // Rendu HTML d'un champ de formulaire (moteur générique)

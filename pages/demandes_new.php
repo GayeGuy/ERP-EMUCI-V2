@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
 $types = di_types_actifs();
 $sel   = trim($_GET['type'] ?? '');
-$champs_dispo = array_keys(di_champs_config());
+$sel_type = $sel !== '' ? di_type($sel) : null;
 
 include __DIR__ . '/../templates/header.php';
 ?>
@@ -64,23 +64,20 @@ include __DIR__ . '/../templates/header.php';
 </style>
 
 <div class="di-wrap">
-<?php if ($sel === '' || !in_array($sel, $champs_dispo, true)): ?>
+<?php if (!$sel_type): ?>
   <h2 style="margin:0 0 6px">Nouvelle demande interne</h2>
   <p style="color:var(--muted,#7f8c8d);margin:0 0 22px">Choisissez le type de demande à soumettre.</p>
   <div class="di-types">
-    <?php foreach ($types as $t):
-        $dispo = in_array($t['code'], $champs_dispo, true);
-        $href  = $dispo ? '?type=' . urlencode($t['code']) : '#'; ?>
-      <a class="di-type-card <?= $dispo ? '' : 'soon' ?>" href="<?= h($href) ?>"<?= $dispo ? '' : ' onclick="return false"' ?>>
+    <?php foreach ($types as $t): ?>
+      <a class="di-type-card" href="?type=<?= urlencode($t['code']) ?>">
         <div class="ic"><i class="ph-duotone ph-file-text"></i></div>
         <h4><?= h($t['label']) ?></h4>
         <p><?= h($t['description']) ?></p>
-        <?php if (!$dispo): ?><span class="di-badge-soon">Bientôt</span><?php endif; ?>
       </a>
     <?php endforeach; ?>
   </div>
 <?php else:
-    $type   = di_type($sel);
+    $type   = $sel_type;
     $fields = di_champs_of($sel);
     $wf     = di_workflow($sel);
 ?>
