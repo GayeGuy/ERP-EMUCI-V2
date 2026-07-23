@@ -63,20 +63,21 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
              ORDER BY ud.is_n1 DESC, u.nom ASC",
             [$id]
         );
+        // Tous les users sauf ceux déjà dans CE département — avec leur dept actuel si assigné ailleurs
         $assigned_ids = array_column($members, 'id');
-        if ($assigned_ids) {
-            $ph = implode(',', array_fill(0, count($assigned_ids), '?'));
-            $available = db_fetch_all(
-                "SELECT u.id, CONCAT(u.prenom,' ',u.nom) AS fullname, u.email
-                 FROM users u WHERE u.id NOT IN ($ph) ORDER BY u.nom ASC",
-                $assigned_ids
-            );
-        } else {
-            $available = db_fetch_all(
-                "SELECT u.id, CONCAT(u.prenom,' ',u.nom) AS fullname, u.email
-                 FROM users u ORDER BY u.nom ASC"
-            );
-        }
+        $ph_excl = $assigned_ids
+            ? 'AND u.id NOT IN (' . implode(',', array_fill(0, count($assigned_ids), '?')) . ')'
+            : '';
+        $available = db_fetch_all(
+            "SELECT u.id, CONCAT(u.prenom,' ',u.nom) AS fullname, u.email,
+                    d.label AS dept_actuel
+             FROM users u
+             LEFT JOIN user_departements ud ON ud.user_id = u.id
+             LEFT JOIN departements d ON d.id = ud.departement_id
+             WHERE 1=1 $ph_excl
+             ORDER BY u.nom ASC",
+            $assigned_ids
+        );
         json_response(true, '', ['dept'=>$dept,'members'=>$members,'available'=>$available]);
     }
 
@@ -85,10 +86,8 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $uid     = (int)($_POST['user_id'] ?? 0);
         $is_n1   = (int)($_POST['is_n1'] ?? 0);
         if (!$dept_id || !$uid) json_response(false, 'Données manquantes.');
-        $existing = db_fetch_one("SELECT departement_id FROM user_departements WHERE user_id=?", [$uid]);
-        if ($existing && (int)$existing['departement_id'] !== $dept_id) {
-            json_response(false, 'Ce compte appartient déjà à un autre département. Retirez-le d\'abord.');
-        }
+        // Si le user est dans un autre dept, on le transfère automatiquement
+        db_query("DELETE FROM user_departements WHERE user_id=? AND departement_id != ?", [$uid, $dept_id]);
         db_query(
             "INSERT INTO user_departements (user_id, departement_id, is_n1) VALUES (?,?,?)
              ON CONFLICT (user_id, departement_id) DO UPDATE SET is_n1=EXCLUDED.is_n1",
@@ -312,9 +311,10 @@ function renderDetail(data) {
         </div>`;
     }).join('') : `<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px"><i class="ph-duotone ph-users" style="font-size:28px;display:block;margin-bottom:6px"></i>Aucun membre</div>`;
 
-    const availOpts = available.map(u =>
-        `<option value="${u.id}">${esc(u.fullname)} — ${esc(u.email||'')}</option>`
-    ).join('');
+    const availOpts = available.map(u => {
+        const deptInfo = u.dept_actuel ? ` · [${esc(u.dept_actuel)}]` : '';
+        return `<option value="${u.id}">${esc(u.fullname)}${deptInfo} — ${esc(u.email||'')}</option>`;
+    }).join('');
 
     el.innerHTML = `
         <div class="detail-hdr">
@@ -335,14 +335,15 @@ function renderDetail(data) {
         <div id="members-list">${membersHtml}</div>
 
         ${available.length ? `
-        <div class="section-lbl">Ajouter un compte</div>
+        <div class="section-lbl">Ajouter / transférer un compte</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Les comptes marqués <strong>[Département]</strong> seront transférés automatiquement.</div>
         <div class="add-form">
             <select id="sel-user"><option value="">— Sélectionner un compte —</option>${availOpts}</select>
             <label><input type="checkbox" id="chk-n1"> N+1</label>
             <button class="btn-primary" style="padding:8px 14px;font-size:12px" onclick="assignUser(${dept.id})">
                 <i class="ph-duotone ph-plus"></i> Ajouter
             </button>
-        </div>` : '<div style="font-size:12px;color:var(--muted);margin-top:10px">Tous les comptes sont déjà affectés à un département.</div>'}
+        </div>` : '<div style="font-size:12px;color:var(--muted);margin-top:10px">Tous les comptes de l\'application sont membres de ce département.</div>'}
     `;
 }
 
