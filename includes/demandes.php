@@ -52,20 +52,32 @@ function di_types_actifs(): array {
     return db_fetch_all("SELECT * FROM di_types WHERE actif = 1 ORDER BY ordre ASC");
 }
 
-// ── Rôles de validation d'un utilisateur ERP (n1, raf, dg, ...)
+// ── Rôles de validation d'un utilisateur — DÉRIVÉS de son rôle ERP.
+//    Source de vérité unique : Administration → Permissions (le rôle ERP = la fonction de
+//    validation). Plus de matrice « Rôles valideurs » séparée. Le N+1 n'est pas ici : il est
+//    résolu par le N+1 du département du demandeur (user_departements), cf. di_can_validate().
 function di_user_roles(int $userId): array {
-    $rows  = db_fetch_all("SELECT role_code FROM di_user_roles WHERE user_id = ?", [$userId]);
-    $roles = array_column($rows, 'role_code');
+    // Rôle ERP (slug) → codes d'étape de circuit que ce rôle peut viser.
+    static $map = [
+        'raf'               => ['raf'],
+        'daf'               => ['daf'],
+        'gestionnaire'      => ['gestionnaire'],
+        'support_it'        => ['it'],
+        'superviseur_it'    => ['it'],
+        'maintenance_info'  => ['it'],
+        'directeur_general' => ['dg'],
+        // Administrateurs : visent toutes les étapes (jamais leur propre demande, cf. di_can_validate)
+        'superadmin'        => ['n1', 'raf', 'daf', 'dg', 'it', 'gestionnaire'],
+        'admin'             => ['n1', 'raf', 'daf', 'dg', 'it', 'gestionnaire'],
+    ];
+    $slug  = db_fetch_value("SELECT r.slug FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=?", [$userId]);
+    $roles = ($slug && isset($map[$slug])) ? $map[$slug] : [];
 
-    // Auto-liaison : profil ERP raf/daf/lecteur → rôle di sans entrée manuelle
-    static $erp_auto = ['raf' => 'raf', 'daf' => 'daf', 'lecteur' => 'dg'];
-    $erp_slug = db_fetch_value(
-        "SELECT r.slug FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=?", [$userId]
-    );
-    if ($erp_slug && isset($erp_auto[$erp_slug])) {
-        $roles[] = $erp_auto[$erp_slug];
-    }
-    return array_unique($roles);
+    // Filet de sécurité : anciens droits attribués manuellement (table di_user_roles, écran retiré)
+    // restent honorés le temps de la transition. Peut être purgé pour un basculement 100 % rôles ERP.
+    $legacy = array_column(db_fetch_all("SELECT role_code FROM di_user_roles WHERE user_id = ?", [$userId]), 'role_code');
+
+    return array_values(array_unique(array_merge($roles, $legacy)));
 }
 
 // ── Demandes que CET utilisateur peut viser (étape courante = un de ses rôles).
