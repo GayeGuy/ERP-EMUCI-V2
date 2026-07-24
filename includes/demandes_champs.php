@@ -187,11 +187,11 @@ function di_render_field(array $f, $value = ''): string {
         echo "</select>";
     } elseif ($type === 'plateformes') {
         $sel = is_array($value) ? $value : [];
-        echo '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px">';
+        echo '<div class="di-plats">';
         foreach (di_plateformes() as $p) {
             $ck = in_array($p['code'], $sel, true) ? ' checked' : '';
-            echo '<label style="display:flex;align-items:center;gap:8px;font-weight:500;cursor:pointer">'
-               . '<input type="checkbox" name="champs['.$key.'][]" value="'.h($p['code']).'"'.$ck.' style="width:auto">'
+            echo '<label class="di-plat">'
+               . '<input type="checkbox" name="champs['.$key.'][]" value="'.h($p['code']).'"'.$ck.'>'
                . h($p['label']).'</label>';
         }
         echo '</div>';

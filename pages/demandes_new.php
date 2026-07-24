@@ -55,31 +55,55 @@ $can_submit = $has_dept || $is_admin_role;
 include __DIR__ . '/../templates/header.php';
 ?>
 <style>
-  .di-wrap{max-width:900px;margin:0 auto}
+  .di-wrap{max-width:880px;margin:0 auto}
   .di-types{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:14px}
-  .di-type-card{display:flex;flex-direction:column;gap:6px;padding:18px;border:1.5px solid var(--border,#e2e8f0);
-    border-radius:14px;background:var(--card,#fff);cursor:pointer;text-decoration:none;color:inherit;transition:.15s}
-  .di-type-card:hover{border-color:var(--primary,#7C92FF);transform:translateY(-2px);box-shadow:0 8px 22px rgba(59,79,190,.12)}
-  .di-type-card.soon{opacity:.55;cursor:not-allowed}
-  .di-type-card .ic{width:42px;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;
-    background:linear-gradient(135deg,#3B4FBE,#7C92FF);color:#fff;font-size:20px}
-  .di-type-card h4{margin:4px 0 0;font-size:15px}
-  .di-type-card p{margin:0;font-size:12px;color:var(--muted,#7f8c8d)}
-  .di-badge-soon{align-self:flex-start;font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px;background:#fef9e7;color:#e67e22}
-  .di-form{background:var(--card,#fff);border:1.5px solid var(--border,#e2e8f0);border-radius:16px;padding:26px}
-  .di-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-  .di-field{display:flex;flex-direction:column;gap:6px}
-  .di-field label{font-size:13px;font-weight:600;color:var(--text,#2c3e50)}
-  .di-field input,.di-field select,.di-field textarea{padding:10px 12px;border:1.5px solid var(--border,#d5dde8);
-    border-radius:9px;font-size:14px;font-family:inherit;background:var(--input,#f8fafc);outline:none;width:100%}
-  .di-field input:focus,.di-field select:focus,.di-field textarea:focus{border-color:var(--primary,#3B4FBE);background:#fff}
-  .di-field input.di-auto{background:#eef1fc;color:#3B4FBE;font-weight:700;border-color:#c9d2f7;cursor:not-allowed}
-  .di-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:22px}
-  .di-btn{padding:11px 22px;border:none;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit}
-  .di-btn-primary{background:linear-gradient(135deg,#3B4FBE,#7C92FF);color:#fff}
-  .di-btn-ghost{background:var(--input,#f0f4f8);color:var(--text,#2c3e50)}
-  .di-alert{display:none;padding:12px 16px;border-radius:9px;font-size:13px;margin-bottom:16px}
-  .di-alert.err{display:block;background:#fdf0ef;color:#e74c3c;border-left:3px solid #e74c3c}
+  .di-type-card{display:flex;flex-direction:column;gap:8px;padding:20px;border:1.5px solid #e8ecf3;
+    border-radius:16px;background:var(--card,#fff);cursor:pointer;text-decoration:none;color:inherit;transition:.18s;box-shadow:0 1px 2px rgba(20,30,80,.04)}
+  .di-type-card:hover{border-color:#7C92FF;transform:translateY(-3px);box-shadow:0 12px 28px rgba(59,79,190,.14)}
+  .di-type-card .ic{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,#3B4FBE,#7C92FF);color:#fff;font-size:21px}
+  .di-type-card h4{margin:6px 0 0;font-size:15px;font-weight:700}
+  .di-type-card p{margin:0;font-size:12.5px;color:var(--muted,#7f8c8d);line-height:1.5}
+  .di-back{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#7482a0;text-decoration:none;font-weight:600;margin-bottom:14px;transition:.15s}
+  .di-back:hover{color:#3B4FBE}
+  .di-head{display:flex;align-items:flex-start;gap:14px;margin-bottom:18px}
+  .di-head .ic{width:48px;height:48px;flex-shrink:0;border-radius:14px;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,#3B4FBE,#7C92FF);color:#fff;font-size:23px;box-shadow:0 6px 16px rgba(59,79,190,.25)}
+  .di-head h2{margin:0 0 3px;font-size:21px;font-weight:800;color:var(--navy,#06033A);letter-spacing:-.2px}
+  .di-head p{margin:0;font-size:13.5px;color:var(--muted,#7f8c8d);line-height:1.5}
+  .di-circuit{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:13px 16px;margin-bottom:20px;background:#f4f6fd;border:1px solid #e6eaf8;border-radius:13px}
+  .di-circuit-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#8a93b8;margin-right:2px}
+  .di-cstep{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid #dfe4fb;border-radius:9px;padding:5px 12px 5px 6px;font-size:12.5px;font-weight:600;color:#3B4FBE}
+  .di-cnum{width:19px;height:19px;border-radius:6px;background:linear-gradient(135deg,#3B4FBE,#7C92FF);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+  .di-carrow{color:#b9c2e6;font-size:13px}
+  .di-form{background:var(--card,#fff);border:1px solid #e8ecf3;border-radius:18px;padding:28px 30px;box-shadow:0 4px 24px rgba(20,30,80,.05)}
+  .di-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px 20px}
+  .di-field{display:flex;flex-direction:column;gap:7px}
+  .di-field>label{font-size:12.5px;font-weight:600;color:#46506b;letter-spacing:.1px}
+  .di-field input:not([type=checkbox]),.di-field select,.di-field textarea{padding:0 14px;height:44px;border:1.5px solid #e4e8f1;
+    border-radius:10px;font-size:14px;font-family:inherit;background:#f8fafc;color:#1f2a44;outline:none;width:100%;transition:border-color .15s,box-shadow .15s,background .15s}
+  .di-field textarea{height:auto;min-height:92px;padding:11px 14px;resize:vertical;line-height:1.5}
+  .di-field input::placeholder,.di-field textarea::placeholder{color:#a3adbf}
+  .di-field input:not([type=checkbox]):hover,.di-field select:hover,.di-field textarea:hover{border-color:#cfd6e4}
+  .di-field input:not([type=checkbox]):focus,.di-field select:focus,.di-field textarea:focus{border-color:#3B4FBE;background:#fff;box-shadow:0 0 0 3.5px rgba(59,79,190,.13)}
+  .di-field input.di-auto{background:#eef1fc;color:#3B4FBE;font-weight:700;border-color:#cdd4f6;cursor:not-allowed}
+  .di-field select{cursor:pointer;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237482a0' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 13px center;padding-right:40px}
+  .di-field input[type=checkbox]{width:17px;height:17px;accent-color:#3B4FBE;cursor:pointer}
+  .di-plats{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:9px}
+  .di-plat{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:500;cursor:pointer;padding:10px 13px;border:1.5px solid #e4e8f1;border-radius:10px;background:#f8fafc;transition:.15s}
+  .di-plat:hover{border-color:#cfd6e4}
+  .di-plat:has(input:checked){border-color:#3B4FBE;background:#eef1fc;color:#3B4FBE}
+  .di-req-note{font-size:12px;color:#9aa4b8}
+  .di-req-note b{color:#ef4444;font-weight:700}
+  .di-actions{display:flex;gap:12px;justify-content:space-between;align-items:center;margin-top:24px;padding-top:20px;border-top:1px solid #eef1f6}
+  .di-btn{display:inline-flex;align-items:center;gap:8px;padding:12px 24px;border:1.5px solid transparent;border-radius:11px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;transition:.16s}
+  .di-btn i{font-size:17px}
+  .di-btn-primary{background:linear-gradient(135deg,#3B4FBE,#7C92FF);color:#fff;box-shadow:0 6px 16px rgba(59,79,190,.28)}
+  .di-btn-primary:hover{transform:translateY(-1px);box-shadow:0 9px 22px rgba(59,79,190,.34)}
+  .di-btn-ghost{background:#f1f4fa;color:#475069}
+  .di-btn-ghost:hover{background:#e6ebf5}
+  .di-alert{display:none;padding:12px 16px;border-radius:10px;font-size:13px;margin-bottom:18px}
+  .di-alert.err{display:flex;gap:8px;align-items:center;background:#fdf0ef;color:#e74c3c;border-left:3px solid #e74c3c}
 </style>
 
 <div class="di-wrap">
@@ -115,12 +139,21 @@ include __DIR__ . '/../templates/header.php';
     $fields = di_champs_of($sel);
     $wf     = di_workflow($sel);
 ?>
-  <a href="<?= APP_URL ?>/pages/demandes_new.php" style="font-size:13px;color:var(--muted,#7f8c8d);text-decoration:none">← Changer de type</a>
-  <h2 style="margin:8px 0 4px"><?= h($type['label']) ?></h2>
-  <p style="color:var(--muted,#7f8c8d);margin:0 0 8px"><?= h($type['description']) ?></p>
-  <p style="font-size:12px;color:var(--muted,#7f8c8d);margin:0 0 20px">
-    Circuit : <?= implode(' → ', array_map(fn($s)=>h($s['label']), $wf)) ?>
-  </p>
+  <a href="<?= APP_URL ?>/pages/demandes_new.php" class="di-back"><i class="ph-bold ph-arrow-left"></i> Changer de type</a>
+  <div class="di-head">
+    <div class="ic"><i class="ph-duotone ph-file-text"></i></div>
+    <div>
+      <h2><?= h($type['label']) ?></h2>
+      <p><?= h($type['description']) ?></p>
+    </div>
+  </div>
+  <div class="di-circuit">
+    <span class="di-circuit-lbl">Circuit</span>
+    <?php foreach ($wf as $i => $s): ?>
+      <?php if ($i): ?><i class="ph-bold ph-arrow-right di-carrow"></i><?php endif; ?>
+      <span class="di-cstep"><span class="di-cnum"><?= $i + 1 ?></span><?= h($s['label']) ?></span>
+    <?php endforeach; ?>
+  </div>
 
   <form class="di-form" id="di-form" onsubmit="return false">
     <input type="hidden" name="type_code" value="<?= h($sel) ?>">
@@ -129,8 +162,11 @@ include __DIR__ . '/../templates/header.php';
       <?php foreach ($fields as $f) echo di_render_field($f); ?>
     </div>
     <div class="di-actions">
-      <button type="button" class="di-btn di-btn-ghost" onclick="diSubmit('brouillon')">Enregistrer brouillon</button>
-      <button type="button" class="di-btn di-btn-primary" onclick="diSubmit('soumettre')">Soumettre la demande</button>
+      <span class="di-req-note"><b>*</b> champ obligatoire</span>
+      <div style="display:flex;gap:12px">
+        <button type="button" class="di-btn di-btn-ghost" onclick="diSubmit('brouillon')"><i class="ph-duotone ph-floppy-disk"></i> Enregistrer brouillon</button>
+        <button type="button" class="di-btn di-btn-primary" onclick="diSubmit('soumettre')"><i class="ph-duotone ph-paper-plane-tilt"></i> Soumettre la demande</button>
+      </div>
     </div>
   </form>
 <?php endif; ?>
