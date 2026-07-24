@@ -43,12 +43,12 @@ function di_champs_config(): array {
             ['key'=>'plateformes',    'label'=>'Accès aux plateformes',    'type'=>'plateformes', 'span'=>true],
         ],
         'basculement_acces' => [
-            ['key'=>'agent_nom',     'label'=>"Nom & Prénoms de l'agent", 'type'=>'text',  'required'=>true],
+            ['key'=>'agent_nom',     'label'=>"Nom & Prénoms de l'agent", 'type'=>'agent', 'required'=>true],
             ['key'=>'agent_email',   'label'=>"Email de l'agent",         'type'=>'email'],
             ['key'=>'agent_fonction','label'=>"Fonction de l'agent",      'type'=>'text'],
             ['key'=>'periode_acces', 'label'=>"Période d'accès",          'type'=>'daterange', 'span'=>true],
-            ['key'=>'site_origine',  'label'=>"Site d'origine",           'type'=>'text',  'required'=>true],
-            ['key'=>'nouveau_site',  'label'=>'Nouveau site',             'type'=>'text',  'required'=>true],
+            ['key'=>'site_origine',  'label'=>"Site d'origine",           'type'=>'site',  'required'=>true],
+            ['key'=>'nouveau_site',  'label'=>'Nouveau site',             'type'=>'site',  'required'=>true],
             ['key'=>'ancien_role',   'label'=>'Ancien rôle',              'type'=>'text',  'required'=>true],
             ['key'=>'nouveau_role',  'label'=>'Nouveau rôle',             'type'=>'text',  'required'=>true],
             ['key'=>'date_demande',  'label'=>'Date de la demande',       'type'=>'date'],
@@ -186,6 +186,23 @@ function di_render_field(array $f, $value = ''): string {
                . h($p['label']).'</label>';
         }
         echo '</div>';
+    } elseif ($type === 'agent') {
+        // Liste déroulante recherchable des agents (users actifs) ; alimente email + fonction (rôle ERP)
+        echo "<input type=\"text\" id=\"f_$key\" name=\"champs[$key]\" value=\"$v\" list=\"dl_$key\" autocomplete=\"off\" data-agentfill=\"1\"$reqA>";
+        echo "<datalist id=\"dl_$key\">";
+        foreach (db_fetch_all("SELECT u.prenom, u.nom, u.email, r.nom AS fonction FROM users u JOIN roles r ON r.id=u.role_id WHERE u.actif=1 ORDER BY u.nom, u.prenom") as $u) {
+            $full = h(trim(($u['prenom'] ?? '').' '.($u['nom'] ?? '')));
+            echo '<option value="'.$full.'" data-email="'.h((string)($u['email'] ?? '')).'" data-fonction="'.h((string)($u['fonction'] ?? '')).'"></option>';
+        }
+        echo "</datalist>";
+    } elseif ($type === 'site') {
+        // Liste déroulante recherchable des sites actifs (saisie libre autorisée)
+        echo "<input type=\"text\" id=\"f_$key\" name=\"champs[$key]\" value=\"$v\" list=\"dl_$key\" autocomplete=\"off\"$reqA>";
+        echo "<datalist id=\"dl_$key\">";
+        foreach (db_fetch_all("SELECT nom FROM sites WHERE actif=1 ORDER BY nom") as $s) {
+            echo '<option value="'.h($s['nom']).'"></option>';
+        }
+        echo "</datalist>";
     } else {
         $t = in_array($type, ['number','date','email']) ? $type : 'text';
         echo "<input type=\"$t\" id=\"f_$key\" name=\"champs[$key]\" value=\"$v\"$reqA>";

@@ -151,6 +151,25 @@ function diSubmit(action){
     })
     .catch(()=>{ err.classList.add('err'); err.textContent='Erreur réseau.'; });
 }
+
+// Auto-remplissage agent : un champ [data-agentfill] alimente #f_agent_email et #f_agent_fonction
+(function(){
+  document.querySelectorAll('input[data-agentfill]').forEach(function(inp){
+    var dl = document.getElementById(inp.getAttribute('list'));
+    if(!dl) return;
+    function fill(){
+      var val = inp.value.trim(), opts = dl.options, match = null;
+      for(var i=0; i<opts.length; i++){ if(opts[i].value === val){ match = opts[i]; break; } }
+      if(!match) return;
+      var em = document.getElementById('f_agent_email');
+      var fo = document.getElementById('f_agent_fonction');
+      if(em && match.dataset.email)    em.value = match.dataset.email;
+      if(fo && match.dataset.fonction) fo.value = match.dataset.fonction;
+    }
+    inp.addEventListener('input', fill);
+    inp.addEventListener('change', fill);
+  });
+})();
 </script>
 
 <?php if ($sel === 'autorisation_absence'): ?>
