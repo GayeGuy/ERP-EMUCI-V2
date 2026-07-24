@@ -12,6 +12,9 @@ function di_champs_config(): array {
         // Choisir un type + saisir « Du » remplit automatiquement jours, « Au » et la reprise (JS
         // dans demandes_new.php). « — Aucune — » = saisie manuelle libre (congé/permission simple).
         'autorisation_absence' => [
+            ['key'=>'agent_nom',     'label'=>"Nom & Prénoms de l'agent", 'type'=>'agent', 'required'=>true],
+            ['key'=>'agent_email',   'label'=>"Email de l'agent",         'type'=>'email'],
+            ['key'=>'agent_fonction','label'=>"Fonction de l'agent",      'type'=>'text'],
             ['key'=>'type_permission','label'=>'Type de permission', 'type'=>'select', 'span'=>true,
              'options'=>[
                 '' => '— Aucune (saisie manuelle) —',
@@ -55,7 +58,9 @@ function di_champs_config(): array {
             ['key'=>'plateformes',   'label'=>'Accès aux plateformes',    'type'=>'plateformes', 'span'=>true],
         ],
         'basculement_compte' => [
-            ['key'=>'agent_nom',      'label'=>"Nom & Prénom de l'agent", 'type'=>'text', 'required'=>true],
+            ['key'=>'agent_nom',      'label'=>"Nom & Prénoms de l'agent", 'type'=>'agent', 'required'=>true],
+            ['key'=>'agent_email',    'label'=>"Email de l'agent",         'type'=>'email'],
+            ['key'=>'agent_fonction', 'label'=>"Fonction de l'agent",      'type'=>'text'],
             ['key'=>'agent_matricule','label'=>"Matricule de l'agent",    'type'=>'text'],
             ['key'=>'site',           'label'=>'Site',                    'type'=>'text', 'required'=>true],
             ['key'=>'ancien_poste',   'label'=>'Ancien poste',            'type'=>'text', 'required'=>true],
@@ -70,7 +75,8 @@ function di_champs_config(): array {
                 'Réorganisation des équipes'=>'Réorganisation des équipes', 'Autre'=>'Autre']],
         ],
         'transfert_agent' => [
-            ['key'=>'agent_nom',     'label'=>"Nom & Prénoms de l'agent", 'type'=>'text', 'required'=>true],
+            ['key'=>'agent_nom',     'label'=>"Nom & Prénoms de l'agent", 'type'=>'agent', 'required'=>true],
+            ['key'=>'agent_email',   'label'=>"Email de l'agent",         'type'=>'email'],
             ['key'=>'agent_fonction','label'=>"Fonction de l'agent",      'type'=>'text'],
             ['key'=>'site_origine',  'label'=>"Site d'origine",           'type'=>'text', 'required'=>true],
             ['key'=>'nouveau_site',  'label'=>'Nouveau site',             'type'=>'text', 'required'=>true],
@@ -107,6 +113,9 @@ function di_champs_config(): array {
             ['key'=>'echeance',       'label'=>'Échéance de traitement', 'type'=>'date'],
         ],
         'exceptionnel' => [
+            ['key'=>'agent_nom',     'label'=>"Nom & Prénoms de l'agent", 'type'=>'agent', 'required'=>true],
+            ['key'=>'agent_email',   'label'=>"Email de l'agent",         'type'=>'email'],
+            ['key'=>'agent_fonction','label'=>"Fonction de l'agent",      'type'=>'text'],
             ['key'=>'date_souhaitee','label'=>'Date souhaitée',       'type'=>'date'],
             ['key'=>'objet',         'label'=>'Objet de la demande',  'type'=>'text', 'required'=>true],
             ['key'=>'motif',         'label'=>'Motif (obligatoire)',  'type'=>'textarea', 'required'=>true, 'span'=>true],
