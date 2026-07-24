@@ -8,15 +8,13 @@
 
 function di_champs_config(): array {
     return [
+        // Type de permission en premier : il porte le nombre de jours autorisés (entre parenthèses).
+        // Choisir un type + saisir « Du » remplit automatiquement jours, « Au » et la reprise (JS
+        // dans demandes_new.php). « — Aucune — » = saisie manuelle libre (congé/permission simple).
         'autorisation_absence' => [
-            ['key'=>'nb_jours',      'label'=>'Nombre de jours demandés', 'type'=>'number', 'required'=>true],
-            ['key'=>'date_debut',    'label'=>'Du',                        'type'=>'date',   'required'=>true],
-            ['key'=>'date_fin',      'label'=>'Au (inclus)',               'type'=>'date',   'required'=>true],
-            ['key'=>'date_reprise',  'label'=>'Date de reprise du service','type'=>'date',   'required'=>true],
-            ['key'=>'motif',         'label'=>'Motif',                     'type'=>'textarea','required'=>true, 'span'=>true],
-            ['key'=>'type_permission','label'=>'Type de permission exceptionnelle', 'type'=>'select', 'span'=>true,
+            ['key'=>'type_permission','label'=>'Type de permission', 'type'=>'select', 'span'=>true,
              'options'=>[
-                '' => '— Aucune —',
+                '' => '— Aucune (saisie manuelle) —',
                 'Mariage du travailleur (4j)'      => 'Mariage du travailleur (4j)',
                 "Mariage d'un enfant (2j)"         => "Mariage d'un enfant (2j)",
                 'Mariage frère/sœur (2j)'          => 'Mariage frère/sœur (2j)',
@@ -28,6 +26,10 @@ function di_champs_config(): array {
                 'Première communion (1j)'          => 'Première communion (1j)',
                 'Déménagement (1j)'                => 'Déménagement (1j)',
              ]],
+            ['key'=>'date_debut',    'label'=>'Du (date de départ)',       'type'=>'date',   'required'=>true],
+            ['key'=>'nb_jours',      'label'=>'Nombre de jours demandés',  'type'=>'number', 'required'=>true],
+            ['key'=>'date_fin',      'label'=>'Au (inclus)',               'type'=>'date',   'required'=>true],
+            ['key'=>'date_reprise',  'label'=>'Date de reprise du service','type'=>'date',   'required'=>true],
         ],
         'creation_acces' => [
             ['key'=>'agent_nom',      'label'=>"Nom & Prénoms de l'agent", 'type'=>'text',  'required'=>true],

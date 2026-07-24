@@ -73,6 +73,7 @@ include __DIR__ . '/../templates/header.php';
   .di-field input,.di-field select,.di-field textarea{padding:10px 12px;border:1.5px solid var(--border,#d5dde8);
     border-radius:9px;font-size:14px;font-family:inherit;background:var(--input,#f8fafc);outline:none;width:100%}
   .di-field input:focus,.di-field select:focus,.di-field textarea:focus{border-color:var(--primary,#3B4FBE);background:#fff}
+  .di-field input.di-auto{background:#eef1fc;color:#3B4FBE;font-weight:700;border-color:#c9d2f7;cursor:not-allowed}
   .di-actions{display:flex;gap:12px;justify-content:flex-end;margin-top:22px}
   .di-btn{padding:11px 22px;border:none;border-radius:10px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit}
   .di-btn-primary{background:linear-gradient(135deg,#3B4FBE,#7C92FF);color:#fff}
@@ -151,5 +152,55 @@ function diSubmit(action){
     .catch(()=>{ err.classList.add('err'); err.textContent='Erreur réseau.'; });
 }
 </script>
+
+<?php if ($sel === 'autorisation_absence'): ?>
+<script>
+// Auto-remplissage : Type de permission (jours entre parenthèses) + Du → jours, Au, reprise
+(function(){
+  var type  = document.getElementById('f_type_permission');
+  var debut = document.getElementById('f_date_debut');
+  var jours = document.getElementById('f_nb_jours');
+  var fin   = document.getElementById('f_date_fin');
+  var rep   = document.getElementById('f_date_reprise');
+  if(!type || !debut || !jours || !fin || !rep) return;
+  var autos = [jours, fin, rep];
+
+  function selDays(){
+    var opt = type.options[type.selectedIndex];
+    var m = opt ? opt.text.match(/\((\d+)\s*j\)/i) : null;
+    return m ? parseInt(m[1], 10) : null;
+  }
+  function addDays(iso, n){
+    if(!iso) return '';
+    var d = new Date(iso + 'T00:00:00');
+    if(isNaN(d.getTime())) return '';
+    d.setDate(d.getDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+  function setAuto(on){
+    autos.forEach(function(el){
+      el.readOnly = on;
+      el.classList.toggle('di-auto', on);
+      el.style.pointerEvents = on ? 'none' : '';
+      el.tabIndex = on ? -1 : 0;
+    });
+  }
+  function apply(){
+    var d = selDays();
+    if(d){
+      setAuto(true);
+      jours.value = d;
+      fin.value = debut.value ? addDays(debut.value, d - 1) : '';
+      rep.value = debut.value ? addDays(debut.value, d)     : '';
+    } else {
+      setAuto(false);
+    }
+  }
+  type.addEventListener('change', apply);
+  debut.addEventListener('change', apply);
+  apply();
+})();
+</script>
+<?php endif; ?>
 
 <?php include __DIR__ . '/../templates/footer.php'; ?>
