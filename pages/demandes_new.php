@@ -155,7 +155,8 @@ function diSubmit(action){
 
 <?php if ($sel === 'autorisation_absence'): ?>
 <script>
-// Auto-remplissage : Type de permission (jours entre parenthèses) + Du → jours, Au, reprise
+// Auto-remplissage : Type de permission (jours entre parenthèses) + Du → jours, Au, reprise.
+// La reprise saute au prochain jour ouvré (week-ends + jours fériés de Côte d'Ivoire).
 (function(){
   var type  = document.getElementById('f_type_permission');
   var debut = document.getElementById('f_date_debut');
@@ -165,17 +166,52 @@ function diSubmit(action){
   if(!type || !debut || !jours || !fin || !rep) return;
   var autos = [jours, fin, rep];
 
-  function selDays(){
-    var opt = type.options[type.selectedIndex];
-    var m = opt ? opt.text.match(/\((\d+)\s*j\)/i) : null;
-    return m ? parseInt(m[1], 10) : null;
-  }
+  // Fériés islamiques (calendrier lunaire) : à confirmer/compléter chaque année selon le décret
+  // officiel. Aïd el-Fitr, Tabaski, Maouloud. 2026 = dates officielles ; 2027 = estimations.
+  var FERIES_ISLAM = {
+    2026: ['2026-03-20', '2026-05-27', '2026-08-26'],
+    2027: ['2027-03-10', '2027-05-16', '2027-08-15']
+  };
+  var cacheFeries = {};
+
+  function parseISO(iso){ var p = iso.split('-'); return new Date(Date.UTC(+p[0], +p[1]-1, +p[2])); }
+  function toISO(d){ return d.toISOString().slice(0, 10); }
   function addDays(iso, n){
     if(!iso) return '';
-    var d = new Date(iso + 'T00:00:00');
+    var d = parseISO(iso);
     if(isNaN(d.getTime())) return '';
-    d.setDate(d.getDate() + n);
-    return d.toISOString().slice(0, 10);
+    d.setUTCDate(d.getUTCDate() + n);
+    return toISO(d);
+  }
+  // Dimanche de Pâques (grégorien, algorithme de Computus)
+  function paques(y){
+    var a=y%19, b=Math.floor(y/100), c=y%100, d=Math.floor(b/4), e=b%4,
+        f=Math.floor((b+8)/25), g=Math.floor((b-f+1)/3), h=(19*a+b-d-g+15)%30,
+        i=Math.floor(c/4), k=c%4, l=(32+2*e+2*i-h-k)%7, m=Math.floor((a+11*h+22*l)/451),
+        mo=Math.floor((h+l-7*m+114)/31), jr=((h+l-7*m+114)%31)+1;
+    return new Date(Date.UTC(y, mo-1, jr));
+  }
+  function feriesDe(y){
+    if(cacheFeries[y]) return cacheFeries[y];
+    var s = {};
+    // Fixes : jour de l'an, fête du travail, fête nationale, assomption, toussaint, paix, noël
+    ['01-01','05-01','08-07','08-15','11-01','11-15','12-25'].forEach(function(md){ s[y+'-'+md]=1; });
+    // Chrétiens mobiles : lundi de Pâques (+1), Ascension (+39), lundi de Pentecôte (+50)
+    var p = paques(y);
+    [1,39,50].forEach(function(off){ var d=new Date(p); d.setUTCDate(d.getUTCDate()+off); s[toISO(d)]=1; });
+    (FERIES_ISLAM[y] || []).forEach(function(iso){ s[iso]=1; });
+    cacheFeries[y] = s;
+    return s;
+  }
+  function estChome(iso){
+    var d = parseISO(iso), j = d.getUTCDay();
+    if(j===0 || j===6) return true;            // dimanche / samedi
+    return !!feriesDe(d.getUTCFullYear())[iso]; // jour férié
+  }
+  function prochainOuvre(iso){
+    if(!iso) return '';
+    for(var g=0; g<60 && estChome(iso); g++){ iso = addDays(iso, 1); }
+    return iso;
   }
   function setAuto(on){
     autos.forEach(function(el){
@@ -185,13 +221,18 @@ function diSubmit(action){
       el.tabIndex = on ? -1 : 0;
     });
   }
+  function selDays(){
+    var opt = type.options[type.selectedIndex];
+    var m = opt ? opt.text.match(/\((\d+)\s*j\)/i) : null;
+    return m ? parseInt(m[1], 10) : null;
+  }
   function apply(){
     var d = selDays();
     if(d){
       setAuto(true);
       jours.value = d;
       fin.value = debut.value ? addDays(debut.value, d - 1) : '';
-      rep.value = debut.value ? addDays(debut.value, d)     : '';
+      rep.value = debut.value ? prochainOuvre(addDays(debut.value, d)) : '';
     } else {
       setAuto(false);
     }
