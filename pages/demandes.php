@@ -71,49 +71,103 @@ function di_pdf_html(array $d): string {
     $wf   = di_workflow_of($d);
     $champs = $d['champs'];
     $fields = di_champs_of($d['type_code']);
-    [$slbl,$sc] = di_statut_label($d['statut']);
+    [$slbl, $sc] = di_statut_label($d['statut']);
+    $cur = (int)$d['etape_actuelle'];
+    $enCours = in_array($d['statut'], ['en_attente','en_cours'], true);
 
+    // Détails de la demande
     $rows = '';
     foreach ($fields as $f) {
         $val = $champs[$f['key']] ?? '';
         if (di_value_empty($val)) continue;
-        $rows .= '<tr><td class="k">'.h($f['label']).'</td><td class="v">'.di_display_value($f, $val).'</td></tr>';
+        $rows .= '<tr><td class="k">'.h($f['label']).'</td><td class="v">'.nl2br(di_display_value($f, $val)).'</td></tr>';
     }
-    $sigs = '';
-    foreach ($d['signatures'] as $s) {
-        $act = ($s['action'] ?? '') === 'rejete' ? '<span style="color:#e74c3c">✗ Rejeté</span>' : '<span style="color:#27ae60">✓ Approuvé</span>';
-        $note = h($s['commentaire'] ?? $s['motif'] ?? '');
-        $sigs .= '<tr><td>'.h($s['etape_label'] ?? '').'</td><td>'.h($s['nom'] ?? '').'</td><td>'.$act.'</td><td>'.$note.'</td></tr>';
-    }
-    if ($sigs === '') $sigs = '<tr><td colspan="4" style="text-align:center;color:#999">Aucun visa pour le moment</td></tr>';
+    if ($rows === '') $rows = '<tr><td class="k" style="color:#b0b7c3">Aucun détail saisi</td><td class="v"></td></tr>';
 
-    return '<!DOCTYPE html><html><head><meta charset="utf-8"><style>
-      body{font-family:"DejaVu Sans",sans-serif;color:#2c3e50;font-size:12px;margin:0}
-      .hd{background:#06033A;color:#fff;padding:18px 26px}
-      .hd h1{margin:0;font-size:18px}.hd .sub{font-size:11px;opacity:.8;margin-top:3px}
-      .wrap{padding:22px 26px}
-      .sec{font-size:12px;font-weight:700;color:#3B4FBE;text-transform:uppercase;letter-spacing:.5px;
-        border-bottom:2px solid #e2e8f0;padding-bottom:5px;margin:20px 0 10px}
-      table{width:100%;border-collapse:collapse}
-      .info td{padding:5px 8px;font-size:12px}.info td.k{color:#7f8c8d;width:38%}.info td.v{font-weight:600}
-      .badge{display:inline-block;padding:3px 12px;border-radius:10px;color:#fff;font-size:11px;font-weight:700;background:'.$sc.'}
-      .sig{width:100%;border-collapse:collapse;margin-top:6px}
-      .sig th{background:#f0f4f8;text-align:left;padding:6px 8px;font-size:11px;color:#555}
-      .sig td{padding:6px 8px;border-bottom:1px solid #eee;font-size:11px}
-      .ft{margin-top:26px;text-align:center;color:#999;font-size:10px;border-top:1px solid #eee;padding-top:8px}
-    </style></head><body>
-    <div class="hd"><h1>'.h($type['label']).'</h1><div class="sub">EMU-CI · Réf. '.h($d['numero']).' · '.date('d/m/Y', strtotime($d['created_at'])).'</div></div>
-    <div class="wrap">
-      <div class="sec">Demandeur</div>
-      <table class="info"><tr><td class="k">Nom</td><td class="v">'.h($dnom).'</td></tr>
-        <tr><td class="k">Email</td><td class="v">'.h($demandeur['email'] ?? '').'</td></tr>
-        <tr><td class="k">Statut</td><td><span class="badge">'.h($slbl).'</span></td></tr></table>
-      <div class="sec">Détails de la demande</div>
-      <table class="info">'.$rows.'</table>
-      <div class="sec">Validations</div>
-      <table class="sig"><tr><th>Étape</th><th>Visa par</th><th>Décision</th><th>Note</th></tr>'.$sigs.'</table>
-      <div class="ft">Document généré automatiquement par EMU-CI — Réf. '.h($d['numero']).' — '.date('d/m/Y H:i').'</div>
-    </div></body></html>';
+    // Signatures indexées par étape du circuit
+    $sigByStep = [];
+    foreach ($d['signatures'] as $s) { $sigByStep[(int)($s['etape'] ?? -1)] = $s; }
+
+    // Circuit (chips) + visas (une ligne par étape, signée ou en attente)
+    $chips = ''; $visaRows = '';
+    foreach ($wf as $i => $st) {
+        $label = h($st['label']);
+        $sig = $sigByStep[$i] ?? null;
+        $act = $sig['action'] ?? '';
+        if ($act === 'approuve')            $chips .= '<span class="chip c-done">✓ '.$label.'</span>';
+        elseif ($act === 'rejete')          $chips .= '<span class="chip c-no">✗ '.$label.'</span>';
+        elseif ($i === $cur && $enCours)    $chips .= '<span class="chip c-cur">'.($i + 1).'. '.$label.'</span>';
+        else                                $chips .= '<span class="chip c-wait">'.($i + 1).'. '.$label.'</span>';
+
+        if ($sig) {
+            $dec  = $act === 'rejete' ? '<span class="no">✗ Rejeté</span>' : '<span class="ok">✓ Approuvé</span>';
+            $par  = h($sig['nom'] ?? '');
+            $dt   = !empty($sig['date']) ? date('d/m/Y', strtotime($sig['date'])) : '';
+            $note = h($sig['commentaire'] ?? $sig['motif'] ?? '');
+        } else {
+            $dec  = ($i === $cur && $enCours) ? '<span class="wait">En attente</span>' : '<span class="wait">Non atteint</span>';
+            $par  = '<span class="wait">—</span>'; $dt = ''; $note = '';
+        }
+        $visaRows .= '<tr><td><b>'.($i + 1).'.</b> '.$label.'</td><td>'.$dec.'</td><td>'.$par.'</td><td>'.$dt.'</td><td>'.$note.'</td></tr>';
+    }
+
+    $tlabel  = h($type['label'] ?? $d['type_code']);
+    $numero  = h($d['numero']);
+    $email   = h($demandeur['email'] ?? '');
+    $dnomH   = h($dnom);
+    $slblH   = h($slbl);
+    $created = date('d/m/Y', strtotime($d['created_at']));
+    $genat   = date('d/m/Y H:i');
+
+    return <<<HTML
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+  @page{margin:0}
+  body{font-family:"DejaVu Sans",sans-serif;color:#2c3e50;font-size:12px;margin:0}
+  .hd{background:#06033A;padding:18px 26px}
+  .hdt{width:100%;border-collapse:collapse}
+  .hdl{text-align:left;vertical-align:middle}
+  .hdr{text-align:right;vertical-align:top;color:#c9cee8;font-size:10px;line-height:1.55;width:32%}
+  .ttl{color:#fff;font-size:19px;font-weight:bold}
+  .sub{color:#aeb6dd;font-size:10.5px;margin-top:3px}
+  .wrap{padding:20px 26px}
+  .badge{display:inline-block;padding:4px 14px;border-radius:20px;color:#fff;font-size:10.5px;font-weight:bold}
+  .sec{font-size:11px;font-weight:bold;color:#3B4FBE;text-transform:uppercase;letter-spacing:.6px;margin:20px 0 9px}
+  .card{border:1px solid #e6eaf3;border-radius:10px;background:#fbfcfe;padding:2px 14px}
+  .info{width:100%;border-collapse:collapse}
+  .info td{padding:8px 4px;font-size:12px;border-bottom:1px solid #eef2f7;vertical-align:top}
+  .info td.k{color:#8a93a5;width:34%}
+  .info td.v{font-weight:bold;color:#1f2a44}
+  .chip{display:inline-block;padding:5px 11px;border-radius:8px;font-size:10.5px;font-weight:bold;margin:0 4px 5px 0}
+  .c-done{background:#e8f6ef;color:#1f9d5b;border:1px solid #bfe6d0}
+  .c-cur{background:#eef1fc;color:#3B4FBE;border:1px solid #cdd4f6}
+  .c-no{background:#fdecea;color:#e74c3c;border:1px solid #f6c9c4}
+  .c-wait{background:#f1f3f8;color:#98a1b3;border:1px solid #e4e8f1}
+  .vis{width:100%;border-collapse:collapse;margin-top:2px}
+  .vis th{background:#f0f3fb;text-align:left;padding:8px 9px;font-size:9.5px;color:#5a6480;text-transform:uppercase;letter-spacing:.4px}
+  .vis td{padding:9px;border-bottom:1px solid #eef2f7;font-size:11px;vertical-align:top}
+  .ok{color:#1f9d5b;font-weight:bold}
+  .no{color:#e74c3c;font-weight:bold}
+  .wait{color:#a0a8b8}
+  .ft{margin-top:24px;text-align:center;color:#aab1c0;font-size:9.5px;border-top:1px solid #eef2f7;padding-top:10px}
+</style></head><body>
+  <div class="hd"><table class="hdt"><tr>
+    <td class="hdl"><div class="ttl">{$tlabel}</div><div class="sub">Demande interne · {$dnomH}</div></td>
+    <td class="hdr">EMU-CI<br>Réf. {$numero}<br>{$created}</td>
+  </tr></table></div>
+  <div class="wrap">
+    <div style="margin-bottom:2px"><span class="badge" style="background:{$sc}">{$slblH}</span></div>
+    <div class="sec">Circuit de validation</div>
+    <div>{$chips}</div>
+    <div class="sec">Demandeur</div>
+    <div class="card"><table class="info"><tr><td class="k">Nom</td><td class="v">{$dnomH}</td></tr><tr><td class="k">Email</td><td class="v">{$email}</td></tr></table></div>
+    <div class="sec">Détails de la demande</div>
+    <div class="card"><table class="info">{$rows}</table></div>
+    <div class="sec">Visas &amp; signatures</div>
+    <table class="vis"><tr><th>Étape</th><th>Décision</th><th>Par</th><th>Date</th><th>Note</th></tr>{$visaRows}</table>
+    <div class="ft">Document généré automatiquement par EMU-CI le {$genat} — Réf. {$numero}</div>
+  </div>
+</body></html>
+HTML;
 }
 
 // ── Vue DÉTAIL (?id=)
