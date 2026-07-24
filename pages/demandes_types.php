@@ -105,8 +105,16 @@ include __DIR__ . '/../templates/header.php';
   .dt-tag.it{background:#e8f8f5;color:#16a085}
   .dt-tag.gen{background:#fef9e7;color:#e67e22}
   .dt-acts{display:flex;gap:8px;align-items:center;flex-shrink:0}
-  .dt-link{font-size:13px;color:#3B4FBE;cursor:pointer;text-decoration:none;font-weight:600}
-  .dt-link.red{color:#e74c3c}
+  .dt-act{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;line-height:1;
+    padding:7px 13px;border-radius:9px;cursor:pointer;text-decoration:none;white-space:nowrap;
+    border:1.5px solid transparent;transition:background .15s,color .15s,border-color .15s,box-shadow .15s}
+  .dt-act i{font-size:15px}
+  .dt-act-edit{background:#eef1fc;color:#3B4FBE;border-color:#dfe4fb}
+  .dt-act-edit:hover{background:#3B4FBE;color:#fff;border-color:#3B4FBE;box-shadow:0 4px 12px rgba(59,79,190,.22)}
+  .dt-act-off{background:#fdeeec;color:#e74c3c;border-color:#f7d9d5}
+  .dt-act-off:hover{background:#e74c3c;color:#fff;border-color:#e74c3c;box-shadow:0 4px 12px rgba(231,76,60,.22)}
+  .dt-act-on{background:#e8f8f0;color:#16a34a;border-color:#cdeeda}
+  .dt-act-on:hover{background:#16a34a;color:#fff;border-color:#16a34a;box-shadow:0 4px 12px rgba(22,163,74,.22)}
   /* Modal */
   .dt-modal{display:none;position:fixed;inset:0;background:rgba(6,3,58,.45);z-index:999;align-items:center;justify-content:center;padding:20px}
   .dt-modal.open{display:flex}
@@ -151,9 +159,15 @@ include __DIR__ . '/../templates/header.php';
           </div>
         </div>
         <div class="dt-acts">
-          <a class="dt-link" onclick="dtOpen('<?= h($t['code']) ?>')">Modifier</a>
-          <a class="dt-link <?= $t['actif'] ? 'red' : '' ?>" onclick="dtToggle('<?= h($t['code']) ?>', <?= $t['actif'] ? 0 : 1 ?>)">
-            <?= $t['actif'] ? 'Désactiver' : 'Activer' ?></a>
+          <a class="dt-act dt-act-edit" onclick="dtOpen('<?= h($t['code']) ?>')">
+            <i class="ph-duotone ph-pencil-simple"></i> Modifier</a>
+          <?php if ($t['actif']): ?>
+            <a class="dt-act dt-act-off" onclick="dtToggle('<?= h($t['code']) ?>', 0)">
+              <i class="ph-duotone ph-prohibit"></i> Désactiver</a>
+          <?php else: ?>
+            <a class="dt-act dt-act-on" onclick="dtToggle('<?= h($t['code']) ?>', 1)">
+              <i class="ph-duotone ph-check-circle"></i> Activer</a>
+          <?php endif; ?>
         </div>
       </div>
     </div>
