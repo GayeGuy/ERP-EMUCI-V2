@@ -123,8 +123,8 @@ function _auto_valider_stock(string $date_import, int $user_id): array {
             db_query(
                 "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,gsb_user_id,gsb_at)
                  VALUES (?,?,'valide_auto',0,?,NOW())
-                 ON DUPLICATE KEY UPDATE statut='valide_auto',nb_ecarts=0,gsb_user_id=VALUES(gsb_user_id),gsb_at=NOW()",
-                [$site_id, $date_import, $user_id]
+                 ON DUPLICATE KEY UPDATE statut='valide_auto',nb_ecarts=0,gsb_user_id=?,gsb_at=NOW()",
+                [$site_id, $date_import, $user_id, $user_id]
             );
             // Notifier coordinateurs
             $coords = db_fetch_all(
@@ -143,8 +143,8 @@ function _auto_valider_stock(string $date_import, int $user_id): array {
             db_query(
                 "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,details_ecarts)
                  VALUES (?,?,'refuse',?,?)
-                 ON DUPLICATE KEY UPDATE statut='refuse',nb_ecarts=VALUES(nb_ecarts),details_ecarts=VALUES(details_ecarts)",
-                [$site_id, $date_import, $nb_ecarts, json_encode($ecarts)]
+                 ON DUPLICATE KEY UPDATE statut='refuse',nb_ecarts=?,details_ecarts=?",
+                [$site_id, $date_import, $nb_ecarts, json_encode($ecarts), $nb_ecarts, json_encode($ecarts)]
             );
             // Notifier GSB
             $gsb_users = db_fetch_all(
@@ -249,6 +249,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                     // Supprimer import du même jour
                     db_query("DELETE FROM import_optoplate WHERE date_import=?", [$date_import]);
 
+                    try {
                     db_begin();
                     foreach ($all_rows as $row) {
                         if (count($row) < 5) continue;
@@ -304,6 +305,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                     $auto_msg = $nb_valide_auto>0?" · ✅ $nb_valide_auto site(s) validé(s) automatiquement":'';
                     $bloc_msg = $nb_bloque>0?" · ⚠️ $nb_bloque site(s) bloqué(s) — validation GSB requise":'';
                     $msg_optoplate = ['type'=>'success','text'=>"Import terminé : $nb_ok plaques importées.".($nb_err?" ($nb_err ignorées)":'').$auto_msg.$bloc_msg];
+                    } catch (Exception $e) {
+                        // PostgreSQL : indispensable de rollback, sinon la connexion
+                        // reste en transaction annulée (25P02) pour toute la page.
+                        db_rollback();
+                        $msg_optoplate = ['type'=>'danger','text'=>'Erreur import : '.$e->getMessage()];
+                    }
                 }
             }
         }
@@ -482,7 +489,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                             db_query(
                                 "UPDATE op_bobines
                                  SET stock_systeme=?, statut=?,
-                                     site_id=?, format=IF(?<>'',?,format)
+                                     site_id=?, format=CASE WHEN ?<>'' THEN ? ELSE format END
                                  WHERE id=?",
                                 [$quantity, $new_statut,
                                  $site_upd, $format, $format, $bobine['id']]
@@ -509,7 +516,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         [$nb_ok, $nb_err, $session_id]);
                     $nb_crees = (int)db_fetch_value(
                         "SELECT COUNT(*) FROM op_bobines
-                         WHERE created_at >= DATE_SUB(NOW(), INTERVAL 5 MINUTE)"
+                         WHERE created_at >= (NOW() - INTERVAL 5 MINUTE)"
                     );
                     audit_log($user['id'], 'CREATE', 'import_emuci', 0,
                         "Import OptoTrace $date_import — $nb_ok lignes, $nb_stock_maj bobines MAJ/créées");
@@ -536,6 +543,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         'text'=>"Import terminé : $nb_ok lignes importées.".($nb_err?" ($nb_err ignorées)":'').$stock_msg.$auto_msg.$bloc_msg];
 
                 } catch (Exception $e) {
+                    // PostgreSQL : rollback obligatoire pour sortir de l'état 25P02
+                    db_rollback();
                     $msg_optotrace = ['type'=>'danger','text'=>'Erreur : '.$e->getMessage()];
                 }
             }

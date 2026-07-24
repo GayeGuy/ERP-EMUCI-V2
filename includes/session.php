@@ -97,7 +97,7 @@ function _check_permission_db(int $role_id, string $module, string $droit): bool
     $key = "$role_id:$module:$droit";
     if (!array_key_exists($key, $cache)) {
         $cache[$key] = (bool)db_fetch_value(
-            "SELECT `$droit` FROM permissions WHERE role_id=? AND module=?",
+            "SELECT $droit FROM permissions WHERE role_id=? AND module=?",
             [$role_id, $module]
         );
     }

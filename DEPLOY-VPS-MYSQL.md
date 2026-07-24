@@ -58,6 +58,13 @@ de production — le patch en fin de fichier est idempotent) :
 mysql -u stockapp -p stockapp < /var/www/stockapp/sql/stockapp.sql
 ```
 
+Puis charger le module **Demandes internes** (tables `di_*`, départements, rôles
+RAF/DAF/Directeur Général, permissions — idempotent) :
+
+```bash
+mysql -u stockapp -p stockapp < /var/www/stockapp/sql/demandes_internes_mysql.sql
+```
+
 ## 5. Configurer les identifiants
 
 Créer le fichier `.env` à la racine (chargé automatiquement par `includes/db.php`) :

@@ -6,7 +6,7 @@
 
 define('TOUS_LES_GROUPES', [
     'DASHBOARD','OPERATIONS','BOBINES','STOCK',
-    'INFORMATIQUE','RAPPORTS','ADMINISTRATION'
+    'INFORMATIQUE','RAPPORTS','DEMANDES','ADMINISTRATION'
 ]);
 
 function _groupes_def(): array {
@@ -150,6 +150,29 @@ function _groupes_def(): array {
             ],
         ],
 
+        // ── DEMANDES INTERNES (transversal — tous les employés)
+        'DEMANDES' => [
+            'icon'        => 'ph-file-text',
+            'titre'       => 'Demandes internes',
+            'description' => 'Demandes administratives dématérialisées et circuits de validation',
+            'couleur'     => '#3B4FBE',
+            'gradient'    => 'linear-gradient(135deg, #3B4FBE 0%, #7C92FF 100%)',
+            'first_page'  => 'pages/demandes.php',
+            'nav' => [
+                ['label'=>'Mes demandes',    'icon'=>'ph-list-checks',
+                 'url'=>'pages/demandes.php','active_keys'=>['demandes']],
+                ['label'=>'Nouvelle demande','icon'=>'ph-plus-circle',
+                 'url'=>'pages/demandes_new.php','active_keys'=>['demandes_new']],
+                ['label'=>'À valider',       'icon'=>'ph-seal-check',
+                 'url'=>'pages/demandes_a_valider.php','active_keys'=>['demandes_valider']],
+                ['label'=>'Types & circuits','icon'=>'ph-git-branch',
+                 'url'=>'pages/demandes_types.php','active_keys'=>['demandes_types'],
+                 'roles_include'=>['admin','superadmin']],
+                // « Rôles valideurs » retiré : la validation est désormais pilotée par le rôle ERP
+                // (Administration → Permissions). Voir di_user_roles() dans includes/demandes.php.
+            ],
+        ],
+
         // ── 8. ADMINISTRATION
         'ADMINISTRATION' => [
             'icon'        => 'ph-shield-check',
@@ -171,6 +194,8 @@ function _groupes_def(): array {
                  'url'=>'pages/delegations.php','active_keys'=>['delegations']],
                 ['label'=>'Sites',         'icon'=>'ph-buildings',
                  'url'=>'pages/sites.php','active_keys'=>['sites']],
+                ['label'=>'Départements',  'icon'=>'ph-tree-structure',
+                 'url'=>'pages/admin/departements.php','active_keys'=>['departements']],
             ],
         ],
     ];
@@ -202,11 +227,17 @@ function get_groupes_pour_role(string $role_slug): array {
         'gestionnaire_stock_bobines' => ['DASHBOARD','OPERATIONS','BOBINES','STOCK'],
         // Lecture seule
         'lecteur'                    => ['DASHBOARD','OPERATIONS','BOBINES','STOCK','RAPPORTS'],
+        // RAF / DAF — validation administrative et financière
+        'raf'                        => ['DASHBOARD','RAPPORTS'],
+        'daf'                        => ['DASHBOARD','RAPPORTS'],
         // Admin
         'admin'                      => $all,
         'superadmin'                 => $all,
     ];
-    return $map[$role_slug] ?? ['DASHBOARD'];
+    $groupes = $map[$role_slug] ?? ['DASHBOARD'];
+    // « Demandes internes » est transversal : visible par tous les rôles.
+    if (!in_array('DEMANDES', $groupes, true)) $groupes[] = 'DEMANDES';
+    return $groupes;
 }
 
 // ── Retourne les groupes accessibles pour l'utilisateur connecté (clé => def)
