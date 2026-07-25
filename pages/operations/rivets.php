@@ -230,6 +230,85 @@ if (isset($_GET['export'])) {
         echo $pdf->output();
         exit;
     }
+
+    // ── PDF SYNTHÈSE MENSUELLE RIVETS
+    if ($export === 'pdf_mensuel') {
+        $mois_fr = ['01'=>'Janvier','02'=>'Février','03'=>'Mars','04'=>'Avril','05'=>'Mai','06'=>'Juin',
+                    '07'=>'Juillet','08'=>'Août','09'=>'Septembre','10'=>'Octobre','11'=>'Novembre','12'=>'Décembre'];
+
+        // Grouper par mois
+        $par_mois = [];
+        foreach ($recap as $r) {
+            $m   = substr($r['date_point'], 0, 7); // YYYY-MM
+            $key = $m;
+            if (!isset($par_mois[$key])) {
+                $par_mois[$key] = [
+                    'mois'       => $m,
+                    'mois_label' => ($mois_fr[substr($m,5,2)] ?? substr($m,5,2)) . ' ' . substr($m,0,4),
+                    'gonflables' => 0, 'eclates' => 0, 'endommages' => 0, 'utilises' => 0, 'total' => 0,
+                ];
+            }
+            $par_mois[$key]['gonflables']   += (int)$r['rivets_gonflables'];
+            $par_mois[$key]['eclates']      += (int)$r['rivets_eclates'];
+            $par_mois[$key]['endommages']   += (int)$r['rivets_endommages'];
+            $par_mois[$key]['utilises']     += (int)$r['rivets_utilises'];
+            $par_mois[$key]['total']        += (int)$r['total_sortis'];
+        }
+        ksort($par_mois);
+
+        $rows_html = '';
+        foreach ($par_mois as $row) {
+            $rows_html .= '<tr style="background:#f0f4ff">
+                <td style="font-weight:700;color:#06033A">' . $row['mois_label'] . '</td>
+                <td style="text-align:center">' . $row['gonflables'] . '</td>
+                <td style="text-align:center">' . $row['eclates'] . '</td>
+                <td style="text-align:center;color:' . ($row['endommages']>0?'#991b1b':'#64748b') . '">' . $row['endommages'] . '</td>
+                <td style="text-align:center;font-weight:700">' . $row['utilises'] . '</td>
+                <td style="text-align:center;font-weight:700">' . $row['total'] . '</td>
+            </tr>';
+        }
+
+        $html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+        body{font-family:Arial,sans-serif;font-size:11px;margin:20px}
+        h1{font-size:15px;color:#06033A;margin:0 0 3px 0}
+        .sub{font-size:9px;color:#64748b;margin-bottom:14px}
+        table{width:100%;border-collapse:collapse}
+        th{background:#06033A;color:#fff;padding:7px 8px;font-size:10px;text-align:center}
+        td{padding:5px 8px;border-bottom:1px solid #e2e8f0;font-size:10px}
+        tr:nth-child(even) td{background:#ffffff}
+        .total-row td{background:#06033A!important;color:#fff!important;font-weight:bold;text-align:center}
+        </style></head><body>
+        <table width="100%" style="border-collapse:collapse;margin-bottom:10px"><tr>
+          <td style="vertical-align:middle;width:85px;padding-right:10px">' . pdf_logo_img('38px') . '</td>
+          <td style="vertical-align:middle;padding-left:12px;border-left:3px solid #06033A">
+            <div style="font-size:15px;font-weight:bold;color:#06033A">Suivi Consommation Rivets</div>
+            <div style="font-size:9px;color:#64748b;margin-top:2px">Express Multiservices CI</div>
+          </td>
+        </tr></table>
+        <div class="sub">Site : ' . h($site_label) . ' &nbsp;|&nbsp; Généré le ' . date('d/m/Y H:i') . '</div>
+        <table><thead><tr>
+            <th>Mois</th><th>Gonflables</th><th>Éclatés</th><th>Endommagés</th><th>Utilisés</th><th>Total sorti</th>
+        </tr></thead><tbody>
+        ' . $rows_html . '
+        <tr class="total-row"><td>TOTAL</td>
+            <td>' . $total_gonfl . '</td>
+            <td>' . $total_eclat . '</td>
+            <td>' . $total_endom . '</td>
+            <td>' . $total_util . '</td>
+            <td>' . $grand_total_sortis . '</td>
+        </tr></tbody></table></body></html>';
+
+        $opts = new Options();
+        $opts->set('isRemoteEnabled', false);
+        $pdf = new Dompdf($opts);
+        $pdf->loadHtml($html);
+        $pdf->setPaper('A4', 'landscape');
+        $pdf->render();
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="synthese_rivets_mensuel_' . date('Ymd') . '.pdf"');
+        echo $pdf->output();
+        exit;
+    }
 }
 
 include __DIR__ . '/../../templates/header.php';
@@ -274,6 +353,10 @@ include __DIR__ . '/../../templates/header.php';
     <a href="?<?= http_build_query(array_merge($_GET, ['export'=>'pdf'])) ?>"
        class="btn btn-secondary" style="font-size:13px;display:flex;align-items:center;gap:6px">
       <i class="ph-duotone ph-file-pdf" style="font-size:16px"></i> PDF
+    </a>
+    <a href="?<?= http_build_query(array_merge($_GET, ['export'=>'pdf_mensuel'])) ?>"
+       class="btn btn-secondary" style="font-size:13px;display:flex;align-items:center;gap:6px">
+      <i class="ph-duotone ph-calendar" style="font-size:16px"></i> PDF mensuel
     </a>
     <?php
     $can_appro = in_array($role_slug_r, ['admin','superadmin','gestionnaire_stock','superviseur_operation']);
