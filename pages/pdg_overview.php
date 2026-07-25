@@ -15,11 +15,22 @@ $active_page = 'pdg_overview';
 
 $mois  = trim($_GET['mois'] ?? date('Y-m'));
 $annee = substr($mois, 0, 4);
+$vue   = trim($_GET['vue'] ?? 'mois');  // 'mois' ou 'annee'
 $mc = ['01'=>'Jan','02'=>'Fév','03'=>'Mar','04'=>'Avr','05'=>'Mai','06'=>'Juin',
        '07'=>'Juil','08'=>'Aoû','09'=>'Sep','10'=>'Oct','11'=>'Nov','12'=>'Déc'];
 $ml = ['01'=>'Janvier','02'=>'Février','03'=>'Mars','04'=>'Avril','05'=>'Mai','06'=>'Juin',
        '07'=>'Juillet','08'=>'Août','09'=>'Septembre','10'=>'Octobre','11'=>'Novembre','12'=>'Décembre'];
-$mois_display = ($ml[substr($mois,5,2)] ?? '') . ' ' . $annee;
+
+// Filtre DATE selon la vue
+if ($vue === 'annee') {
+    $date_filter = "TO_CHAR(date_point,'YYYY')=?";
+    $date_param  = $annee;
+    $mois_display = "Année $annee";
+} else {
+    $date_filter = "TO_CHAR(date_point,'YYYY-MM')=?";
+    $date_param  = $mois;
+    $mois_display = ($ml[substr($mois,5,2)] ?? '') . ' ' . $annee;
+}
 
 // ── OPÉRATIONS
 $ops = db_fetch_one(
@@ -32,8 +43,8 @@ $ops = db_fetch_one(
             COALESCE(SUM(rivets_utilises),0) AS rivets_utilises,
             COALESCE(ROUND(AVG(NULLIF(moyenne_prod,0)),1),0) AS moy_prod
      FROM op_points_journaliers
-     WHERE TO_CHAR(date_point,'YYYY-MM')=? AND statut != 'brouillon'",
-    [$mois]
+     WHERE $date_filter AND statut != 'brouillon'",
+    [$date_param]
 );
 
 $prod_par_site = db_fetch_all(
@@ -45,10 +56,10 @@ $prod_par_site = db_fetch_all(
             SUM(CASE WHEN p.statut='en_attente_validation' THEN 1 ELSE 0 END) AS en_attente
      FROM sites s
      LEFT JOIN op_points_journaliers p ON p.site_id=s.id
-                AND TO_CHAR(p.date_point,'YYYY-MM')=? AND p.statut != 'brouillon'
+                AND $date_filter AND p.statut != 'brouillon'
      WHERE s.actif=1
      GROUP BY s.id, s.nom, s.type ORDER BY engins DESC",
-    [$mois]
+    [$date_param]
 );
 
 // ── BOBINES
@@ -306,10 +317,27 @@ include __DIR__ . '/../templates/header.php';
     <span class="bdg bdg-ok"><i class="ph-duotone ph-check-circle"></i> Aucune alerte</span>
     <?php endif; ?>
     <form method="get" style="display:flex;align-items:center;gap:6px">
+      <label style="font-size:11px;color:var(--muted);font-weight:700">Vue</label>
+      <select name="vue" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:white;outline:none;cursor:pointer"
+              onchange="this.form.submit()">
+        <option value="mois" <?= $vue==='mois'?'selected':'' ?>>Par mois</option>
+        <option value="annee" <?= $vue==='annee'?'selected':'' ?>>Année complète</option>
+      </select>
+      <?php if($vue==='mois'): ?>
       <label style="font-size:11px;color:var(--muted);font-weight:700">Mois</label>
       <input type="month" name="mois" value="<?= h($mois) ?>"
              style="padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:white;outline:none"
              onchange="this.form.submit()">
+      <?php else: ?>
+      <label style="font-size:11px;color:var(--muted);font-weight:700">Année</label>
+      <select name="annee" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:white;outline:none;cursor:pointer"
+              onchange="document.querySelector('input[name=mois]').value=this.value+'-01';this.form.submit()">
+        <?php for ($y = 2020; $y <= date('Y'); $y++): ?>
+        <option value="<?= $y ?>" <?= $annee==$y?'selected':'' ?>><?= $y ?></option>
+        <?php endfor; ?>
+      </select>
+      <input type="hidden" name="mois" value="<?= h($mois) ?>">
+      <?php endif; ?>
     </form>
   </div>
 </div>
