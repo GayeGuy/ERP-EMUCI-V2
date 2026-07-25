@@ -19,10 +19,18 @@ $active_page = 'rapports';
 $annee     = (int)($_GET['annee'] ?? date('Y'));
 $mois      = (int)($_GET['mois']  ?? 0);   // 0 = toute l'année
 $f_site    = (int)($_GET['site']  ?? 0);
+$format    = trim($_GET['format'] ?? 'html');
 
 // Filtre date
 $date_debut = $mois ? sprintf('%04d-%02d-01', $annee, $mois) : "$annee-01-01";
 $date_fin   = $mois ? date('Y-m-t', strtotime($date_debut))  : "$annee-12-31";
+
+// ── EXPORT PDF
+if ($format === 'pdf') {
+    require_permission('rapports','can_export');
+    _rapport_pdf($user, $annee, $mois, $f_site, $date_debut, $date_fin);
+    exit;
+}
 
 // ── KPIs GLOBAUX
 $kpi = [
@@ -404,6 +412,7 @@ include __DIR__ . '/../templates/header.php';
     <a href="<?= APP_URL ?>/api/export.php?type=livraisons"  class="btn btn-secondary btn-sm">📥 Livraisons</a>
     <a href="<?= APP_URL ?>/api/export.php?type=consommables" class="btn btn-secondary btn-sm">📥 Consommables</a>
     <a href="<?= APP_URL ?>/api/export.php?type=couts_sites&annee=<?= $annee ?>&mois=<?= $mois ?>&site=<?= $f_site ?>" class="btn btn-secondary btn-sm">💰 Coûts sites</a>
+    <a href="?annee=<?= $annee ?>&mois=<?= $mois ?>&site=<?= $f_site ?>&format=pdf" class="btn btn-secondary btn-sm">📄 PDF rapport</a>
     <?php if(can('audit','can_export')): ?>
     <a href="<?= APP_URL ?>/api/export.php?type=audit" class="btn btn-secondary btn-sm">📥 Audit</a>
     <?php endif; ?>
@@ -907,5 +916,107 @@ if(document.getElementById('chartCoutEvol')&&evolDatasets.length){
 const coutSiteLabels=<?= $cout_site_labels ?>, coutSiteVals=<?= $cout_site_values ?>;
 // (optionnel: on réutilise chartSites pour la quantité; le coût est dans les barres inline)
 </script>
+
+<?php
+
+// ============================================================
+//  Génération PDF du rapport (DomPDF)
+// ============================================================
+function _rapport_pdf($user, $annee, $mois, $f_site, $date_debut, $date_fin) {
+    $autoload = __DIR__ . '/../vendor/autoload.php';
+    if (!file_exists($autoload)) {
+        header('Content-Type: text/plain');
+        echo 'DomPDF non installé.';
+        exit;
+    }
+    require_once $autoload;
+
+    $site_nom = '';
+    if ($f_site) {
+        $site = db_fetch_one("SELECT nom FROM sites WHERE id=?", [$f_site]);
+        $site_nom = $site ? $site['nom'] : '';
+    }
+    $titre_rapport = $mois
+        ? 'Rapport '.date('F Y', strtotime("$annee-$mois-01")).($site_nom ? " — $site_nom" : '')
+        : "Rapport annuel $annee".($site_nom ? " — $site_nom" : '');
+
+    $period_str = $mois ? date('d/m/Y', strtotime($date_debut)).' → '.date('d/m/Y', strtotime($date_fin)) : "$annee";
+
+    $html = <<<HTML
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <title>$titre_rapport</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
+        h1 { color: #06033A; border-bottom: 3px solid #3B4FBE; padding-bottom: 10px; }
+        h2 { color: #1B75BC; margin-top: 30px; border-left: 4px solid #3B4FBE; padding-left: 10px; }
+        table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        th { background: #0D1F35; color: white; padding: 10px; text-align: left; }
+        td { padding: 8px; border-bottom: 1px solid #ddd; }
+        tr:nth-child(even) { background: #f9f9f9; }
+        .kpi-box { display: inline-block; width: 23%; margin: 1%; padding: 15px; background: #f0f4ff; border-left: 4px solid #3B4FBE; }
+        .kpi-val { font-size: 18px; font-weight: bold; color: #06033A; }
+        .kpi-lbl { font-size: 11px; color: #666; text-transform: uppercase; }
+        .page-break { page-break-after: always; }
+        .footer { margin-top: 40px; font-size: 11px; color: #999; border-top: 1px solid #ddd; padding-top: 10px; }
+    </style>
+</head>
+<body>
+    <h1>$titre_rapport</h1>
+    <p><strong>Période :</strong> $period_str</p>
+    <p><strong>Généré par :</strong> {$user['prenom']} {$user['nom']} le <em>".date('d/m/Y à H:i')."</em></p>
+
+    <h2>📊 KPIs globaux</h2>
+    <p>
+HTML;
+
+    // Récupérer les KPIs
+    $kpi = [
+        'total_equip'    => (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1"),
+        'total_sites'    => (int)db_fetch_value("SELECT COUNT(*) FROM sites WHERE actif=1"),
+        'total_users'    => (int)db_fetch_value("SELECT COUNT(*) FROM users WHERE actif=1"),
+        'equip_hs'       => (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND etat='hs'"),
+    ];
+
+    $html .= '<div class="kpi-box"><div class="kpi-val">'.$kpi['total_equip'].'</div><div class="kpi-lbl">Équipements</div></div>';
+    $html .= '<div class="kpi-box"><div class="kpi-val">'.$kpi['total_sites'].'</div><div class="kpi-lbl">Sites</div></div>';
+    $html .= '<div class="kpi-box"><div class="kpi-val">'.$kpi['total_users'].'</div><div class="kpi-lbl">Utilisateurs</div></div>';
+    $html .= '<div class="kpi-box"><div class="kpi-val">'.$kpi['equip_hs'].'</div><div class="kpi-lbl">Équipements HS</div></div></p>';
+
+    $html .= '<h2>📦 Consommation</h2>';
+    $conso = db_fetch_all(
+        "SELECT c.code, c.libelle, c.unite, COALESCE(SUM(lc.quantite),0) AS total
+         FROM consommables c
+         LEFT JOIN livraisons_consommables lc ON lc.consommable_id=c.id
+             AND lc.date_livraison BETWEEN ? AND ?
+         GROUP BY c.id ORDER BY total DESC LIMIT 20",
+        [$date_debut, $date_fin]
+    );
+
+    if (!empty($conso)) {
+        $html .= '<table><thead><tr><th>Code</th><th>Libellé</th><th>Unité</th><th style="text-align:right">Quantité</th></tr></thead><tbody>';
+        foreach ($conso as $row) {
+            $html .= '<tr><td>'.h($row['code']).'</td><td>'.h($row['libelle']).'</td><td>'.h($row['unite']).'</td><td style="text-align:right;">'.number_format((int)$row['total'],0,' ','').'</td></tr>';
+        }
+        $html .= '</tbody></table>';
+    }
+
+    $html .= '<div class="footer">Rapport généré automatiquement. Confidentiel.</div></body></html>';
+
+    // Générer le PDF
+    $dompdf = new \Dompdf\Dompdf(['isPhpEnabled' => true, 'isRemoteEnabled' => false]);
+    $dompdf->loadHtml($html, 'UTF-8');
+    $dompdf->setPaper('A4', 'portrait');
+    $dompdf->render();
+
+    $filename = 'rapport_'.$annee.($mois ? '_'.sprintf('%02d', $mois) : '').'_'.date('Ymd_His').'.pdf';
+    $dompdf->stream($filename);
+
+    audit_log($user['id'], 'EXPORT', 'rapports', null, "Export PDF rapport $annee".($mois ? " mois $mois" : ''));
+}
+
+?>
 
 <?php include __DIR__ . '/../templates/footer.php'; ?>
