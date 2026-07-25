@@ -213,9 +213,14 @@ include __DIR__ . '/../templates/header.php';
     <input type="month" name="mois" value="<?= h($f_mois) ?>" onchange="this.form.submit()"
            style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none">
   </form>
-  <?php if(in_array($role_slug,['maintenance_info','admin','superadmin'])): ?>
-  <button class="btn btn-primary" onclick="ouvrirForm()">+ Nouveau rapport</button>
-  <?php endif; ?>
+  <div style="display:flex;gap:8px">
+    <?php if(in_array($role_slug,['maintenance_info','admin','superadmin'])): ?>
+    <button class="btn btn-primary" onclick="ouvrirForm()">+ Nouveau rapport</button>
+    <?php endif; ?>
+    <?php if(can('rapport_journalier','can_export') && !empty($rapports)): ?>
+    <a href="<?= APP_URL ?>/api/export.php?type=rapports_journaliers&mois=<?= h($f_mois) ?>&site=<?= $f_site ?>" class="btn btn-secondary">📥 Exporter</a>
+    <?php endif; ?>
+  </div>
 </div>
 
 <!-- LISTE -->

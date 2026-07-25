@@ -385,6 +385,42 @@ elseif ($type==='rivets') {
     audit_log($user['id'],'EXPORT','rivets',null,"Export Excel stock rivets");
 }
 
+// ── RAPPORTS JOURNALIERS (MAINTENANCE INFO) ────────────────
+elseif ($type==='rapports_journaliers') {
+    require_permission('rapport_journalier','can_export');
+    $f_site = (int)($_GET['site'] ?? 0);
+    $f_mois = trim($_GET['mois'] ?? date('Y-m'));
+    $where  = []; $params = [];
+    if ($f_site) { $where[]='r.site_id=?'; $params[]=$f_site; }
+    $where[]="TO_CHAR(r.date_rapport,'YYYY-MM')=?"; $params[]=$f_mois;
+    $rows = db_fetch_all(
+        "SELECT r.date_rapport, s.nom AS site, r.nb_equip_ok, r.nb_equip_hs, r.nb_equip_maintenance,
+                r.nb_interventions, r.observations, r.actions_preventives,
+                CONCAT(u.prenom,' ',u.nom) AS technicien, r.statut, r.created_at
+         FROM rapports_journaliers_info r
+         JOIN sites s ON s.id=r.site_id
+         LEFT JOIN users u ON u.id=r.technicien_id
+         WHERE ".implode(' AND ',$where)." ORDER BY r.date_rapport DESC",
+        $params
+    );
+    $sheet->setTitle('Rapports Journaliers');
+    $sheet->fromArray(['Date','Site','Opérationnels','H.S','En maint.','Interventions','Observations','Actions prévues','Technicien','Statut'],null,'A1');
+    apply_header($sp,'A1:J1');
+    $row=2; foreach($rows as $r){
+        $sheet->fromArray(
+            [$r['date_rapport'],$r['site'],$r['nb_equip_ok'],$r['nb_equip_hs'],$r['nb_equip_maintenance'],
+             $r['nb_interventions'],substr($r['observations']??'',0,50),substr($r['actions_preventives']??'',0,50),
+             $r['technicien']??'—',$r['statut']],
+            null,"A$row"
+        );
+        stripe($sheet,"A$row:J$row"); $row++;
+    }
+    if($row>2) apply_data($sp,"A2:J".($row-1));
+    auto_size($sheet,10);
+    $filename='rapports_journaliers_'.date('Ymd').'.xlsx';
+    audit_log($user['id'],'EXPORT','rapports_journaliers',null,"Export Excel rapports journaliers $f_mois");
+}
+
 else { http_response_code(400); die('Type d\'export non reconnu.'); }
 
 // ── TÉLÉCHARGEMENT ───────────────────────────────────────────
