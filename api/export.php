@@ -323,6 +323,68 @@ elseif ($type==='interventions') {
     audit_log($user['id'],'EXPORT','interventions',null,"Export Excel interventions");
 }
 
+// ── STOCK PMMA ────────────────────────────────────────────────
+elseif ($type==='pmma') {
+    require_permission('pmma','can_export');
+    $f_site = (int)($_GET['site'] ?? 0);
+    $where  = []; $params = [];
+    if ($f_site) { $where[]='sps.site_id=?'; $params[]=$f_site; }
+    $rows = db_fetch_all(
+        "SELECT s.nom AS site, sps.type_pmma, sps.quantite_actuelle, sps.seuil_alerte,
+                CONCAT(u.prenom,' ',u.nom) AS responsable, sps.created_at
+         FROM stock_pmma_site sps
+         JOIN sites s ON s.id=sps.site_id
+         LEFT JOIN users u ON u.id=sps.created_by
+         ".($where?"WHERE ".implode(' AND ',$where):'')."
+         ORDER BY s.nom, sps.type_pmma",
+        $params
+    );
+    $sheet->setTitle('Stock PMMA');
+    $sheet->fromArray(['Site','Type PMMA','Quantité actuelle','Seuil alerte','Responsable','Créé le'],null,'A1');
+    apply_header($sp,'A1:F1');
+    $row=2; foreach($rows as $r){
+        $sheet->fromArray([$r['site'],$r['type_pmma'],$r['quantite_actuelle']??0,$r['seuil_alerte']??0,
+            $r['responsable']??'—',$r['created_at']],null,"A$row");
+        if(((int)$r['quantite_actuelle']??0)<((int)$r['seuil_alerte']??0)) $sheet->getStyle("C$row")->getFont()->getColor()->setARGB('FFE74C3C');
+        stripe($sheet,"A$row:F$row"); $row++;
+    }
+    if($row>2) apply_data($sp,"A2:F".($row-1));
+    auto_size($sheet,6);
+    $filename='stock_pmma_'.date('Ymd_His').'.xlsx';
+    audit_log($user['id'],'EXPORT','pmma',null,"Export Excel stock PMMA");
+}
+
+// ── STOCK RIVETS ──────────────────────────────────────────────
+elseif ($type==='rivets') {
+    require_permission('rivets','can_export');
+    $f_site = (int)($_GET['site'] ?? 0);
+    $where  = []; $params = [];
+    if ($f_site) { $where[]='osr.site_id=?'; $params[]=$f_site; }
+    $rows = db_fetch_all(
+        "SELECT s.nom AS site, osr.type_rivet, osr.quantite, osr.type_mouvement,
+                CONCAT(u.prenom,' ',u.nom) AS utilisateur, osr.created_at, osr.notes
+         FROM op_stock_rivets osr
+         JOIN sites s ON s.id=osr.site_id
+         LEFT JOIN users u ON u.id=osr.created_by
+         ".($where?"WHERE ".implode(' AND ',$where):'')."
+         ORDER BY osr.created_at DESC",
+        $params
+    );
+    $sheet->setTitle('Stock Rivets');
+    $sheet->fromArray(['Site','Type de rivet','Quantité','Type mouvement','Utilisateur','Date','Notes'],null,'A1');
+    apply_header($sp,'A1:G1');
+    $row=2; foreach($rows as $r){
+        $mov_lbl = $r['type_mouvement']==='entree'?'Entrée':'Sortie';
+        $sheet->fromArray([$r['site'],$r['type_rivet'],$r['quantite'],$mov_lbl,
+            $r['utilisateur']??'—',$r['created_at'],$r['notes']??''],null,"A$row");
+        stripe($sheet,"A$row:G$row"); $row++;
+    }
+    if($row>2) apply_data($sp,"A2:G".($row-1));
+    auto_size($sheet,7);
+    $filename='stock_rivets_'.date('Ymd_His').'.xlsx';
+    audit_log($user['id'],'EXPORT','rivets',null,"Export Excel stock rivets");
+}
+
 else { http_response_code(400); die('Type d\'export non reconnu.'); }
 
 // ── TÉLÉCHARGEMENT ───────────────────────────────────────────
