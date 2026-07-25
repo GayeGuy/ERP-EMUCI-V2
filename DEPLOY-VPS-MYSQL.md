@@ -136,10 +136,18 @@ certbot --apache -d votre-domaine.ci
 
 ## 9. Mises à jour
 
+Un script tout-en-un, **idempotent**, fait le `git pull`, sauvegarde la base, charge
+le schéma de base **uniquement à la première installation** (jamais sur une base
+existante — les données sont protégées), applique le schéma Demandes (idempotent),
+puis remet les permissions et recharge Apache :
+
 ```bash
-cd /var/www/stockapp && git pull
-# si le schéma a évolué, recharger sql/stockapp.sql est sans risque (patch idempotent)
+cd /var/www/stockapp && sudo ./deploy.sh
 ```
+
+Options utiles : `SKIP_BACKUP=1` (ne pas sauvegarder), `SKIP_PULL=1` (pas de git pull),
+`APP_DIR=…` (autre chemin). Les identifiants MySQL sont lus automatiquement dans `.env`.
+La sauvegarde est déposée dans `backups/`.
 
 ---
 

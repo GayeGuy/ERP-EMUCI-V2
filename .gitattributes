@@ -1,0 +1,2 @@
+# Scripts shell : toujours en LF (exécutés sur le VPS Linux)
+*.sh text eol=lf
