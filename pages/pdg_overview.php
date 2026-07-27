@@ -232,6 +232,58 @@ $pmma_ch_h     = max(140, count($pmma_par_type) * 46);
 // Palette sites (couleurs identifiables par site)
 $SC = ['#1B75BC','#3B4FBE','#7c3aed','#0891b2','#16a34a','#d97706','#e11d48'];
 
+// ── DONNÉES MENSUELLES PAR SITE (widget performance)
+$site_monthly_raw = db_fetch_all(
+    "SELECT s.nom AS site_nom,
+            TO_CHAR(p.date_point,'YYYY-MM') AS mois,
+            COALESCE(SUM(fu.films_utilises),0) AS films,
+            COALESCE(SUM(p.total_engins),0) AS engins,
+            COALESCE(ROUND(AVG(NULLIF(p.moyenne_prod,0)),1),0) AS moy_vh
+     FROM sites s
+     JOIN op_points_journaliers p ON p.site_id=s.id
+          AND TO_CHAR(p.date_point,'YYYY')=?
+          AND p.statut != 'brouillon'
+     LEFT JOIN op_films_utilises fu ON fu.point_id=p.id
+     WHERE s.actif=1
+     GROUP BY s.id, s.nom, TO_CHAR(p.date_point,'YYYY-MM')
+     ORDER BY s.id, mois",
+    [$annee]
+);
+$site_monthly_by_name = [];
+foreach ($site_monthly_raw as $r) {
+    if ($r['mois']) $site_monthly_by_name[$r['site_nom']][$r['mois']] = [
+        'films'  => (int)$r['films'],
+        'engins' => (int)$r['engins'],
+        'moy_vh' => (float)$r['moy_vh'],
+    ];
+}
+// Films restants par site (si op_bobines a site_id)
+$films_rest_by_site = [];
+try {
+    foreach (db_fetch_all(
+        "SELECT s.nom, COALESCE(SUM(b.films_restants),0) AS fr
+         FROM sites s LEFT JOIN op_bobines b ON b.site_id=s.id AND b.statut IN ('en_cours','en_stock')
+         WHERE s.actif=1 GROUP BY s.id, s.nom"
+    ) as $r) $films_rest_by_site[$r['nom']] = (int)$r['fr'];
+} catch (Throwable $e) {}
+$films_mois_by_site = [];
+foreach ($films_par_site as $fs) $films_mois_by_site[$fs['nom']] = (int)$fs['films'];
+$pfw_sites_json = [];
+foreach ($prod_par_site as $i => $s) {
+    $fr = $films_rest_by_site[$s['nom']] ?? 0;
+    if (!$fr) $fr = (int)round(($bobines_stats['films_restants']??0) / max(1, count($prod_par_site)));
+    $pfw_sites_json[] = [
+        'name'       => $s['nom'],
+        'color'      => $SC[$i % count($SC)],
+        'moy_vh'     => (float)$s['moy_vh'],
+        'films_mois' => $films_mois_by_site[$s['nom']] ?? 0,
+        'films_rest' => $fr,
+        'monthly'    => (object)($site_monthly_by_name[$s['nom']] ?? []),
+    ];
+}
+$js_pfw_sites    = json_encode($pfw_sites_json);
+$pfw_quarter_def = max(1, (int)ceil((int)substr($mois, 5, 2) / 3));
+
 include __DIR__ . '/../templates/header.php';
 ?>
 <style>
@@ -355,6 +407,27 @@ include __DIR__ . '/../templates/header.php';
 .stock-stat-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #f1f5f9;font-size:13px}
 .stock-stat-row:last-child{border-bottom:none}
 .stock-val{font-weight:800;font-family:'Montserrat',sans-serif;font-size:15px}
+
+/* ── Widget Performance par site */
+.pfw-card{background:#fff;border:1.5px solid var(--border,#e2e8f0);border-radius:20px;overflow:hidden;margin-bottom:20px}
+.pfw-top{display:flex;justify-content:space-between;align-items:center;padding:16px 22px;border-bottom:1px solid #f1f5f9;flex-wrap:wrap;gap:10px}
+.pfw-site-lbl{font-size:11px;color:#94a3b8;letter-spacing:.3px;margin-bottom:3px;text-transform:uppercase;font-weight:700}
+.pfw-site-sel{display:flex;align-items:center;gap:6px;cursor:pointer}
+.pfw-site-sel select{font-size:16px;font-weight:900;color:#06033A;background:transparent;border:none;outline:none;cursor:pointer;font-family:inherit;appearance:none;-webkit-appearance:none;padding-right:4px}
+.pfw-site-arr{font-size:11px;color:#94a3b8}
+.pfw-quarters{display:flex;gap:6px}
+.pfw-q{padding:7px 16px;border-radius:20px;border:1.5px solid #e2e8f0;background:#f8fafc;font-size:13px;font-weight:700;color:#94a3b8;cursor:pointer;font-family:inherit;transition:.15s;white-space:nowrap}
+.pfw-q:hover{border-color:#06033A;color:#06033A}
+.pfw-q.active{background:#06033A;color:#fff;border-color:#06033A}
+.pfw-body{display:grid;grid-template-columns:200px 1fr;min-height:250px}
+@media(max-width:700px){.pfw-body{grid-template-columns:1fr}}
+.pfw-left{padding:22px 16px 22px 20px;display:flex;gap:10px;transition:background .35s;border-radius:0 0 0 18px}
+.pfw-vert{writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;font-weight:700;color:rgba(255,255,255,.55);letter-spacing:.8px;text-transform:uppercase;flex-shrink:0;align-self:center}
+.pfw-stats{flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px}
+.pfw-stat-lbl{font-size:11px;color:rgba(255,255,255,.65);margin-bottom:3px;font-weight:600}
+.pfw-stat-val{font-size:21px;font-weight:900;color:#fff;font-family:'Montserrat',sans-serif;line-height:1}
+.pfw-right{padding:18px 20px 10px;position:relative;overflow:hidden}
+.pfw-empty{display:flex;align-items:center;justify-content:center;height:100%;color:#94a3b8;font-size:13px}
 </style>
 
 <div class="pdg">
@@ -458,108 +531,60 @@ include __DIR__ . '/../templates/header.php';
   </div>
 </div>
 
-<!-- ══════════ PERFORMANCE SITES ══════════ -->
-<div class="perf-wrap">
-  <!-- Left: site distribution + rows -->
-  <div class="card">
-    <div class="card-ttl">Performance par site</div>
-    <div class="card-sub"><?= h($mois_display) ?> · engins posés</div>
-
-    <!-- Distribution bar -->
-    <div class="dist-bar">
-      <?php foreach ($prod_par_site as $i => $s):
-        $pct = $engins_curr > 0 ? round($s['engins'] / $engins_curr * 100, 1) : 0;
-        $col = $SC[$i % count($SC)];
-      ?>
-      <div class="dist-seg" style="width:<?= $pct ?>%;background:<?= $col ?>" title="<?= h($s['nom']) ?> — <?= $pct ?>%"></div>
+<!-- ══════════ WIDGET PERFORMANCE PAR SITE ══════════ -->
+<div class="pfw-card">
+  <!-- Top : sélecteur site + filtres trimestre -->
+  <div class="pfw-top">
+    <div>
+      <div class="pfw-site-lbl">Performance mensuelle par site</div>
+      <div class="pfw-site-sel">
+        <select id="pfwSiteSelect" onchange="pfwChangeSite(+this.value)">
+          <?php foreach ($pfw_sites_json ? json_decode($js_pfw_sites, true) : [] as $i => $sj): ?>
+          <option value="<?= $i ?>"><?= h($sj['name']) ?></option>
+          <?php endforeach; ?>
+        </select>
+        <span class="pfw-site-arr">↓</span>
+      </div>
+    </div>
+    <div class="pfw-quarters">
+      <?php foreach ([1=>'T1',2=>'T2',3=>'T3',4=>'T4'] as $q => $ql): ?>
+      <button class="pfw-q<?= $q===$pfw_quarter_def?' active':'' ?>" data-q="<?= $q ?>" onclick="pfwChangeQ(this)"><?= $ql ?></button>
       <?php endforeach; ?>
-    </div>
-
-    <!-- Site rows -->
-    <?php foreach ($prod_par_site as $i => $s):
-      $pct = $engins_curr > 0 ? round($s['engins'] / $engins_curr * 100, 1) : 0;
-      $col = $SC[$i % count($SC)];
-      $initials = mb_strtoupper(mb_substr(preg_replace('/[^A-Za-z]/', '', $s['nom']), 0, 2));
-    ?>
-    <div class="site-row">
-      <div class="site-av" style="background:<?= $col ?>"><?= h($initials) ?></div>
-      <div style="flex:1;min-width:0">
-        <div class="site-name"><?= h($s['nom']) ?></div>
-        <div class="site-sub"><?= number_format((int)$s['engins'], 0, ',', ' ') ?> engins</div>
-      </div>
-      <div class="site-mini-bar" style="min-width:70px">
-        <div style="height:4px;background:#f1f5f9;border-radius:2px">
-          <div style="height:100%;width:<?= $pct ?>%;background:<?= $col ?>;border-radius:2px"></div>
-        </div>
-      </div>
-      <div class="site-pct" style="color:<?= $col ?>"><?= $pct ?>%</div>
-    </div>
-    <?php endforeach; ?>
-    <?php if (empty($prod_par_site)): ?>
-    <div style="text-align:center;padding:30px;color:#94a3b8">Aucune donnée pour <?= h($mois_display) ?></div>
-    <?php endif; ?>
-  </div>
-
-  <!-- Right: detailed table -->
-  <div class="card">
-    <div style="display:flex;justify-content:space-between;align-items:start;margin-bottom:4px">
-      <div>
-        <div class="card-ttl">Indicateurs par site</div>
-        <div class="card-sub">Engins · Plaques · Moy V/H · Films</div>
-      </div>
       <button onclick="document.getElementById('modal-ops').style.display='flex'"
-        style="display:flex;align-items:center;gap:5px;padding:7px 13px;background:#f1f5f9;border:1px solid #e2e8f0;
-               border-radius:9px;font-size:12px;font-weight:700;color:#06033A;cursor:pointer;white-space:nowrap">
+        style="padding:7px 13px;border:1.5px solid #e2e8f0;border-radius:20px;background:#f8fafc;font-size:12px;font-weight:700;color:#06033A;cursor:pointer;font-family:inherit;white-space:nowrap;margin-left:6px">
         <i class="ph-duotone ph-arrows-out"></i> Détails
       </button>
     </div>
-    <table class="ptbl">
-      <thead><tr>
-        <th>Site</th>
-        <th>Engins</th>
-        <th>Plaques</th>
-        <th>V/H</th>
-        <th>Films</th>
-        <th>Statut</th>
-      </tr></thead>
-      <tbody>
-      <?php
-      $films_by_site = [];
-      foreach ($films_par_site as $fs) $films_by_site[$fs['nom']] = (int)$fs['films'];
-      ?>
-      <?php foreach ($prod_par_site as $i => $s):
-        $col = $SC[$i % count($SC)];
-        $mvh = (float)$s['moy_vh'];
-        $mvh_cls = $mvh >= 10 ? 'mvh-g' : ($mvh >= 5 ? 'mvh-o' : 'mvh-r');
-        $sf = $films_by_site[$s['nom']] ?? 0;
-      ?>
-      <tr>
-        <td>
-          <div style="display:flex;align-items:center;gap:8px">
-            <div style="width:8px;height:8px;border-radius:50%;background:<?= $col ?>;flex-shrink:0"></div>
-            <span style="font-weight:700;color:var(--navy,#06033A)"><?= h($s['nom']) ?></span>
-          </div>
-        </td>
-        <td style="font-weight:800;font-family:'Montserrat',sans-serif;color:var(--navy,#06033A)"><?= number_format((int)$s['engins'],0,',',' ') ?></td>
-        <td style="font-weight:700;color:#1B75BC"><?= number_format((int)$s['plaques'],0,',',' ') ?></td>
-        <td><span class="mvh <?= $mvh_cls ?>"><?= $mvh ?></span></td>
-        <td style="color:#7c3aed;font-weight:700"><?= number_format($sf,0,',',' ') ?></td>
-        <td>
-          <?php if ($s['en_attente'] > 0): ?>
-            <span class="att-dot"><i class="ph-duotone ph-clock"></i> <?= $s['en_attente'] ?></span>
-          <?php elseif ($s['nb_points'] > 0): ?>
-            <i class="ph-duotone ph-check-circle" style="color:#16a34a;font-size:16px"></i>
-          <?php else: ?>
-            <span style="color:#94a3b8">—</span>
-          <?php endif; ?>
-        </td>
-      </tr>
-      <?php endforeach; ?>
+  </div>
+
+  <!-- Corps : panneau coloré gauche + graphique droit -->
+  <div class="pfw-body">
+    <!-- Panneau coloré -->
+    <div class="pfw-left" id="pfwLeft" style="background:#1B75BC">
+      <div class="pfw-vert">Moy. mensuelle</div>
+      <div class="pfw-stats">
+        <div>
+          <div class="pfw-stat-lbl">Moy. production</div>
+          <div class="pfw-stat-val" id="pfwMoy">—</div>
+        </div>
+        <div>
+          <div class="pfw-stat-lbl">Films utilisés</div>
+          <div class="pfw-stat-val" id="pfwFilms">—</div>
+        </div>
+        <div>
+          <div class="pfw-stat-lbl">Stock films rest.</div>
+          <div class="pfw-stat-val" id="pfwStock">—</div>
+        </div>
+      </div>
+    </div>
+    <!-- Zone graphique -->
+    <div class="pfw-right">
       <?php if (empty($prod_par_site)): ?>
-      <tr><td colspan="6" style="text-align:center;padding:24px;color:#94a3b8">Aucune donnée</td></tr>
+      <div class="pfw-empty">Aucune donnée disponible</div>
+      <?php else: ?>
+      <canvas id="pfwChart" height="230"></canvas>
       <?php endif; ?>
-      </tbody>
-    </table>
+    </div>
   </div>
 </div>
 
@@ -994,6 +1019,159 @@ function showTip(e, html) {
     tip.style.top  = (y+th>window.innerHeight-8 ? y-th+20 : y)+'px';
 }
 function hideTip() { document.getElementById('pdg-tip').style.display='none'; }
+
+// ══════ WIDGET PERFORMANCE PAR SITE ══════
+const pfwSites = <?= $js_pfw_sites ?>;
+let pfwSiteIdx  = 0;
+let pfwQuarter  = <?= $pfw_quarter_def ?>;
+const pfwAnnee  = '<?= $annee ?>';
+const pfwQMonths = {1:['01','02','03'],2:['04','05','06'],3:['07','08','09'],4:['10','11','12']};
+const pfwMLbls   = {'01':'Jan','02':'Fév','03':'Mar','04':'Avr','05':'Mai','06':'Juin','07':'Juil','08':'Aoû','09':'Sep','10':'Oct','11':'Nov','12':'Déc'};
+
+function pfwChangeSite(idx) { pfwSiteIdx = idx; pfwUpdate(); }
+function pfwChangeQ(btn) {
+    document.querySelectorAll('.pfw-q').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    pfwQuarter = +btn.dataset.q;
+    pfwUpdate();
+}
+
+function hexRgba(hex, a) {
+    const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);
+    return `rgba(${r},${g},${b},${a})`;
+}
+function rrect(ctx, x, y, w, h, r) {
+    r = Math.min(r, w/2, h/2);
+    ctx.beginPath();
+    ctx.moveTo(x+r, y);
+    ctx.arcTo(x+w, y, x+w, y+h, r);
+    ctx.arcTo(x+w, y+h, x, y+h, r);
+    ctx.arcTo(x, y+h, x, y, r);
+    ctx.arcTo(x, y, x+w, y, r);
+    ctx.closePath();
+}
+
+function pfwUpdate() {
+    if (!pfwSites.length) return;
+    const site = pfwSites[pfwSiteIdx];
+    // Panneau gauche
+    document.getElementById('pfwLeft').style.background = site.color;
+    document.getElementById('pfwMoy').textContent   = site.moy_vh ? site.moy_vh + ' v/h' : '—';
+    document.getElementById('pfwFilms').textContent = fmtN(site.films_mois);
+    document.getElementById('pfwStock').textContent = fmtN(site.films_rest);
+    // Graphique
+    pfwDrawChart(site);
+}
+
+function pfwDrawChart(site) {
+    const el = document.getElementById('pfwChart'); if (!el) return;
+    const container = el.parentElement;
+    const W = container.getBoundingClientRect().width || 500;
+    const H = 230;
+    el.width  = Math.round(W * DPR);
+    el.height = Math.round(H * DPR);
+    el.style.width  = Math.round(W) + 'px';
+    el.style.height = H + 'px';
+    const ctx = el.getContext('2d');
+    ctx.scale(DPR, DPR);
+
+    const months = pfwQMonths[pfwQuarter];
+    const enginVals = months.map(m => { const k=pfwAnnee+'-'+m; return site.monthly[k]?site.monthly[k].engins:0; });
+    const filmVals  = months.map(m => { const k=pfwAnnee+'-'+m; return site.monthly[k]?site.monthly[k].films:0; });
+
+    const pad = {t:48, r:58, b:36, l:18};
+    const cW = W - pad.l - pad.r;
+    const cH = H - pad.t - pad.b;
+    const n  = months.length;
+    const slot = cW / n;
+    const gap  = 10;
+    const bW   = Math.min(slot * 0.55, 80);
+    const b1W  = (bW - gap) / 2; // films (hatched)
+    const b2W  = (bW - gap) / 2; // engins (solid)
+    const col  = site.color;
+
+    const maxE = Math.max(...enginVals, 1);
+    const maxF = Math.max(...filmVals,  1);
+
+    // Grille + axe droit (engins)
+    const yVals = [0, Math.round(maxE*0.33), Math.round(maxE*0.67), maxE];
+    yVals.forEach((v, i) => {
+        const y = pad.t + cH * (1 - i / (yVals.length-1));
+        ctx.strokeStyle = '#f1f5f9'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W-pad.r+6, y); ctx.stroke();
+        ctx.fillStyle = '#cbd5e1'; ctx.font = '10px DM Sans,sans-serif';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(fmtN(v), W-pad.r+10, y);
+    });
+
+    months.forEach((m, i) => {
+        const bx = pad.l + slot*i + (slot - bW) / 2;
+        const ev = enginVals[i];
+        const fv = filmVals[i];
+
+        // ── Bar films (hatché gauche)
+        const fh = Math.max(4, (fv/maxF) * cH);
+        const fy = pad.t + cH - fh;
+        // fond léger
+        ctx.fillStyle = hexRgba(col, 0.12);
+        rrect(ctx, bx, fy, b1W, fh, [6,6,0,0]); ctx.fill();
+        // hachures diagonales
+        ctx.save();
+        rrect(ctx, bx, fy, b1W, fh, [6,6,0,0]); ctx.clip();
+        ctx.strokeStyle = hexRgba(col, 0.45); ctx.lineWidth = 1.5;
+        for (let d = -fh; d < b1W+fh; d += 9) {
+            ctx.beginPath(); ctx.moveTo(bx+d, fy+fh); ctx.lineTo(bx+d+fh, fy); ctx.stroke();
+        }
+        ctx.restore();
+        // pill valeur films
+        if (fv > 0) {
+            const lbl = fmtN(fv);
+            ctx.font = 'bold 10px DM Sans,sans-serif';
+            const lw = ctx.measureText(lbl).width + 12;
+            const lh = 19; const lx = bx + (b1W-lw)/2; const ly = fy-lh-4;
+            ctx.fillStyle = hexRgba(col, 0.75);
+            rrect(ctx, lx, ly, lw, lh, 5); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+            ctx.fillText(lbl, bx+b1W/2, ly+lh/2);
+        }
+
+        // ── Bar engins (solide droite)
+        const ex = bx + b1W + gap;
+        const eh = Math.max(4, (ev/maxE) * cH);
+        const ey = pad.t + cH - eh;
+        ctx.fillStyle = ev > 0 ? col : '#f1f5f9';
+        rrect(ctx, ex, ey, b2W, eh, [6,6,0,0]); ctx.fill();
+        // pill valeur engins
+        if (ev > 0) {
+            const lbl = fmtN(ev);
+            ctx.font = 'bold 10px DM Sans,sans-serif';
+            const lw = ctx.measureText(lbl).width + 12;
+            const lh = 19; const lx = ex + (b2W-lw)/2; const ly = ey-lh-4;
+            ctx.fillStyle = col;
+            rrect(ctx, lx, ly, lw, lh, 5); ctx.fill();
+            ctx.fillStyle = '#fff'; ctx.textAlign='center'; ctx.textBaseline='middle';
+            ctx.fillText(lbl, ex+b2W/2, ly+lh/2);
+        }
+
+        // Label mois centré sous la paire
+        ctx.fillStyle = '#94a3b8'; ctx.font = '11px DM Sans,sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText(pfwMLbls[m], bx+bW/2, pad.t+cH+8);
+    });
+
+    // Légende
+    const legY = 6;
+    [['Films (▨)', hexRgba(col,0.55)],['Engins (■)', col]].forEach(([lbl, c], i) => {
+        const lx = pad.l + i*130;
+        ctx.fillStyle = c; ctx.fillRect(lx, legY+3, 10, 10);
+        ctx.fillStyle = '#64748b'; ctx.font='10px DM Sans,sans-serif';
+        ctx.textAlign='left'; ctx.textBaseline='middle';
+        ctx.fillText(lbl, lx+14, legY+8);
+    });
+}
+
+window.addEventListener('load', () => { if (pfwSites.length) setTimeout(pfwUpdate, 80); });
+window.addEventListener('resize', () => { clearTimeout(window._prt); window._prt=setTimeout(pfwUpdate,200); });
 
 function openFilmsModal() {
     document.getElementById('modal-films').style.display='flex';
