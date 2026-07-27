@@ -117,6 +117,30 @@ function di_a_valider(array $user): array {
     return $out;
 }
 
+// ── Demandes déjà traitées par cet utilisateur (a signé au moins une étape)
+function di_deja_traite(array $user): array {
+    $uid   = (int)$user['id'];
+    $param = json_encode([['user_id' => $uid]]);
+    $rows  = db_fetch_all(
+        "SELECT id FROM di_demandes
+         WHERE demandeur_id <> ?
+           AND signatures != '[]'
+           AND (signatures::jsonb) @> ?::jsonb
+         ORDER BY updated_at DESC LIMIT 50",
+        [$uid, $param]
+    );
+    $out = [];
+    foreach ($rows as $r) {
+        $d = di_get((int)$r['id']);
+        if (!$d) continue;
+        $wf = di_workflow_of($d);
+        $d['_etape_label'] = $wf[(int)$d['etape_actuelle']]['label'] ?? '';
+        $d['_demandeur']   = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$d['demandeur_id']]);
+        $out[] = $d;
+    }
+    return $out;
+}
+
 // ── Étape suivante (ou null si terminé) — logique identique à l'app source
 function di_next_step(array $workflow, int $currentStep): ?int {
     if ($currentStep === -1) return 0;
