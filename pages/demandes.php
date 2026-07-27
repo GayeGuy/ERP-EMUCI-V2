@@ -161,16 +161,8 @@ function di_pdf_html(array $d): string {
       {$sigBlock}
     </td></tr>
     <tr style="background:{$bdBg}">
-      <td style="padding:2px 8px 3px;font-size:10px;color:#5a6480">Signataire</td>
-      <td style="padding:2px 8px 3px;font-size:10.5px;font-weight:bold;color:#1f2a44">{$byLine}</td>
-    </tr>
-    <tr style="background:{$bdBg}">
-      <td style="padding:2px 8px 4px;font-size:10px;color:#5a6480">Décision</td>
-      <td style="padding:2px 8px 4px;font-size:10.5px"><span style="{$decCl}">{$decTx}</span></td>
-    </tr>
-    <tr style="background:{$bdBg}">
-      <td style="padding:2px 8px 7px;font-size:10px;color:#5a6480">Date</td>
-      <td style="padding:2px 8px 7px;font-size:10.5px;color:#1f2a44">{$dtLine}</td>
+      <td style="padding:3px 8px 7px;font-size:10px;color:#5a6480">Date</td>
+      <td style="padding:3px 8px 7px;font-size:10.5px;color:#1f2a44">{$dtLine}</td>
     </tr>
     <tr style="background:{$bdBg}">
       <td colspan="2" style="padding:0 8px 8px;font-size:9.5px;color:#8a93a5;font-style:italic">{$noteLine}&nbsp;</td>
