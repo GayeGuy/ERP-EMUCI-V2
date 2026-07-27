@@ -168,8 +168,9 @@ function _groupes_def(): array {
                 ['label'=>'Types & circuits','icon'=>'ph-git-branch',
                  'url'=>'pages/demandes_types.php','active_keys'=>['demandes_types'],
                  'roles_include'=>['admin','superadmin']],
-                // « Rôles valideurs » retiré : la validation est désormais pilotée par le rôle ERP
-                // (Administration → Permissions). Voir di_user_roles() dans includes/demandes.php.
+                ['label'=>'Circuits avancés','icon'=>'ph-buildings',
+                 'url'=>'pages/demandes_roles.php','active_keys'=>['demandes_roles'],
+                 'roles_include'=>['admin','superadmin']],
             ],
         ],
 
