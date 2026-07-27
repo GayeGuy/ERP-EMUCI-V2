@@ -66,6 +66,7 @@ function di_user_roles(int $userId): array {
         'superviseur_it'    => ['it'],
         'maintenance_info'  => ['it'],
         'directeur_general' => ['dg'],
+        'lecteur'           => ['dg'],  // PDG — rôle ERP "lecteur" = visa Direction Générale
         // Administrateurs : visent toutes les étapes (jamais leur propre demande, cf. di_can_validate)
         'superadmin'        => ['n1', 'raf', 'daf', 'dg', 'it', 'gestionnaire'],
         'admin'             => ['n1', 'raf', 'daf', 'dg', 'it', 'gestionnaire'],
