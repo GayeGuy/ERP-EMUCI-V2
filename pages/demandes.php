@@ -239,10 +239,25 @@ if (!empty($_GET['id'])) {
     }
 }
 
+// ── Filtres période pour la liste
+$fil_periode = $_GET['periode'] ?? '';
+$fil_from    = $_GET['date_from'] ?? '';
+$fil_to      = $_GET['date_to']   ?? '';
+$today = date('Y-m-d');
+if ($fil_periode === 'today')    { $fil_from = $fil_to = $today; }
+elseif ($fil_periode === 'week')    { $fil_from = date('Y-m-d', strtotime('monday this week')); $fil_to = $today; }
+elseif ($fil_periode === 'month')   { $fil_from = date('Y-m-01'); $fil_to = $today; }
+elseif ($fil_periode === '3months') { $fil_from = date('Y-m-d', strtotime('-3 months')); $fil_to = $today; }
+$fFrom = $fil_from !== '' ? $fil_from : null;
+$fTo   = $fil_to   !== '' ? $fil_to   : null;
+
 // ── Liste « Mes demandes »
+$dateWhere = ''; $dateParams = [];
+if ($fFrom) { $dateWhere .= ' AND created_at >= ?'; $dateParams[] = $fFrom . ' 00:00:00'; }
+if ($fTo)   { $dateWhere .= ' AND created_at <= ?'; $dateParams[] = $fTo   . ' 23:59:59'; }
 $mes = $detail ? [] : db_fetch_all(
-    "SELECT id, numero, type_code, statut, created_at FROM di_demandes WHERE demandeur_id=? ORDER BY created_at DESC",
-    [$user['id']]
+    "SELECT id, numero, type_code, statut, created_at FROM di_demandes WHERE demandeur_id=? $dateWhere ORDER BY created_at DESC",
+    array_merge([$user['id']], $dateParams)
 );
 $type_labels = [];
 foreach (di_types_actifs() as $t) $type_labels[$t['code']] = $t['label'];
@@ -386,11 +401,45 @@ include __DIR__ . '/../templates/header.php';
     <div class="di-stat"><div class="n" style="color:#7f8c8d"><?= $di_stats['brouillon'] ?></div><div class="l">Brouillons</div></div>
   </div>
 
+  <!-- ── Barre de filtres -->
+  <form method="get" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    background:var(--card,#fff);border:1.5px solid var(--border,#e2e8f0);border-radius:12px;
+    padding:10px 14px;margin-bottom:16px">
+    <span style="font-size:12px;font-weight:700;color:var(--muted,#7f8c8d);white-space:nowrap">Période</span>
+    <?php
+    $pills = [''=> 'Tout','today'=>"Auj.",'week'=>'Semaine','month'=>'Mois','3months'=>'3 mois','custom'=>'Dates…'];
+    foreach ($pills as $val => $lbl):
+        $act = ($fil_periode === $val) || ($val==='' && $fil_periode==='') ? 'background:#3B4FBE;color:#fff;border-color:#3B4FBE' : '';
+    ?>
+    <a href="?periode=<?= $val ?>" style="padding:5px 12px;border-radius:18px;font-size:12px;font-weight:700;
+      border:1.5px solid var(--border,#e2e8f0);background:var(--input,#f8fafc);color:var(--muted,#7f8c8d);
+      text-decoration:none;<?= $act ?>" <?= $val==='custom'?'onclick="toggleCustom(event)"':'' ?>><?= $lbl ?></a>
+    <?php endforeach; ?>
+    <span id="mes-custom" style="display:<?= $fil_periode==='custom'?'flex':'none' ?>;align-items:center;gap:6px">
+      <input type="date" name="date_from" value="<?= h($fil_from) ?>"
+        style="padding:5px 9px;border:1.5px solid var(--border,#d5dde8);border-radius:8px;font-size:12px;font-family:inherit;background:var(--input,#f8fafc)">
+      <span style="color:var(--muted,#cbd5e1)">→</span>
+      <input type="date" name="date_to" value="<?= h($fil_to) ?>"
+        style="padding:5px 9px;border:1.5px solid var(--border,#d5dde8);border-radius:8px;font-size:12px;font-family:inherit;background:var(--input,#f8fafc)">
+      <input type="hidden" name="periode" value="custom">
+      <button type="submit" style="padding:5px 14px;border:none;border-radius:8px;background:#3B4FBE;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">OK</button>
+    </span>
+    <?php if ($fFrom || $fTo): ?>
+    <a href="?" style="font-size:12px;color:#e74c3c;text-decoration:none;margin-left:4px">✕ Effacer</a>
+    <?php endif; ?>
+  </form>
+
   <?php if (empty($mes)): ?>
     <div class="di-card di-empty">
-      <i class="ph-duotone ph-tray" style="font-size:44px;color:#cbd5e1"></i>
-      <p>Vous n'avez pas encore de demande.</p>
-      <a href="<?= APP_URL ?>/pages/demandes_new.php" class="di-btn di-btn-primary" style="margin-top:8px">Créer ma première demande</a>
+      <?php if ($fFrom || $fTo): ?>
+        <i class="ph-duotone ph-calendar-blank" style="font-size:44px;color:#cbd5e1"></i>
+        <p>Aucune demande sur cette période.</p>
+        <a href="?" class="di-btn di-btn-ghost" style="margin-top:8px">Voir toutes mes demandes</a>
+      <?php else: ?>
+        <i class="ph-duotone ph-tray" style="font-size:44px;color:#cbd5e1"></i>
+        <p>Vous n'avez pas encore de demande.</p>
+        <a href="<?= APP_URL ?>/pages/demandes_new.php" class="di-btn di-btn-primary" style="margin-top:8px">Créer ma première demande</a>
+      <?php endif; ?>
     </div>
   <?php else: ?>
     <table class="di-tbl">
@@ -423,6 +472,11 @@ include __DIR__ . '/../templates/header.php';
 </div>
 
 <script>
+function toggleCustom(e){
+  e.preventDefault();
+  const d = document.getElementById('mes-custom');
+  if (d) d.style.display = d.style.display === 'none' ? 'flex' : 'none';
+}
 const DI_ID = <?= $detail ? (int)$detail['id'] : 0 ?>;
 function diPost(fd, ok){
   fetch('<?= APP_URL ?>/pages/demandes.php', {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, body:fd})
