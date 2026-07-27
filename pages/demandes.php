@@ -98,27 +98,69 @@ function di_pdf_html(array $d): string {
     $sigByStep = [];
     foreach ($d['signatures'] as $s) { $sigByStep[(int)($s['etape'] ?? -1)] = $s; }
 
-    // Circuit (chips) + visas (une ligne par étape, signée ou en attente)
-    $chips = ''; $visaRows = '';
+    // Blocs de visa (un par étape) — format document administratif
+    $nSteps   = count($wf);
+    $pct      = $nSteps > 0 ? floor(100 / $nSteps) : 100;
+    $visaCells = '';
     foreach ($wf as $i => $st) {
         $label = h($st['label']);
-        $sig = $sigByStep[$i] ?? null;
-        $act = $sig['action'] ?? '';
-        if ($act === 'approuve')            $chips .= '<span class="chip c-done">✓ '.$label.'</span>';
-        elseif ($act === 'rejete')          $chips .= '<span class="chip c-no">✗ '.$label.'</span>';
-        elseif ($i === $cur && $enCours)    $chips .= '<span class="chip c-cur">'.($i + 1).'. '.$label.'</span>';
-        else                                $chips .= '<span class="chip c-wait">'.($i + 1).'. '.$label.'</span>';
+        $sig   = $sigByStep[$i] ?? null;
+        $act   = $sig['action'] ?? '';
 
-        if ($sig) {
-            $dec  = $act === 'rejete' ? '<span class="no">✗ Rejeté</span>' : '<span class="ok">✓ Approuvé</span>';
-            $par  = h($sig['nom'] ?? '');
-            $dt   = !empty($sig['date']) ? date('d/m/Y', strtotime($sig['date'])) : '';
-            $note = h($sig['commentaire'] ?? $sig['motif'] ?? '');
+        if ($act === 'approuve') {
+            $hdbg  = '#1f9d5b'; $hdfg = '#fff';
+            $icon  = '&#10003;'; // ✓
+            $decTx = 'Approuvé';
+            $decCl = 'color:#1f9d5b;font-weight:bold';
+            $bdBg  = '#f0faf5'; $bdBorder = '#bfe6d0';
+        } elseif ($act === 'rejete') {
+            $hdbg  = '#e74c3c'; $hdfg = '#fff';
+            $icon  = '&#10007;'; // ✗
+            $decTx = 'Rejeté';
+            $decCl = 'color:#e74c3c;font-weight:bold';
+            $bdBg  = '#fdf1f0'; $bdBorder = '#f6c9c4';
+        } elseif ($i === $cur && $enCours) {
+            $hdbg  = '#3B4FBE'; $hdfg = '#fff';
+            $icon  = '&#8987;'; // ⏳
+            $decTx = 'En attente de visa';
+            $decCl = 'color:#3B4FBE;font-style:italic';
+            $bdBg  = '#f4f5fd'; $bdBorder = '#cdd4f6';
         } else {
-            $dec  = ($i === $cur && $enCours) ? '<span class="wait">En attente</span>' : '<span class="wait">Non atteint</span>';
-            $par  = '<span class="wait">—</span>'; $dt = ''; $note = '';
+            $hdbg  = '#b0b7c9'; $hdfg = '#fff';
+            $icon  = '&#8212;'; // —
+            $decTx = 'Non atteint';
+            $decCl = 'color:#b0b7c9;font-style:italic';
+            $bdBg  = '#f8f9fb'; $bdBorder = '#e4e8f1';
         }
-        $visaRows .= '<tr><td><b>'.($i + 1).'.</b> '.$label.'</td><td>'.$dec.'</td><td>'.$par.'</td><td>'.$dt.'</td><td>'.$note.'</td></tr>';
+
+        $byLine   = $sig ? h($sig['nom'] ?? '') : '&nbsp;';
+        $dtLine   = ($sig && !empty($sig['date'])) ? date('d/m/Y', strtotime($sig['date'])) : '&nbsp;';
+        $noteLine = $sig ? h($sig['commentaire'] ?? $sig['motif'] ?? '') : '';
+
+        $visaCells .= <<<CELL
+<td style="width:{$pct}%;vertical-align:top;padding:0 4px">
+  <table style="width:100%;border-collapse:collapse;border:1.5px solid {$bdBorder};border-radius:6px;overflow:hidden">
+    <tr><td colspan="2" style="background:{$hdbg};color:{$hdfg};font-size:9.5px;font-weight:bold;
+      padding:6px 8px;text-transform:uppercase;letter-spacing:.4px;line-height:1.3">
+      {$icon}&nbsp;&nbsp;{$label}
+    </td></tr>
+    <tr><td colspan="2" style="background:{$bdBg};padding:7px 8px 4px">
+      <span style="{$decCl};font-size:11px">{$decTx}</span>
+    </td></tr>
+    <tr style="background:{$bdBg}">
+      <td style="padding:2px 8px 3px;font-size:10px;color:#5a6480">Signataire</td>
+      <td style="padding:2px 8px 3px;font-size:10.5px;font-weight:bold;color:#1f2a44">{$byLine}</td>
+    </tr>
+    <tr style="background:{$bdBg}">
+      <td style="padding:2px 8px 7px;font-size:10px;color:#5a6480">Date</td>
+      <td style="padding:2px 8px 7px;font-size:10.5px;color:#1f2a44">{$dtLine}</td>
+    </tr>
+    <tr style="background:{$bdBg}">
+      <td colspan="2" style="padding:0 8px 8px;font-size:9.5px;color:#8a93a5;font-style:italic;min-height:18px">{$noteLine}&nbsp;</td>
+    </tr>
+  </table>
+</td>
+CELL;
     }
 
     $tlabel  = h($type['label'] ?? $d['type_code']);
@@ -141,39 +183,30 @@ function di_pdf_html(array $d): string {
   .sub{color:#aeb6dd;font-size:10.5px;margin-top:3px}
   .wrap{padding:20px 26px}
   .badge{display:inline-block;padding:4px 14px;border-radius:20px;color:#fff;font-size:10.5px;font-weight:bold}
-  .sec{font-size:11px;font-weight:bold;color:#3B4FBE;text-transform:uppercase;letter-spacing:.6px;margin:20px 0 9px}
-  .card{border:1px solid #e6eaf3;border-radius:10px;background:#fbfcfe;padding:2px 14px}
+  .sec{font-size:11px;font-weight:bold;color:#3B4FBE;text-transform:uppercase;letter-spacing:.6px;margin:20px 0 9px;
+    border-bottom:2px solid #eef2f7;padding-bottom:5px}
+  .card{border:1px solid #e6eaf3;border-radius:8px;background:#fbfcfe;padding:2px 14px}
   .info{width:100%;border-collapse:collapse}
-  .info td{padding:8px 4px;font-size:12px;border-bottom:1px solid #eef2f7;vertical-align:top}
+  .info td{padding:7px 4px;font-size:12px;border-bottom:1px solid #eef2f7;vertical-align:top}
   .info td.k{color:#8a93a5;width:34%}
   .info td.v{font-weight:bold;color:#1f2a44}
-  .chip{display:inline-block;padding:5px 11px;border-radius:8px;font-size:10.5px;font-weight:bold;margin:0 4px 5px 0}
-  .c-done{background:#e8f6ef;color:#1f9d5b;border:1px solid #bfe6d0}
-  .c-cur{background:#eef1fc;color:#3B4FBE;border:1px solid #cdd4f6}
-  .c-no{background:#fdecea;color:#e74c3c;border:1px solid #f6c9c4}
-  .c-wait{background:#f1f3f8;color:#98a1b3;border:1px solid #e4e8f1}
-  .vis{width:100%;border-collapse:collapse;margin-top:2px}
-  .vis th{background:#f0f3fb;text-align:left;padding:8px 9px;font-size:9.5px;color:#5a6480;text-transform:uppercase;letter-spacing:.4px}
-  .vis td{padding:9px;border-bottom:1px solid #eef2f7;font-size:11px;vertical-align:top}
-  .ok{color:#1f9d5b;font-weight:bold}
-  .no{color:#e74c3c;font-weight:bold}
-  .wait{color:#a0a8b8}
-  .ft{margin-top:24px;text-align:center;color:#aab1c0;font-size:9.5px;border-top:1px solid #eef2f7;padding-top:10px}
+  .ft{margin-top:28px;text-align:center;color:#aab1c0;font-size:9px;border-top:1px solid #eef2f7;padding-top:10px}
 </style></head><body>
   <div class="hd"><table class="hdt"><tr>
     <td class="hdl"><div class="ttl">{$tlabel}</div><div class="sub">Demande interne · {$dnomH}</div></td>
-    <td class="hdr">EMU-CI<br>Réf. {$numero}<br>{$created}</td>
+    <td class="hdr">EMU-CI<br>Réf.&nbsp;{$numero}<br>{$created}</td>
   </tr></table></div>
   <div class="wrap">
-    <div style="margin-bottom:2px"><span class="badge" style="background:{$sc}">{$slblH}</span></div>
-    <div class="sec">Circuit de validation</div>
-    <div>{$chips}</div>
+    <div style="margin-bottom:14px"><span class="badge" style="background:{$sc}">{$slblH}</span></div>
     <div class="sec">Demandeur</div>
-    <div class="card"><table class="info"><tr><td class="k">Nom</td><td class="v">{$dnomH}</td></tr><tr><td class="k">Email</td><td class="v">{$email}</td></tr></table></div>
+    <div class="card"><table class="info">
+      <tr><td class="k">Nom</td><td class="v">{$dnomH}</td></tr>
+      <tr><td class="k">Email</td><td class="v">{$email}</td></tr>
+    </table></div>
     <div class="sec">Détails de la demande</div>
     <div class="card"><table class="info">{$rows}</table></div>
-    <div class="sec">Visas &amp; signatures</div>
-    <table class="vis"><tr><th>Étape</th><th>Décision</th><th>Par</th><th>Date</th><th>Note</th></tr>{$visaRows}</table>
+    <div class="sec">Chaîne de visas</div>
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed"><tr>{$visaCells}</tr></table>
     <div class="ft">Document généré automatiquement par EMU-CI le {$genat} — Réf. {$numero}</div>
   </div>
 </body></html>
