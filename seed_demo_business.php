@@ -11,6 +11,15 @@
 //  jamais aux données réelles.
 // ============================================================
 
+// Ce script écrit dans la base. Le secret partagé du dépôt ne suffit pas :
+// il faut activer explicitement ALLOW_DEMO_SEED=1 dans l'environnement
+// (dashboard Render) pour que la démo puisse s'exécuter. Désactivez-la
+// dès que la recette est terminée.
+if (getenv('ALLOW_DEMO_SEED') !== '1') {
+    http_response_code(403);
+    die('Jeu de démonstration désactivé. Définissez ALLOW_DEMO_SEED=1 pour l\'autoriser.');
+}
+
 $secret = $_GET['secret'] ?? '';
 if ($secret !== 'emuci2026import') { http_response_code(403); die('Accès refusé'); }
 
