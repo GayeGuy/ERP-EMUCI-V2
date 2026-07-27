@@ -248,28 +248,39 @@ if (!empty($_GET['id'])) {
     }
 }
 
-// ── Filtres période pour la liste
-$fil_periode = $_GET['periode'] ?? '';
-$fil_from    = $_GET['date_from'] ?? '';
-$fil_to      = $_GET['date_to']   ?? '';
-$today = date('Y-m-d');
-if ($fil_periode === 'today')    { $fil_from = $fil_to = $today; }
-elseif ($fil_periode === 'week')    { $fil_from = date('Y-m-d', strtotime('monday this week')); $fil_to = $today; }
-elseif ($fil_periode === 'month')   { $fil_from = date('Y-m-01'); $fil_to = $today; }
-elseif ($fil_periode === '3months') { $fil_from = date('Y-m-d', strtotime('-3 months')); $fil_to = $today; }
-$fFrom = $fil_from !== '' ? $fil_from : null;
-$fTo   = $fil_to   !== '' ? $fil_to   : null;
+// ── Filtres liste
+$fil_search  = $_GET['q']         ?? '';
+$fil_type    = $_GET['type']      ?? '';
+$fil_statut  = $_GET['statut']    ?? '';
+$fSearch = $fil_search !== '' ? $fil_search : null;
+$fType   = $fil_type   !== '' ? $fil_type   : null;
+$fStatut = $fil_statut !== '' ? $fil_statut : null;
+$fFrom = null; $fTo = null;
 
 // ── Liste « Mes demandes »
-$dateWhere = ''; $dateParams = [];
-if ($fFrom) { $dateWhere .= ' AND created_at >= ?'; $dateParams[] = $fFrom . ' 00:00:00'; }
-if ($fTo)   { $dateWhere .= ' AND created_at <= ?'; $dateParams[] = $fTo   . ' 23:59:59'; }
+$where = 'd.demandeur_id=?'; $params = [(int)$user['id']];
+if ($fType)   { $where .= ' AND d.type_code = ?'; $params[] = $fType; }
+if ($fStatut) {
+    if ($fStatut === 'en_cours') { $where .= " AND d.statut IN ('en_attente','en_cours')"; }
+    else                         { $where .= ' AND d.statut = ?'; $params[] = $fStatut; }
+}
+if ($fSearch) {
+    $where .= ' AND (d.numero ILIKE ? OR LOWER(u.prenom || \' \' || u.nom) LIKE LOWER(?))';
+    $params[] = '%'.$fSearch.'%'; $params[] = '%'.$fSearch.'%';
+}
 $mes = $detail ? [] : db_fetch_all(
-    "SELECT id, numero, type_code, statut, created_at FROM di_demandes WHERE demandeur_id=? $dateWhere ORDER BY created_at DESC",
-    array_merge([$user['id']], $dateParams)
+    "SELECT d.id, d.numero, d.type_code, d.statut, d.created_at, d.etape_actuelle,
+            (u.prenom || ' ' || u.nom) AS demandeur_nom
+     FROM di_demandes d JOIN users u ON u.id = d.demandeur_id
+     WHERE $where ORDER BY d.created_at DESC",
+    $params
 );
 $type_labels = [];
-foreach (di_types_actifs() as $t) $type_labels[$t['code']] = $t['label'];
+$wf_cache    = [];
+foreach (di_types_actifs() as $t) {
+    $type_labels[$t['code']] = $t['label'];
+    $wf_cache[$t['code']]    = json_decode($t['workflow'] ?? '[]', true) ?: [];
+}
 
 // ── Mini-dashboard (vue liste uniquement)
 $di_stats = ['en_attente'=>0,'en_cours'=>0,'approuve'=>0,'rejete'=>0,'brouillon'=>0];
@@ -446,39 +457,54 @@ include __DIR__ . '/../templates/header.php';
   </div>
 
   <!-- ── Barre de filtres -->
-  <form method="get" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;
-    background:var(--card,#fff);border:1.5px solid var(--border,#e2e8f0);border-radius:12px;
-    padding:10px 14px;margin-bottom:16px">
-    <span style="font-size:12px;font-weight:700;color:var(--muted,#7f8c8d);white-space:nowrap">Période</span>
-    <?php
-    $pills = [''=> 'Tout','today'=>"Auj.",'week'=>'Semaine','month'=>'Mois','3months'=>'3 mois','custom'=>'Dates…'];
-    foreach ($pills as $val => $lbl):
-        $act = ($fil_periode === $val) || ($val==='' && $fil_periode==='') ? 'background:#3B4FBE;color:#fff;border-color:#3B4FBE' : '';
-    ?>
-    <a href="?periode=<?= $val ?>" style="padding:5px 12px;border-radius:18px;font-size:12px;font-weight:700;
-      border:1.5px solid var(--border,#e2e8f0);background:var(--input,#f8fafc);color:var(--muted,#7f8c8d);
-      text-decoration:none;<?= $act ?>" <?= $val==='custom'?'onclick="toggleCustom(event)"':'' ?>><?= $lbl ?></a>
-    <?php endforeach; ?>
-    <span id="mes-custom" style="display:<?= $fil_periode==='custom'?'flex':'none' ?>;align-items:center;gap:6px">
-      <input type="date" name="date_from" value="<?= h($fil_from) ?>"
-        style="padding:5px 9px;border:1.5px solid var(--border,#d5dde8);border-radius:8px;font-size:12px;font-family:inherit;background:var(--input,#f8fafc)">
-      <span style="color:var(--muted,#cbd5e1)">→</span>
-      <input type="date" name="date_to" value="<?= h($fil_to) ?>"
-        style="padding:5px 9px;border:1.5px solid var(--border,#d5dde8);border-radius:8px;font-size:12px;font-family:inherit;background:var(--input,#f8fafc)">
-      <input type="hidden" name="periode" value="custom">
-      <button type="submit" style="padding:5px 14px;border:none;border-radius:8px;background:#3B4FBE;color:#fff;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit">OK</button>
-    </span>
-    <?php if ($fFrom || $fTo): ?>
-    <a href="?" style="font-size:12px;color:#e74c3c;text-decoration:none;margin-left:4px">✕ Effacer</a>
-    <?php endif; ?>
+  <?php $has_filter = $fType || $fStatut || $fSearch; ?>
+  <form method="get" id="fmes" style="background:var(--card,#fff);border:1.5px solid var(--border,#e2e8f0);border-radius:14px;
+    padding:0;margin-bottom:18px;display:grid;grid-template-columns:1fr 1px 1fr 1px 1fr;align-items:stretch;overflow:hidden">
+    <!-- Rechercher -->
+    <div style="padding:14px 18px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted,#7f8c8d);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Rechercher</div>
+      <input type="text" name="q" value="<?= h($fil_search) ?>" placeholder="Nom, type, référence…"
+        style="width:100%;border:none;outline:none;font-size:13px;font-family:inherit;background:transparent;color:var(--text,#2c3e50);padding:0"
+        oninput="clearTimeout(this._t);this._t=setTimeout(()=>document.getElementById('fmes').submit(),500)">
+    </div>
+    <div style="background:var(--border,#e2e8f0)"></div>
+    <!-- Type -->
+    <div style="padding:14px 18px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted,#7f8c8d);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Type</div>
+      <select name="type" style="border:none;outline:none;font-size:13px;font-family:inherit;background:transparent;color:var(--text,#2c3e50);width:100%;cursor:pointer;padding:0"
+        onchange="document.getElementById('fmes').submit()">
+        <option value="">Tous les types</option>
+        <?php foreach (di_types_actifs() as $t): ?>
+        <option value="<?= h($t['code']) ?>" <?= $fType===$t['code']?'selected':'' ?>><?= h($t['label']) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+    <div style="background:var(--border,#e2e8f0)"></div>
+    <!-- Statut -->
+    <div style="padding:14px 18px">
+      <div style="font-size:11px;font-weight:700;color:var(--muted,#7f8c8d);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Statut</div>
+      <select name="statut" style="border:none;outline:none;font-size:13px;font-family:inherit;background:transparent;color:var(--text,#2c3e50);width:100%;cursor:pointer;padding:0"
+        onchange="document.getElementById('fmes').submit()">
+        <option value="">Tous les statuts</option>
+        <option value="brouillon"  <?= $fStatut==='brouillon'?'selected':'' ?>>Brouillon</option>
+        <option value="en_cours"   <?= $fStatut==='en_cours'?'selected':'' ?>>En cours</option>
+        <option value="approuve"   <?= $fStatut==='approuve'?'selected':'' ?>>Approuvée</option>
+        <option value="rejete"     <?= $fStatut==='rejete'?'selected':'' ?>>Rejetée</option>
+      </select>
+    </div>
   </form>
+  <?php if ($has_filter): ?>
+  <div style="margin:-10px 0 14px;font-size:12px">
+    <a href="?" style="color:#e74c3c;text-decoration:none;font-weight:700">✕ Effacer les filtres</a>
+  </div>
+  <?php endif; ?>
 
   <?php if (empty($mes)): ?>
     <div class="di-card di-empty">
-      <?php if ($fFrom || $fTo): ?>
-        <i class="ph-duotone ph-calendar-blank" style="font-size:44px;color:#cbd5e1"></i>
-        <p>Aucune demande sur cette période.</p>
-        <a href="?" class="di-btn di-btn-ghost" style="margin-top:8px">Voir toutes mes demandes</a>
+      <?php if ($has_filter): ?>
+        <i class="ph-duotone ph-magnifying-glass" style="font-size:44px;color:#cbd5e1"></i>
+        <p>Aucune demande ne correspond à votre recherche.</p>
+        <a href="?" class="di-btn di-btn-ghost" style="margin-top:8px">Effacer les filtres</a>
       <?php else: ?>
         <i class="ph-duotone ph-tray" style="font-size:44px;color:#cbd5e1"></i>
         <p>Vous n'avez pas encore de demande.</p>
@@ -487,20 +513,33 @@ include __DIR__ . '/../templates/header.php';
     </div>
   <?php else: ?>
     <table class="di-tbl">
-      <thead><tr><th>Référence</th><th>Type</th><th>Date</th><th>Statut</th><th></th></tr></thead>
+      <thead><tr>
+        <th>Réf.</th><th>Type</th><th>Demandeur</th><th>Statut</th><th>Étape</th><th>Date</th><th></th>
+      </tr></thead>
       <tbody>
-      <?php foreach ($mes as $m): $url = APP_URL.'/pages/demandes.php?id='.(int)$m['id']; ?>
+      <?php foreach ($mes as $m):
+        $url = APP_URL.'/pages/demandes.php?id='.(int)$m['id'];
+        $wf  = $wf_cache[$m['type_code']] ?? [];
+        $idx = (int)($m['etape_actuelle'] ?? 0);
+        if (in_array($m['statut'], ['approuve','approuve_traitement'], true))   $etape_lbl = 'Approuvée';
+        elseif ($m['statut'] === 'rejete')   $etape_lbl = 'Rejetée';
+        elseif ($m['statut'] === 'brouillon') $etape_lbl = 'Brouillon';
+        else $etape_lbl = $wf[$idx]['label'] ?? '—';
+      ?>
         <tr style="cursor:pointer" onclick="location.href='<?= $url ?>'">
-          <td style="font-weight:700"><?= h($m['numero']) ?></td>
+          <td style="font-weight:700;white-space:nowrap"><?= h($m['numero']) ?></td>
           <td><?= h($type_labels[$m['type_code']] ?? $m['type_code']) ?></td>
-          <td style="color:var(--muted,#7f8c8d);font-size:13px"><?= date('d/m/Y', strtotime($m['created_at'])) ?></td>
+          <td style="font-size:13px"><?= h($m['demandeur_nom'] ?? '') ?></td>
           <td><?= di_badge($m['statut']) ?></td>
-          <td style="text-align:right">
+          <td><span style="font-size:12px;font-weight:600;padding:3px 9px;border-radius:8px;
+            background:var(--input,#eef1fc);color:var(--navy,#06033A)"><?= h($etape_lbl) ?></span></td>
+          <td style="color:var(--muted,#7f8c8d);font-size:13px;white-space:nowrap"><?= date('d M. Y', strtotime($m['created_at'])) ?></td>
+          <td style="text-align:right;white-space:nowrap">
             <a href="<?= $url ?>" onclick="event.stopPropagation()"
                style="display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:8px;
                  font-size:12px;font-weight:700;background:var(--input,#f0f4f8);color:var(--navy,#06033A);
                  text-decoration:none;border:1.5px solid var(--border,#e2e8f0)">
-              <i class="ph-duotone ph-eye"></i> Voir
+              Voir
             </a>
           </td>
         </tr>
@@ -524,11 +563,6 @@ include __DIR__ . '/../templates/header.php';
 </div>
 
 <script>
-function toggleCustom(e){
-  e.preventDefault();
-  const d = document.getElementById('mes-custom');
-  if (d) d.style.display = d.style.display === 'none' ? 'flex' : 'none';
-}
 const DI_ID = <?= $detail ? (int)$detail['id'] : 0 ?>;
 function diPost(fd, ok){
   fetch('<?= APP_URL ?>/pages/demandes.php', {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, body:fd})
