@@ -245,6 +245,156 @@ $cible_vh   = 15;
 $moy_vh_cur = (float)($ops['moy_prod'] ?? 0);
 $taux_prod  = $cible_vh > 0 ? min(100, (int)round($moy_vh_cur / $cible_vh * 100)) : 0;
 
+// ══════════════════════════════════════════════════════════
+//  KPI BUSINESS — service, gâche matière, écart de consommation,
+//  couverture de stock, fiabilité, productivité, mix produit
+// ══════════════════════════════════════════════════════════
+
+// ── Agrégats du point journalier (mix, non-posés, rivets, heures)
+$biz = db_fetch_one(
+    "SELECT COALESCE(SUM(total_plaques),0)              AS posees,
+            COALESCE(SUM(non_poses_concessionnaires),0) AS np_conc,
+            COALESCE(SUM(non_poses_usagers),0)          AS np_usag,
+            COALESCE(SUM(nb_vp),0)                      AS nb_vp,
+            COALESCE(SUM(nb_camion),0)                  AS nb_camion,
+            COALESCE(SUM(nb_semi),0)                    AS nb_semi,
+            COALESCE(SUM(nb_moto),0)                    AS nb_moto,
+            COALESCE(SUM(rivets_utilises),0)            AS riv_ok,
+            COALESCE(SUM(rivets_endommages),0)          AS riv_ko,
+            COALESCE(SUM(nb_heures_travail),0)          AS heures
+     FROM op_points_journaliers
+     WHERE $date_filter AND statut <> 'brouillon'",
+    [$date_param]
+);
+
+// 1 ── Taux de service : part de la demande réellement servie
+$posees   = (int)($biz['posees'] ?? 0);
+$np_conc  = (int)($biz['np_conc'] ?? 0);
+$np_usag  = (int)($biz['np_usag'] ?? 0);
+$np_total = $np_conc + $np_usag;
+$demande  = $posees + $np_total;
+$taux_service = $demande > 0 ? round($posees / $demande * 100, 1) : null;
+
+// 2 ── Rendement matière : part de film et de rivets détruits
+$gache = db_fetch_one(
+    "SELECT COALESCE(SUM(fu.films_utilises),0)   AS ok,
+            COALESCE(SUM(fu.films_endommages),0) AS ko
+     FROM op_films_utilises fu
+     JOIN op_points_journaliers p ON p.id = fu.point_id
+     WHERE $date_filter_p AND p.statut <> 'brouillon'",
+    [$date_param]
+);
+$f_ok = (int)($gache['ok'] ?? 0);
+$f_ko = (int)($gache['ko'] ?? 0);
+$taux_gache     = ($f_ok + $f_ko) > 0 ? round($f_ko / ($f_ok + $f_ko) * 100, 2) : null;
+$riv_ok         = (int)($biz['riv_ok'] ?? 0);
+$riv_ko         = (int)($biz['riv_ko'] ?? 0);
+$taux_gache_riv = ($riv_ok + $riv_ko) > 0 ? round($riv_ko / ($riv_ok + $riv_ko) * 100, 2) : null;
+
+// 3 ── Écart consommation théorique vs réelle
+//     Théorique = Σ (engins du type × plaques/rivets par engin), par série A/B/C/D.
+$nb_vp = (int)($biz['nb_vp'] ?? 0); $nb_cam = (int)($biz['nb_camion'] ?? 0);
+$nb_smi = (int)($biz['nb_semi'] ?? 0); $nb_mot = (int)($biz['nb_moto'] ?? 0);
+$bareme_plq = ['A'=>2,'B'=>2,'C'=>2,'D'=>1];   // valeurs de repli si la table est vide
+$bareme_riv = ['A'=>4,'B'=>4,'C'=>4,'D'=>2];
+foreach (db_fetch_all(
+    "SELECT serie_bobine,
+            ROUND(AVG(nb_plaques))::int AS nb_plaques,
+            ROUND(AVG(nb_rivets))::int  AS nb_rivets
+     FROM op_types_vehicule GROUP BY serie_bobine") as $t) {
+    $s = strtoupper(trim((string)$t['serie_bobine']));
+    if (isset($bareme_plq[$s])) {
+        $bareme_plq[$s] = (int)$t['nb_plaques'];
+        $bareme_riv[$s] = (int)$t['nb_rivets'];
+    }
+}
+$theo_plq = $nb_vp*$bareme_plq['A'] + $nb_cam*$bareme_plq['B'] + $nb_smi*$bareme_plq['C'] + $nb_mot*$bareme_plq['D'];
+$theo_riv = $nb_vp*$bareme_riv['A'] + $nb_cam*$bareme_riv['B'] + $nb_smi*$bareme_riv['C'] + $nb_mot*$bareme_riv['D'];
+$ecart_plq     = $theo_plq > 0 ? $posees - $theo_plq : null;
+$ecart_plq_pct = $theo_plq > 0 ? round(($posees - $theo_plq) / $theo_plq * 100, 1) : null;
+$ecart_riv     = $theo_riv > 0 ? $riv_ok - $theo_riv : null;
+$ecart_riv_pct = $theo_riv > 0 ? round(($riv_ok - $theo_riv) / $theo_riv * 100, 1) : null;
+
+// 4 ── Couverture de stock, en jours, site par site
+$couv_raw = db_fetch_all(
+    "SELECT s.id, s.nom,
+            COALESCE(st.restants,0) AS restants,
+            COALESCE(c.films,0)     AS films,
+            COALESCE(c.jours,0)     AS jours
+     FROM sites s
+     LEFT JOIN (
+        SELECT p.site_id,
+               SUM(fu.films_utilises)       AS films,
+               COUNT(DISTINCT p.date_point) AS jours
+        FROM op_points_journaliers p
+        JOIN op_films_utilises fu ON fu.point_id = p.id
+        WHERE $date_filter_p AND p.statut <> 'brouillon'
+        GROUP BY p.site_id
+     ) c ON c.site_id = s.id
+     LEFT JOIN (
+        SELECT site_id, SUM(films_restants) AS restants
+        FROM op_bobines WHERE statut IN ('en_stock','en_cours') GROUP BY site_id
+     ) st ON st.site_id = s.id
+     WHERE s.actif = 1
+     ORDER BY s.nom",
+    [$date_param]
+);
+$couverture = [];
+foreach ($couv_raw as $r) {
+    $j  = (int)$r['jours'];
+    $cj = $j > 0 ? (float)$r['films'] / $j : 0.0;          // consommation moyenne / jour
+    $couverture[] = [
+        'nom'       => $r['nom'],
+        'restants'  => (int)$r['restants'],
+        'conso_j'   => $cj,
+        // null = pas de consommation observée, donc pas de couverture calculable
+        'jours'     => $cj > 0 ? (int)floor((int)$r['restants'] / $cj) : null,
+    ];
+}
+// Tri : les sites les plus tendus d'abord, les non calculables en fin de liste
+usort($couverture, fn($a,$b) => [$a['jours']===null?1:0, $a['jours']??0] <=> [$b['jours']===null?1:0, $b['jours']??0]);
+$seuil_couv_bas = 15;   // jours : en deçà, réapprovisionnement à déclencher
+$couv_critiques = count(array_filter($couverture, fn($c) => $c['jours'] !== null && $c['jours'] < $seuil_couv_bas));
+
+// 5 ── Fiabilité du stock : écarts d'inventaire + réconciliation EMUCI
+$fiab = db_fetch_one(
+    "SELECT (SELECT COUNT(*)                      FROM ecarts_bobines WHERE statut = 'ouvert') AS ec_ouverts,
+            (SELECT COALESCE(SUM(ABS(ecart)),0)   FROM ecarts_bobines WHERE statut = 'ouvert') AS ec_films,
+            (SELECT COUNT(*)                      FROM op_bobines     WHERE statut = 'perdue') AS bob_perdues,
+            (SELECT COALESCE(SUM(films_restants),0) FROM op_bobines   WHERE statut = 'perdue') AS bob_perdues_films"
+);
+$recon = db_fetch_one(
+    "SELECT COUNT(*) AS total,
+            COALESCE(SUM(CASE WHEN statut_ecart = 'majeur' THEN 1 ELSE 0 END),0)              AS majeurs,
+            COALESCE(SUM(CASE WHEN statut_ecart = 'majeur' AND ajuste = 0 THEN 1 ELSE 0 END),0) AS majeurs_ouverts,
+            COALESCE(SUM(ABS(ecart)),0) AS ecart_films
+     FROM comparaisons_stock
+     WHERE " . str_replace('date_point', 'date_comparaison', $date_filter),
+    [$date_param]
+);
+$rec_total    = (int)($recon['total'] ?? 0);
+$rec_majeurs  = (int)($recon['majeurs'] ?? 0);
+$rec_ouverts  = (int)($recon['majeurs_ouverts'] ?? 0);
+$taux_recon   = $rec_total > 0 ? round(($rec_total - $rec_majeurs) / $rec_total * 100, 1) : null;
+$ec_ouverts   = (int)($fiab['ec_ouverts'] ?? 0);
+$bob_perdues  = (int)($fiab['bob_perdues'] ?? 0);
+
+// 6 ── Productivité réelle : plaques posées par heure travaillée
+$heures      = (float)($biz['heures'] ?? 0);
+$prod_reelle = $heures > 0 ? round($posees / $heures, 1) : null;
+
+// 7 ── Mix produit
+$mix_total = $nb_vp + $nb_cam + $nb_smi + $nb_mot;
+// 'k' = série A/B/C/D ; les couleurs vivent en CSS pour suivre le thème clair/sombre.
+$mix = [
+    ['lbl'=>'Véhicules particuliers','court'=>'VP',    'n'=>$nb_vp, 'k'=>'a'],
+    ['lbl'=>'Camions',               'court'=>'Camion','n'=>$nb_cam,'k'=>'b'],
+    ['lbl'=>'Semi-remorques',        'court'=>'Semi',  'n'=>$nb_smi,'k'=>'c'],
+    ['lbl'=>'Motos',                 'court'=>'Moto',  'n'=>$nb_mot,'k'=>'d'],
+];
+foreach ($mix as &$m) { $m['pct'] = $mix_total > 0 ? round($m['n'] / $mix_total * 100, 1) : 0; }
+unset($m);
+
 // ── JS DATA
 $js_evol_labels  = json_encode(array_map(fn($r) => ($mc[substr($r['mois'],5,2)]??'').' '.substr($r['mois'],2,2), $evol));
 $js_evol_engins  = json_encode(array_map(fn($r) => (int)$r['engins'], $evol));
@@ -500,6 +650,114 @@ include __DIR__ . '/../templates/header.php';
 #pdg-tip{display:none;position:fixed;z-index:3000;background:#191A17;color:#F4F5F1;border-radius:14px;padding:13px 16px;
   box-shadow:0 12px 34px rgba(0,0,0,.28);pointer-events:none;min-width:180px;font-size:12px;line-height:1.7;font-family:'Manrope',sans-serif}
 
+/* ══════════════════════════════════════════════════════════
+   BANDEAU BUSINESS — service, gâche, écarts, couverture
+   ══════════════════════════════════════════════════════════ */
+.px-biz{display:flex;flex-direction:column;gap:18px;margin-bottom:26px}
+
+/* ── Ligne 1 : service (hero) + 3 métriques ─────────────── */
+.px-biz-lead{display:grid;grid-template-columns:minmax(0,1.32fr) minmax(0,1fr);gap:18px;align-items:stretch}
+@media(max-width:980px){.px-biz-lead{grid-template-columns:minmax(0,1fr)}}
+
+.px-hero{background:#191A17;color:#F4F5F1;border-radius:var(--px-r-xl);padding:28px;display:flex;flex-direction:column;min-width:0}
+[data-theme="dark"] #pdgx .px-hero{background:#000200}
+.px-hero-lbl{font-size:12px;color:rgba(244,245,241,.62);display:flex;align-items:center;gap:8px}
+.px-hero-val{font-size:clamp(46px,7vw,74px);line-height:.94;margin:12px 0 2px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.px-hero-unit{font-size:clamp(20px,2.4vw,26px);color:rgba(244,245,241,.45);font-weight:800}
+.px-hero-note{font-size:12.5px;color:rgba(244,245,241,.62);line-height:1.6;max-width:46ch}
+.px-hero-note b{color:#F4F5F1;font-weight:700}
+
+/* Composition de la demande : servi / non servi */
+.px-demand{margin-top:auto;padding-top:22px}
+.px-demand-bar{display:flex;height:34px;border-radius:12px;overflow:hidden;background:rgba(244,245,241,.12)}
+.px-demand-seg{display:flex;align-items:center;padding:0 12px;font-size:12px;font-weight:800;white-space:nowrap;
+  font-family:'Plus Jakarta Sans',sans-serif;font-variant-numeric:tabular-nums;min-width:0;overflow:hidden}
+.px-demand-served{background:var(--px-mint);color:#14320F}
+.px-demand-lost{background:#FFC4B5;color:#5C1A0F}
+.px-demand-key{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px}
+.px-demand-k{display:flex;align-items:center;gap:7px;font-size:11.5px;color:rgba(244,245,241,.62)}
+.px-demand-k b{color:#F4F5F1;font-weight:700;font-variant-numeric:tabular-nums}
+
+/* Métriques compactes à droite du hero */
+.px-metrics{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;min-width:0}
+@media(max-width:520px){.px-metrics{grid-template-columns:minmax(0,1fr)}}
+.px-metric{background:var(--px-card);border-radius:var(--px-r-lg);padding:19px 20px;display:flex;flex-direction:column;min-width:0}
+.px-metric-soft{background:var(--px-card-2)}
+/* Hauteur fixe : que le libellé tienne sur une ou deux lignes, les quatre
+   valeurs restent alignées sur la même ligne de base. */
+.px-metric-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;min-height:34px}
+.px-metric-l{font-size:11px;font-weight:700;color:var(--px-ink-soft);text-transform:uppercase;letter-spacing:.06em;line-height:1.4}
+.px-metric-v{font-size:clamp(25px,3vw,31px);line-height:1;margin-top:11px;display:flex;align-items:baseline;gap:5px}
+.px-metric-u{font-size:14px;color:var(--px-ink-soft);font-weight:800}
+.px-metric-s{font-size:11.5px;color:var(--px-ink-soft);margin-top:7px;line-height:1.5}
+.px-metric-na{color:var(--px-ink-soft);font-size:22px;font-weight:800}
+
+/* ── Ligne 2 : mix produit ──────────────────────────────── */
+/* Une teinte par série A/B/C/D. La série A est la dominante : elle prend
+   l'encre en clair, une sauge moyenne en sombre où le quasi-noir
+   se confondrait avec le fond de carte. */
+#pdgx{
+  --px-mix-a:#191A17;--px-mix-a-ink:#F4F5F1;
+  --px-mix-b:#A9F5A1;--px-mix-b-ink:#14320F;
+  --px-mix-c:#BFA8FB;--px-mix-c-ink:#241645;
+  --px-mix-d:#FFC4B5;--px-mix-d-ink:#5C1A0F;
+}
+[data-theme="dark"] #pdgx{--px-mix-a:#8B9784;--px-mix-a-ink:#0B0F09}
+.px-mix-bar{display:flex;height:44px;border-radius:14px;overflow:hidden;background:var(--px-card-2);margin-top:4px}
+.px-mix-seg{display:flex;align-items:center;justify-content:center;font-family:'Plus Jakarta Sans',sans-serif;
+  font-size:12.5px;font-weight:800;font-variant-numeric:tabular-nums;min-width:0;overflow:hidden;white-space:nowrap;padding:0 8px}
+.px-mix-a{background:var(--px-mix-a);color:var(--px-mix-a-ink)}
+.px-mix-b{background:var(--px-mix-b);color:var(--px-mix-b-ink)}
+.px-mix-c{background:var(--px-mix-c);color:var(--px-mix-c-ink)}
+.px-mix-d{background:var(--px-mix-d);color:var(--px-mix-d-ink)}
+/* Sous 700px les segments deviennent trop étroits pour porter un pourcentage
+   lisible : la légende juste dessous donne déjà chaque valeur. */
+@media(max-width:700px){.px-mix-pct,.px-demand-lbl{display:none}}
+.px-dot-a{background:var(--px-mix-a)}
+.px-dot-b{background:var(--px-mix-b)}
+.px-dot-c{background:var(--px-mix-c)}
+.px-dot-d{background:var(--px-mix-d)}
+.px-mix-key{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:12px;margin-top:16px}
+.px-mix-k{display:flex;flex-direction:column;gap:3px;min-width:0}
+.px-mix-k-top{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--px-ink-soft);font-weight:600}
+.px-mix-k-v{font-size:19px;line-height:1.1}
+.px-mix-k-p{font-size:11.5px;color:var(--px-ink-soft);font-variant-numeric:tabular-nums}
+
+/* ── Ligne 3 : couverture + fiabilité ───────────────────── */
+.px-biz-split{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);gap:18px;align-items:start}
+@media(max-width:980px){.px-biz-split{grid-template-columns:minmax(0,1fr)}}
+
+.px-cov{display:flex;flex-direction:column;gap:2px;margin-top:6px}
+.px-cov-r{display:grid;grid-template-columns:minmax(96px,1.5fr) minmax(0,2fr) auto;gap:14px;align-items:center;
+  padding:11px 0;border-bottom:1px solid var(--px-line)}
+.px-cov-r:last-child{border-bottom:none}
+.px-cov-n{font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.px-cov-sub{font-size:11px;color:var(--px-ink-soft);margin-top:2px;font-variant-numeric:tabular-nums}
+.px-cov-track{background:var(--px-card-2);border-radius:99px;height:9px;overflow:hidden;position:relative}
+.px-cov-fill{height:100%;border-radius:99px;background:var(--px-ink);transition:width .4s cubic-bezier(.22,1,.36,1)}
+[data-theme="dark"] #pdgx .px-cov-fill{background:var(--px-mint)}
+.px-cov-fill.low{background:#E4674A}
+[data-theme="dark"] #pdgx .px-cov-fill.low{background:#FF8E70}
+.px-cov-mark{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--px-ink-soft);opacity:.5}
+.px-cov-d{display:flex;align-items:center;gap:8px;justify-self:end;white-space:nowrap}
+.px-cov-num{font-size:16px;line-height:1;font-variant-numeric:tabular-nums}
+.px-cov-unit{font-size:11px;color:var(--px-ink-soft)}
+
+.px-risk{display:flex;flex-direction:column;gap:9px;margin-top:6px}
+.px-risk-r{display:flex;align-items:center;gap:13px;background:var(--px-card-2);border-radius:var(--px-r-md);padding:13px 15px}
+.px-risk-ico{width:34px;height:34px;border-radius:10px;background:var(--px-card);display:flex;align-items:center;
+  justify-content:center;font-size:16px;flex-shrink:0}
+.px-risk-b{flex:1;min-width:0}
+.px-risk-t{font-size:13px;font-weight:600;line-height:1.35}
+.px-risk-s{font-size:11px;color:var(--px-ink-soft);margin-top:3px;line-height:1.45}
+.px-risk-n{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:19px;font-variant-numeric:tabular-nums;flex-shrink:0}
+/* Fond mint fixe dans les deux thèmes : l'encre y est forcée en sombre. */
+.px-risk-clear{display:flex;align-items:center;gap:11px;background:var(--px-mint);color:#14320F;border-radius:var(--px-r-md);padding:15px}
+.px-risk-clear b{font-weight:800}
+.px-risk-clear .px-risk-ico{background:rgba(255,255,255,.55);color:#14320F}
+.px-risk-clear .px-risk-t{color:#14320F}
+.px-risk-clear .px-risk-s{color:#2F4A2A}
+
 @media(prefers-reduced-motion:reduce){#pdgx *{transition:none!important;animation:none!important}}
 </style>
 
@@ -533,6 +791,299 @@ include __DIR__ . '/../templates/header.php';
         <input type="hidden" name="mois" value="<?= h($mois) ?>">
       <?php endif; ?>
     </form>
+  </div>
+
+  <!-- ═══════════════════ PERFORMANCE BUSINESS ═══════════════════ -->
+  <div class="px-biz">
+
+    <!-- ── Taux de service + métriques de rendement ── -->
+    <div class="px-biz-lead">
+
+      <section class="px-hero">
+        <div class="px-hero-lbl">
+          <i class="ph-duotone ph-target"></i> Taux de service · demande servie
+        </div>
+
+        <?php if ($taux_service === null): ?>
+          <div class="px-num px-hero-val" style="font-size:clamp(30px,4vw,42px)">—</div>
+          <div class="px-hero-note">Aucun point journalier saisi sur la période. Le taux de service se calcule dès la première saisie.</div>
+        <?php else: ?>
+          <div class="px-num px-hero-val">
+            <?= number_format($taux_service, 1, ',', ' ') ?><span class="px-hero-unit">%</span>
+          </div>
+          <div class="px-hero-note">
+            <b><?= fmt_number($posees) ?></b> plaques posées sur <b><?= fmt_number($demande) ?></b> demandées.
+            <?php if ($np_total > 0): ?>
+              <b><?= fmt_number($np_total) ?></b> non posées, dont <?= fmt_number($np_conc) ?> côté concessionnaires
+              et <?= fmt_number($np_usag) ?> côté usagers.
+            <?php else: ?>
+              Aucune plaque restée non posée sur la période.
+            <?php endif; ?>
+          </div>
+
+          <div class="px-demand">
+            <?php
+              $pc_serv = $demande > 0 ? $posees / $demande * 100 : 0;
+              $pc_lost = 100 - $pc_serv;
+            ?>
+            <div class="px-demand-bar" role="img"
+                 aria-label="Répartition de la demande : <?= fmt_number($posees) ?> plaques posées, <?= fmt_number($np_total) ?> non posées">
+              <?php if ($pc_serv > 0): ?>
+                <div class="px-demand-seg px-demand-served" style="width:<?= round($pc_serv,2) ?>%">
+                  <?php if ($pc_serv >= 26): ?><span class="px-demand-lbl"><?= fmt_number($posees) ?> posées</span><?php endif; ?>
+                </div>
+              <?php endif; ?>
+              <?php if ($pc_lost > 0): ?>
+                <div class="px-demand-seg px-demand-lost" style="width:<?= round($pc_lost,2) ?>%">
+                  <?php if ($pc_lost >= 26): ?><span class="px-demand-lbl"><?= fmt_number($np_total) ?> non posées</span><?php endif; ?>
+                </div>
+              <?php endif; ?>
+            </div>
+            <div class="px-demand-key">
+              <span class="px-demand-k"><span class="px-leg-d px-dot-b"></span>Posées <b><?= fmt_number($posees) ?></b></span>
+              <span class="px-demand-k"><span class="px-leg-d px-dot-d"></span>Non posées <b><?= fmt_number($np_total) ?></b></span>
+              <span class="px-demand-k">Manque à gagner <b><?= $demande>0 ? number_format($pc_lost,1,',',' ') : '0' ?> %</b></span>
+            </div>
+          </div>
+        <?php endif; ?>
+      </section>
+
+      <div class="px-metrics">
+
+        <!-- Gâche film -->
+        <div class="px-metric">
+          <div class="px-metric-hd">
+            <div class="px-metric-l">Gâche film</div>
+            <?php if ($taux_gache !== null): ?>
+              <span class="px-tag <?= $taux_gache > 3 ? 'px-tag-warn' : 'px-tag-ok' ?>">
+                <?= $taux_gache > 3 ? 'à surveiller' : 'maîtrisée' ?>
+              </span>
+            <?php endif; ?>
+          </div>
+          <?php if ($taux_gache === null): ?>
+            <div class="px-metric-na" style="margin-top:11px">—</div>
+            <div class="px-metric-s">Aucun film consommé sur la période.</div>
+          <?php else: ?>
+            <div class="px-num px-metric-v"><?= number_format($taux_gache,2,',',' ') ?><span class="px-metric-u">%</span></div>
+            <div class="px-metric-s"><?= fmt_number($f_ko) ?> films détruits sur <?= fmt_number($f_ok + $f_ko) ?> engagés</div>
+          <?php endif; ?>
+        </div>
+
+        <!-- Gâche rivets -->
+        <div class="px-metric">
+          <div class="px-metric-hd">
+            <div class="px-metric-l">Casse rivets</div>
+            <?php if ($taux_gache_riv !== null): ?>
+              <span class="px-tag <?= $taux_gache_riv > 5 ? 'px-tag-warn' : 'px-tag-ok' ?>">
+                <?= $taux_gache_riv > 5 ? 'à surveiller' : 'maîtrisée' ?>
+              </span>
+            <?php endif; ?>
+          </div>
+          <?php if ($taux_gache_riv === null): ?>
+            <div class="px-metric-na" style="margin-top:11px">—</div>
+            <div class="px-metric-s">Aucun rivet consommé sur la période.</div>
+          <?php else: ?>
+            <div class="px-num px-metric-v"><?= number_format($taux_gache_riv,2,',',' ') ?><span class="px-metric-u">%</span></div>
+            <div class="px-metric-s"><?= fmt_number($riv_ko) ?> rivets cassés sur <?= fmt_number($riv_ok + $riv_ko) ?> posés</div>
+          <?php endif; ?>
+        </div>
+
+        <!-- Productivité réelle -->
+        <div class="px-metric px-metric-soft">
+          <div class="px-metric-hd"><div class="px-metric-l">Productivité réelle</div></div>
+          <?php if ($prod_reelle === null): ?>
+            <div class="px-metric-na" style="margin-top:11px">—</div>
+            <div class="px-metric-s">Heures travaillées non renseignées.</div>
+          <?php else: ?>
+            <div class="px-num px-metric-v"><?= number_format($prod_reelle,1,',',' ') ?><span class="px-metric-u">pl./h</span></div>
+            <div class="px-metric-s"><?= fmt_number($posees) ?> plaques sur <?= number_format($heures,0,',',' ') ?> h travaillées</div>
+          <?php endif; ?>
+        </div>
+
+        <!-- Écart consommation théorique vs réelle -->
+        <div class="px-metric px-metric-soft">
+          <div class="px-metric-hd">
+            <div class="px-metric-l">Écart conso.</div>
+            <?php if ($ecart_plq_pct !== null && abs($ecart_plq_pct) > 5): ?>
+              <span class="px-tag px-tag-warn">écart</span>
+            <?php endif; ?>
+          </div>
+          <?php if ($ecart_plq_pct === null): ?>
+            <div class="px-metric-na" style="margin-top:11px">—</div>
+            <div class="px-metric-s">Aucun engin déclaré sur la période.</div>
+          <?php else: ?>
+            <div class="px-num px-metric-v">
+              <?= $ecart_plq_pct > 0 ? '+' : '' ?><?= number_format($ecart_plq_pct,1,',',' ') ?><span class="px-metric-u">%</span>
+            </div>
+            <div class="px-metric-s">
+              <?= fmt_number($posees) ?> posées vs <?= fmt_number($theo_plq) ?> attendues d'après le mix
+            </div>
+          <?php endif; ?>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Mix produit ── -->
+    <?php if ($mix_total > 0): ?>
+    <section class="px-card">
+      <div class="px-card-hdr" style="margin-bottom:10px">
+        <div>
+          <div class="px-card-ttl">Mix produit</div>
+          <div class="px-card-sub"><?= fmt_number($mix_total) ?> engins traités · pilote la demande en séries de bobines</div>
+        </div>
+      </div>
+      <div class="px-mix-bar" role="img" aria-label="Répartition des engins par type : <?php
+        echo h(implode(', ', array_map(fn($m) => $m['court'].' '.number_format($m['pct'],1,',',' ').' %',
+                                       array_filter($mix, fn($m) => $m['n'] > 0)))); ?>">
+        <?php foreach ($mix as $m): if ($m['n'] <= 0) continue; ?>
+          <div class="px-mix-seg px-mix-<?= $m['k'] ?>" style="width:<?= round($m['pct'],2) ?>%">
+            <?php if ($m['pct'] >= 11): ?><span class="px-mix-pct"><?= number_format($m['pct'],1,',',' ') ?> %</span><?php endif; ?>
+          </div>
+        <?php endforeach; ?>
+      </div>
+      <div class="px-mix-key">
+        <?php foreach ($mix as $m): ?>
+          <div class="px-mix-k">
+            <div class="px-mix-k-top"><span class="px-leg-d px-dot-<?= $m['k'] ?>"></span><?= h($m['lbl']) ?></div>
+            <div class="px-num px-mix-k-v"><?= fmt_number($m['n']) ?></div>
+            <div class="px-mix-k-p"><?= number_format($m['pct'],1,',',' ') ?> % du volume</div>
+          </div>
+        <?php endforeach; ?>
+      </div>
+    </section>
+    <?php endif; ?>
+
+    <!-- ── Couverture de stock + fiabilité ── -->
+    <div class="px-biz-split">
+
+      <!-- Couverture par site -->
+      <section class="px-card">
+        <div class="px-card-hdr">
+          <div>
+            <div class="px-card-ttl">Couverture de stock</div>
+            <div class="px-card-sub">Jours de film restants au rythme observé · cible <?= $cible_autonomie ?> j</div>
+          </div>
+          <?php if ($couv_critiques > 0): ?>
+            <span class="px-chip px-chip-alert"><i class="ph-duotone ph-warning-circle"></i> <?= $couv_critiques ?> site<?= $couv_critiques>1?'s':'' ?> sous <?= $seuil_couv_bas ?> j</span>
+          <?php else: ?>
+            <span class="px-chip px-chip-ok"><i class="ph-duotone ph-check-circle"></i> Rien sous <?= $seuil_couv_bas ?> j</span>
+          <?php endif; ?>
+        </div>
+
+        <?php if (empty($couverture)): ?>
+          <div class="px-metric-s">Aucun site actif à afficher.</div>
+        <?php else: ?>
+          <div class="px-cov">
+            <?php foreach ($couverture as $c):
+              $j    = $c['jours'];
+              $pct  = $j === null ? 0 : min(100, $j / max(1,$cible_autonomie) * 100);
+              $low  = $j !== null && $j < $seuil_couv_bas;
+            ?>
+              <div class="px-cov-r">
+                <div style="min-width:0">
+                  <div class="px-cov-n"><?= h($c['nom']) ?></div>
+                  <div class="px-cov-sub">
+                    <?= fmt_number($c['restants']) ?> films
+                    <?= $c['conso_j'] > 0 ? '· '.number_format($c['conso_j'],1,',',' ').' /j' : '' ?>
+                  </div>
+                </div>
+                <div class="px-cov-track">
+                  <div class="px-cov-fill<?= $low ? ' low' : '' ?>" style="width:<?= round($pct,1) ?>%"></div>
+                  <div class="px-cov-mark" style="left:<?= round($seuil_couv_bas / max(1,$cible_autonomie) * 100, 1) ?>%"></div>
+                </div>
+                <div class="px-cov-d">
+                  <?php if ($j === null): ?>
+                    <span class="px-tag px-tag-none">pas de conso.</span>
+                  <?php else: ?>
+                    <span class="px-num px-cov-num"><?= $j ?></span><span class="px-cov-unit">j</span>
+                    <?php if ($low): ?><span class="px-tag px-tag-warn">réappro</span><?php endif; ?>
+                  <?php endif; ?>
+                </div>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+      </section>
+
+      <!-- Fiabilité du stock -->
+      <section class="px-card">
+        <div class="px-card-hdr">
+          <div>
+            <div class="px-card-ttl">Fiabilité du stock</div>
+            <div class="px-card-sub">Écarts d'inventaire et réconciliation EMUCI</div>
+          </div>
+        </div>
+
+        <?php
+          $has_risk = $ec_ouverts > 0 || $bob_perdues > 0 || $rec_ouverts > 0;
+        ?>
+        <div class="px-risk">
+
+          <?php if ($ec_ouverts > 0): ?>
+            <div class="px-risk-r">
+              <div class="px-risk-ico"><i class="ph-duotone ph-scales"></i></div>
+              <div class="px-risk-b">
+                <div class="px-risk-t">Écarts d'inventaire non résolus</div>
+                <div class="px-risk-s"><?= fmt_number((int)($fiab['ec_films'] ?? 0)) ?> films d'écart cumulé, en attente d'arbitrage</div>
+              </div>
+              <div class="px-risk-n"><?= $ec_ouverts ?></div>
+            </div>
+          <?php endif; ?>
+
+          <?php if ($bob_perdues > 0): ?>
+            <div class="px-risk-r">
+              <div class="px-risk-ico"><i class="ph-duotone ph-warning-octagon"></i></div>
+              <div class="px-risk-b">
+                <div class="px-risk-t">Bobines déclarées perdues</div>
+                <div class="px-risk-s"><?= fmt_number((int)($fiab['bob_perdues_films'] ?? 0)) ?> films non consommés, sortis du stock</div>
+              </div>
+              <div class="px-risk-n"><?= $bob_perdues ?></div>
+            </div>
+          <?php endif; ?>
+
+          <?php if ($rec_ouverts > 0): ?>
+            <div class="px-risk-r">
+              <div class="px-risk-ico"><i class="ph-duotone ph-arrows-left-right"></i></div>
+              <div class="px-risk-b">
+                <div class="px-risk-t">Écarts EMUCI majeurs non ajustés</div>
+                <div class="px-risk-s">Plus de 5 films d'écart entre EMUCI et DigiStock, sans ajustement</div>
+              </div>
+              <div class="px-risk-n"><?= $rec_ouverts ?></div>
+            </div>
+          <?php endif; ?>
+
+          <?php if (!$has_risk): ?>
+            <div class="px-risk-clear">
+              <div class="px-risk-ico"><i class="ph-duotone ph-check-circle"></i></div>
+              <div class="px-risk-b">
+                <div class="px-risk-t">Aucun écart ouvert</div>
+                <div class="px-risk-s">Inventaires et réconciliation EMUCI à jour.</div>
+              </div>
+            </div>
+          <?php endif; ?>
+
+          <!-- Taux de concordance EMUCI -->
+          <div class="px-risk-r" style="background:transparent;padding:14px 0 0;border-top:1px solid var(--px-line);border-radius:0">
+            <div class="px-risk-b">
+              <div class="px-risk-t">Concordance EMUCI ↔ DigiStock</div>
+              <div class="px-risk-s">
+                <?php if ($taux_recon === null): ?>
+                  Aucune comparaison enregistrée sur la période.
+                <?php else: ?>
+                  <?= fmt_number($rec_total - $rec_majeurs) ?> comparaisons alignées sur <?= fmt_number($rec_total) ?>
+                <?php endif; ?>
+              </div>
+            </div>
+            <div class="px-risk-n">
+              <?= $taux_recon === null ? '—' : number_format($taux_recon,1,',',' ').' %' ?>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+    </div>
   </div>
 
   <!-- ═══════════════════ GRILLE PRINCIPALE ═══════════════════ -->
