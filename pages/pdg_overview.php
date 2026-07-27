@@ -23,14 +23,26 @@ $ml = ['01'=>'Janvier','02'=>'Février','03'=>'Mars','04'=>'Avril','05'=>'Mai','
 
 // Filtre DATE selon la vue
 if ($vue === 'annee') {
-    $date_filter = "TO_CHAR(date_point,'YYYY')=?";
-    $date_param  = $annee;
+    $date_filter  = "TO_CHAR(date_point,'YYYY')=?";
+    $date_param   = $annee;
     $mois_display = "Année $annee";
+    $prev_param   = (string)((int)$annee - 1);
+    $prev_display = "Année $prev_param";
+    $prev_short   = $prev_param;
+    $cur_short    = $annee;
+    $cmd_filter   = "TO_CHAR(created_at,'YYYY')=?";
 } else {
-    $date_filter = "TO_CHAR(date_point,'YYYY-MM')=?";
-    $date_param  = $mois;
+    $date_filter  = "TO_CHAR(date_point,'YYYY-MM')=?";
+    $date_param   = $mois;
     $mois_display = ($ml[substr($mois,5,2)] ?? '') . ' ' . $annee;
+    $prev_param   = date('Y-m', strtotime($mois . '-01 -1 month'));
+    $prev_display = ($ml[substr($prev_param,5,2)] ?? '') . ' ' . substr($prev_param,0,4);
+    $prev_short   = ($mc[substr($prev_param,5,2)] ?? '') . ' ' . substr($prev_param,2,2);
+    $cur_short    = ($mc[substr($mois,5,2)] ?? '') . ' ' . substr($mois,2,2);
+    $cmd_filter   = "TO_CHAR(created_at,'YYYY-MM')=?";
 }
+// même filtre, table préfixée (pour les jointures)
+$date_filter_p = str_replace('date_point', 'p.date_point', $date_filter);
 
 // ── OPÉRATIONS
 $ops = db_fetch_one(
@@ -47,6 +59,43 @@ $ops = db_fetch_one(
     [$date_param]
 );
 
+// ── PÉRIODE PRÉCÉDENTE (comparaison)
+$prev = db_fetch_one(
+    "SELECT COUNT(*) AS total_points,
+            COALESCE(SUM(total_engins),0) AS total_engins,
+            COALESCE(SUM(total_plaques),0) AS total_plaques,
+            COALESCE(SUM(rivets_utilises),0) AS rivets_utilises,
+            COALESCE(ROUND(AVG(NULLIF(moyenne_prod,0)),1),0) AS moy_prod
+     FROM op_points_journaliers
+     WHERE $date_filter AND statut != 'brouillon'",
+    [$prev_param]
+);
+
+/** Variation % entre période courante et précédente (null si pas de base). */
+function pdg_delta($cur, $prev) {
+    $cur = (float)$cur; $prev = (float)$prev;
+    if ($prev <= 0) return null;
+    return round(($cur - $prev) / $prev * 100, 1);
+}
+$d_engins  = pdg_delta($ops['total_engins']  ?? 0, $prev['total_engins']  ?? 0);
+$d_plaques = pdg_delta($ops['total_plaques'] ?? 0, $prev['total_plaques'] ?? 0);
+$d_prod    = pdg_delta($ops['moy_prod']      ?? 0, $prev['moy_prod']      ?? 0);
+$d_rivets  = pdg_delta($ops['rivets_utilises'] ?? 0, $prev['rivets_utilises'] ?? 0);
+
+// ── ACTIVITÉ : jours actifs, meilleur jour
+$jours_actifs = (int)db_fetch_value(
+    "SELECT COUNT(DISTINCT date_point) FROM op_points_journaliers
+     WHERE $date_filter AND statut != 'brouillon'",
+    [$date_param]
+);
+$best_day = db_fetch_one(
+    "SELECT date_point, COALESCE(SUM(total_engins),0) AS engins
+     FROM op_points_journaliers
+     WHERE $date_filter AND statut != 'brouillon'
+     GROUP BY date_point ORDER BY engins DESC LIMIT 1",
+    [$date_param]
+);
+
 $prod_par_site = db_fetch_all(
     "SELECT s.nom, s.type,
             COUNT(p.id) AS nb_points,
@@ -56,11 +105,13 @@ $prod_par_site = db_fetch_all(
             SUM(CASE WHEN p.statut='en_attente_validation' THEN 1 ELSE 0 END) AS en_attente
      FROM sites s
      LEFT JOIN op_points_journaliers p ON p.site_id=s.id
-                AND $date_filter AND p.statut != 'brouillon'
+                AND $date_filter_p AND p.statut != 'brouillon'
      WHERE s.actif=1
      GROUP BY s.id, s.nom, s.type ORDER BY engins DESC",
     [$date_param]
 );
+$top_site   = $prod_par_site[0] ?? null;
+$sites_actifs = count(array_filter($prod_par_site, fn($s) => (int)$s['nb_points'] > 0));
 
 // ── BOBINES
 $bobines_stats = db_fetch_one(
@@ -76,28 +127,19 @@ $films_mois = (int)db_fetch_value(
     "SELECT COALESCE(SUM(fu.films_utilises),0)
      FROM op_films_utilises fu
      JOIN op_points_journaliers p ON p.id=fu.point_id
-     WHERE TO_CHAR(p.date_point,'YYYY-MM')=?",
-    [$mois]
+     WHERE $date_filter_p",
+    [$date_param]
 );
 
-$films_par_site = db_fetch_all(
-    "SELECT s.nom, COALESCE(SUM(fu.films_utilises),0) AS films
-     FROM sites s
-     LEFT JOIN op_points_journaliers p ON p.site_id=s.id AND TO_CHAR(p.date_point,'YYYY-MM')=?
-     LEFT JOIN op_films_utilises fu ON fu.point_id=p.id
-     WHERE s.actif=1
-     GROUP BY s.id, s.nom ORDER BY films DESC",
-    [$mois]
-);
 $films_detail_raw = db_fetch_all(
     "SELECT s.nom AS site, b.type_code, COALESCE(SUM(fu.films_utilises),0) AS films
      FROM sites s
-     JOIN op_points_journaliers p ON p.site_id=s.id AND TO_CHAR(p.date_point,'YYYY-MM')=?
+     JOIN op_points_journaliers p ON p.site_id=s.id AND $date_filter_p
      JOIN op_films_utilises fu ON fu.point_id=p.id
      JOIN op_bobines b ON b.id=fu.bobine_id
      WHERE s.actif=1
      GROUP BY s.id, s.nom, b.type_code ORDER BY s.nom, b.type_code",
-    [$mois]
+    [$date_param]
 );
 $films_par_type = [];
 $films_by_type  = [];
@@ -108,14 +150,19 @@ foreach ($films_detail_raw as $d) {
 arsort($films_par_type);
 $js_films_detail = json_encode(array_values(array_map(fn($t)=>$films_by_type[$t]??[], array_keys($films_par_type))));
 
+// Autonomie films : jours de stock au rythme de consommation observé
+$films_restants = (int)($bobines_stats['films_restants'] ?? 0);
+$conso_jour     = $jours_actifs > 0 ? $films_mois / $jours_actifs : 0;
+$autonomie      = $conso_jour > 0 ? (int)floor($films_restants / $conso_jour) : null;
+
 // ── COMMANDES
 $cmd_stats = db_fetch_one(
     "SELECT SUM(CASE WHEN statut='en_attente' THEN 1 ELSE 0 END) AS en_attente,
             SUM(CASE WHEN statut='en_attente_livraison' THEN 1 ELSE 0 END) AS a_livrer,
             SUM(CASE WHEN statut='en_cours_livraison' THEN 1 ELSE 0 END) AS en_route,
-            SUM(CASE WHEN statut='livre' AND TO_CHAR(created_at,'YYYY-MM')=? THEN 1 ELSE 0 END) AS livrees_mois
+            SUM(CASE WHEN statut='livre' AND $cmd_filter THEN 1 ELSE 0 END) AS livrees_mois
      FROM commandes",
-    [$mois]
+    [$date_param]
 );
 
 // ── RIVETS
@@ -161,6 +208,13 @@ $evol = db_fetch_all(
      WHERE date_point >= (CURRENT_DATE - INTERVAL '6 MONTH') AND statut != 'brouillon'
      GROUP BY TO_CHAR(date_point,'YYYY-MM') ORDER BY mois ASC"
 );
+$evol_films = db_fetch_all(
+    "SELECT TO_CHAR(p.date_point,'YYYY-MM') AS mois, COALESCE(SUM(fu.films_utilises),0) AS films
+     FROM op_points_journaliers p
+     JOIN op_films_utilises fu ON fu.point_id=p.id
+     WHERE p.date_point >= (CURRENT_DATE - INTERVAL '6 MONTH') AND p.statut != 'brouillon'
+     GROUP BY TO_CHAR(p.date_point,'YYYY-MM') ORDER BY mois ASC"
+);
 
 // ── POINTS EN ATTENTE
 $pts_attente = db_fetch_all(
@@ -172,16 +226,50 @@ $pts_attente = db_fetch_all(
      ORDER BY p.date_point DESC LIMIT 10"
 );
 
+// ── INDICATEURS DÉRIVÉS
+$total_points   = (int)($ops['total_points'] ?? 0);
+$points_valides = (int)($ops['points_valides'] ?? 0);
+$taux_valid     = $total_points > 0 ? round($points_valides / $total_points * 100) : 0;
+$eng            = (int)($ops['total_engins'] ?? 0);
+$plq            = (int)($ops['total_plaques'] ?? 0);
+$riv            = (int)($ops['rivets_utilises'] ?? 0);
+$ratio_plaques  = $eng > 0 ? round($plq / $eng, 2) : 0;
+$ratio_rivets   = $eng > 0 ? round($riv / $eng, 1) : 0;
+$moy_jour       = $jours_actifs > 0 ? round($eng / $jours_actifs) : 0;
+$best_engins    = (int)($best_day['engins'] ?? 0);
+// Jauge « couverture films » : part du stock restant sur 60 jours d'autonomie cible
+$cible_autonomie = 60;
+$taux_films      = $autonomie === null ? 0 : min(100, (int)round($autonomie / $cible_autonomie * 100));
+// Jauge « productivité » : moyenne V/H sur une cible de 15 véhicules/heure
+$cible_vh   = 15;
+$moy_vh_cur = (float)($ops['moy_prod'] ?? 0);
+$taux_prod  = $cible_vh > 0 ? min(100, (int)round($moy_vh_cur / $cible_vh * 100)) : 0;
+
 // ── JS DATA
 $js_evol_labels  = json_encode(array_map(fn($r) => ($mc[substr($r['mois'],5,2)]??'').' '.substr($r['mois'],2,2), $evol));
 $js_evol_engins  = json_encode(array_map(fn($r) => (int)$r['engins'], $evol));
 $js_evol_plaques = json_encode(array_map(fn($r) => (int)$r['plaques'], $evol));
+$js_evol_films   = json_encode(array_map(fn($r) => (int)$r['films'], $evol_films));
 $js_statuts      = json_encode([(int)($ops['points_valides']??0),(int)($ops['points_attente']??0),(int)($ops['points_rejetes']??0)]);
 $js_films_labels = json_encode(array_keys($films_par_type));
 $js_films_values = json_encode(array_values($films_par_type));
 $js_bobines      = json_encode([(int)($bobines_stats['en_cours']??0),(int)($bobines_stats['en_stock']??0),(int)($bobines_stats['epuisees']??0)]);
 $js_cmds         = json_encode([(int)($cmd_stats['en_attente']??0),(int)(($cmd_stats['a_livrer']??0)+($cmd_stats['en_route']??0)),(int)($cmd_stats['livrees_mois']??0)]);
 $max_engins      = empty($prod_par_site) ? 1 : max(1, ...array_column($prod_par_site, 'engins'));
+// Barres de comparaison période N-1 / N
+$js_compare = json_encode([
+    'prev' => ['label'=>$prev_short, 'engins'=>(int)($prev['total_engins']??0), 'plaques'=>(int)($prev['total_plaques']??0)],
+    'cur'  => ['label'=>$cur_short,  'engins'=>$eng,                            'plaques'=>$plq],
+]);
+// Jauges (flèches ← → pour naviguer)
+$js_gauges = json_encode([
+    ['key'=>'valid','titre'=>'Taux de validation','valeur'=>$points_valides.'/'.$total_points,
+     'pct'=>$taux_valid,'sous'=>'Points validés sur '.$total_points.' saisis','unite'=>'%'],
+    ['key'=>'prod','titre'=>'Productivité terrain','valeur'=>number_format($moy_vh_cur,1,',',' ').' V/H',
+     'pct'=>$taux_prod,'sous'=>'Cible : '.$cible_vh.' véhicules / heure','unite'=>'%'],
+    ['key'=>'films','titre'=>'Autonomie films','valeur'=>($autonomie===null?'—':$autonomie.' j'),
+     'pct'=>$taux_films,'sous'=>'Cible : '.$cible_autonomie.' jours de stock','unite'=>'%'],
+]);
 // PMMA + Rivets charts
 $pmma_by_type = [];
 foreach ($pmma_detail as $d) $pmma_by_type[$d['type_pmma']][] = ['site'=>$d['nom'],'qty'=>(int)$d['quantite'],'seuil'=>(int)$d['seuil']];
@@ -205,367 +293,487 @@ $pmma_ch_h      = max(160, count($pmma_par_type) * 46);
 $riv_ch_h       = 120;
 $films_ch_h     = max(160, count($films_par_type) * 46);
 
+/** Rendu d'un badge de variation ↗ / ↘. */
+function pdg_trend($d) {
+    if ($d === null) return '<span class="px-trend px-flat">nouveau</span>';
+    if ($d >= 0)     return '<span class="px-trend px-up">↗ +'.number_format($d,1,',',' ').'%</span>';
+    return '<span class="px-trend px-down">↘ '.number_format($d,1,',',' ').'%</span>';
+}
+
 include __DIR__ . '/../templates/header.php';
 ?>
 <style>
-/* ── PAGE */
-.pdg-hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:24px;flex-wrap:wrap;gap:12px}
-.pdg-title{font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:var(--navy)}
-.pdg-sub{font-size:13px;color:var(--muted);margin-top:2px}
+/* ══════════════════════════════════════════════════════════
+   VUE PDG — design system local (préfixe .px- / #pdgx)
+   ══════════════════════════════════════════════════════════ */
+#pdgx{
+  --px-bg:#DDE5DC;          /* fond sauge */
+  --px-ink:#191A17;         /* encre quasi-noire */
+  --px-ink-soft:#5D6459;    /* texte secondaire */
+  --px-card:#FFFFFF;
+  --px-card-2:#F1F2EE;      /* carte sourde */
+  --px-mint:#A9F5A1;        /* accent vert */
+  --px-mint-d:#7ADE70;
+  --px-lilac:#BFA8FB;       /* accent lavande */
+  --px-line:rgba(25,26,23,.10);
+  --px-r-xl:30px;
+  --px-r-lg:22px;
+  --px-r-md:16px;
+  --px-r-sm:12px;
 
-/* ── ALERTES BADGES */
-.bdg{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:20px;font-size:12px;font-weight:600}
-.bdg-warn{background:#fff7ed;color:#c2410c;border:1px solid #fed7aa}
-.bdg-ok{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
+  /* pleine largeur : annule le padding de .page-content */
+  margin:-28px;
+  padding:28px;
+  background:var(--px-bg);
+  min-height:calc(100vh - var(--topbar-h,64px));
+  font-family:'Manrope',sans-serif;
+  color:var(--px-ink);
+}
+/* .page-content garde un padding de 28px à toutes les tailles : on conserve la
+   marge négative telle quelle pour rester pleine largeur, et on réduit seulement
+   l'espacement intérieur sur petit écran. */
+@media(max-width:640px){ #pdgx{padding:18px} }
 
-/* ── BLOCS */
-.bloc{background:white;border:1px solid var(--border);border-radius:16px;margin-bottom:22px;overflow:hidden}
-.bloc-ops{border-top:4px solid #06033A}
-.bloc-bob{border-top:4px solid #7c3aed}
-.bloc-stock{border-top:4px solid #0891b2}
-.bloc-cmd{border-top:4px solid #d97706}
-.bloc-alrt{border-top:4px solid #dc2626}
-.bloc-hdr{display:flex;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--border)}
-.bloc-ico{width:36px;height:36px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
-.bloc-ico-navy{background:#eef0f8;color:#06033A}
-.bloc-ico-purple{background:#f5f3ff;color:#7c3aed}
-.bloc-ico-cyan{background:#ecfeff;color:#0891b2}
-.bloc-ico-orange{background:#fffbeb;color:#d97706}
-.bloc-ico-red{background:#fee2e2;color:#dc2626}
-.bloc-ttl{font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;color:var(--navy)}
-.bloc-stl{font-size:12px;color:var(--muted)}
-.bloc-body{padding:20px}
+[data-theme="dark"] #pdgx{
+  --px-bg:#12160F;
+  --px-ink:#EDEFE9;
+  --px-ink-soft:#9BA396;
+  --px-card:#1C211A;
+  --px-card-2:#232920;
+  --px-line:rgba(237,239,233,.12);
+}
 
-/* ── KPI GRID */
-.kpi-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px;margin-bottom:20px}
-.kc{background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:14px 16px}
-.kc-val{font-family:'Montserrat',sans-serif;font-size:26px;font-weight:900;line-height:1;color:var(--navy)}
-.kc-lbl{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-top:4px}
-.kc-sub{font-size:11px;color:var(--muted);margin-top:3px}
-.c-blue .kc-val{color:#1B75BC}
-.c-green .kc-val{color:#16a34a}
-.c-orange .kc-val{color:#d97706}
-.c-red .kc-val{color:#dc2626}
-.c-purple .kc-val{color:#7c3aed}
+#pdgx *{box-sizing:border-box}
+#pdgx .px-num{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
 
-/* ── CHARTS */
-.ch2{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-bottom:20px}
-@media(max-width:680px){.ch2{grid-template-columns:1fr}}
-.ch-box{background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:16px}
-.ch-ttl{font-size:12px;font-weight:700;color:var(--navy);margin-bottom:10px}
-.ch-wrap{width:100%;position:relative}
-.ch-wrap canvas{display:block;width:100%!important}
-.donut-row{display:flex;align-items:center;justify-content:center;gap:20px}
-.legend{display:flex;flex-direction:column;gap:7px}
-.leg-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
-.leg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+/* ── EN-TÊTE ─────────────────────────────────────────── */
+.px-top{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-bottom:22px}
+.px-h1{font-family:'Plus Jakarta Sans',sans-serif;font-size:clamp(26px,3.4vw,38px);font-weight:800;letter-spacing:-.03em;line-height:1.05}
+.px-h1-sub{font-size:13px;color:var(--px-ink-soft);margin-top:6px}
+.px-tools{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.px-select{appearance:none;background:var(--px-card);border:1px solid var(--px-line);color:var(--px-ink);
+  padding:10px 34px 10px 16px;border-radius:99px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;outline:none;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%23191A17' stroke-width='1.8' stroke-linecap='round'/></svg>");
+  background-repeat:no-repeat;background-position:right 14px center}
+[data-theme="dark"] #pdgx .px-select{background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' fill='none' stroke='%23EDEFE9' stroke-width='1.8' stroke-linecap='round'/></svg>")}
+.px-select:focus-visible,.px-ico-btn:focus-visible,.px-tab:focus-visible{outline:2px solid var(--px-ink);outline-offset:2px}
+.px-month{background:var(--px-card);border:1px solid var(--px-line);color:var(--px-ink);padding:10px 16px;border-radius:99px;
+  font-family:inherit;font-size:13px;font-weight:600;outline:none;cursor:pointer}
 
-/* ── SITE TABLE */
-.stbl{width:100%;border-collapse:collapse;font-size:13px}
-.stbl th{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;padding:7px 10px;border-bottom:2px solid var(--border);text-align:left;white-space:nowrap}
-.stbl td{padding:10px;border-bottom:1px solid var(--border)}
-.stbl tr:last-child td{border-bottom:none}
-.stbl tr:nth-child(even) td{background:#f8fafc}
-.pb-wrap{background:#e2e8f0;border-radius:4px;height:6px;overflow:hidden;min-width:60px}
-.pb-fill{height:100%;border-radius:4px;background:#1B75BC}
-.pill{display:inline-block;padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700}
-.p-green{background:#d1fae5;color:#065f46}
-.p-orange{background:#fff7ed;color:#c2410c}
-.p-blue{background:#dbeafe;color:#1e40af}
+/* ── GRILLES ─────────────────────────────────────────── */
+.px-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.08fr);gap:18px;align-items:start}
+@media(max-width:1080px){.px-grid{grid-template-columns:minmax(0,1fr)}}
+.px-col{display:flex;flex-direction:column;gap:18px;min-width:0}
 
-/* ── STOCK 2 COL */
-.s2col{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-@media(max-width:680px){.s2col{grid-template-columns:1fr}}
-.s-bloc-ttl{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px}
-.s-card{background:#f8fafc;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:8px}
-.s-card-hdr{background:var(--navy);padding:8px 12px;color:white;font-size:12px;font-weight:700;font-family:'Montserrat',sans-serif}
-.s-card-body{padding:10px 12px}
-.s-row{display:flex;justify-content:space-between;align-items:center;font-size:12px;padding:3px 0}
-.s-val{font-weight:800;font-family:'Montserrat',sans-serif;font-size:15px}
-.s-alrt{background:#fee2e2;color:#991b1b;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;margin-top:5px}
+/* ── CARTES ──────────────────────────────────────────── */
+.px-card{background:var(--px-card);border-radius:var(--px-r-xl);padding:26px;min-width:0}
+.px-card-dark{background:#191A17;color:#F4F5F1;border-radius:var(--px-r-xl);padding:26px;min-width:0}
+[data-theme="dark"] #pdgx .px-card-dark{background:#000200}
+.px-card-soft{background:var(--px-card-2);border-radius:var(--px-r-xl);padding:26px;min-width:0}
+.px-card-hdr{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:18px}
+.px-card-ttl{font-family:'Plus Jakarta Sans',sans-serif;font-size:19px;font-weight:800;letter-spacing:-.02em;line-height:1.2}
+.px-card-sub{font-size:12px;color:var(--px-ink-soft);margin-top:4px}
+.px-card-dark .px-card-sub{color:rgba(244,245,241,.55)}
 
-/* ── COMMANDES */
-.cmd-wrap{display:grid;grid-template-columns:1fr auto;gap:20px;align-items:center}
-@media(max-width:600px){.cmd-wrap{grid-template-columns:1fr}}
-.cmd-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
-.cmd-s{border-radius:10px;padding:16px;text-align:center;background:#f8fafc}
-.cmd-s-val{font-family:'Montserrat',sans-serif;font-size:32px;font-weight:900;line-height:1}
-.cmd-s-lbl{font-size:10px;color:var(--muted);font-weight:700;text-transform:uppercase;margin-top:6px}
+.px-ico{width:46px;height:46px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.px-ico-ink{background:#191A17;color:var(--px-mint)}
+.px-ico-mint{background:var(--px-mint);color:#191A17}
+.px-ico-lilac{background:var(--px-lilac);color:#191A17}
+.px-ico-btn{width:38px;height:38px;border-radius:50%;border:1px solid var(--px-line);background:transparent;color:var(--px-ink);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;transition:background .15s,transform .15s}
+.px-ico-btn:hover{background:var(--px-ink);color:var(--px-card)}
+.px-ico-btn:active{transform:scale(.94)}
 
-/* ── ALERT TABLE */
-.atbl{width:100%;border-collapse:collapse;font-size:13px}
-.atbl th{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;padding:6px 10px;border-bottom:2px solid var(--border);text-align:left}
-.atbl td{padding:9px 10px;border-bottom:1px solid var(--border)}
-.atbl tr:last-child td{border-bottom:none}
+/* ── BADGES / TENDANCES ──────────────────────────────── */
+.px-trend{display:inline-flex;align-items:center;gap:3px;padding:4px 10px;border-radius:99px;font-size:11.5px;font-weight:700;white-space:nowrap}
+.px-up{background:var(--px-mint);color:#14320F}
+.px-down{background:#FFD9D2;color:#7A2114}
+.px-flat{background:rgba(25,26,23,.07);color:var(--px-ink-soft)}
+[data-theme="dark"] #pdgx .px-flat{background:rgba(237,239,233,.10)}
+.px-chip{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:99px;font-size:12px;font-weight:700;
+  background:var(--px-card);border:1px solid var(--px-line);color:var(--px-ink)}
+.px-chip-alert{background:#FFE9E3;border-color:transparent;color:#7A2114}
+[data-theme="dark"] #pdgx .px-chip-alert{background:#3A1710;color:#FFC4B5}
+.px-chip-ok{background:var(--px-mint);border-color:transparent;color:#14320F}
+
+/* ── CARTE PRODUCTION (sombre) ───────────────────────── */
+.px-prod-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,190px);gap:18px;align-items:end}
+@media(max-width:520px){.px-prod-body{grid-template-columns:minmax(0,1fr)}}
+.px-prod-lbl{font-size:12px;color:rgba(244,245,241,.55);display:flex;align-items:center;gap:8px}
+.px-prod-val{font-size:clamp(38px,5.6vw,58px);line-height:1;margin-top:10px}
+.px-legend{display:flex;gap:14px;flex-wrap:wrap;margin-top:16px}
+.px-leg{display:flex;align-items:center;gap:6px;font-size:11.5px;color:rgba(244,245,241,.62)}
+.px-leg-d{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.px-prod-foot{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:22px;padding-top:20px;border-top:1px solid rgba(244,245,241,.12)}
+.px-pf-v{font-size:21px;line-height:1}
+.px-pf-l{font-size:10.5px;color:rgba(244,245,241,.5);margin-top:5px;text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+
+/* ── JAUGE ───────────────────────────────────────────── */
+.px-gauge-panel{background:var(--px-mint);border-radius:var(--px-r-lg);padding:22px;margin-top:16px;position:relative}
+.px-gauge-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.px-gauge-badge{width:42px;height:42px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;color:#191A17}
+.px-gauge-wrap{position:relative;margin:6px auto 0;max-width:300px}
+.px-gauge-foot{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;margin-top:-6px}
+.px-gauge-pct{font-size:26px;line-height:1;color:#14320F}
+.px-gauge-note{font-size:11px;color:#3B5236;margin-top:5px}
+.px-gauge-val{font-size:clamp(24px,3.4vw,34px);line-height:1;color:#14320F;text-align:right}
+.px-dots{display:flex;gap:6px;justify-content:center;margin-top:14px}
+.px-dot{width:7px;height:7px;border-radius:50%;background:var(--px-line);border:none;padding:0;cursor:pointer;transition:width .2s,background .2s}
+.px-dot.on{width:22px;border-radius:99px;background:var(--px-ink)}
+
+/* ── ALERTES (carte pilule) ──────────────────────────── */
+.px-alert-row{display:flex;align-items:center;gap:12px;background:var(--px-card-2);border-radius:var(--px-r-md);padding:13px 16px;margin-top:9px}
+.px-alert-ico{width:32px;height:32px;border-radius:9px;background:var(--px-card);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.px-alert-txt{font-size:13px;font-weight:600;flex:1;min-width:0}
+.px-alert-n{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:16px;font-variant-numeric:tabular-nums}
+.px-count{min-width:46px;height:46px;padding:0 12px;border-radius:99px;background:#191A17;color:var(--px-mint);
+  display:flex;align-items:center;justify-content:center;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:17px;flex-shrink:0}
+
+/* ── TIMELINE + MINI-CARTES ──────────────────────────── */
+.px-split{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}
+@media(max-width:760px){.px-split{grid-template-columns:minmax(0,1fr)}}
+.px-tl{list-style:none;margin:16px 0 0;padding:0;position:relative}
+.px-tl:before{content:'';position:absolute;left:6px;top:8px;bottom:8px;width:2px;background:var(--px-line)}
+.px-tl li{position:relative;padding:0 0 20px 26px}
+.px-tl li:last-child{padding-bottom:0}
+.px-tl li:after{content:'';position:absolute;left:0;top:4px;width:14px;height:14px;border-radius:50%;
+  background:var(--px-card);border:2px solid var(--px-line)}
+.px-tl li.on:after{background:var(--px-ink);border-color:var(--px-ink)}
+.px-tl-m{font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:14.5px;letter-spacing:-.01em}
+.px-tl-d{font-size:11.5px;color:var(--px-ink-soft);margin-top:3px;line-height:1.5}
+.px-mini{border-radius:var(--px-r-lg);padding:20px;display:flex;flex-direction:column;min-height:0}
+.px-mini-mint{background:var(--px-mint);color:#14320F}
+.px-mini-lilac{background:var(--px-lilac);color:#241645}
+.px-mini-hdr{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.px-mini-l{font-size:12px;font-weight:700;opacity:.75}
+.px-mini-v{font-size:clamp(24px,3vw,31px);line-height:1;margin-top:8px}
+.px-mini-arrow{width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.5);display:flex;align-items:center;
+  justify-content:center;font-size:13px;flex-shrink:0}
+.px-bar{height:22px;border-radius:99px;background:rgba(255,255,255,.55);overflow:hidden;position:relative;margin-top:14px}
+.px-bar-f{height:100%;border-radius:99px;background:#191A17}
+.px-bar-dot{position:absolute;top:50%;width:13px;height:13px;border-radius:50%;background:var(--px-lilac);
+  transform:translate(-50%,-50%);border:2px solid #191A17}
+
+/* ── SECTION DÉTAILS ─────────────────────────────────── */
+.px-sec{margin-top:18px}
+.px-sec-hdr{display:flex;align-items:center;gap:12px;margin:30px 4px 14px}
+.px-sec-ttl{font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;font-weight:800;letter-spacing:-.01em}
+.px-sec-line{flex:1;height:1px;background:var(--px-line)}
+.px-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px}
+.px-kpi{background:var(--px-card);border-radius:var(--px-r-lg);padding:18px 20px}
+.px-kpi-v{font-size:27px;line-height:1}
+.px-kpi-l{font-size:10.5px;color:var(--px-ink-soft);text-transform:uppercase;letter-spacing:.06em;font-weight:700;margin-top:7px}
+.px-kpi-s{font-size:11.5px;color:var(--px-ink-soft);margin-top:5px}
+
+/* ── TABLE SITES ─────────────────────────────────────── */
+.px-tbl-wrap{overflow-x:auto;border-radius:var(--px-r-lg)}
+#pdgx table.px-tbl{width:100%;border-collapse:collapse;font-size:13px;min-width:620px}
+#pdgx .px-tbl th{background:transparent!important;font-size:10px;font-weight:800;color:var(--px-ink-soft)!important;
+  text-transform:uppercase;letter-spacing:.07em;padding:0 14px 12px;border-bottom:1px solid var(--px-line);text-align:left;white-space:nowrap;font-family:'Manrope',sans-serif}
+#pdgx .px-tbl td{padding:13px 14px;border-bottom:1px solid var(--px-line);color:var(--px-ink);vertical-align:middle}
+#pdgx .px-tbl tr:last-child td{border-bottom:none}
+#pdgx .px-tbl tr:hover td{background:var(--px-card-2)}
+.px-track{background:var(--px-card-2);border-radius:99px;height:8px;overflow:hidden;min-width:56px;flex:1}
+.px-track-f{height:100%;border-radius:99px;background:#191A17}
+[data-theme="dark"] #pdgx .px-track-f{background:var(--px-mint)}
+.px-tag{display:inline-block;padding:3px 11px;border-radius:99px;font-size:11px;font-weight:700}
+.px-tag-ok{background:var(--px-mint);color:#14320F}
+.px-tag-warn{background:#FFE9E3;color:#7A2114}
+.px-tag-none{background:var(--px-card-2);color:var(--px-ink-soft)}
+
+/* ── GRAPHES ─────────────────────────────────────────── */
+.px-chart{width:100%;position:relative}
+.px-chart canvas{display:block;width:100%!important}
+.px-donut-row{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.px-lg{display:flex;flex-direction:column;gap:9px}
+.px-lg-i{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--px-ink-soft)}
+.px-lg-d{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.px-hint{font-size:11px;color:var(--px-ink-soft);font-weight:400}
+
+/* ── MODALE ──────────────────────────────────────────── */
+.px-modal{display:none;position:fixed;inset:0;z-index:2000;background:rgba(25,26,23,.55);
+  align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(3px)}
+.px-modal-box{background:var(--px-card);border-radius:var(--px-r-xl);width:100%;max-width:700px;max-height:88vh;
+  display:flex;flex-direction:column;overflow:hidden;color:var(--px-ink)}
+.px-modal-hdr{display:flex;align-items:center;gap:14px;padding:22px 26px;border-bottom:1px solid var(--px-line);flex-shrink:0}
+
+#pdg-tip{display:none;position:fixed;z-index:3000;background:#191A17;color:#F4F5F1;border-radius:14px;padding:13px 16px;
+  box-shadow:0 12px 34px rgba(0,0,0,.28);pointer-events:none;min-width:180px;font-size:12px;line-height:1.7;font-family:'Manrope',sans-serif}
+
+@media(prefers-reduced-motion:reduce){#pdgx *{transition:none!important;animation:none!important}}
 </style>
 
-<!-- HEADER -->
-<div class="pdg-hdr">
-  <div>
-    <div class="pdg-title">Vue Exécutive</div>
-    <div class="pdg-sub">Express Multiservices CI — DigiStock</div>
-  </div>
-  <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-    <?php if($total_alertes > 0): ?>
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
-      <?php if($points_attente>0): ?><span class="bdg bdg-warn"><i class="ph-duotone ph-clock"></i> <?= $points_attente ?> pt(s) à valider</span><?php endif; ?>
-      <?php if($cmd_en_attente>0): ?><span class="bdg bdg-warn"><i class="ph-duotone ph-package"></i> <?= $cmd_en_attente ?> commande(s)</span><?php endif; ?>
-      <?php if($alertes_stock>0): ?><span class="bdg bdg-warn"><i class="ph-duotone ph-warning"></i> <?= $alertes_stock ?> stock(s) bas</span><?php endif; ?>
-      <?php if($rivets_bas>0): ?><span class="bdg bdg-warn"><i class="ph-duotone ph-nut"></i> <?= $rivets_bas ?> rivets bas</span><?php endif; ?>
+<div id="pdgx">
+
+  <!-- ═══════════════════ EN-TÊTE ═══════════════════ -->
+  <div class="px-top">
+    <div>
+      <h1 class="px-h1">Vue exécutive</h1>
+      <div class="px-h1-sub">Express Multiservices CI — DigiStock · <?= h($mois_display) ?></div>
     </div>
-    <?php else: ?>
-    <span class="bdg bdg-ok"><i class="ph-duotone ph-check-circle"></i> Aucune alerte</span>
-    <?php endif; ?>
-    <form method="get" style="display:flex;align-items:center;gap:6px">
-      <label style="font-size:11px;color:var(--muted);font-weight:700">Vue</label>
-      <select name="vue" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:white;outline:none;cursor:pointer"
-              onchange="this.form.submit()">
-        <option value="mois" <?= $vue==='mois'?'selected':'' ?>>Par mois</option>
-        <option value="annee" <?= $vue==='annee'?'selected':'' ?>>Année complète</option>
+    <form method="get" class="px-tools">
+      <?php if($total_alertes > 0): ?>
+        <span class="px-chip px-chip-alert"><i class="ph-duotone ph-warning-circle"></i> <?= $total_alertes ?> alerte<?= $total_alertes>1?'s':'' ?></span>
+      <?php else: ?>
+        <span class="px-chip px-chip-ok"><i class="ph-duotone ph-check-circle"></i> Aucune alerte</span>
+      <?php endif; ?>
+      <select name="vue" class="px-select" onchange="this.form.submit()" aria-label="Type de vue">
+        <option value="mois"  <?= $vue==='mois' ?'selected':'' ?>>Mensuel</option>
+        <option value="annee" <?= $vue==='annee'?'selected':'' ?>>Annuel</option>
       </select>
       <?php if($vue==='mois'): ?>
-      <label style="font-size:11px;color:var(--muted);font-weight:700">Mois</label>
-      <input type="month" name="mois" value="<?= h($mois) ?>"
-             style="padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:white;outline:none"
-             onchange="this.form.submit()">
+        <input type="month" name="mois" value="<?= h($mois) ?>" class="px-month" onchange="this.form.submit()" aria-label="Mois">
       <?php else: ?>
-      <label style="font-size:11px;color:var(--muted);font-weight:700">Année</label>
-      <select name="annee" style="padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:white;outline:none;cursor:pointer"
-              onchange="document.querySelector('input[name=mois]').value=this.value+'-01';this.form.submit()">
-        <?php for ($y = 2020; $y <= date('Y'); $y++): ?>
-        <option value="<?= $y ?>" <?= $annee==$y?'selected':'' ?>><?= $y ?></option>
-        <?php endfor; ?>
-      </select>
-      <input type="hidden" name="mois" value="<?= h($mois) ?>">
+        <select name="annee" class="px-select" aria-label="Année"
+                onchange="document.querySelector('input[name=mois]').value=this.value+'-01';this.form.submit()">
+          <?php for ($y = 2020; $y <= (int)date('Y'); $y++): ?>
+            <option value="<?= $y ?>" <?= (int)$annee===$y?'selected':'' ?>><?= $y ?></option>
+          <?php endfor; ?>
+        </select>
+        <input type="hidden" name="mois" value="<?= h($mois) ?>">
       <?php endif; ?>
     </form>
   </div>
-</div>
 
-<!-- ═══════════════════════════ BLOC OPÉRATIONS -->
-<div class="bloc bloc-ops">
-  <div class="bloc-hdr">
-    <div class="bloc-ico bloc-ico-navy"><i class="ph-duotone ph-lightning"></i></div>
-    <div><div class="bloc-ttl">Opérations</div><div class="bloc-stl">Points journaliers — <?= h($mois_display) ?></div></div>
-    <button onclick="document.getElementById('modal-ops').style.display='flex'" style="margin-left:auto;display:flex;align-items:center;gap:6px;padding:7px 14px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:700;color:#06033A;cursor:pointer;white-space:nowrap">
-      <i class="ph-duotone ph-table"></i> Détails
-    </button>
-  </div>
-  <div class="bloc-body">
+  <!-- ═══════════════════ GRILLE PRINCIPALE ═══════════════════ -->
+  <div class="px-grid">
 
-    <div class="kpi-row">
-      <div class="kc c-blue">
-        <div class="kc-val"><?= fmt_number($ops['total_engins'] ?? 0) ?></div>
-        <div class="kc-lbl">Engins posés</div>
-        <div class="kc-sub">ce mois</div>
-      </div>
-      <div class="kc">
-        <div class="kc-val"><?= fmt_number($ops['total_plaques'] ?? 0) ?></div>
-        <div class="kc-lbl">Plaques posées</div>
-        <div class="kc-sub">ce mois</div>
-      </div>
-      <div class="kc c-green">
-        <div class="kc-val"><?= $ops['moy_prod'] ?? '0' ?></div>
-        <div class="kc-lbl">Moy. V/H</div>
-        <div class="kc-sub">véhicules / heure</div>
-      </div>
-      <div class="kc <?= ($ops['points_attente']??0)>0 ? 'c-orange' : 'c-green' ?>">
-        <div class="kc-val"><?= ($ops['points_valides']??0) ?>/<?= ($ops['total_points']??0) ?></div>
-        <div class="kc-lbl">Points validés</div>
-        <div class="kc-sub"><?= $ops['points_attente']??0 ?> en attente</div>
-      </div>
-      <div class="kc">
-        <div class="kc-val"><?= fmt_number($ops['rivets_utilises'] ?? 0) ?></div>
-        <div class="kc-lbl">Rivets posés</div>
-        <div class="kc-sub">ce mois</div>
-      </div>
-    </div>
+    <!-- ─────────── COLONNE GAUCHE ─────────── -->
+    <div class="px-col">
 
-    <div class="ch2">
-      <div class="ch-box">
-        <div class="ch-ttl">Évolution engins posés — 6 derniers mois</div>
-        <div class="ch-wrap"><canvas id="cEvol" height="190"></canvas></div>
-      </div>
-      <div class="ch-box">
-        <div class="ch-ttl">Statuts des points</div>
-        <div class="donut-row" style="margin-top:10px">
-          <canvas id="cStatuts" width="140" height="140" style="width:140px!important;flex-shrink:0"></canvas>
-          <div class="legend">
-            <div class="leg-item"><div class="leg-dot" style="background:#16a34a"></div>Validés (<?= $ops['points_valides']??0 ?>)</div>
-            <div class="leg-item"><div class="leg-dot" style="background:#d97706"></div>En attente (<?= $ops['points_attente']??0 ?>)</div>
-            <div class="leg-item"><div class="leg-dot" style="background:#dc2626"></div>Rejetés (<?= $ops['points_rejetes']??0 ?>)</div>
+      <!-- Production (carte sombre) -->
+      <section class="px-card-dark">
+        <div class="px-card-hdr">
+          <div>
+            <div class="px-card-ttl">Production</div>
+            <div class="px-card-sub">Volume posé · vs <?= h($prev_display) ?></div>
+          </div>
+          <?= pdg_trend($d_engins) ?>
+        </div>
+
+        <div class="px-prod-body">
+          <div>
+            <div class="px-prod-lbl">Engins posés <span class="px-ico" style="width:22px;height:22px;font-size:11px;background:var(--px-mint);color:#191A17">↗</span></div>
+            <div class="px-num px-prod-val"><?= fmt_number($eng) ?></div>
+            <div class="px-legend">
+              <span class="px-leg"><span class="px-leg-d" style="background:#A9F5A1"></span>Engins</span>
+              <span class="px-leg"><span class="px-leg-d" style="background:#BFA8FB"></span>Plaques</span>
+            </div>
+          </div>
+          <div class="px-chart"><canvas id="cCompare" height="188" aria-label="Comparaison des volumes posés"></canvas></div>
+        </div>
+
+        <div class="px-prod-foot">
+          <div>
+            <div class="px-num px-pf-v"><?= fmt_number($plq) ?></div>
+            <div class="px-pf-l">Plaques posées</div>
+          </div>
+          <div>
+            <div class="px-num px-pf-v"><?= number_format($moy_vh_cur,1,',',' ') ?></div>
+            <div class="px-pf-l">Moy. véhic./h</div>
+          </div>
+          <div>
+            <div class="px-num px-pf-v"><?= fmt_number($moy_jour) ?></div>
+            <div class="px-pf-l">Engins / jour</div>
           </div>
         </div>
-      </div>
-    </div>
+      </section>
 
-  </div>
-</div>
-
-<!-- ═══════════════════════════ BLOC BOBINES & FILMS -->
-<div class="bloc bloc-bob">
-  <div class="bloc-hdr">
-    <div class="bloc-ico bloc-ico-purple"><i class="ph-duotone ph-film-strip"></i></div>
-    <div><div class="bloc-ttl">Bobines &amp; Films</div><div class="bloc-stl">État des bobines et consommation films</div></div>
-    <button onclick="openFilmsModal()" style="margin-left:auto;display:flex;align-items:center;gap:6px;padding:7px 14px;background:#f5f3ff;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:700;color:#7c3aed;cursor:pointer;white-space:nowrap">
-      <i class="ph-duotone ph-chart-bar-horizontal"></i> Films par site
-    </button>
-  </div>
-  <div class="bloc-body">
-
-    <div class="kpi-row">
-      <div class="kc c-purple">
-        <div class="kc-val"><?= $bobines_stats['en_cours']??0 ?></div>
-        <div class="kc-lbl">Bobines actives</div>
-        <div class="kc-sub">en cours d'utilisation</div>
-      </div>
-      <div class="kc c-blue">
-        <div class="kc-val"><?= $bobines_stats['en_stock']??0 ?></div>
-        <div class="kc-lbl">En stock</div>
-        <div class="kc-sub">prêtes à utiliser</div>
-      </div>
-      <div class="kc">
-        <div class="kc-val"><?= fmt_number($films_mois) ?></div>
-        <div class="kc-lbl">Films utilisés</div>
-        <div class="kc-sub"><?= h($mois_display) ?></div>
-      </div>
-      <div class="kc <?= ($bobines_stats['films_restants']??0)<500?'c-red':'' ?>">
-        <div class="kc-val"><?= fmt_number($bobines_stats['films_restants']??0) ?></div>
-        <div class="kc-lbl">Films restants</div>
-        <div class="kc-sub">toutes bobines</div>
-      </div>
-    </div>
-
-    <div class="ch-box" style="max-width:380px">
-      <div class="ch-ttl">État des bobines</div>
-      <div class="donut-row" style="margin-top:10px">
-        <canvas id="cBobines" width="140" height="140" style="width:140px!important;flex-shrink:0"></canvas>
-        <div class="legend">
-          <div class="leg-item"><div class="leg-dot" style="background:#7c3aed"></div>En cours (<?= $bobines_stats['en_cours']??0 ?>)</div>
-          <div class="leg-item"><div class="leg-dot" style="background:#1B75BC"></div>En stock (<?= $bobines_stats['en_stock']??0 ?>)</div>
-          <div class="leg-item"><div class="leg-dot" style="background:#94a3b8"></div>Épuisées (<?= $bobines_stats['epuisees']??0 ?>)</div>
+      <!-- Jauges pilotables -->
+      <section class="px-card">
+        <div class="px-card-hdr" style="align-items:center">
+          <div>
+            <div class="px-card-ttl" id="gTitre">Taux de validation</div>
+            <div class="px-card-sub" id="gSous">Points validés</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="px-ico-btn" type="button" onclick="gaugeStep(-1)" aria-label="Indicateur précédent">←</button>
+            <button class="px-ico-btn" type="button" onclick="gaugeStep(1)"  aria-label="Indicateur suivant">→</button>
+          </div>
         </div>
-      </div>
-    </div>
-  </div>
-</div>
 
-<!-- ═══════════════════════════ BLOC STOCK -->
-<div class="bloc bloc-stock">
-  <div class="bloc-hdr">
-    <div class="bloc-ico bloc-ico-cyan"><i class="ph-duotone ph-package"></i></div>
-    <div><div class="bloc-ttl">Stock matériel</div><div class="bloc-stl">PMMA et rivets par site</div></div>
-  </div>
-  <div class="bloc-body">
-    <div class="ch2">
-      <div class="ch-box">
-        <div class="ch-ttl"><i class="ph-duotone ph-printer" style="vertical-align:middle"></i> PMMA par type <span style="font-size:10px;color:var(--muted);font-weight:400">— survoler pour détail par site</span></div>
-        <div class="ch-wrap"><canvas id="cPmma" height="<?= $pmma_ch_h ?>"></canvas></div>
-      </div>
-      <div class="ch-box">
-        <div class="ch-ttl"><i class="ph-duotone ph-nut" style="vertical-align:middle"></i> Rivets par type <span style="font-size:10px;color:var(--muted);font-weight:400">— survoler pour détail par site</span></div>
-        <div class="ch-wrap"><canvas id="cRivets" height="<?= $riv_ch_h ?>"></canvas></div>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ═══════════════════════════ BLOC COMMANDES -->
-<div class="bloc bloc-cmd">
-  <div class="bloc-hdr">
-    <div class="bloc-ico bloc-ico-orange"><i class="ph-duotone ph-shopping-cart"></i></div>
-    <div><div class="bloc-ttl">Commandes articles</div><div class="bloc-stl">État des commandes en cours</div></div>
-  </div>
-  <div class="bloc-body">
-    <div class="cmd-wrap">
-      <div class="cmd-stats">
-        <div class="cmd-s" style="border-top:3px solid #d97706">
-          <div class="cmd-s-val" style="color:#d97706"><?= $cmd_stats['en_attente']??0 ?></div>
-          <div class="cmd-s-lbl">En attente</div>
+        <div class="px-gauge-panel">
+          <div class="px-gauge-top">
+            <div class="px-gauge-badge"><i class="ph-duotone ph-chart-line-up"></i></div>
+            <span class="px-trend px-up" id="gCible">objectif</span>
+          </div>
+          <div class="px-gauge-wrap"><canvas id="cGauge" height="150" aria-label="Jauge d'indicateur"></canvas></div>
+          <div class="px-gauge-foot">
+            <div>
+              <div class="px-num px-gauge-pct"><span id="gPct">0</span>%</div>
+              <div class="px-gauge-note" id="gNote">—</div>
+            </div>
+            <div class="px-num px-gauge-val" id="gVal">—</div>
+          </div>
         </div>
-        <div class="cmd-s" style="border-top:3px solid #1B75BC">
-          <div class="cmd-s-val" style="color:#1B75BC"><?= ($cmd_stats['a_livrer']??0)+($cmd_stats['en_route']??0) ?></div>
-          <div class="cmd-s-lbl">En livraison</div>
-        </div>
-        <div class="cmd-s" style="border-top:3px solid #16a34a">
-          <div class="cmd-s-val" style="color:#16a34a"><?= $cmd_stats['livrees_mois']??0 ?></div>
-          <div class="cmd-s-lbl">Livrées ce mois</div>
-        </div>
-      </div>
-      <div style="display:flex;flex-direction:column;align-items:center;gap:10px">
-        <canvas id="cCmds" width="130" height="130" style="width:130px!important;flex-shrink:0"></canvas>
-        <div class="legend">
-          <div class="leg-item"><div class="leg-dot" style="background:#d97706"></div>En attente</div>
-          <div class="leg-item"><div class="leg-dot" style="background:#1B75BC"></div>En livraison</div>
-          <div class="leg-item"><div class="leg-dot" style="background:#16a34a"></div>Livrées</div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
+        <div class="px-dots" id="gDots"></div>
+      </section>
 
-<!-- ═══════════════════════════ BLOC ALERTES -->
-<?php if(!empty($pts_attente)): ?>
-<div class="bloc bloc-alrt">
-  <div class="bloc-hdr">
-    <div class="bloc-ico bloc-ico-red"><i class="ph-duotone ph-clock"></i></div>
-    <div><div class="bloc-ttl">Points en attente de validation</div><div class="bloc-stl">Action requise par le superviseur</div></div>
-  </div>
-  <div class="bloc-body" style="padding-top:0">
-    <table class="atbl">
-      <thead><tr><th>Site</th><th>Date</th><th>Type</th><th>Coordinateur</th></tr></thead>
-      <tbody>
-      <?php foreach($pts_attente as $pt): ?>
-      <tr>
-        <td style="font-weight:600;color:var(--navy)"><?= h($pt['site']) ?></td>
-        <td><?= fmt_date($pt['date_point']) ?></td>
-        <td><span class="pill p-orange"><?= ['point_9h'=>'9h','point_13h'=>'13h','point_18h'=>'18h'][$pt['type_point']] ?? $pt['type_point'] ?></span></td>
-        <td style="color:var(--muted)"><?= h($pt['coord']??'—') ?></td>
-      </tr>
-      <?php endforeach; ?>
-      </tbody>
-    </table>
-  </div>
-</div>
-<?php endif; ?>
+    </div>
 
-<!-- ═══════ MODAL FILMS PAR SITE ═══════ -->
-<div id="modal-films" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(6,3,58,.5);align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.style.display='none'">
-  <div style="background:white;border-radius:16px;width:100%;max-width:680px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-    <div style="display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid #e2e8f0;flex-shrink:0">
-      <div style="width:34px;height:34px;border-radius:10px;background:#f5f3ff;display:flex;align-items:center;justify-content:center;color:#7c3aed;font-size:16px">
-        <i class="ph-duotone ph-chart-bar-horizontal"></i>
-      </div>
-      <div>
-        <div style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;color:#06033A">Films utilisés par site</div>
-        <div style="font-size:12px;color:#94a3b8"><?= h($mois_display) ?></div>
-      </div>
-      <button onclick="document.getElementById('modal-films').style.display='none'" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:22px;line-height:1;padding:4px 8px">&times;</button>
-    </div>
-    <div style="overflow:auto;padding:20px">
-      <div class="ch-wrap"><canvas id="cFilms" height="<?= $films_ch_h ?>"></canvas></div>
+    <!-- ─────────── COLONNE DROITE ─────────── -->
+    <div class="px-col">
+
+      <!-- Alertes / actions requises -->
+      <section class="px-card-soft" style="padding:20px">
+        <div style="display:flex;align-items:center;gap:14px">
+          <div class="px-ico px-ico-ink"><i class="ph-duotone ph-bell-ringing"></i></div>
+          <div style="flex:1;min-width:0">
+            <div class="px-card-ttl" style="font-size:17px">Actions requises</div>
+            <div class="px-card-sub">Points de décision en attente</div>
+          </div>
+          <div class="px-num px-count"><?= $total_alertes ?></div>
+        </div>
+
+        <?php if($total_alertes === 0): ?>
+          <div class="px-alert-row">
+            <div class="px-alert-ico" style="color:#2F7A22"><i class="ph-duotone ph-check-circle"></i></div>
+            <div class="px-alert-txt">Rien à traiter — tous les indicateurs sont au vert</div>
+          </div>
+        <?php else: ?>
+          <?php if($points_attente > 0): ?>
+          <div class="px-alert-row">
+            <div class="px-alert-ico"><i class="ph-duotone ph-clock"></i></div>
+            <div class="px-alert-txt">Points journaliers à valider</div>
+            <div class="px-num px-alert-n"><?= $points_attente ?></div>
+          </div>
+          <?php endif; ?>
+          <?php if($cmd_en_attente > 0): ?>
+          <div class="px-alert-row">
+            <div class="px-alert-ico"><i class="ph-duotone ph-shopping-cart"></i></div>
+            <div class="px-alert-txt">Commandes en attente de traitement</div>
+            <div class="px-num px-alert-n"><?= $cmd_en_attente ?></div>
+          </div>
+          <?php endif; ?>
+          <?php if($alertes_stock > 0): ?>
+          <div class="px-alert-row">
+            <div class="px-alert-ico"><i class="ph-duotone ph-package"></i></div>
+            <div class="px-alert-txt">Articles sous le seuil d'alerte</div>
+            <div class="px-num px-alert-n"><?= $alertes_stock ?></div>
+          </div>
+          <?php endif; ?>
+          <?php if($rivets_bas > 0): ?>
+          <div class="px-alert-row">
+            <div class="px-alert-ico"><i class="ph-duotone ph-nut"></i></div>
+            <div class="px-alert-txt">Stocks rivets sous 200 unités</div>
+            <div class="px-num px-alert-n"><?= $rivets_bas ?></div>
+          </div>
+          <?php endif; ?>
+        <?php endif; ?>
+      </section>
+
+      <!-- Évolution + mini-cartes -->
+      <section class="px-card">
+        <div class="px-split">
+          <div>
+            <div style="display:flex;align-items:center;gap:12px">
+              <div class="px-ico px-ico-mint"><i class="ph-duotone ph-trend-up"></i></div>
+              <div class="px-card-ttl" style="font-size:17px;line-height:1.15">Évolution<br>6 mois</div>
+            </div>
+            <ul class="px-tl">
+              <?php if(empty($evol)): ?>
+                <li class="on"><div class="px-tl-m">Aucune donnée</div><div class="px-tl-d">Pas de point saisi sur la période</div></li>
+              <?php else:
+                $evol_tl = array_slice($evol, -5);
+                $last_i  = count($evol_tl) - 1;
+                foreach($evol_tl as $i => $e):
+                  $lbl = ($ml[substr($e['mois'],5,2)] ?? '') . ' ' . substr($e['mois'],0,4);
+              ?>
+                <li class="<?= $i===$last_i ? 'on' : '' ?>">
+                  <div class="px-tl-m"><?= h($lbl) ?></div>
+                  <div class="px-tl-d"><?= fmt_number($e['engins']) ?> engins · <?= fmt_number($e['plaques']) ?> plaques</div>
+                </li>
+              <?php endforeach; endif; ?>
+            </ul>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:14px">
+            <!-- Meilleure journée -->
+            <div class="px-mini px-mini-mint">
+              <div class="px-mini-hdr">
+                <div class="px-mini-l">Meilleure journée</div>
+                <div class="px-mini-arrow">↗</div>
+              </div>
+              <div class="px-num px-mini-v"><?= fmt_number($best_engins) ?></div>
+              <div style="font-size:11.5px;opacity:.75;margin-top:5px">
+                <?= $best_day ? h(fmt_date($best_day['date_point'])) : '—' ?> · engins posés
+              </div>
+              <div class="px-bar">
+                <?php $bar_pct = $best_engins > 0 && $moy_jour > 0 ? min(100, round($moy_jour / $best_engins * 100)) : 0; ?>
+                <div class="px-bar-f" style="width:<?= $bar_pct ?>%"></div>
+                <div class="px-bar-dot" style="left:<?= $bar_pct ?>%"></div>
+              </div>
+              <div style="font-size:11px;opacity:.72;margin-top:7px">Moyenne quotidienne à <?= $bar_pct ?>% du pic</div>
+            </div>
+
+            <!-- Consommation films -->
+            <div class="px-mini px-mini-lilac">
+              <div class="px-mini-hdr">
+                <div class="px-mini-l">Films consommés</div>
+                <div class="px-mini-arrow">↗</div>
+              </div>
+              <div class="px-num px-mini-v"><?= fmt_number($films_mois) ?></div>
+              <div style="font-size:11.5px;opacity:.75;margin-top:5px">
+                <?= $autonomie === null ? 'Autonomie non calculable' : 'Autonomie ≈ '.$autonomie.' jours' ?>
+              </div>
+              <div class="px-chart" style="margin-top:10px"><canvas id="cSpark" height="66" aria-label="Consommation de films sur 6 mois"></canvas></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
     </div>
   </div>
-</div>
 
-<!-- ═══════ MODAL DÉTAILS OPÉRATIONS ═══════ -->
-<div id="modal-ops" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(6,3,58,.5);align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.style.display='none'">
-  <div style="background:white;border-radius:16px;width:100%;max-width:860px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-    <div style="display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid #e2e8f0;flex-shrink:0">
-      <div style="width:34px;height:34px;border-radius:10px;background:#eef0f8;display:flex;align-items:center;justify-content:center;color:#06033A;font-size:16px">
-        <i class="ph-duotone ph-table"></i>
-      </div>
-      <div>
-        <div style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;color:#06033A">Détails par site — Opérations</div>
-        <div style="font-size:12px;color:#94a3b8">Points journaliers — <?= h($mois_display) ?></div>
-      </div>
-      <button onclick="document.getElementById('modal-ops').style.display='none'" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:22px;line-height:1;padding:4px 8px">&times;</button>
+  <!-- ═══════════════════ INDICATEURS CLÉS ═══════════════════ -->
+  <div class="px-sec-hdr">
+    <div class="px-sec-ttl">Indicateurs de la période</div>
+    <div class="px-sec-line"></div>
+  </div>
+  <div class="px-kpis">
+    <div class="px-kpi">
+      <div class="px-num px-kpi-v"><?= fmt_number($riv) ?></div>
+      <div class="px-kpi-l">Rivets posés</div>
+      <div class="px-kpi-s"><?= $ratio_rivets ?> par engin · <?= strip_tags(pdg_trend($d_rivets)) ?></div>
     </div>
-    <div style="overflow:auto;padding:0 20px 20px">
-      <table class="stbl" style="margin-top:0">
+    <div class="px-kpi">
+      <div class="px-num px-kpi-v"><?= $ratio_plaques ?></div>
+      <div class="px-kpi-l">Plaques / engin</div>
+      <div class="px-kpi-s"><?= strip_tags(pdg_trend($d_plaques)) ?> sur les plaques</div>
+    </div>
+    <div class="px-kpi">
+      <div class="px-num px-kpi-v"><?= $jours_actifs ?></div>
+      <div class="px-kpi-l">Jours d'activité</div>
+      <div class="px-kpi-s"><?= $total_points ?> point<?= $total_points>1?'s':'' ?> saisi<?= $total_points>1?'s':'' ?></div>
+    </div>
+    <div class="px-kpi">
+      <div class="px-num px-kpi-v"><?= $sites_actifs ?>/<?= count($prod_par_site) ?></div>
+      <div class="px-kpi-l">Sites actifs</div>
+      <div class="px-kpi-s"><?= $top_site ? 'Top : '.h($top_site['nom']) : 'Aucun site actif' ?></div>
+    </div>
+    <div class="px-kpi">
+      <div class="px-num px-kpi-v"><?= $bobines_stats['en_cours']??0 ?></div>
+      <div class="px-kpi-l">Bobines actives</div>
+      <div class="px-kpi-s"><?= $bobines_stats['en_stock']??0 ?> en stock · <?= fmt_number($films_restants) ?> films</div>
+    </div>
+    <div class="px-kpi">
+      <div class="px-num px-kpi-v"><?= ($cmd_stats['a_livrer']??0)+($cmd_stats['en_route']??0) ?></div>
+      <div class="px-kpi-l">Cmd. en livraison</div>
+      <div class="px-kpi-s"><?= $cmd_stats['livrees_mois']??0 ?> livrée<?= ($cmd_stats['livrees_mois']??0)>1?'s':'' ?> sur la période</div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════ PERFORMANCE PAR SITE ═══════════════════ -->
+  <div class="px-sec-hdr">
+    <div class="px-sec-ttl">Performance par site</div>
+    <div class="px-sec-line"></div>
+  </div>
+  <section class="px-card">
+    <div class="px-tbl-wrap">
+      <table class="px-tbl">
         <thead><tr>
           <th>Site</th>
-          <th style="min-width:110px">Progression engins</th>
+          <th style="min-width:120px">Part du volume</th>
           <th style="text-align:right">Engins</th>
           <th style="text-align:right">Plaques</th>
           <th style="text-align:right">Moy V/H</th>
@@ -573,49 +781,161 @@ include __DIR__ . '/../templates/header.php';
           <th style="text-align:center">Statut</th>
         </tr></thead>
         <tbody>
-        <?php foreach($prod_par_site as $s):
+        <?php if(empty($prod_par_site)): ?>
+          <tr><td colspan="7" style="text-align:center;color:var(--px-ink-soft);padding:28px">Aucun site actif</td></tr>
+        <?php else: foreach($prod_par_site as $s):
           $pct = $max_engins > 0 ? round($s['engins'] / $max_engins * 100) : 0;
         ?>
         <tr>
           <td>
-            <div style="font-weight:700;color:var(--navy)"><?= h($s['nom']) ?></div>
-            <div style="font-size:11px;color:var(--muted)"><?= h($s['type']??'') ?></div>
+            <div style="font-weight:700"><?= h($s['nom']) ?></div>
+            <div style="font-size:11px;color:var(--px-ink-soft)"><?= h($s['type']??'') ?></div>
           </td>
           <td>
-            <div style="display:flex;align-items:center;gap:8px">
-              <div class="pb-wrap" style="flex:1"><div class="pb-fill" style="width:<?= $pct ?>%"></div></div>
-              <span style="font-size:11px;color:var(--muted);min-width:30px"><?= $pct ?>%</span>
+            <div style="display:flex;align-items:center;gap:10px">
+              <div class="px-track"><div class="px-track-f" style="width:<?= $pct ?>%"></div></div>
+              <span style="font-size:11px;color:var(--px-ink-soft);min-width:32px"><?= $pct ?>%</span>
             </div>
           </td>
-          <td style="text-align:right;font-family:'Montserrat',sans-serif;font-weight:800;color:var(--navy)"><?= fmt_number($s['engins']) ?></td>
-          <td style="text-align:right;font-weight:700;color:#1565c0"><?= fmt_number($s['plaques']) ?></td>
-          <td style="text-align:right;font-weight:700;color:<?= $s['moy_vh']>=10?'#16a34a':($s['moy_vh']>=5?'#d97706':'#dc2626') ?>"><?= $s['moy_vh'] ?></td>
-          <td style="text-align:right;color:var(--muted)"><?= $s['nb_points'] ?></td>
+          <td style="text-align:right" class="px-num"><?= fmt_number($s['engins']) ?></td>
+          <td style="text-align:right;font-weight:700"><?= fmt_number($s['plaques']) ?></td>
+          <td style="text-align:right;font-weight:700"><?= $s['moy_vh'] ?></td>
+          <td style="text-align:right;color:var(--px-ink-soft)"><?= $s['nb_points'] ?></td>
           <td style="text-align:center">
             <?php if($s['en_attente']>0): ?>
-              <span class="pill p-orange"><?= $s['en_attente'] ?> att.</span>
+              <span class="px-tag px-tag-warn"><?= $s['en_attente'] ?> en attente</span>
             <?php elseif($s['nb_points']>0): ?>
-              <span class="pill p-green">OK</span>
+              <span class="px-tag px-tag-ok">À jour</span>
             <?php else: ?>
-              <span class="pill p-blue">—</span>
+              <span class="px-tag px-tag-none">Inactif</span>
             <?php endif; ?>
           </td>
+        </tr>
+        <?php endforeach; endif; ?>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ STOCKS ═══════════════════ -->
+  <div class="px-sec-hdr">
+    <div class="px-sec-ttl">Stocks matériel</div>
+    <div class="px-sec-line"></div>
+    <button class="px-chip" type="button" onclick="openFilmsModal()" style="cursor:pointer">
+      <i class="ph-duotone ph-film-strip"></i> Films par site
+    </button>
+  </div>
+  <div class="px-split">
+    <section class="px-card">
+      <div class="px-card-hdr">
+        <div>
+          <div class="px-card-ttl" style="font-size:17px">PMMA par type</div>
+          <div class="px-card-sub">Survoler pour le détail par site</div>
+        </div>
+        <div class="px-ico px-ico-mint"><i class="ph-duotone ph-printer"></i></div>
+      </div>
+      <div class="px-chart"><canvas id="cPmma" height="<?= $pmma_ch_h ?>"></canvas></div>
+    </section>
+    <section class="px-card">
+      <div class="px-card-hdr">
+        <div>
+          <div class="px-card-ttl" style="font-size:17px">Rivets par type</div>
+          <div class="px-card-sub">Seuil d'alerte : 200 unités</div>
+        </div>
+        <div class="px-ico px-ico-lilac"><i class="ph-duotone ph-nut"></i></div>
+      </div>
+      <div class="px-chart"><canvas id="cRivets" height="<?= $riv_ch_h ?>"></canvas></div>
+    </section>
+  </div>
+
+  <!-- ═══════════════════ RÉPARTITIONS ═══════════════════ -->
+  <div class="px-sec-hdr">
+    <div class="px-sec-ttl">Répartitions</div>
+    <div class="px-sec-line"></div>
+  </div>
+  <div class="px-split">
+    <section class="px-card">
+      <div class="px-card-ttl" style="font-size:17px;margin-bottom:18px">Statuts des points</div>
+      <div class="px-donut-row">
+        <canvas id="cStatuts" width="150" height="150" style="width:150px!important;flex-shrink:0"></canvas>
+        <div class="px-lg">
+          <div class="px-lg-i"><span class="px-lg-d" style="background:#A9F5A1"></span>Validés (<?= $points_valides ?>)</div>
+          <div class="px-lg-i"><span class="px-lg-d" style="background:#BFA8FB"></span>En attente (<?= $points_attente ?>)</div>
+          <div class="px-lg-i"><span class="px-lg-d" style="background:#F2A08D"></span>Rejetés (<?= $ops['points_rejetes']??0 ?>)</div>
+        </div>
+      </div>
+    </section>
+    <section class="px-card">
+      <div class="px-card-ttl" style="font-size:17px;margin-bottom:18px">Bobines &amp; commandes</div>
+      <div class="px-donut-row">
+        <canvas id="cBobines" width="130" height="130" style="width:130px!important;flex-shrink:0"></canvas>
+        <div class="px-lg">
+          <div class="px-lg-i"><span class="px-lg-d" style="background:#BFA8FB"></span>En cours (<?= $bobines_stats['en_cours']??0 ?>)</div>
+          <div class="px-lg-i"><span class="px-lg-d" style="background:#A9F5A1"></span>En stock (<?= $bobines_stats['en_stock']??0 ?>)</div>
+          <div class="px-lg-i"><span class="px-lg-d" style="background:#C8CCC2"></span>Épuisées (<?= $bobines_stats['epuisees']??0 ?>)</div>
+        </div>
+        <canvas id="cCmds" width="130" height="130" style="width:130px!important;flex-shrink:0"></canvas>
+        <div class="px-lg">
+          <div class="px-lg-i"><span class="px-lg-d" style="background:#F2C88D"></span>Cmd. en attente (<?= $cmd_stats['en_attente']??0 ?>)</div>
+          <div class="px-lg-i"><span class="px-lg-d" style="background:#BFA8FB"></span>En livraison (<?= ($cmd_stats['a_livrer']??0)+($cmd_stats['en_route']??0) ?>)</div>
+          <div class="px-lg-i"><span class="px-lg-d" style="background:#A9F5A1"></span>Livrées (<?= $cmd_stats['livrees_mois']??0 ?>)</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- ═══════════════════ POINTS EN ATTENTE ═══════════════════ -->
+  <?php if(!empty($pts_attente)): ?>
+  <div class="px-sec-hdr">
+    <div class="px-sec-ttl">Points en attente de validation</div>
+    <div class="px-sec-line"></div>
+  </div>
+  <section class="px-card">
+    <div class="px-tbl-wrap">
+      <table class="px-tbl" style="min-width:520px">
+        <thead><tr><th>Site</th><th>Date</th><th>Type</th><th>Coordinateur</th></tr></thead>
+        <tbody>
+        <?php foreach($pts_attente as $pt): ?>
+        <tr>
+          <td style="font-weight:700"><?= h($pt['site']) ?></td>
+          <td><?= fmt_date($pt['date_point']) ?></td>
+          <td><span class="px-tag px-tag-warn"><?= ['point_9h'=>'9h','point_13h'=>'13h','point_18h'=>'18h'][$pt['type_point']] ?? h($pt['type_point']) ?></span></td>
+          <td style="color:var(--px-ink-soft)"><?= h($pt['coord']??'—') ?></td>
         </tr>
         <?php endforeach; ?>
         </tbody>
       </table>
     </div>
-  </div>
-</div>
+  </section>
+  <?php endif; ?>
 
-<div id="pdg-tip" style="display:none;position:fixed;z-index:3000;background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;box-shadow:0 8px 24px rgba(0,0,0,.13);pointer-events:none;min-width:170px;font-size:12px;line-height:1.7"></div>
+  <!-- ═══════════════════ MODALE FILMS ═══════════════════ -->
+  <div id="modal-films" class="px-modal" onclick="if(event.target===this)this.style.display='none'">
+    <div class="px-modal-box">
+      <div class="px-modal-hdr">
+        <div class="px-ico px-ico-mint"><i class="ph-duotone ph-film-strip"></i></div>
+        <div style="flex:1">
+          <div class="px-card-ttl" style="font-size:17px">Films utilisés par site</div>
+          <div class="px-card-sub"><?= h($mois_display) ?></div>
+        </div>
+        <button class="px-ico-btn" type="button" onclick="document.getElementById('modal-films').style.display='none'" aria-label="Fermer">&times;</button>
+      </div>
+      <div style="overflow:auto;padding:24px">
+        <div class="px-chart"><canvas id="cFilms" height="<?= $films_ch_h ?>"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="pdg-tip" role="status"></div>
+</div>
 
 <script>
 const evolLabels  = <?= $js_evol_labels ?>;
 const evolEngins  = <?= $js_evol_engins ?>;
-const filmsLabels  = <?= $js_films_labels ?>;
-const filmsValues  = <?= $js_films_values ?>;
-const filmsDetail  = <?= $js_films_detail ?>;
+const evolFilms   = <?= $js_evol_films ?>;
+const filmsLabels = <?= $js_films_labels ?>;
+const filmsValues = <?= $js_films_values ?>;
+const filmsDetail = <?= $js_films_detail ?>;
 const statutsData = <?= $js_statuts ?>;
 const bobinesData = <?= $js_bobines ?>;
 const cmdsData    = <?= $js_cmds ?>;
@@ -626,7 +946,10 @@ const pmmaDetail  = <?= $js_pmma_detail ?>;
 const rivLabels   = <?= $js_riv_labels ?>;
 const rivTotals   = <?= $js_riv_totals ?>;
 const rivDetail   = <?= $js_riv_detail ?>;
+const compareData = <?= $js_compare ?>;
+const gaugeData   = <?= $js_gauges ?>;
 
+const INK = '#191A17', MINT = '#A9F5A1', LILAC = '#BFA8FB', CORAL = '#F2A08D', SAND = '#F2C88D', GREY = '#C8CCC2';
 const DPR = window.devicePixelRatio || 1;
 
 function initCv(id) {
@@ -639,283 +962,385 @@ function initCv(id) {
     el.style.width  = Math.round(w) + 'px';
     el.style.height = h + 'px';
     const ctx = el.getContext('2d');
-    ctx.scale(DPR, DPR);
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
     return {ctx, w: Math.round(w), h};
 }
 
-function drawBar(id, labels, values, color) {
-    const c = initCv(id); if (!c) return;
-    const {ctx, w, h} = c;
-    const pad = {t:22,r:10,b:36,l:42};
-    const cW = w-pad.l-pad.r, cH = h-pad.t-pad.b;
-    const max = Math.max(...values, 1);
-    const n = labels.length || 1;
-    const slot = cW/n, bw = Math.max(6, slot*0.55);
+function rrect(ctx, x, y, w, h, r) {
+    r = Math.min(r, w / 2, h / 2);
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y,     x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x,     y + h, r);
+    ctx.arcTo(x,     y + h, x,     y,     r);
+    ctx.arcTo(x,     y,     x + w, y,     r);
+    ctx.closePath();
+}
 
-    ctx.strokeStyle='#e2e8f0'; ctx.lineWidth=1;
-    for (let i=0; i<=4; i++) {
-        const y = pad.t + cH*(1-i/4);
-        ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(w-pad.r,y); ctx.stroke();
-        ctx.fillStyle='#94a3b8'; ctx.font='10px DM Sans,sans-serif';
-        ctx.textAlign='right'; ctx.textBaseline='middle';
-        ctx.fillText(Math.round(max*i/4), pad.l-4, y);
-    }
-    if (!labels.length) {
-        ctx.fillStyle='#94a3b8'; ctx.font='12px DM Sans,sans-serif';
-        ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText('Aucune donnée', w/2, h/2); return;
-    }
-    values.forEach((v,i) => {
-        const bh = Math.max(2,(v/max)*cH);
-        const x  = pad.l + slot*i + (slot-bw)/2;
-        const y  = pad.t + cH - bh;
-        ctx.fillStyle = color;
-        ctx.fillRect(x, y, bw, bh);
-        if (v>0) {
-            ctx.fillStyle='#06033A'; ctx.font='bold 10px DM Sans,sans-serif';
-            ctx.textAlign='center'; ctx.textBaseline='bottom';
-            ctx.fillText(v, x+bw/2, y-2);
+/** Motif hachuré (portions « période précédente » / « restant »). */
+function hatch(ctx, stroke, bg) {
+    const p = document.createElement('canvas');
+    p.width = p.height = 8;
+    const c = p.getContext('2d');
+    if (bg) { c.fillStyle = bg; c.fillRect(0, 0, 8, 8); }
+    c.strokeStyle = stroke; c.lineWidth = 2.2;
+    c.beginPath(); c.moveTo(-2, 10); c.lineTo(10, -2); c.stroke();
+    c.beginPath(); c.moveTo(2, 14);  c.lineTo(14, 2);  c.stroke();
+    return ctx.createPattern(p, 'repeat');
+}
+
+function fmtN(n) { return Number(n).toLocaleString('fr-FR'); }
+
+/* ── BARRES DE COMPARAISON (carte Production) ───────────── */
+function drawCompare() {
+    const c = initCv('cCompare'); if (!c) return;
+    const {ctx, w, h} = c;
+    const cols = [compareData.prev, compareData.cur];
+    const totals = cols.map(d => d.engins + d.plaques);
+    const max = Math.max(...totals, 1);
+    const labelH = 22, padB = 4;
+    const areaH = h - labelH - padB;
+    const gap = 14;
+    const bw = Math.min(88, (w - gap) / 2);
+    const startX = (w - (bw * 2 + gap)) / 2;
+    const hp = hatch(ctx, 'rgba(244,245,241,.30)', 'rgba(244,245,241,.07)');
+
+    cols.forEach((d, i) => {
+        const total = d.engins + d.plaques;
+        const bh = Math.max(26, (total / max) * areaH);
+        const x  = startX + i * (bw + gap);
+        const y  = labelH + areaH - bh;
+
+        ctx.fillStyle = 'rgba(244,245,241,.55)';
+        ctx.font = '600 11px Manrope, sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText(d.label || '', x + bw / 2, 2);
+
+        if (i === 0) {                       // période précédente : hachurée
+            rrect(ctx, x, y, bw, bh, 16);
+            ctx.fillStyle = hp; ctx.fill();
+            ctx.strokeStyle = 'rgba(244,245,241,.22)'; ctx.lineWidth = 1; ctx.stroke();
+        } else {                             // période courante : mint + lilas
+            const pH = total > 0 ? (d.plaques / total) * bh : 0;
+            ctx.save();
+            rrect(ctx, x, y, bw, bh, 16); ctx.clip();
+            ctx.fillStyle = MINT;  ctx.fillRect(x, y, bw, bh - pH);
+            ctx.fillStyle = LILAC; ctx.fillRect(x, y + bh - pH, bw, pH);
+            ctx.restore();
         }
-        ctx.fillStyle='#94a3b8'; ctx.font='10px DM Sans,sans-serif';
-        ctx.textAlign='center'; ctx.textBaseline='top';
-        const lbl = (labels[i]||'').length>8 ? (labels[i]||'').substring(0,8) : (labels[i]||'');
-        ctx.fillText(lbl, x+bw/2, h-pad.b+6);
+    });
+
+    if (max <= 1) {
+        ctx.fillStyle = 'rgba(244,245,241,.45)';
+        ctx.font = '12px Manrope, sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('Aucune donnée', w / 2, h / 2);
+    }
+}
+
+/* ── JAUGE (arc semi-circulaire) ─────────────────────────── */
+let gaugeIdx = 0;
+function drawGauge(pct) {
+    const c = initCv('cGauge'); if (!c) return;
+    const {ctx, w, h} = c;
+    const cx = w / 2, cy = h - 8;
+    const R  = Math.min(w / 2 - 16, h - 26);
+    const lw = Math.max(16, Math.min(26, R * 0.24));
+    const frac = Math.max(0, Math.min(100, pct)) / 100;
+    const a0 = Math.PI, a1 = Math.PI + frac * Math.PI;
+
+    ctx.lineCap = 'round';
+    ctx.lineWidth = lw;
+    // reste : hachuré
+    ctx.strokeStyle = hatch(ctx, 'rgba(20,50,15,.55)', 'rgba(255,255,255,.35)');
+    ctx.beginPath(); ctx.arc(cx, cy, R, a0, Math.PI * 2); ctx.stroke();
+    // atteint : encre
+    if (frac > 0.005) {
+        ctx.strokeStyle = INK;
+        ctx.beginPath(); ctx.arc(cx, cy, R, a0, a1); ctx.stroke();
+    }
+    // curseur
+    const mx = cx + Math.cos(a1) * R, my = cy + Math.sin(a1) * R;
+    ctx.fillStyle = LILAC;
+    ctx.beginPath(); ctx.arc(mx, my, lw * 0.32, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = INK; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(mx, my, lw * 0.32, 0, Math.PI * 2); ctx.stroke();
+}
+
+function renderGauge() {
+    const g = gaugeData[gaugeIdx]; if (!g) return;
+    document.getElementById('gTitre').textContent = g.titre;
+    document.getElementById('gSous').textContent  = g.sous;
+    document.getElementById('gPct').textContent   = g.pct;
+    document.getElementById('gVal').textContent   = g.valeur;
+    document.getElementById('gNote').textContent  = g.sous;
+    document.getElementById('gCible').textContent = g.pct >= 80 ? 'objectif atteint' : (g.pct >= 50 ? 'en progression' : 'sous objectif');
+    document.querySelectorAll('#gDots .px-dot').forEach((d, i) => d.classList.toggle('on', i === gaugeIdx));
+    drawGauge(g.pct);
+}
+function gaugeStep(dir) {
+    gaugeIdx = (gaugeIdx + dir + gaugeData.length) % gaugeData.length;
+    renderGauge();
+}
+function buildDots() {
+    const box = document.getElementById('gDots');
+    if (!box) return;
+    box.innerHTML = '';
+    gaugeData.forEach((g, i) => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'px-dot' + (i === 0 ? ' on' : '');
+        b.setAttribute('aria-label', g.titre);
+        b.onclick = () => { gaugeIdx = i; renderGauge(); };
+        box.appendChild(b);
     });
 }
 
+/* ── SPARKLINE (carte films) ─────────────────────────────── */
+function drawSpark() {
+    const c = initCv('cSpark'); if (!c) return;
+    const {ctx, w, h} = c;
+    const v = evolFilms.length ? evolFilms : [0];
+    if (v.length < 2) {
+        ctx.fillStyle = 'rgba(36,22,69,.5)';
+        ctx.font = '11px Manrope, sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('Historique insuffisant', w / 2, h / 2);
+        return;
+    }
+    const max = Math.max(...v, 1), min = Math.min(...v, 0);
+    const span = (max - min) || 1;
+    const pad = 8;
+    const pt = i => [ (i / (v.length - 1)) * (w - 8) + 4,
+                      pad + (1 - (v[i] - min) / span) * (h - pad * 2) ];
+
+    ctx.beginPath();
+    ctx.moveTo(...pt(0));
+    for (let i = 1; i < v.length; i++) ctx.lineTo(...pt(i));
+    const [lx, ly] = pt(v.length - 1);
+    ctx.lineTo(lx, h); ctx.lineTo(4, h); ctx.closePath();
+    ctx.fillStyle = 'rgba(25,26,23,.14)'; ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(...pt(0));
+    for (let i = 1; i < v.length; i++) ctx.lineTo(...pt(i));
+    ctx.strokeStyle = INK; ctx.lineWidth = 2.4; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.stroke();
+
+    ctx.fillStyle = MINT;
+    ctx.beginPath(); ctx.arc(lx, ly, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = INK; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(lx, ly, 5, 0, Math.PI * 2); ctx.stroke();
+}
+
+/* ── DONUT ───────────────────────────────────────────────── */
+function drawDonut(id, values, colors) {
+    const el = document.getElementById(id); if (!el) return;
+    const sz = parseInt(el.getAttribute('width') || 140);
+    el.width = sz * DPR; el.height = sz * DPR;
+    el.style.width = sz + 'px'; el.style.height = sz + 'px';
+    const ctx = el.getContext('2d');
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const cx = sz / 2, cy = sz / 2, R = sz / 2 - 4, r = R * 0.62;
+    const total = values.reduce((a, b) => a + b, 0);
+    const bg = getComputedStyle(document.getElementById('pdgx')).getPropertyValue('--px-card').trim() || '#fff';
+    const ink = getComputedStyle(document.getElementById('pdgx')).getPropertyValue('--px-ink').trim() || INK;
+
+    if (!total) {
+        ctx.fillStyle = GREY;
+        ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = bg;
+        ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = ink; ctx.font = '800 15px "Plus Jakarta Sans", sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('0', cx, cy);
+        return;
+    }
+    let angle = -Math.PI / 2;
+    values.forEach((v, i) => {
+        if (!v) return;
+        const slice = (v / total) * Math.PI * 2;
+        ctx.fillStyle = colors[i];
+        ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, R, angle, angle + slice); ctx.closePath(); ctx.fill();
+        angle += slice;
+    });
+    ctx.fillStyle = bg;
+    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = ink; ctx.font = '800 17px "Plus Jakarta Sans", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(fmtN(total), cx, cy);
+}
+
+/* ── BARRES HORIZONTALES ─────────────────────────────────── */
 function drawHBar(id, labels, values, color) {
     const c = initCv(id); if (!c) return;
     const {ctx, w, h} = c;
+    const ink = getComputedStyle(document.getElementById('pdgx')).getPropertyValue('--px-ink').trim() || INK;
+    const soft = getComputedStyle(document.getElementById('pdgx')).getPropertyValue('--px-ink-soft').trim() || '#5D6459';
     if (!labels.length) {
-        ctx.fillStyle='#94a3b8'; ctx.font='12px DM Sans,sans-serif';
-        ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText('Aucune donnée', w/2, h/2); return;
+        ctx.fillStyle = soft; ctx.font = '12px Manrope, sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('Aucune donnée', w / 2, h / 2); return;
     }
-    const lw = 110, rw = 38;
-    const bArea = w - lw - rw;
+    const lw = Math.min(120, w * 0.32), rw = 44;
+    const bArea = Math.max(20, w - lw - rw);
     const rh = h / labels.length;
-    const bh = Math.min(rh * 0.45, 20);
+    const bh = Math.min(rh * 0.5, 22);
     const max = Math.max(...values, 1);
     labels.forEach((lbl, i) => {
         const y  = i * rh;
         const by = y + (rh - bh) / 2;
-        const bw = Math.max((values[i] / max) * bArea, values[i] > 0 ? 4 : 0);
-        ctx.fillStyle = '#06033A'; ctx.font = '11px DM Sans,sans-serif';
+        const bw = Math.max((values[i] / max) * bArea, values[i] > 0 ? 6 : 0);
+        ctx.fillStyle = ink; ctx.font = '600 11.5px Manrope, sans-serif';
         ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-        ctx.fillText(lbl.length > 14 ? lbl.substring(0,14)+'…' : lbl, lw - 8, y + rh / 2);
-        ctx.fillStyle = color;
-        ctx.fillRect(lw, by, bw, bh);
-        if (values[i] > 0) {
-            ctx.fillStyle = '#64748b'; ctx.font = '10px DM Sans,sans-serif';
+        ctx.fillText(lbl.length > 15 ? lbl.substring(0, 15) + '…' : lbl, lw - 10, y + rh / 2);
+        if (bw > 0) { ctx.fillStyle = color; rrect(ctx, lw, by, bw, bh, bh / 2); ctx.fill(); }
+        ctx.fillStyle = soft; ctx.font = '600 11px Manrope, sans-serif';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(values[i] > 0 ? fmtN(values[i]) : '—', lw + bw + 8, y + rh / 2);
+    });
+}
+
+function drawPmma() {
+    const lows = pmmaBas.map(n => n > 0);
+    const c = initCv('cPmma'); if (!c) return;
+    const {ctx, w, h} = c;
+    const ink = getComputedStyle(document.getElementById('pdgx')).getPropertyValue('--px-ink').trim() || INK;
+    const soft = getComputedStyle(document.getElementById('pdgx')).getPropertyValue('--px-ink-soft').trim() || '#5D6459';
+    if (!pmmaLabels.length) {
+        ctx.fillStyle = soft; ctx.font = '12px Manrope, sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('Aucun stock PMMA', w / 2, h / 2); return;
+    }
+    const lw = Math.min(110, w * 0.32), rw = 44;
+    const bArea = Math.max(20, w - lw - rw);
+    const rh = h / pmmaLabels.length;
+    const max = Math.max(...pmmaTotals, 1);
+    pmmaLabels.forEach((lbl, i) => {
+        const y = i * rh, bh = Math.min(rh * 0.5, 22), by = y + (rh - bh) / 2;
+        const tot = pmmaTotals[i];
+        const bw = Math.max((tot / max) * bArea, tot > 0 ? 6 : 0);
+        ctx.fillStyle = ink; ctx.font = '600 11.5px Manrope, sans-serif';
+        ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+        ctx.fillText(lbl.length > 13 ? lbl.substring(0, 13) + '…' : lbl, lw - 10, y + rh / 2);
+        if (bw > 0) { ctx.fillStyle = lows[i] ? CORAL : MINT; rrect(ctx, lw, by, bw, bh, bh / 2); ctx.fill(); }
+        ctx.fillStyle = soft; ctx.font = '600 11px Manrope, sans-serif';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(fmtN(tot), lw + bw + 8, y + rh / 2);
+    });
+}
+
+function drawRivets() {
+    const c = initCv('cRivets'); if (!c) return;
+    const {ctx, w, h} = c;
+    const ink = getComputedStyle(document.getElementById('pdgx')).getPropertyValue('--px-ink').trim() || INK;
+    const soft = getComputedStyle(document.getElementById('pdgx')).getPropertyValue('--px-ink-soft').trim() || '#5D6459';
+    const lw = Math.min(110, w * 0.32), rw = 44;
+    const bArea = Math.max(20, w - lw - rw);
+    const rh = h / (rivLabels.length || 1);
+    const max = Math.max(...rivTotals, 1);
+    rivLabels.forEach((lbl, i) => {
+        const y = i * rh, bh = Math.min(rh * 0.5, 22), by = y + (rh - bh) / 2;
+        const tot = rivTotals[i];
+        const bw = Math.max((tot / max) * bArea, tot > 0 ? 6 : 0);
+        const bas = (rivDetail[i] || []).filter(s => s.qty > 0 && s.qty < 200).length;
+        ctx.fillStyle = ink; ctx.font = '600 11.5px Manrope, sans-serif';
+        ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+        ctx.fillText(lbl, lw - 10, y + rh / 2);
+        if (tot > 0) {
+            ctx.fillStyle = bas > 0 ? CORAL : (i === 0 ? MINT : LILAC);
+            rrect(ctx, lw, by, bw, bh, bh / 2); ctx.fill();
+            ctx.fillStyle = soft; ctx.font = '600 11px Manrope, sans-serif';
             ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-            ctx.fillText(values[i], lw + bw + 4, y + rh / 2);
+            ctx.fillText(fmtN(tot), lw + bw + 8, y + rh / 2);
+        } else {
+            ctx.fillStyle = soft; ctx.font = '11px Manrope, sans-serif';
+            ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+            ctx.fillText('—', lw + 8, y + rh / 2);
         }
     });
 }
 
-function drawDonut(id, values, colors) {
-    const el = document.getElementById(id); if (!el) return;
-    const sz = parseInt(el.getAttribute('width')||140);
-    el.width = sz*DPR; el.height = sz*DPR;
-    el.style.width=sz+'px'; el.style.height=sz+'px';
-    const ctx = el.getContext('2d');
-    ctx.scale(DPR, DPR);
-    const cx=sz/2, cy=sz/2, R=sz/2-6, r=R*0.58;
-    const total = values.reduce((a,b)=>a+b,0);
-    if (!total) {
-        ctx.fillStyle='#e2e8f0';
-        ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fill();
-        ctx.fillStyle='white';
-        ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
-        ctx.fillStyle='#94a3b8'; ctx.font='bold 13px Montserrat,sans-serif';
-        ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText('0', cx, cy); return;
-    }
-    let angle = -Math.PI/2;
-    values.forEach((v,i) => {
-        if (!v) return;
-        const slice=(v/total)*Math.PI*2;
-        ctx.fillStyle=colors[i];
-        ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,R,angle,angle+slice); ctx.closePath(); ctx.fill();
-        angle+=slice;
-    });
-    ctx.fillStyle='white';
-    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#06033A'; ctx.font='bold 15px Montserrat,sans-serif';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(total, cx, cy);
-}
-
-// ── TOOLTIP
+/* ── INFOBULLES ──────────────────────────────────────────── */
 function showTip(e, html) {
     const tip = document.getElementById('pdg-tip');
     tip.innerHTML = html;
     tip.style.display = 'block';
     const tw = tip.offsetWidth, th = tip.offsetHeight;
-    const x  = e.clientX + 14;
-    const y  = e.clientY - 10;
-    tip.style.left = (x + tw > window.innerWidth - 8 ? x - tw - 28 : x) + 'px';
+    const x = e.clientX + 16, y = e.clientY - 10;
+    tip.style.left = (x + tw > window.innerWidth - 8 ? x - tw - 32 : x) + 'px';
     tip.style.top  = (y + th > window.innerHeight - 8 ? y - th + 20 : y) + 'px';
 }
 function hideTip() { document.getElementById('pdg-tip').style.display = 'none'; }
 
-function fmtN(n) { return Number(n).toLocaleString('fr-FR'); }
-
-// ── PMMA CHART
-function drawPmma() {
-    const c = initCv('cPmma'); if (!c) return;
-    const {ctx, w, h} = c;
-    const lw = 96, rw = 38;
-    const bArea = w - lw - rw;
-    const n = pmmaLabels.length || 1;
-    const rowH = h / n;
-    const max = Math.max(...pmmaTotals, 1);
-    pmmaLabels.forEach((lbl, i) => {
-        const y   = i * rowH;
-        const bh  = Math.min(rowH * 0.44, 20);
-        const by  = y + (rowH - bh) / 2;
-        const tot = pmmaTotals[i];
-        const bw  = Math.max((tot / max) * bArea, tot > 0 ? 4 : 0);
-        const low = pmmaBas[i] > 0;
-        ctx.fillStyle = low ? '#dc2626' : '#06033A';
-        ctx.font = '11px DM Sans,sans-serif';
-        ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-        ctx.fillText(lbl.length > 12 ? lbl.substring(0,12)+'…' : lbl, lw - 8, y + rowH / 2);
-        ctx.fillStyle = low ? '#dc2626' : '#0891b2';
-        ctx.fillRect(lw, by, bw, bh);
-        ctx.fillStyle = '#64748b'; ctx.font = '10px DM Sans,sans-serif';
-        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-        ctx.fillText(fmtN(tot), lw + bw + 4, y + rowH / 2);
+function bindTip(canvasId, labels, rowsFor) {
+    const el = document.getElementById(canvasId);
+    if (!el || !labels.length) return;
+    el.style.cursor = 'crosshair';
+    el.addEventListener('mousemove', e => {
+        const rect = el.getBoundingClientRect();
+        const idx = Math.floor((e.clientY - rect.top) / (rect.height / labels.length));
+        if (idx >= 0 && idx < labels.length) showTip(e, rowsFor(idx));
+        else hideTip();
     });
+    el.addEventListener('mouseleave', hideTip);
 }
 
-// ── RIVETS CHART (par type)
-function drawRivets() {
-    const c = initCv('cRivets'); if (!c) return;
-    const {ctx, w, h} = c;
-    const lw = 96, rw = 38;
-    const bArea = w - lw - rw;
-    const n = rivLabels.length || 1;
-    const rowH = h / n;
-    const max = Math.max(...rivTotals, 1);
-    const colors = ['#1B75BC', '#06033A'];
-    rivLabels.forEach((lbl, i) => {
-        const bh  = Math.min(rowH * 0.44, 20);
-        const y   = i * rowH;
-        const by  = y + (rowH - bh) / 2;
-        const tot = rivTotals[i];
-        const bw  = Math.max((tot / max) * bArea, tot > 0 ? 4 : 0);
-        // alerte seulement si le site A du stock mais sous le seuil (pas si qty=0)
-        const bas = (rivDetail[i] || []).filter(s => s.qty > 0 && s.qty < 200).length;
-        ctx.fillStyle = bas > 0 ? '#dc2626' : '#06033A';
-        ctx.font = '11px DM Sans,sans-serif';
-        ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
-        ctx.fillText(lbl, lw - 8, y + rowH / 2);
-        if (tot > 0) {
-            ctx.fillStyle = bas > 0 ? '#dc2626' : colors[i];
-            ctx.fillRect(lw, by, bw, bh);
-            ctx.fillStyle = '#64748b'; ctx.font = '10px DM Sans,sans-serif';
-            ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-            ctx.fillText(fmtN(tot), lw + bw + 4, y + rowH / 2);
-        } else {
-            ctx.fillStyle = '#94a3b8'; ctx.font = '11px DM Sans,sans-serif';
-            ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-            ctx.fillText('—', lw + 6, y + rowH / 2);
-        }
-    });
+function tipRow(left, right, alert) {
+    return `<div style="display:flex;justify-content:space-between;gap:18px;color:${alert ? '#FFB4A2' : 'rgba(244,245,241,.86)'}">
+        <span>${left}</span><span style="font-weight:700">${right}</span></div>`;
 }
 
-// ── HOVER SETUP
 function setupHover() {
-    // Films
-    const ef = document.getElementById('cFilms');
-    if (ef && filmsLabels.length) {
-        ef.style.cursor = 'crosshair';
-        const filmsTotal = filmsValues.reduce((a, b) => a + b, 0);
-        ef.addEventListener('mousemove', e => {
-            const rect = ef.getBoundingClientRect();
-            const idx  = Math.floor((e.clientY - rect.top) / (rect.height / filmsLabels.length));
-            if (idx >= 0 && idx < filmsLabels.length) {
-                const d  = filmsDetail[idx] || [];
-                let html = `<div style="font-weight:700;color:#06033A;font-size:13px;margin-bottom:6px">${filmsLabels[idx]}</div>`;
-                d.forEach(s => {
-                    html += `<div style="display:flex;justify-content:space-between;gap:16px;color:#374151">
-                        <span>${s.site}</span>
-                        <span style="font-weight:700">${fmtN(s.films)} <span style="font-weight:400;color:#94a3b8">/ ${fmtN(filmsValues[idx])}</span></span>
-                    </div>`;
-                });
-                if (!d.length) html += `<div style="color:#94a3b8">Aucune donnée</div>`;
-                showTip(e, html);
-            } else hideTip();
-        });
-        ef.addEventListener('mouseleave', hideTip);
-    }
-    // PMMA
-    const ep = document.getElementById('cPmma');
-    if (ep && pmmaLabels.length) {
-        ep.style.cursor = 'crosshair';
-        ep.addEventListener('mousemove', e => {
-            const rect = ep.getBoundingClientRect();
-            const idx  = Math.floor((e.clientY - rect.top) / (rect.height / pmmaLabels.length));
-            if (idx >= 0 && idx < pmmaLabels.length) {
-                const d = pmmaDetail[idx] || [];
-                let html = `<div style="font-weight:700;color:#06033A;font-size:13px;margin-bottom:6px">${pmmaLabels[idx]}</div>`;
-                d.forEach(s => {
-                    const low = s.qty < s.seuil;
-                    html += `<div style="display:flex;justify-content:space-between;gap:14px;color:${low?'#dc2626':'#374151'}">
-                        <span>${s.site||'—'}</span>
-                        <span style="font-weight:700">${fmtN(s.qty)} <span style="font-weight:400;color:#94a3b8">/ ${fmtN(pmmaTotals[idx])}</span></span>
-                    </div>`;
-                });
-                if (!d.length) html += `<div style="color:#94a3b8">Aucun stock</div>`;
-                if (pmmaBas[idx] > 0) html += `<div style="margin-top:5px;color:#dc2626;font-size:11px;font-weight:600">⚠ ${pmmaBas[idx]} site(s) en stock bas</div>`;
-                showTip(e, html);
-            } else hideTip();
-        });
-        ep.addEventListener('mouseleave', hideTip);
-    }
-    // Rivets
-    const er = document.getElementById('cRivets');
-    if (er && rivLabels.length) {
-        er.style.cursor = 'crosshair';
-        er.addEventListener('mousemove', e => {
-            const rect = er.getBoundingClientRect();
-            const idx  = Math.floor((e.clientY - rect.top) / (rect.height / rivLabels.length));
-            if (idx >= 0 && idx < rivLabels.length) {
-                const d = rivDetail[idx] || [];
-                let html = `<div style="font-weight:700;color:#06033A;font-size:13px;margin-bottom:6px">${rivLabels[idx]}</div>`;
-                d.forEach(s => {
-                    const low = s.qty < 200;
-                    html += `<div style="display:flex;justify-content:space-between;gap:14px;color:${low?'#dc2626':'#374151'}">
-                        <span>${s.site}</span>
-                        <span style="font-weight:700">${fmtN(s.qty)} <span style="font-weight:400;color:#94a3b8">/ ${fmtN(rivTotals[idx])}</span></span>
-                    </div>`;
-                });
-                const bas = d.filter(s => s.qty < 200).length;
-                if (bas > 0) html += `<div style="margin-top:5px;color:#dc2626;font-size:11px;font-weight:600">⚠ ${bas} site(s) sous seuil (200)</div>`;
-                showTip(e, html);
-            } else hideTip();
-        });
-        er.addEventListener('mouseleave', hideTip);
-    }
+    bindTip('cFilms', filmsLabels, i => {
+        const d = filmsDetail[i] || [];
+        let html = `<div style="font-weight:800;font-size:13px;margin-bottom:7px">${filmsLabels[i]}</div>`;
+        d.forEach(s => html += tipRow(s.site, `${fmtN(s.films)} <span style="font-weight:400;opacity:.55">/ ${fmtN(filmsValues[i])}</span>`, false));
+        if (!d.length) html += `<div style="opacity:.55">Aucune donnée</div>`;
+        return html;
+    });
+    bindTip('cPmma', pmmaLabels, i => {
+        const d = pmmaDetail[i] || [];
+        let html = `<div style="font-weight:800;font-size:13px;margin-bottom:7px">${pmmaLabels[i]}</div>`;
+        d.forEach(s => html += tipRow(s.site || '—', `${fmtN(s.qty)} <span style="font-weight:400;opacity:.55">/ ${fmtN(pmmaTotals[i])}</span>`, s.qty < s.seuil));
+        if (!d.length) html += `<div style="opacity:.55">Aucun stock</div>`;
+        if (pmmaBas[i] > 0) html += `<div style="margin-top:7px;color:#FFB4A2;font-size:11px;font-weight:700">⚠ ${pmmaBas[i]} site(s) sous seuil</div>`;
+        return html;
+    });
+    bindTip('cRivets', rivLabels, i => {
+        const d = rivDetail[i] || [];
+        let html = `<div style="font-weight:800;font-size:13px;margin-bottom:7px">${rivLabels[i]}</div>`;
+        d.forEach(s => html += tipRow(s.site, `${fmtN(s.qty)} <span style="font-weight:400;opacity:.55">/ ${fmtN(rivTotals[i])}</span>`, s.qty < 200));
+        const bas = d.filter(s => s.qty < 200).length;
+        if (bas > 0) html += `<div style="margin-top:7px;color:#FFB4A2;font-size:11px;font-weight:700">⚠ ${bas} site(s) sous seuil (200)</div>`;
+        return html;
+    });
 }
 
 function openFilmsModal() {
     document.getElementById('modal-films').style.display = 'flex';
-    setTimeout(() => drawHBar('cFilms', filmsLabels, filmsValues, '#7c3aed'), 40);
+    setTimeout(() => drawHBar('cFilms', filmsLabels, filmsValues, LILAC), 40);
 }
 
 function render() {
-    drawBar('cEvol',   evolLabels,  evolEngins,  '#1B75BC');
-    drawDonut('cStatuts', statutsData, ['#16a34a','#d97706','#dc2626']);
-    drawDonut('cBobines', bobinesData, ['#7c3aed','#1B75BC','#94a3b8']);
-    drawDonut('cCmds',    cmdsData,    ['#d97706','#1B75BC','#16a34a']);
+    drawCompare();
+    drawSpark();
+    renderGauge();
+    drawDonut('cStatuts', statutsData, [MINT, LILAC, CORAL]);
+    drawDonut('cBobines', bobinesData, [LILAC, MINT, GREY]);
+    drawDonut('cCmds',    cmdsData,    [SAND, LILAC, MINT]);
     drawPmma();
     drawRivets();
+    if (document.getElementById('modal-films').style.display === 'flex') {
+        drawHBar('cFilms', filmsLabels, filmsValues, LILAC);
+    }
 }
 
-window.addEventListener('load', () => { setTimeout(render, 60); setTimeout(setupHover, 120); });
-let _rt; window.addEventListener('resize', () => { clearTimeout(_rt); _rt=setTimeout(render,200); });
+document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') document.getElementById('modal-films').style.display = 'none';
+});
+
+window.addEventListener('load', () => { buildDots(); setTimeout(render, 60); setTimeout(setupHover, 120); });
+let _rt; window.addEventListener('resize', () => { clearTimeout(_rt); _rt = setTimeout(render, 200); });
 </script>
 
 <?php include __DIR__ . '/../templates/footer.php'; ?>
