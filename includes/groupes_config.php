@@ -164,12 +164,14 @@ function _groupes_def(): array {
                 ['label'=>'Nouvelle demande','icon'=>'ph-plus-circle',
                  'url'=>'pages/demandes_new.php','active_keys'=>['demandes_new']],
                 ['label'=>'À valider',       'icon'=>'ph-seal-check',
-                 'url'=>'pages/demandes_a_valider.php','active_keys'=>['demandes_valider']],
+                 'url'=>'pages/demandes_a_valider.php','active_keys'=>['demandes_valider'],
+                 'roles_exclude'=>['coordinateur_site']],
                 ['label'=>'Types & circuits','icon'=>'ph-git-branch',
                  'url'=>'pages/demandes_types.php','active_keys'=>['demandes_types'],
                  'roles_include'=>['admin','superadmin']],
-                // « Rôles valideurs » retiré : la validation est désormais pilotée par le rôle ERP
-                // (Administration → Permissions). Voir di_user_roles() dans includes/demandes.php.
+                ['label'=>'Circuits avancés','icon'=>'ph-buildings',
+                 'url'=>'pages/demandes_roles.php','active_keys'=>['demandes_roles'],
+                 'roles_include'=>['admin','superadmin']],
             ],
         ],
 

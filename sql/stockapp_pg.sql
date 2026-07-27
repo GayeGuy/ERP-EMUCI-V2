@@ -10900,5 +10900,33 @@ ALTER TABLE distributions_site ADD COLUMN IF NOT EXISTS created_by integer DEFAU
 ALTER TABLE distribution_lignes ADD COLUMN IF NOT EXISTS commande_ligne_id integer DEFAULT NULL;
 ALTER TABLE distribution_lignes ADD COLUMN IF NOT EXISTS quantite_recue integer DEFAULT 0;
 ALTER TABLE distribution_lignes ADD COLUMN IF NOT EXISTS unite varchar(20) DEFAULT 'unite';
+-- op_pmma_utilises (PMMA par point journalier ; creee par fix_columns.php cote MySQL)
+CREATE TABLE IF NOT EXISTS op_pmma_utilises (
+  id SERIAL PRIMARY KEY,
+  point_id integer NOT NULL,
+  type_pmma varchar(50) NOT NULL,
+  utilises integer NOT NULL DEFAULT 0,
+  endommages integer NOT NULL DEFAULT 0,
+  created_at timestamp DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS op_pmma_utilises_idx_point_id ON op_pmma_utilises (point_id);
+
+-- plate_number : colonne legacy absente des INSERT actuels (MySQL laxiste la
+-- remplissait par ''). Nullable en PostgreSQL pour ne pas bloquer l'import OptoTrace.
+ALTER TABLE import_optotrace ALTER COLUMN plate_number DROP NOT NULL;
+
+-- Sequences manquantes (tables creees avec AUTO_INCREMENT inline dans le dump)
+CREATE SEQUENCE IF NOT EXISTS demandes_correction_saisie_id_seq;
+ALTER TABLE demandes_correction_saisie ALTER COLUMN id SET DEFAULT nextval('demandes_correction_saisie_id_seq');
+ALTER SEQUENCE demandes_correction_saisie_id_seq OWNED BY demandes_correction_saisie.id;
+SELECT setval('demandes_correction_saisie_id_seq', GREATEST((SELECT COALESCE(MAX(id),0) FROM demandes_correction_saisie), 1));
+CREATE SEQUENCE IF NOT EXISTS stock_fin_mois_id_seq;
+ALTER TABLE stock_fin_mois ALTER COLUMN id SET DEFAULT nextval('stock_fin_mois_id_seq');
+ALTER SEQUENCE stock_fin_mois_id_seq OWNED BY stock_fin_mois.id;
+SELECT setval('stock_fin_mois_id_seq', GREATEST((SELECT COALESCE(MAX(id),0) FROM stock_fin_mois), 1));
+CREATE SEQUENCE IF NOT EXISTS corrections_bobines_id_seq;
+ALTER TABLE corrections_bobines ALTER COLUMN id SET DEFAULT nextval('corrections_bobines_id_seq');
+ALTER SEQUENCE corrections_bobines_id_seq OWNED BY corrections_bobines.id;
+SELECT setval('corrections_bobines_id_seq', GREATEST((SELECT COALESCE(MAX(id),0) FROM corrections_bobines), 1));
 
 COMMIT;
