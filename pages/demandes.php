@@ -137,6 +137,19 @@ function di_pdf_html(array $d): string {
         $dtLine   = ($sig && !empty($sig['date'])) ? date('d/m/Y', strtotime($sig['date'])) : '&nbsp;';
         $noteLine = $sig ? h($sig['commentaire'] ?? $sig['motif'] ?? '') : '';
 
+        // Image de signature du signataire (data URI stockée dans users.signature)
+        $sigImg = '';
+        if ($sig && !empty($sig['user_id'])) {
+            $sigData = db_fetch_value("SELECT signature FROM users WHERE id=?", [(int)$sig['user_id']]);
+            if ($sigData && str_starts_with($sigData, 'data:image/')) {
+                $enc    = htmlspecialchars($sigData, ENT_QUOTES, 'UTF-8');
+                $sigImg = "<img src=\"{$enc}\" style=\"max-width:100%;max-height:38px;display:block;margin:4px auto\">";
+            }
+        }
+        $sigBlock = $sigImg
+            ? $sigImg
+            : ($sig ? '<div style="border-top:1px solid '.($act==='approuve'?'#bfe6d0':($act==='rejete'?'#f6c9c4':'#cdd4f6')).';margin:6px 8px 2px"></div>' : '');
+
         $visaCells .= <<<CELL
 <td style="width:{$pct}%;vertical-align:top;padding:0 4px">
   <table style="width:100%;border-collapse:collapse;border:1.5px solid {$bdBorder};border-radius:6px;overflow:hidden">
@@ -144,19 +157,23 @@ function di_pdf_html(array $d): string {
       padding:6px 8px;text-transform:uppercase;letter-spacing:.4px;line-height:1.3">
       {$icon}&nbsp;&nbsp;{$label}
     </td></tr>
-    <tr><td colspan="2" style="background:{$bdBg};padding:7px 8px 4px">
-      <span style="{$decCl};font-size:11px">{$decTx}</span>
+    <tr><td colspan="2" style="background:{$bdBg};padding:6px 8px 2px;text-align:center;height:46px">
+      {$sigBlock}
     </td></tr>
     <tr style="background:{$bdBg}">
       <td style="padding:2px 8px 3px;font-size:10px;color:#5a6480">Signataire</td>
       <td style="padding:2px 8px 3px;font-size:10.5px;font-weight:bold;color:#1f2a44">{$byLine}</td>
     </tr>
     <tr style="background:{$bdBg}">
+      <td style="padding:2px 8px 4px;font-size:10px;color:#5a6480">Décision</td>
+      <td style="padding:2px 8px 4px;font-size:10.5px"><span style="{$decCl}">{$decTx}</span></td>
+    </tr>
+    <tr style="background:{$bdBg}">
       <td style="padding:2px 8px 7px;font-size:10px;color:#5a6480">Date</td>
       <td style="padding:2px 8px 7px;font-size:10.5px;color:#1f2a44">{$dtLine}</td>
     </tr>
     <tr style="background:{$bdBg}">
-      <td colspan="2" style="padding:0 8px 8px;font-size:9.5px;color:#8a93a5;font-style:italic;min-height:18px">{$noteLine}&nbsp;</td>
+      <td colspan="2" style="padding:0 8px 8px;font-size:9.5px;color:#8a93a5;font-style:italic">{$noteLine}&nbsp;</td>
     </tr>
   </table>
 </td>
