@@ -375,17 +375,52 @@ include __DIR__ . '/../templates/header.php';
     </div>
   </div>
 
-  <?php if (!empty($detail['signatures'])): ?>
+  <?php if (!empty($detail['historique'])): ?>
   <div class="di-card">
-    <h4 style="margin:0 0 12px">Historique des visas</h4>
-    <?php foreach ($detail['signatures'] as $s): ?>
-      <div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border,#eef2f7);font-size:13px">
-        <span style="color:<?= ($s['action']??'')==='rejete'?'#e74c3c':'#27ae60' ?>;font-weight:700">
-          <?= ($s['action']??'')==='rejete'?'✗':'✓' ?></span>
-        <div><strong><?= h($s['etape_label']??'') ?></strong> — <?= h($s['nom']??'') ?>
-          <?php $note = $s['commentaire'] ?? $s['motif'] ?? ''; if ($note): ?><div style="color:var(--muted,#7f8c8d)"><?= h($note) ?></div><?php endif; ?>
+    <h4 style="margin:0 0 18px">Historique</h4>
+    <?php
+    $mois_fr = ['','janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+    $hist_entries = $detail['historique'];
+    foreach ($hist_entries as $idx => $h_entry):
+        $action = $h_entry['action'] ?? '';
+        $last   = $idx === count($hist_entries) - 1;
+        if ($action === 'valide') {
+            $ic_bg = '#e8f6ef'; $ic_cl = '#1f9d5b'; $ic = '✓';
+            $label = 'Validé — '.($h_entry['etape'] ?? '');
+        } elseif ($action === 'rejete') {
+            $ic_bg = '#fdecea'; $ic_cl = '#e74c3c'; $ic = '✗';
+            $label = 'Rejeté — '.($h_entry['etape'] ?? '');
+        } elseif ($action === 'soumis') {
+            $ic_bg = '#eef1fc'; $ic_cl = '#3B4FBE'; $ic = '→';
+            $label = 'Demande soumise';
+        } else {
+            $ic_bg = '#f1f3f8'; $ic_cl = '#98a1b3'; $ic = '→';
+            $label = 'Brouillon sauvegardé';
+        }
+        $note = h($h_entry['commentaire'] ?? $h_entry['motif'] ?? '');
+        $ts   = strtotime($h_entry['date'] ?? '');
+        $date_fr = $ts ? intval(date('j',$ts)).' '.$mois_fr[intval(date('n',$ts))].' '.date('Y',$ts).' à '.date('H:i',$ts) : '';
+    ?>
+    <div style="display:flex;gap:14px;padding-bottom:<?= $last?'0':'20px' ?>">
+      <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0">
+        <div style="width:34px;height:34px;border-radius:50%;background:<?= $ic_bg ?>;color:<?= $ic_cl ?>;
+          font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
+          <?= $ic ?>
         </div>
+        <?php if (!$last): ?>
+        <div style="width:2px;flex:1;background:var(--border,#e2e8f0);margin-top:4px;min-height:16px"></div>
+        <?php endif; ?>
       </div>
+      <div style="padding-top:6px;flex:1">
+        <div style="font-weight:700;font-size:14px;color:var(--navy,#06033A)"><?= h($label) ?></div>
+        <div style="font-size:12px;color:var(--muted,#7f8c8d);margin-top:2px">
+          <?= h($h_entry['nom'] ?? '') ?><?= $date_fr ? ' · '.$date_fr : '' ?>
+        </div>
+        <?php if ($note): ?>
+        <div style="font-size:12px;color:var(--muted,#7f8c8d);font-style:italic;margin-top:4px"><?= $note ?></div>
+        <?php endif; ?>
+      </div>
+    </div>
     <?php endforeach; ?>
   </div>
   <?php endif; ?>
@@ -460,14 +495,22 @@ include __DIR__ . '/../templates/header.php';
     </div>
   <?php else: ?>
     <table class="di-tbl">
-      <thead><tr><th>Référence</th><th>Type</th><th>Date</th><th>Statut</th></tr></thead>
+      <thead><tr><th>Référence</th><th>Type</th><th>Date</th><th>Statut</th><th></th></tr></thead>
       <tbody>
-      <?php foreach ($mes as $m): ?>
-        <tr style="cursor:pointer" onclick="location.href='<?= APP_URL ?>/pages/demandes.php?id=<?= (int)$m['id'] ?>'">
+      <?php foreach ($mes as $m): $url = APP_URL.'/pages/demandes.php?id='.(int)$m['id']; ?>
+        <tr style="cursor:pointer" onclick="location.href='<?= $url ?>'">
           <td style="font-weight:700"><?= h($m['numero']) ?></td>
           <td><?= h($type_labels[$m['type_code']] ?? $m['type_code']) ?></td>
-          <td><?= date('d/m/Y', strtotime($m['created_at'])) ?></td>
+          <td style="color:var(--muted,#7f8c8d);font-size:13px"><?= date('d/m/Y', strtotime($m['created_at'])) ?></td>
           <td><?= di_badge($m['statut']) ?></td>
+          <td style="text-align:right">
+            <a href="<?= $url ?>" onclick="event.stopPropagation()"
+               style="display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:8px;
+                 font-size:12px;font-weight:700;background:var(--input,#f0f4f8);color:var(--navy,#06033A);
+                 text-decoration:none;border:1.5px solid var(--border,#e2e8f0)">
+              <i class="ph-duotone ph-eye"></i> Voir
+            </a>
+          </td>
         </tr>
       <?php endforeach; ?>
       </tbody>
