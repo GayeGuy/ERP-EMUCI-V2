@@ -83,7 +83,7 @@ function di_user_roles(int $userId): array {
 
 // ── Demandes que CET utilisateur peut viser (étape courante = un de ses rôles).
 //    Enrichit chaque demande de _etape_label et _demandeur.
-function di_a_valider(array $user): array {
+function di_a_valider(array $user, ?string $from = null, ?string $to = null): array {
     $roles    = di_user_roles((int)$user['id']);
     // N+1 département
     $is_n1_dept = (bool)db_fetch_value(
@@ -99,9 +99,13 @@ function di_a_valider(array $user): array {
     );
     if (!$roles && !$is_n1_dept && !$has_dept_role) return [];
 
+    $dateWhere = ''; $dateParams = [];
+    if ($from) { $dateWhere .= " AND submitted_at >= ?"; $dateParams[] = $from . ' 00:00:00'; }
+    if ($to)   { $dateWhere .= " AND submitted_at <= ?"; $dateParams[] = $to   . ' 23:59:59'; }
+
     $pending = db_fetch_all(
-        "SELECT id FROM di_demandes WHERE statut IN ('en_attente','en_cours') AND demandeur_id <> ? ORDER BY created_at ASC",
-        [$user['id']]
+        "SELECT id FROM di_demandes WHERE statut IN ('en_attente','en_cours') AND demandeur_id <> ? $dateWhere ORDER BY created_at ASC",
+        array_merge([(int)$user['id']], $dateParams)
     );
     $out = [];
     foreach ($pending as $p) {
@@ -118,16 +122,20 @@ function di_a_valider(array $user): array {
 }
 
 // ── Demandes déjà traitées par cet utilisateur (a signé au moins une étape)
-function di_deja_traite(array $user): array {
+function di_deja_traite(array $user, ?string $from = null, ?string $to = null): array {
     $uid   = (int)$user['id'];
     $param = json_encode([['user_id' => $uid]]);
+    $dateWhere = ''; $dateParams = [];
+    if ($from) { $dateWhere .= " AND submitted_at >= ?"; $dateParams[] = $from . ' 00:00:00'; }
+    if ($to)   { $dateWhere .= " AND submitted_at <= ?"; $dateParams[] = $to   . ' 23:59:59'; }
     $rows  = db_fetch_all(
         "SELECT id FROM di_demandes
          WHERE demandeur_id <> ?
            AND signatures != '[]'
            AND (signatures::jsonb) @> ?::jsonb
-         ORDER BY updated_at DESC LIMIT 50",
-        [$uid, $param]
+           $dateWhere
+         ORDER BY updated_at DESC LIMIT 100",
+        array_merge([$uid, $param], $dateParams)
     );
     $out = [];
     foreach ($rows as $r) {
