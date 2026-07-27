@@ -24,7 +24,17 @@ if (($_GET['export'] ?? '') === 'pdf' && !empty($_GET['id'])) {
     if (!$d) { http_response_code(404); exit('Demande introuvable.'); }
     $owner = (int)$d['demandeur_id'] === (int)$user['id'];
     $wf = di_workflow_of($d);
-    $isValidator = false; foreach ($wf as $st) if (in_array($st['role'],$my_roles,true)) $isValidator=true;
+    $isValidator = false;
+    foreach ($wf as $st) if (in_array($st['role'], $my_roles, true)) $isValidator = true;
+    if (!$isValidator && isset($d['n1_user_id']) && (int)$d['n1_user_id'] === (int)$user['id']) $isValidator = true;
+    if (!$isValidator) {
+        foreach ($wf as $st) {
+            $dept_id = db_fetch_value("SELECT departement_id FROM di_roles WHERE code=?", [$st['role']]);
+            if ($dept_id && db_fetch_value("SELECT COUNT(*) FROM user_departements WHERE user_id=? AND departement_id=?", [(int)$user['id'], (int)$dept_id])) {
+                $isValidator = true; break;
+            }
+        }
+    }
     if (!$owner && !$isValidator && !$is_admin) { http_response_code(403); exit('Accès refusé.'); }
 
     $autoload = __DIR__ . '/../vendor/autoload.php';
@@ -179,9 +189,18 @@ if (!empty($_GET['id'])) {
         $wf = di_workflow_of($detail);
         $isValidator = false;
         foreach ($wf as $st) if (in_array($st['role'], $my_roles, true)) $isValidator = true;
-        // N+1 département : accès si l'utilisateur est le N+1 résolu de cette demande
+        // N+1 résolu pour cette demande
         if (!$isValidator && isset($detail['n1_user_id']) && (int)$detail['n1_user_id'] === (int)$user['id']) {
             $isValidator = true;
+        }
+        // Validation par département : membre d'un département lié à une étape du circuit
+        if (!$isValidator) {
+            foreach ($wf as $st) {
+                $dept_id = db_fetch_value("SELECT departement_id FROM di_roles WHERE code=?", [$st['role']]);
+                if ($dept_id && db_fetch_value("SELECT COUNT(*) FROM user_departements WHERE user_id=? AND departement_id=?", [(int)$user['id'], (int)$dept_id])) {
+                    $isValidator = true; break;
+                }
+            }
         }
         if (!$owner && !$isValidator && !$is_admin) { $detail = null; }
     }
