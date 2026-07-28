@@ -961,7 +961,7 @@ include __DIR__ . '/../templates/header.php';
       <?php if (empty($couverture)): ?>
         <div class="biz-m-sub">Aucun site actif.</div>
       <?php else: ?>
-      <div class="biz-cov"<?= count($couverture)>4 ? ' style="max-height:240px;overflow-y:auto;"' : '' ?>>
+      <div class="biz-cov"<?= count($couverture)>4 ? ' style="max-height:240px;overflow-y:auto;padding-right:6px;scrollbar-width:thin;scrollbar-color:#cbd5e1 transparent;"' : '' ?>>
         <?php foreach ($couverture as $c):
           // Échelle de lecture : 60 jours d'autonomie remplissent la barre
           $pct  = $c['jours'] !== null ? min(100, $c['jours'] / 60 * 100) : 0;
