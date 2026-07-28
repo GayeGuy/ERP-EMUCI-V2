@@ -392,19 +392,39 @@ $couv_raw = db_fetch_all(
 $couverture = [];
 foreach ($couv_raw as $r) {
     $j  = (int)$r['jours'];
-    $cj = $j > 0 ? (float)$r['films'] / $j : 0.0;          // consommation moyenne / jour
+    $cj = $j > 0 ? (float)$r['films'] / $j : 0.0;
     $couverture[] = [
+        'site_id'  => (int)$r['id'],
         'nom'      => $r['nom'],
         'restants' => (int)$r['restants'],
         'conso_j'  => $cj,
-        // null = pas de consommation observée, donc pas de couverture calculable
         'jours'    => $cj > 0 ? (int)floor((int)$r['restants'] / $cj) : null,
     ];
 }
-// Tri : les sites les plus tendus d'abord, les non calculables en fin de liste
 usort($couverture, fn($a,$b) => [$a['jours']===null?1:0, $a['jours']??0] <=> [$b['jours']===null?1:0, $b['jours']??0]);
-$seuil_couv_bas = 15;   // jours : en deçà, réapprovisionnement à déclencher
+$seuil_couv_bas = 15;
 $couv_critiques = count(array_filter($couverture, fn($c) => $c['jours'] !== null && $c['jours'] < $seuil_couv_bas));
+
+// Types de bobines par site (pour tooltip survol couverture)
+$cov_types_by_site = [];
+try {
+    foreach (db_fetch_all(
+        "SELECT b.site_id,
+                COALESCE(t.libelle, b.type_code) AS lbl,
+                SUM(b.films_restants) AS films
+         FROM op_bobines b
+         LEFT JOIN op_types_bobines t ON t.code = b.type_code
+         WHERE b.statut IN ('en_cours','en_stock') AND b.site_id IS NOT NULL
+         GROUP BY b.site_id, b.type_code, t.libelle
+         ORDER BY b.site_id, films DESC"
+    ) as $tr) {
+        $cov_types_by_site[$tr['site_id']][] = [
+            'lbl'   => $tr['lbl'],
+            'films' => (int)$tr['films'],
+        ];
+    }
+} catch (Throwable $e) {}
+$js_cov_types = json_encode($cov_types_by_site);
 
 // 5 ── Fiabilité du stock : écarts d'inventaire + réconciliation EMUCI
 $ec_ouverts = $bob_perdues = $rec_total = $rec_majeurs = $rec_ouverts = 0;
@@ -680,6 +700,12 @@ include __DIR__ . '/../templates/header.php';
 .biz-cov-f.low{background:#d97706}
 /* Repère du seuil de réapprovisionnement (15 j sur une échelle de 60 j) */
 .biz-cov-mk{position:absolute;top:-2px;bottom:-2px;width:1.5px;background:rgba(6,3,58,.35)}
+/* Tooltip couverture */
+.cov-tip{position:fixed;z-index:9999;background:#06033A;color:#fff;border-radius:10px;padding:10px 14px;font-size:12px;min-width:180px;max-width:260px;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.22);opacity:0;transition:opacity .15s}
+.cov-tip-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.08)}
+.cov-tip-row:last-child{border-bottom:none}
+.cov-tip-lbl{color:#cbd5e1;font-size:11px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cov-tip-val{font-weight:700;color:#fff;white-space:nowrap;font-variant-numeric:tabular-nums}
 .biz-cov-d{display:flex;align-items:baseline;gap:5px;justify-content:flex-end;white-space:nowrap}
 .biz-cov-num{font-size:18px;font-weight:900;color:var(--navy,#06033A);font-family:'Montserrat',sans-serif;
   font-variant-numeric:tabular-nums}
@@ -967,7 +993,7 @@ include __DIR__ . '/../templates/header.php';
           $pct  = $c['jours'] !== null ? min(100, $c['jours'] / 60 * 100) : 0;
           $bas  = $c['jours'] !== null && $c['jours'] < $seuil_couv_bas;
         ?>
-        <div class="biz-cov-r">
+        <div class="biz-cov-r" data-sid="<?= $c['site_id'] ?>">
           <div style="min-width:0">
             <div class="biz-cov-n"><?= h($c['nom']) ?></div>
             <div class="biz-cov-s">
@@ -1549,6 +1575,40 @@ function showTip(e, html) {
     tip.style.top  = (y+th>window.innerHeight-8 ? y-th+20 : y)+'px';
 }
 function hideTip() { document.getElementById('pdg-tip').style.display='none'; }
+
+// ══════ TOOLTIP COUVERTURE DE STOCK ══════
+const covTypes = <?= $js_cov_types ?>;
+(function(){
+  const tip = document.createElement('div');
+  tip.className = 'cov-tip';
+  document.body.appendChild(tip);
+
+  function fmt(n){ return Number(n).toLocaleString('fr-FR'); }
+
+  document.querySelectorAll('.biz-cov-r[data-sid]').forEach(row => {
+    row.addEventListener('mouseenter', e => {
+      const sid  = row.dataset.sid;
+      const rows = covTypes[sid];
+      if (!rows || !rows.length) return;
+      tip.innerHTML = rows.map(r =>
+        `<div class="cov-tip-row"><span class="cov-tip-lbl">${r.lbl}</span><span class="cov-tip-val">${fmt(r.films)} films</span></div>`
+      ).join('');
+      tip.style.opacity = '1';
+      positionTip(e);
+    });
+    row.addEventListener('mousemove', positionTip);
+    row.addEventListener('mouseleave', () => { tip.style.opacity = '0'; });
+  });
+
+  function positionTip(e){
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    let x = e.clientX + 14, y = e.clientY - 10;
+    if (x + tw > window.innerWidth  - 8) x = e.clientX - tw - 14;
+    if (y + th > window.innerHeight - 8) y = e.clientY - th - 10;
+    tip.style.left = x + 'px';
+    tip.style.top  = y + 'px';
+  }
+})();
 
 // ══════ WIDGET PERFORMANCE PAR SITE ══════
 const pfwSites = <?= $js_pfw_sites ?>;
