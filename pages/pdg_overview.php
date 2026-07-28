@@ -44,7 +44,7 @@ if ($vue === 'annee') {
 // même filtre, table préfixée (pour les jointures)
 $date_filter_p = str_replace('date_point', 'p.date_point', $date_filter);
 
-// ── OPÉRATIONS mois courant
+// ── OPÉRATIONS
 $ops = db_fetch_one(
     "SELECT COUNT(*) AS total_points,
             SUM(CASE WHEN statut='valide' THEN 1 ELSE 0 END) AS points_valides,
@@ -96,20 +96,6 @@ $best_day = db_fetch_one(
     [$date_param]
 );
 
-// ── OPÉRATIONS mois précédent (tendance)
-$ops_prec = db_fetch_one(
-    "SELECT COALESCE(SUM(total_engins),0) AS total_engins,
-            COALESCE(SUM(total_plaques),0) AS total_plaques
-     FROM op_points_journaliers
-     WHERE TO_CHAR(date_point,'YYYY-MM')=? AND statut != 'brouillon'",
-    [$mois_prec]
-);
-$engins_curr = (int)($ops['total_engins'] ?? 0);
-$engins_prev = (int)($ops_prec['total_engins'] ?? 0);
-$engins_delta = $engins_curr - $engins_prev;
-$engins_trend = $engins_prev > 0 ? round($engins_delta / $engins_prev * 100, 1) : null;
-
-// ── SITES — performance par site
 $prod_par_site = db_fetch_all(
     "SELECT s.nom, s.type,
             COUNT(p.id) AS nb_points,
@@ -136,6 +122,7 @@ $bobines_stats = db_fetch_one(
             COALESCE(SUM(films_restants),0) AS films_restants
      FROM op_bobines"
 );
+
 $films_mois = (int)db_fetch_value(
     "SELECT COALESCE(SUM(fu.films_utilises),0)
      FROM op_films_utilises fu
@@ -190,15 +177,18 @@ foreach ($rivets as $r) $rps[$r['nom']][$r['type_rivet']] = (int)$r['quantite'];
 
 // ── PMMA
 $pmma_par_type = db_fetch_all(
-    "SELECT sp.type_pmma, COALESCE(SUM(sp.quantite),0) AS total,
+    "SELECT sp.type_pmma,
+            COALESCE(SUM(sp.quantite),0) AS total,
             COUNT(CASE WHEN sp.quantite < sp.seuil_alerte THEN 1 END) AS nb_bas
-     FROM stock_pmma_site sp JOIN sites s ON s.id=sp.site_id
+     FROM stock_pmma_site sp
+     JOIN sites s ON s.id=sp.site_id
      WHERE s.actif=1
      GROUP BY sp.type_pmma ORDER BY total DESC"
 );
 $pmma_detail = db_fetch_all(
     "SELECT s.nom, sp.type_pmma, COALESCE(sp.quantite,0) AS quantite, COALESCE(sp.seuil_alerte,10) AS seuil
-     FROM sites s JOIN stock_pmma_site sp ON sp.site_id=s.id
+     FROM sites s
+     JOIN stock_pmma_site sp ON sp.site_id=s.id
      WHERE s.actif=1 ORDER BY sp.type_pmma, s.nom"
 );
 
@@ -208,21 +198,6 @@ $rivets_bas     = (int)db_fetch_value("SELECT COUNT(*) FROM op_stock_rivets WHER
 $points_attente = (int)($ops['points_attente'] ?? 0);
 $cmd_en_attente = (int)($cmd_stats['en_attente'] ?? 0);
 $total_alertes  = $points_attente + $cmd_en_attente + $alertes_stock + $rivets_bas;
-
-// ── DEMANDES INTERNES
-$di_pending = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE statut IN ('en_attente','en_cours')");
-$di_mois    = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE TO_CHAR(created_at,'YYYY-MM')=? AND statut != 'brouillon'", [$mois]);
-$di_approuv = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE TO_CHAR(updated_at,'YYYY-MM')=? AND statut IN ('approuve','approuve_traitement')", [$mois]);
-$di_tx      = $di_mois > 0 ? round($di_approuv / $di_mois * 100) : 0;
-$di_recents = db_fetch_all(
-    "SELECT d.numero, dt.label AS type_lbl, d.statut,
-            (u.prenom||' '||u.nom) AS demandeur
-     FROM di_demandes d
-     JOIN di_types dt ON dt.code = d.type_code
-     JOIN users u ON u.id = d.demandeur_id
-     WHERE d.statut IN ('en_attente','en_cours')
-     ORDER BY d.created_at DESC LIMIT 5"
-);
 
 // ── ÉVOLUTION 6 MOIS
 $evol = db_fetch_all(
@@ -248,7 +223,7 @@ $pts_attente = db_fetch_all(
      JOIN sites s ON s.id=p.site_id
      LEFT JOIN users u ON u.id=p.created_by
      WHERE p.statut='en_attente_validation'
-     ORDER BY p.date_point DESC LIMIT 8"
+     ORDER BY p.date_point DESC LIMIT 10"
 );
 
 // ── INDICATEURS DÉRIVÉS
@@ -452,73 +427,21 @@ $js_pmma_labels = json_encode(array_map(fn($r)=>$r['type_pmma'], $pmma_par_type)
 $js_pmma_totals = json_encode(array_map(fn($r)=>(int)$r['total'], $pmma_par_type));
 $js_pmma_bas    = json_encode(array_map(fn($r)=>(int)$r['nb_bas'], $pmma_par_type));
 $js_pmma_detail = json_encode(array_values(array_map(fn($r)=>$pmma_by_type[$r['type_pmma']]??[], $pmma_par_type)));
-$riv_type_detail = [[], []]; $riv_total_gonfl = 0; $riv_total_eclat = 0;
+$riv_type_detail = [[], []];
+$riv_total_gonfl = 0; $riv_total_eclat = 0;
 foreach ($rps as $site => $types) {
-    $g = (int)($types['gonflable'] ?? 0); $e = (int)($types['eclate'] ?? 0);
+    $g = (int)($types['gonflable'] ?? 0);
+    $e = (int)($types['eclate'] ?? 0);
     $riv_total_gonfl += $g; $riv_total_eclat += $e;
-    $riv_type_detail[0][] = ['site'=>$site,'qty'=>$g];
-    $riv_type_detail[1][] = ['site'=>$site,'qty'=>$e];
+    $riv_type_detail[0][] = ['site' => $site, 'qty' => $g];
+    $riv_type_detail[1][] = ['site' => $site, 'qty' => $e];
 }
-$js_riv_labels = json_encode(['Gonflable','Éclaté']);
-$js_riv_totals = json_encode([$riv_total_gonfl,$riv_total_eclat]);
-$js_riv_detail = json_encode($riv_type_detail);
-$films_ch_h    = max(160, count($films_par_type) * 46);
-$pmma_ch_h     = max(140, count($pmma_par_type) * 46);
-
-// Palette sites (couleurs identifiables par site)
-$SC = ['#1B75BC','#3B4FBE','#7c3aed','#0891b2','#16a34a','#d97706','#e11d48'];
-
-// ── DONNÉES MENSUELLES PAR SITE (widget performance)
-$site_monthly_raw = db_fetch_all(
-    "SELECT s.nom AS site_nom,
-            TO_CHAR(p.date_point,'YYYY-MM') AS mois,
-            COALESCE(SUM(fu.films_utilises),0) AS films,
-            COALESCE(SUM(p.total_engins),0) AS engins,
-            COALESCE(ROUND(AVG(NULLIF(p.moyenne_prod,0)),1),0) AS moy_vh
-     FROM sites s
-     JOIN op_points_journaliers p ON p.site_id=s.id
-          AND TO_CHAR(p.date_point,'YYYY')=?
-          AND p.statut != 'brouillon'
-     LEFT JOIN op_films_utilises fu ON fu.point_id=p.id
-     WHERE s.actif=1
-     GROUP BY s.id, s.nom, TO_CHAR(p.date_point,'YYYY-MM')
-     ORDER BY s.id, mois",
-    [$annee]
-);
-$site_monthly_by_name = [];
-foreach ($site_monthly_raw as $r) {
-    if ($r['mois']) $site_monthly_by_name[$r['site_nom']][$r['mois']] = [
-        'films'  => (int)$r['films'],
-        'engins' => (int)$r['engins'],
-        'moy_vh' => (float)$r['moy_vh'],
-    ];
-}
-// Films restants par site (si op_bobines a site_id)
-$films_rest_by_site = [];
-try {
-    foreach (db_fetch_all(
-        "SELECT s.nom, COALESCE(SUM(b.films_restants),0) AS fr
-         FROM sites s LEFT JOIN op_bobines b ON b.site_id=s.id AND b.statut IN ('en_cours','en_stock')
-         WHERE s.actif=1 GROUP BY s.id, s.nom"
-    ) as $r) $films_rest_by_site[$r['nom']] = (int)$r['fr'];
-} catch (Throwable $e) {}
-$films_mois_by_site = [];
-foreach ($films_par_site as $fs) $films_mois_by_site[$fs['nom']] = (int)$fs['films'];
-$pfw_sites_json = [];
-foreach ($prod_par_site as $i => $s) {
-    $fr = $films_rest_by_site[$s['nom']] ?? 0;
-    if (!$fr) $fr = (int)round(($bobines_stats['films_restants']??0) / max(1, count($prod_par_site)));
-    $pfw_sites_json[] = [
-        'name'       => $s['nom'],
-        'color'      => $SC[$i % count($SC)],
-        'moy_vh'     => (float)$s['moy_vh'],
-        'films_mois' => $films_mois_by_site[$s['nom']] ?? 0,
-        'films_rest' => $fr,
-        'monthly'    => (object)($site_monthly_by_name[$s['nom']] ?? []),
-    ];
-}
-$js_pfw_sites    = json_encode($pfw_sites_json);
-$pfw_quarter_def = max(1, (int)ceil((int)substr($mois, 5, 2) / 3));
+$js_riv_labels  = json_encode(['Gonflable', 'Éclaté']);
+$js_riv_totals  = json_encode([$riv_total_gonfl, $riv_total_eclat]);
+$js_riv_detail  = json_encode($riv_type_detail);
+$pmma_ch_h      = max(160, count($pmma_par_type) * 46);
+$riv_ch_h       = 120;
+$films_ch_h     = max(160, count($films_par_type) * 46);
 
 /** Rendu d'un badge de variation ↗ / ↘. */
 function pdg_trend($d) {
@@ -1351,7 +1274,6 @@ include __DIR__ . '/../templates/header.php';
       </section>
 
     </div>
-    <div style="overflow:auto;padding:22px"><div style="width:100%;position:relative"><canvas id="cFilms" height="<?= $films_ch_h ?>"></canvas></div></div>
   </div>
 
   <!-- ═══════════════════ INDICATEURS CLÉS ═══════════════════ -->
@@ -1414,9 +1336,6 @@ include __DIR__ . '/../templates/header.php';
           <tr><td colspan="7" style="text-align:center;color:var(--px-ink-soft);padding:28px">Aucun site actif</td></tr>
         <?php else: foreach($prod_par_site as $s):
           $pct = $max_engins > 0 ? round($s['engins'] / $max_engins * 100) : 0;
-          $col = $SC[$i % count($SC)];
-          $mvh = (float)$s['moy_vh'];
-          $mvh_cls = $mvh>=10?'mvh-g':($mvh>=5?'mvh-o':'mvh-r');
         ?>
         <tr>
           <td>
@@ -1584,12 +1503,11 @@ const gaugeData   = <?= $js_gauges ?>;
 const INK = '#191A17', MINT = '#A9F5A1', LILAC = '#BFA8FB', CORAL = '#F2A08D', SAND = '#F2C88D', GREY = '#C8CCC2';
 const DPR = window.devicePixelRatio || 1;
 
-function fmtN(n) { return Number(n).toLocaleString('fr-FR'); }
-
 function initCv(id) {
-    const el = document.getElementById(id); if (!el) return null;
-    const w  = el.parentElement.getBoundingClientRect().width || 400;
-    const h  = parseInt(el.getAttribute('height') || 200);
+    const el = document.getElementById(id);
+    if (!el) return null;
+    const w = el.parentElement.getBoundingClientRect().width || 400;
+    const h = parseInt(el.getAttribute('height') || 200);
     el.width  = Math.round(w * DPR);
     el.height = Math.round(h * DPR);
     el.style.width  = Math.round(w) + 'px';
@@ -1890,9 +1808,6 @@ function drawRivets() {
             ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
             ctx.fillText('—', lw + 8, y + rh / 2);
         }
-        ctx.fillStyle = '#94a3b8'; ctx.font = '10px DM Sans,sans-serif';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-        ctx.fillText(evolLabels[i] || '', x, pad.t + cH + 6);
     });
 }
 

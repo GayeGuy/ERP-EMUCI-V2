@@ -24,17 +24,7 @@ if (($_GET['export'] ?? '') === 'pdf' && !empty($_GET['id'])) {
     if (!$d) { http_response_code(404); exit('Demande introuvable.'); }
     $owner = (int)$d['demandeur_id'] === (int)$user['id'];
     $wf = di_workflow_of($d);
-    $isValidator = false;
-    foreach ($wf as $st) if (in_array($st['role'], $my_roles, true)) $isValidator = true;
-    if (!$isValidator && isset($d['n1_user_id']) && (int)$d['n1_user_id'] === (int)$user['id']) $isValidator = true;
-    if (!$isValidator) {
-        foreach ($wf as $st) {
-            $dept_id = db_fetch_value("SELECT departement_id FROM di_roles WHERE code=?", [$st['role']]);
-            if ($dept_id && db_fetch_value("SELECT COUNT(*) FROM user_departements WHERE user_id=? AND departement_id=?", [(int)$user['id'], (int)$dept_id])) {
-                $isValidator = true; break;
-            }
-        }
-    }
+    $isValidator = false; foreach ($wf as $st) if (in_array($st['role'],$my_roles,true)) $isValidator=true;
     if (!$owner && !$isValidator && !$is_admin) { http_response_code(403); exit('Accès refusé.'); }
 
     $autoload = __DIR__ . '/../vendor/autoload.php';
@@ -98,78 +88,27 @@ function di_pdf_html(array $d): string {
     $sigByStep = [];
     foreach ($d['signatures'] as $s) { $sigByStep[(int)($s['etape'] ?? -1)] = $s; }
 
-    // Blocs de visa (un par étape) — format document administratif
-    $nSteps   = count($wf);
-    $pct      = $nSteps > 0 ? floor(100 / $nSteps) : 100;
-    $visaCells = '';
+    // Circuit (chips) + visas (une ligne par étape, signée ou en attente)
+    $chips = ''; $visaRows = '';
     foreach ($wf as $i => $st) {
         $label = h($st['label']);
-        $sig   = $sigByStep[$i] ?? null;
-        $act   = $sig['action'] ?? '';
+        $sig = $sigByStep[$i] ?? null;
+        $act = $sig['action'] ?? '';
+        if ($act === 'approuve')            $chips .= '<span class="chip c-done">✓ '.$label.'</span>';
+        elseif ($act === 'rejete')          $chips .= '<span class="chip c-no">✗ '.$label.'</span>';
+        elseif ($i === $cur && $enCours)    $chips .= '<span class="chip c-cur">'.($i + 1).'. '.$label.'</span>';
+        else                                $chips .= '<span class="chip c-wait">'.($i + 1).'. '.$label.'</span>';
 
-        if ($act === 'approuve') {
-            $hdbg  = '#1f9d5b'; $hdfg = '#fff';
-            $icon  = '&#10003;'; // ✓
-            $decTx = 'Approuvé';
-            $decCl = 'color:#1f9d5b;font-weight:bold';
-            $bdBg  = '#f0faf5'; $bdBorder = '#bfe6d0';
-        } elseif ($act === 'rejete') {
-            $hdbg  = '#e74c3c'; $hdfg = '#fff';
-            $icon  = '&#10007;'; // ✗
-            $decTx = 'Rejeté';
-            $decCl = 'color:#e74c3c;font-weight:bold';
-            $bdBg  = '#fdf1f0'; $bdBorder = '#f6c9c4';
-        } elseif ($i === $cur && $enCours) {
-            $hdbg  = '#3B4FBE'; $hdfg = '#fff';
-            $icon  = '&#8987;'; // ⏳
-            $decTx = 'En attente de visa';
-            $decCl = 'color:#3B4FBE;font-style:italic';
-            $bdBg  = '#f4f5fd'; $bdBorder = '#cdd4f6';
+        if ($sig) {
+            $dec  = $act === 'rejete' ? '<span class="no">✗ Rejeté</span>' : '<span class="ok">✓ Approuvé</span>';
+            $par  = h($sig['nom'] ?? '');
+            $dt   = !empty($sig['date']) ? date('d/m/Y', strtotime($sig['date'])) : '';
+            $note = h($sig['commentaire'] ?? $sig['motif'] ?? '');
         } else {
-            $hdbg  = '#b0b7c9'; $hdfg = '#fff';
-            $icon  = '&#8212;'; // —
-            $decTx = 'Non atteint';
-            $decCl = 'color:#b0b7c9;font-style:italic';
-            $bdBg  = '#f8f9fb'; $bdBorder = '#e4e8f1';
+            $dec  = ($i === $cur && $enCours) ? '<span class="wait">En attente</span>' : '<span class="wait">Non atteint</span>';
+            $par  = '<span class="wait">—</span>'; $dt = ''; $note = '';
         }
-
-        $byLine   = $sig ? h($sig['nom'] ?? '') : '&nbsp;';
-        $dtLine   = ($sig && !empty($sig['date'])) ? date('d/m/Y', strtotime($sig['date'])) : '&nbsp;';
-        $noteLine = $sig ? h($sig['commentaire'] ?? $sig['motif'] ?? '') : '';
-
-        // Image de signature du signataire (data URI stockée dans users.signature)
-        $sigImg = '';
-        if ($sig && !empty($sig['user_id'])) {
-            $sigData = db_fetch_value("SELECT signature FROM users WHERE id=?", [(int)$sig['user_id']]);
-            if ($sigData && str_starts_with($sigData, 'data:image/')) {
-                $enc    = htmlspecialchars($sigData, ENT_QUOTES, 'UTF-8');
-                $sigImg = "<img src=\"{$enc}\" style=\"max-width:100%;max-height:38px;display:block;margin:4px auto\">";
-            }
-        }
-        $sigBlock = $sigImg
-            ? $sigImg
-            : ($sig ? '<div style="border-top:1px solid '.($act==='approuve'?'#bfe6d0':($act==='rejete'?'#f6c9c4':'#cdd4f6')).';margin:6px 8px 2px"></div>' : '');
-
-        $visaCells .= <<<CELL
-<td style="width:{$pct}%;vertical-align:top;padding:0 4px">
-  <table style="width:100%;border-collapse:collapse;border:1.5px solid {$bdBorder};border-radius:6px;overflow:hidden">
-    <tr><td colspan="2" style="background:{$hdbg};color:{$hdfg};font-size:9.5px;font-weight:bold;
-      padding:6px 8px;text-transform:uppercase;letter-spacing:.4px;line-height:1.3">
-      {$icon}&nbsp;&nbsp;{$label}
-    </td></tr>
-    <tr><td colspan="2" style="background:{$bdBg};padding:6px 8px 2px;text-align:center;height:46px">
-      {$sigBlock}
-    </td></tr>
-    <tr style="background:{$bdBg}">
-      <td style="padding:3px 8px 7px;font-size:10px;color:#5a6480">Date</td>
-      <td style="padding:3px 8px 7px;font-size:10.5px;color:#1f2a44">{$dtLine}</td>
-    </tr>
-    <tr style="background:{$bdBg}">
-      <td colspan="2" style="padding:0 8px 8px;font-size:9.5px;color:#8a93a5;font-style:italic">{$noteLine}&nbsp;</td>
-    </tr>
-  </table>
-</td>
-CELL;
+        $visaRows .= '<tr><td><b>'.($i + 1).'.</b> '.$label.'</td><td>'.$dec.'</td><td>'.$par.'</td><td>'.$dt.'</td><td>'.$note.'</td></tr>';
     }
 
     $tlabel  = h($type['label'] ?? $d['type_code']);
@@ -192,30 +131,39 @@ CELL;
   .sub{color:#aeb6dd;font-size:10.5px;margin-top:3px}
   .wrap{padding:20px 26px}
   .badge{display:inline-block;padding:4px 14px;border-radius:20px;color:#fff;font-size:10.5px;font-weight:bold}
-  .sec{font-size:11px;font-weight:bold;color:#3B4FBE;text-transform:uppercase;letter-spacing:.6px;margin:20px 0 9px;
-    border-bottom:2px solid #eef2f7;padding-bottom:5px}
-  .card{border:1px solid #e6eaf3;border-radius:8px;background:#fbfcfe;padding:2px 14px}
+  .sec{font-size:11px;font-weight:bold;color:#3B4FBE;text-transform:uppercase;letter-spacing:.6px;margin:20px 0 9px}
+  .card{border:1px solid #e6eaf3;border-radius:10px;background:#fbfcfe;padding:2px 14px}
   .info{width:100%;border-collapse:collapse}
-  .info td{padding:7px 4px;font-size:12px;border-bottom:1px solid #eef2f7;vertical-align:top}
+  .info td{padding:8px 4px;font-size:12px;border-bottom:1px solid #eef2f7;vertical-align:top}
   .info td.k{color:#8a93a5;width:34%}
   .info td.v{font-weight:bold;color:#1f2a44}
-  .ft{margin-top:28px;text-align:center;color:#aab1c0;font-size:9px;border-top:1px solid #eef2f7;padding-top:10px}
+  .chip{display:inline-block;padding:5px 11px;border-radius:8px;font-size:10.5px;font-weight:bold;margin:0 4px 5px 0}
+  .c-done{background:#e8f6ef;color:#1f9d5b;border:1px solid #bfe6d0}
+  .c-cur{background:#eef1fc;color:#3B4FBE;border:1px solid #cdd4f6}
+  .c-no{background:#fdecea;color:#e74c3c;border:1px solid #f6c9c4}
+  .c-wait{background:#f1f3f8;color:#98a1b3;border:1px solid #e4e8f1}
+  .vis{width:100%;border-collapse:collapse;margin-top:2px}
+  .vis th{background:#f0f3fb;text-align:left;padding:8px 9px;font-size:9.5px;color:#5a6480;text-transform:uppercase;letter-spacing:.4px}
+  .vis td{padding:9px;border-bottom:1px solid #eef2f7;font-size:11px;vertical-align:top}
+  .ok{color:#1f9d5b;font-weight:bold}
+  .no{color:#e74c3c;font-weight:bold}
+  .wait{color:#a0a8b8}
+  .ft{margin-top:24px;text-align:center;color:#aab1c0;font-size:9.5px;border-top:1px solid #eef2f7;padding-top:10px}
 </style></head><body>
   <div class="hd"><table class="hdt"><tr>
     <td class="hdl"><div class="ttl">{$tlabel}</div><div class="sub">Demande interne · {$dnomH}</div></td>
-    <td class="hdr">EMU-CI<br>Réf.&nbsp;{$numero}<br>{$created}</td>
+    <td class="hdr">EMU-CI<br>Réf. {$numero}<br>{$created}</td>
   </tr></table></div>
   <div class="wrap">
-    <div style="margin-bottom:14px"><span class="badge" style="background:{$sc}">{$slblH}</span></div>
+    <div style="margin-bottom:2px"><span class="badge" style="background:{$sc}">{$slblH}</span></div>
+    <div class="sec">Circuit de validation</div>
+    <div>{$chips}</div>
     <div class="sec">Demandeur</div>
-    <div class="card"><table class="info">
-      <tr><td class="k">Nom</td><td class="v">{$dnomH}</td></tr>
-      <tr><td class="k">Email</td><td class="v">{$email}</td></tr>
-    </table></div>
+    <div class="card"><table class="info"><tr><td class="k">Nom</td><td class="v">{$dnomH}</td></tr><tr><td class="k">Email</td><td class="v">{$email}</td></tr></table></div>
     <div class="sec">Détails de la demande</div>
     <div class="card"><table class="info">{$rows}</table></div>
-    <div class="sec">Chaîne de visas</div>
-    <table style="width:100%;border-collapse:collapse;table-layout:fixed"><tr>{$visaCells}</tr></table>
+    <div class="sec">Visas &amp; signatures</div>
+    <table class="vis"><tr><th>Étape</th><th>Décision</th><th>Par</th><th>Date</th><th>Note</th></tr>{$visaRows}</table>
     <div class="ft">Document généré automatiquement par EMU-CI le {$genat} — Réf. {$numero}</div>
   </div>
 </body></html>
@@ -231,56 +179,21 @@ if (!empty($_GET['id'])) {
         $wf = di_workflow_of($detail);
         $isValidator = false;
         foreach ($wf as $st) if (in_array($st['role'], $my_roles, true)) $isValidator = true;
-        // N+1 résolu pour cette demande
+        // N+1 département : accès si l'utilisateur est le N+1 résolu de cette demande
         if (!$isValidator && isset($detail['n1_user_id']) && (int)$detail['n1_user_id'] === (int)$user['id']) {
             $isValidator = true;
-        }
-        // Validation par département : membre d'un département lié à une étape du circuit
-        if (!$isValidator) {
-            foreach ($wf as $st) {
-                $dept_id = db_fetch_value("SELECT departement_id FROM di_roles WHERE code=?", [$st['role']]);
-                if ($dept_id && db_fetch_value("SELECT COUNT(*) FROM user_departements WHERE user_id=? AND departement_id=?", [(int)$user['id'], (int)$dept_id])) {
-                    $isValidator = true; break;
-                }
-            }
         }
         if (!$owner && !$isValidator && !$is_admin) { $detail = null; }
     }
 }
 
-// ── Filtres liste
-$fil_search  = $_GET['q']         ?? '';
-$fil_type    = $_GET['type']      ?? '';
-$fil_statut  = $_GET['statut']    ?? '';
-$fSearch = $fil_search !== '' ? $fil_search : null;
-$fType   = $fil_type   !== '' ? $fil_type   : null;
-$fStatut = $fil_statut !== '' ? $fil_statut : null;
-$fFrom = null; $fTo = null;
-
 // ── Liste « Mes demandes »
-$where = 'd.demandeur_id=?'; $params = [(int)$user['id']];
-if ($fType)   { $where .= ' AND d.type_code = ?'; $params[] = $fType; }
-if ($fStatut) {
-    if ($fStatut === 'en_cours') { $where .= " AND d.statut IN ('en_attente','en_cours')"; }
-    else                         { $where .= ' AND d.statut = ?'; $params[] = $fStatut; }
-}
-if ($fSearch) {
-    $where .= ' AND (d.numero ILIKE ? OR LOWER(u.prenom || \' \' || u.nom) LIKE LOWER(?))';
-    $params[] = '%'.$fSearch.'%'; $params[] = '%'.$fSearch.'%';
-}
 $mes = $detail ? [] : db_fetch_all(
-    "SELECT d.id, d.numero, d.type_code, d.statut, d.created_at, d.etape_actuelle,
-            (u.prenom || ' ' || u.nom) AS demandeur_nom
-     FROM di_demandes d JOIN users u ON u.id = d.demandeur_id
-     WHERE $where ORDER BY d.created_at DESC",
-    $params
+    "SELECT id, numero, type_code, statut, created_at FROM di_demandes WHERE demandeur_id=? ORDER BY created_at DESC",
+    [$user['id']]
 );
 $type_labels = [];
-$wf_cache    = [];
-foreach (di_types_actifs() as $t) {
-    $type_labels[$t['code']] = $t['label'];
-    $wf_cache[$t['code']]    = json_decode($t['workflow'] ?? '[]', true) ?: [];
-}
+foreach (di_types_actifs() as $t) $type_labels[$t['code']] = $t['label'];
 
 // ── Mini-dashboard (vue liste uniquement)
 $di_stats = ['en_attente'=>0,'en_cours'=>0,'approuve'=>0,'rejete'=>0,'brouillon'=>0];
@@ -378,52 +291,17 @@ include __DIR__ . '/../templates/header.php';
     </div>
   </div>
 
-  <?php if (!empty($detail['historique'])): ?>
+  <?php if (!empty($detail['signatures'])): ?>
   <div class="di-card">
-    <h4 style="margin:0 0 18px">Historique</h4>
-    <?php
-    $mois_fr = ['','janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
-    $hist_entries = $detail['historique'];
-    foreach ($hist_entries as $idx => $h_entry):
-        $action = $h_entry['action'] ?? '';
-        $last   = $idx === count($hist_entries) - 1;
-        if ($action === 'valide') {
-            $ic_bg = '#e8f6ef'; $ic_cl = '#1f9d5b'; $ic = '✓';
-            $label = 'Validé — '.($h_entry['etape'] ?? '');
-        } elseif ($action === 'rejete') {
-            $ic_bg = '#fdecea'; $ic_cl = '#e74c3c'; $ic = '✗';
-            $label = 'Rejeté — '.($h_entry['etape'] ?? '');
-        } elseif ($action === 'soumis') {
-            $ic_bg = '#eef1fc'; $ic_cl = '#3B4FBE'; $ic = '→';
-            $label = 'Demande soumise';
-        } else {
-            $ic_bg = '#f1f3f8'; $ic_cl = '#98a1b3'; $ic = '→';
-            $label = 'Brouillon sauvegardé';
-        }
-        $note = h($h_entry['commentaire'] ?? $h_entry['motif'] ?? '');
-        $ts   = strtotime($h_entry['date'] ?? '');
-        $date_fr = $ts ? intval(date('j',$ts)).' '.$mois_fr[intval(date('n',$ts))].' '.date('Y',$ts).' à '.date('H:i',$ts) : '';
-    ?>
-    <div style="display:flex;gap:14px;padding-bottom:<?= $last?'0':'20px' ?>">
-      <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0">
-        <div style="width:34px;height:34px;border-radius:50%;background:<?= $ic_bg ?>;color:<?= $ic_cl ?>;
-          font-weight:800;font-size:14px;display:flex;align-items:center;justify-content:center;flex-shrink:0">
-          <?= $ic ?>
+    <h4 style="margin:0 0 12px">Historique des visas</h4>
+    <?php foreach ($detail['signatures'] as $s): ?>
+      <div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border,#eef2f7);font-size:13px">
+        <span style="color:<?= ($s['action']??'')==='rejete'?'#e74c3c':'#27ae60' ?>;font-weight:700">
+          <?= ($s['action']??'')==='rejete'?'✗':'✓' ?></span>
+        <div><strong><?= h($s['etape_label']??'') ?></strong> — <?= h($s['nom']??'') ?>
+          <?php $note = $s['commentaire'] ?? $s['motif'] ?? ''; if ($note): ?><div style="color:var(--muted,#7f8c8d)"><?= h($note) ?></div><?php endif; ?>
         </div>
-        <?php if (!$last): ?>
-        <div style="width:2px;flex:1;background:var(--border,#e2e8f0);margin-top:4px;min-height:16px"></div>
-        <?php endif; ?>
       </div>
-      <div style="padding-top:6px;flex:1">
-        <div style="font-weight:700;font-size:14px;color:var(--navy,#06033A)"><?= h($label) ?></div>
-        <div style="font-size:12px;color:var(--muted,#7f8c8d);margin-top:2px">
-          <?= h($h_entry['nom'] ?? '') ?><?= $date_fr ? ' · '.$date_fr : '' ?>
-        </div>
-        <?php if ($note): ?>
-        <div style="font-size:12px;color:var(--muted,#7f8c8d);font-style:italic;margin-top:4px"><?= $note ?></div>
-        <?php endif; ?>
-      </div>
-    </div>
     <?php endforeach; ?>
   </div>
   <?php endif; ?>
@@ -456,92 +334,22 @@ include __DIR__ . '/../templates/header.php';
     <div class="di-stat"><div class="n" style="color:#7f8c8d"><?= $di_stats['brouillon'] ?></div><div class="l">Brouillons</div></div>
   </div>
 
-  <!-- ── Barre de filtres -->
-  <?php $has_filter = $fType || $fStatut || $fSearch; ?>
-  <form method="get" id="fmes" style="background:var(--card,#fff);border:1.5px solid var(--border,#e2e8f0);border-radius:14px;
-    padding:0;margin-bottom:18px;display:grid;grid-template-columns:1fr 1px 1fr 1px 1fr;align-items:stretch;overflow:hidden">
-    <!-- Rechercher -->
-    <div style="padding:14px 18px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted,#7f8c8d);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Rechercher</div>
-      <input type="text" name="q" value="<?= h($fil_search) ?>" placeholder="Nom, type, référence…"
-        style="width:100%;border:none;outline:none;font-size:13px;font-family:inherit;background:transparent;color:var(--text,#2c3e50);padding:0"
-        oninput="clearTimeout(this._t);this._t=setTimeout(()=>document.getElementById('fmes').submit(),500)">
-    </div>
-    <div style="background:var(--border,#e2e8f0)"></div>
-    <!-- Type -->
-    <div style="padding:14px 18px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted,#7f8c8d);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Type</div>
-      <select name="type" style="border:none;outline:none;font-size:13px;font-family:inherit;background:transparent;color:var(--text,#2c3e50);width:100%;cursor:pointer;padding:0"
-        onchange="document.getElementById('fmes').submit()">
-        <option value="">Tous les types</option>
-        <?php foreach (di_types_actifs() as $t): ?>
-        <option value="<?= h($t['code']) ?>" <?= $fType===$t['code']?'selected':'' ?>><?= h($t['label']) ?></option>
-        <?php endforeach; ?>
-      </select>
-    </div>
-    <div style="background:var(--border,#e2e8f0)"></div>
-    <!-- Statut -->
-    <div style="padding:14px 18px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted,#7f8c8d);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Statut</div>
-      <select name="statut" style="border:none;outline:none;font-size:13px;font-family:inherit;background:transparent;color:var(--text,#2c3e50);width:100%;cursor:pointer;padding:0"
-        onchange="document.getElementById('fmes').submit()">
-        <option value="">Tous les statuts</option>
-        <option value="brouillon"  <?= $fStatut==='brouillon'?'selected':'' ?>>Brouillon</option>
-        <option value="en_cours"   <?= $fStatut==='en_cours'?'selected':'' ?>>En cours</option>
-        <option value="approuve"   <?= $fStatut==='approuve'?'selected':'' ?>>Approuvée</option>
-        <option value="rejete"     <?= $fStatut==='rejete'?'selected':'' ?>>Rejetée</option>
-      </select>
-    </div>
-  </form>
-  <?php if ($has_filter): ?>
-  <div style="margin:-10px 0 14px;font-size:12px">
-    <a href="?" style="color:#e74c3c;text-decoration:none;font-weight:700">✕ Effacer les filtres</a>
-  </div>
-  <?php endif; ?>
-
   <?php if (empty($mes)): ?>
     <div class="di-card di-empty">
-      <?php if ($has_filter): ?>
-        <i class="ph-duotone ph-magnifying-glass" style="font-size:44px;color:#cbd5e1"></i>
-        <p>Aucune demande ne correspond à votre recherche.</p>
-        <a href="?" class="di-btn di-btn-ghost" style="margin-top:8px">Effacer les filtres</a>
-      <?php else: ?>
-        <i class="ph-duotone ph-tray" style="font-size:44px;color:#cbd5e1"></i>
-        <p>Vous n'avez pas encore de demande.</p>
-        <a href="<?= APP_URL ?>/pages/demandes_new.php" class="di-btn di-btn-primary" style="margin-top:8px">Créer ma première demande</a>
-      <?php endif; ?>
+      <i class="ph-duotone ph-tray" style="font-size:44px;color:#cbd5e1"></i>
+      <p>Vous n'avez pas encore de demande.</p>
+      <a href="<?= APP_URL ?>/pages/demandes_new.php" class="di-btn di-btn-primary" style="margin-top:8px">Créer ma première demande</a>
     </div>
   <?php else: ?>
     <table class="di-tbl">
-      <thead><tr>
-        <th>Réf.</th><th>Type</th><th>Demandeur</th><th>Statut</th><th>Étape</th><th>Date</th><th></th>
-      </tr></thead>
+      <thead><tr><th>Référence</th><th>Type</th><th>Date</th><th>Statut</th></tr></thead>
       <tbody>
-      <?php foreach ($mes as $m):
-        $url = APP_URL.'/pages/demandes.php?id='.(int)$m['id'];
-        $wf  = $wf_cache[$m['type_code']] ?? [];
-        $idx = (int)($m['etape_actuelle'] ?? 0);
-        if (in_array($m['statut'], ['approuve','approuve_traitement'], true))   $etape_lbl = 'Approuvée';
-        elseif ($m['statut'] === 'rejete')   $etape_lbl = 'Rejetée';
-        elseif ($m['statut'] === 'brouillon') $etape_lbl = 'Brouillon';
-        else $etape_lbl = $wf[$idx]['label'] ?? '—';
-      ?>
-        <tr style="cursor:pointer" onclick="location.href='<?= $url ?>'">
-          <td style="font-weight:700;white-space:nowrap"><?= h($m['numero']) ?></td>
+      <?php foreach ($mes as $m): ?>
+        <tr style="cursor:pointer" onclick="location.href='<?= APP_URL ?>/pages/demandes.php?id=<?= (int)$m['id'] ?>'">
+          <td style="font-weight:700"><?= h($m['numero']) ?></td>
           <td><?= h($type_labels[$m['type_code']] ?? $m['type_code']) ?></td>
-          <td style="font-size:13px"><?= h($m['demandeur_nom'] ?? '') ?></td>
+          <td><?= date('d/m/Y', strtotime($m['created_at'])) ?></td>
           <td><?= di_badge($m['statut']) ?></td>
-          <td><span style="font-size:12px;font-weight:600;padding:3px 9px;border-radius:8px;
-            background:var(--input,#eef1fc);color:var(--navy,#06033A)"><?= h($etape_lbl) ?></span></td>
-          <td style="color:var(--muted,#7f8c8d);font-size:13px;white-space:nowrap"><?= date('d M. Y', strtotime($m['created_at'])) ?></td>
-          <td style="text-align:right;white-space:nowrap">
-            <a href="<?= $url ?>" onclick="event.stopPropagation()"
-               style="display:inline-flex;align-items:center;gap:5px;padding:6px 14px;border-radius:8px;
-                 font-size:12px;font-weight:700;background:var(--input,#f0f4f8);color:var(--navy,#06033A);
-                 text-decoration:none;border:1.5px solid var(--border,#e2e8f0)">
-              Voir
-            </a>
-          </td>
         </tr>
       <?php endforeach; ?>
       </tbody>
