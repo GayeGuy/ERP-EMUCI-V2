@@ -2229,10 +2229,12 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
     var barres = [];
     document.querySelectorAll('[data-b]').forEach(function (el) {
       var cle = el.getAttribute('data-b');
-      if (!(cle in av.b)) return;                  // colonne nouvelle : pas d'écart à montrer
+      // Rien avant (site sans saisie, ou colonne nouvelle) : on part de zéro
+      // pour que l'apparition se voie aussi.
+      var dep = (cle in av.b) ? av.b[cle] : 0;
       var arr = parseFloat(el.getAttribute('data-p'));
-      if (isNaN(arr) || Math.abs(arr - av.b[cle]) < 0.01) return;
-      barres.push([el, el.getAttribute('data-ax') === 'h' ? 'height' : 'width', av.b[cle], arr]);
+      if (isNaN(arr) || Math.abs(arr - dep) < 0.01) return;
+      barres.push([el, el.getAttribute('data-ax') === 'h' ? 'height' : 'width', dep, arr]);
     });
     barres.forEach(function (b) { b[0].style[b[1]] = b[2] + '%'; });
 
@@ -2247,9 +2249,10 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
     var nombres = [];
     document.querySelectorAll('[data-k]').forEach(function (el) {
       var cle = el.getAttribute('data-k');
-      if (!(cle in av.n)) return;
       var arr = parseFloat(el.getAttribute('data-v'));
-      var dep = av.n[cle];
+      // Pas de valeur précédente : le chiffre monte depuis zéro, plutôt
+      // que d'apparaître d'un coup.
+      var dep = (cle in av.n) ? av.n[cle] : 0;
       if (isNaN(arr) || Math.abs(arr - dep) < 0.005) return;
       // Le suffixe (%, pl./h) vit dans un <span> qu'il faut préserver
       var unite = el.querySelector('span');
