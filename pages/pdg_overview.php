@@ -682,9 +682,14 @@ include __DIR__ . '/../templates/header.php';
 .mvh-r{background:#fee2e2;color:#991b1b}
 .att-dot{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#c2410c}
 
+/* ── PFW + ÉVOLUTION CÔTE À CÔTE */
+.pfw-evol-row{display:flex;gap:14px;align-items:stretch;margin-bottom:20px}
+.pfw-evol-row .pfw-card{flex:1.3;min-width:0;margin-bottom:0}
+.pfw-evol-row .ch-box{flex:1;min-width:0}
+@media(max-width:900px){.pfw-evol-row{flex-direction:column}}
+
 /* ── CHARTS ROW */
-.charts-row{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:14px;margin-bottom:20px}
-@media(max-width:900px){.charts-row{grid-template-columns:1fr 1fr}}
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
 @media(max-width:580px){.charts-row{grid-template-columns:1fr}}
 .ch-box{background:#fff;border:1.5px solid var(--border,#e2e8f0);border-radius:18px;padding:20px 22px}
 /* Sans min-width:0, une piste de grille ne descend pas sous la taille de
@@ -1252,7 +1257,8 @@ include __DIR__ . '/../templates/header.php';
   </div>
 </div>
 
-<!-- ══════════ WIDGET PERFORMANCE PAR SITE ══════════ -->
+<!-- ══════════ PERFORMANCE PAR SITE + ÉVOLUTION ══════════ -->
+<div class="pfw-evol-row">
 <div class="pfw-card">
   <!-- Top : sélecteur site + filtres trimestre -->
   <div class="pfw-top">
@@ -1308,6 +1314,14 @@ include __DIR__ . '/../templates/header.php';
     </div>
   </div>
 </div>
+
+  <!-- Évolution 6 mois -->
+  <div class="ch-box">
+    <div class="ch-ttl">Évolution engins posés</div>
+    <div class="ch-sub">6 derniers mois</div>
+    <canvas id="cEvol" height="170"></canvas>
+  </div>
+</div><!-- /.pfw-evol-row -->
 
 <!-- ══════════ POINT DU PARC MATÉRIEL ══════════ -->
 <div class="biz-card eq" style="margin-bottom:20px">
@@ -1388,8 +1402,6 @@ include __DIR__ . '/../templates/header.php';
       <?php else: ?>
         <?php
           $eq_ng = max(1, count($eq_grads) - 1);
-          // Largeur plancher : sous ce seuil les colonnes deviennent illisibles,
-          // le conteneur défile alors au lieu d'écraser les barres.
           $eq_minw = 40 + count($eq_series) * 54;
         ?>
         <div class="eq-scroll">
@@ -1408,8 +1420,6 @@ include __DIR__ . '/../templates/header.php';
             <div class="eq-cols">
               <?php foreach ($eq_series as $s):
                 $o = (int)$s['op']; $m = (int)$s['mt']; $x = (int)$s['hs'];
-                // Clé stable d'une page à l'autre : le libellé, pas l'index.
-                // Une colonne qui change de rang garde ainsi son animation.
                 $si = preg_replace('/[^a-z0-9]+/', '-', strtolower((string)$s['lbl']));
               ?>
               <div class="eq-col" role="img"
@@ -1443,13 +1453,9 @@ include __DIR__ . '/../templates/header.php';
 
 <!-- ══════════ CHARTS ROW ══════════ -->
 <div class="charts-row">
-  <!-- Évolution 6 mois -->
-  <div class="ch-box">
-    <div class="ch-ttl">Évolution engins posés</div>
-    <div class="ch-sub">6 derniers mois</div>
-    <canvas id="cEvol" height="170"></canvas>
-  </div>
 
+<!-- ══════════ CHARTS ROW ══════════ -->
+<div class="charts-row">
   <!-- Bobines donut -->
   <div class="ch-box">
     <div class="ch-ttl">État des bobines</div>
