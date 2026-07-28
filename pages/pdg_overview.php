@@ -592,30 +592,10 @@ include __DIR__ . '/../templates/header.php';
   background:white;outline:none;font-family:inherit;cursor:pointer}
 .month-inp:focus{border-color:#1B75BC;box-shadow:0 0 0 3px rgba(27,117,188,.12)}
 
-/* ── HERO (top KPI row) */
-.hero-row{display:grid;grid-template-columns:1.8fr 1fr 1fr 1fr 1fr;gap:14px;margin-bottom:20px}
-@media(max-width:900px){.hero-row{grid-template-columns:1fr 1fr 1fr;}}
-@media(max-width:580px){.hero-row{grid-template-columns:1fr 1fr;}}
-.hero-main{background:var(--navy,#06033A);border-radius:18px;padding:22px 26px;color:#fff;position:relative;overflow:hidden}
-.hero-main::after{content:'';position:absolute;right:-30px;bottom:-30px;width:150px;height:150px;
-  background:rgba(255,255,255,.05);border-radius:50%}
-.hero-num{font-size:38px;font-weight:900;letter-spacing:-1px;line-height:1;font-family:'Montserrat',sans-serif}
-.hero-lbl{font-size:11px;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.5px;margin-top:6px;font-weight:700}
-.hero-trend{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:700;margin-top:10px}
-.t-up{background:rgba(22,163,74,.2);color:#86efac}
-.t-dn{background:rgba(220,38,38,.2);color:#fca5a5}
-.t-flat{background:rgba(255,255,255,.1);color:rgba(255,255,255,.7)}
-.hero-prev{font-size:11px;color:rgba(255,255,255,.45);margin-top:5px}
-.hero-card{background:#fff;border:1.5px solid var(--border,#e2e8f0);border-radius:18px;padding:18px 20px;display:flex;flex-direction:column;justify-content:space-between}
-.hc-label{font-size:10px;font-weight:700;color:var(--muted,#94a3b8);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
-.hc-top{font-size:11px;color:var(--muted,#94a3b8);margin-bottom:4px}
-.hc-num{font-size:26px;font-weight:900;color:var(--navy,#06033A);font-family:'Montserrat',sans-serif;line-height:1}
-.hc-name{font-size:12px;font-weight:600;color:var(--muted,#94a3b8);margin-top:3px}
+/* ── Pastilles d'état, partagées par les bandeaux de la page */
 .hc-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;margin-top:8px}
-.hc-blue{background:#dbeafe;color:#1e40af}
 .hc-green{background:#d1fae5;color:#065f46}
 .hc-orange{background:#fff7ed;color:#c2410c}
-.hc-purple{background:#f5f3ff;color:#5b21b6}
 .hc-red{background:#fee2e2;color:#991b1b}
 
 /* ── SITE PERFORMANCE SECTION */
@@ -916,82 +896,6 @@ include __DIR__ . '/../templates/header.php';
       </select>
       <input type="month" name="mois" value="<?= h($mois) ?>" class="month-inp" onchange="this.form.submit()">
     </form>
-  </div>
-</div>
-
-<!-- ══════════ HERO KPI ROW ══════════ -->
-<div class="hero-row">
-  <!-- Main KPI -->
-  <div class="hero-main">
-    <div class="hero-lbl">Engins posés</div>
-    <div style="display:flex;align-items:flex-end;gap:4px;margin-top:4px">
-      <div class="hero-num"><?= number_format($engins_curr, 0, ',', ' ') ?></div>
-    </div>
-    <?php if ($engins_trend !== null): ?>
-    <div class="hero-trend <?= $engins_trend >= 0 ? 't-up' : 't-dn' ?>">
-      <?= $engins_trend >= 0 ? '↑' : '↓' ?> <?= abs($engins_trend) ?>%
-      &nbsp;<span style="font-weight:400;opacity:.8"><?= $engins_delta >= 0 ? '+' : '' ?><?= number_format($engins_delta, 0, ',', ' ') ?></span>
-    </div>
-    <?php else: ?>
-    <div class="hero-trend t-flat">— Premier mois</div>
-    <?php endif; ?>
-    <div class="hero-prev">vs <?= h($mois_prec_lbl) ?> (<?= number_format($engins_prev, 0, ',', ' ') ?>)</div>
-  </div>
-
-  <!-- Meilleur site -->
-  <div class="hero-card">
-    <div class="hc-label">Meilleur site</div>
-    <?php if ($best_site): ?>
-    <div class="hc-top">Production n°1</div>
-    <div class="hc-num"><?= number_format((int)$best_site['engins'], 0, ',', ' ') ?></div>
-    <div class="hc-name"><?= h($best_site['nom']) ?></div>
-    <div><span class="hc-badge hc-blue">Moy <?= $best_site['moy_vh'] ?> v/h</span></div>
-    <?php else: ?>
-    <div class="hc-num" style="color:#94a3b8">—</div>
-    <?php endif; ?>
-  </div>
-
-  <!-- Films utilisés -->
-  <div class="hero-card">
-    <div class="hc-label">Films utilisés</div>
-    <div class="hc-top"><?= h($mois_display) ?></div>
-    <div class="hc-num"><?= number_format($films_mois, 0, ',', ' ') ?></div>
-    <div class="hc-name">films ce mois</div>
-    <?php
-    $films_delta = $films_mois - $films_mois_prec;
-    $films_trend = $films_mois_prec > 0 ? round(abs($films_delta) / $films_mois_prec * 100, 1) : null;
-    ?>
-    <?php if ($films_trend !== null): ?>
-    <div><span class="hc-badge <?= $films_delta >= 0 ? 'hc-green' : 'hc-orange' ?>">
-      <?= $films_delta >= 0 ? '↑' : '↓' ?> <?= $films_trend ?>%
-    </span></div>
-    <?php endif; ?>
-  </div>
-
-  <!-- Points validés -->
-  <div class="hero-card">
-    <div class="hc-label">Points journaliers</div>
-    <div class="hc-top">Validés / Total</div>
-    <div class="hc-num"><?= ($ops['points_valides']??0) ?><span style="font-size:16px;color:#94a3b8;font-weight:600">/<?= ($ops['total_points']??0) ?></span></div>
-    <div class="hc-name">points ce mois</div>
-    <?php if ($points_attente > 0): ?>
-    <div><span class="hc-badge hc-orange"><i class="ph-duotone ph-clock"></i> <?= $points_attente ?> en attente</span></div>
-    <?php else: ?>
-    <div><span class="hc-badge hc-green">Tous traités</span></div>
-    <?php endif; ?>
-  </div>
-
-  <!-- Taux validation -->
-  <div class="hero-card">
-    <div class="hc-label">Taux validation</div>
-    <div class="hc-top">Points approuvés</div>
-    <div class="hc-num"><?= $tx_valid ?><span style="font-size:18px;color:#94a3b8;font-weight:600">%</span></div>
-    <div style="margin-top:10px">
-      <div style="background:#f1f5f9;border-radius:4px;height:6px;overflow:hidden">
-        <div style="height:100%;width:<?= $tx_valid ?>%;background:<?= $tx_valid>=80?'#16a34a':($tx_valid>=50?'#d97706':'#dc2626') ?>;border-radius:4px;transition:.6s"></div>
-      </div>
-    </div>
-    <div><span class="hc-badge <?= $tx_valid>=80?'hc-green':($tx_valid>=50?'hc-orange':'hc-red') ?>"><?= $tx_valid>=80?'Excellent':($tx_valid>=50?'Moyen':'Faible') ?></span></div>
   </div>
 </div>
 
