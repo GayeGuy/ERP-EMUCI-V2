@@ -221,8 +221,22 @@ $js_evol_labels  = json_encode(array_map(fn($r) => ($mc[substr($r['mois'],5,2)]?
 $js_evol_engins  = json_encode(array_map(fn($r) => (int)$r['engins'], $evol));
 $js_evol_plaques = json_encode(array_map(fn($r) => (int)$r['plaques'], $evol));
 $js_statuts      = json_encode([(int)($ops['points_valides']??0),(int)($ops['points_attente']??0),(int)($ops['points_rejetes']??0)]);
-$js_films_labels = json_encode(array_keys($films_par_type));
-$js_films_values = json_encode(array_values($films_par_type));
+// Films modal : consommation (tous sites) OU stock restant par type (site sélectionné)
+if ($site_id && !empty($cov_types_by_site[$site_id])) {
+    // Site sélectionné → affiche films restants en stock par type
+    $_ftypes = $cov_types_by_site[$site_id];
+    $js_films_labels   = json_encode(array_column($_ftypes, 'code'));
+    $js_films_values   = json_encode(array_column($_ftypes, 'films'));
+    $js_films_detail   = json_encode(array_map(fn($t) => [['site'=>$site_nom_sel,'films'=>$t['films']]], $_ftypes));
+    $films_modal_title = 'Films disponibles par type';
+    $films_modal_sub   = h($site_nom_sel) . ' · stock restant';
+} else {
+    // Tous sites → affiche consommation du mois
+    $js_films_labels   = json_encode(array_keys($films_par_type));
+    $js_films_values   = json_encode(array_values($films_par_type));
+    $films_modal_title = 'Films utilisés par type de bobine';
+    $films_modal_sub   = h($mois_display);
+}
 $js_bobines      = json_encode([(int)($bobines_stats['en_cours']??0),(int)($bobines_stats['en_stock']??0),(int)($bobines_stats['epuisees']??0)]);
 $js_cmds         = json_encode([(int)($cmd_stats['en_attente']??0),(int)(($cmd_stats['a_livrer']??0)+($cmd_stats['en_route']??0)),(int)($cmd_stats['livrees_mois']??0)]);
 $pmma_by_type = [];
@@ -241,7 +255,7 @@ foreach ($rps as $site => $types) {
 $js_riv_labels = json_encode(['Gonflable','Éclaté']);
 $js_riv_totals = json_encode([$riv_total_gonfl,$riv_total_eclat]);
 $js_riv_detail = json_encode($riv_type_detail);
-$films_ch_h    = max(160, count($films_par_type) * 46);
+$films_ch_h    = max(160, count(json_decode($js_films_labels, true)) * 46);
 $pmma_ch_h     = max(140, count($pmma_par_type) * 46);
 
 // Palette sites (couleurs identifiables par site)
@@ -1328,8 +1342,8 @@ include __DIR__ . '/../templates/header.php';
     <div style="display:flex;align-items:center;gap:12px;padding:18px 22px;border-bottom:1px solid #e2e8f0;flex-shrink:0">
       <div style="width:36px;height:36px;border-radius:12px;background:#f5f3ff;display:flex;align-items:center;justify-content:center;color:#7c3aed;font-size:18px"><i class="ph-duotone ph-chart-bar-horizontal"></i></div>
       <div>
-        <div style="font-weight:800;font-size:14px;color:#06033A">Films utilisés par type de bobine</div>
-        <div style="font-size:12px;color:#94a3b8"><?= h($mois_display) ?></div>
+        <div style="font-weight:800;font-size:14px;color:#06033A"><?= h($films_modal_title) ?></div>
+        <div style="font-size:12px;color:#94a3b8"><?= $films_modal_sub ?></div>
       </div>
       <button onclick="document.getElementById('modal-films').style.display='none'" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:24px;line-height:1;padding:4px 8px">&times;</button>
     </div>
@@ -1343,11 +1357,21 @@ include __DIR__ . '/../templates/header.php';
       <div style="width:36px;height:36px;border-radius:12px;background:#ecfeff;display:flex;align-items:center;justify-content:center;color:#0891b2;font-size:18px"><i class="ph-duotone ph-printer"></i></div>
       <div>
         <div style="font-weight:800;font-size:14px;color:#06033A">Stock PMMA par type</div>
-        <div style="font-size:12px;color:#94a3b8">Survoler pour le détail par site</div>
+        <div style="font-size:12px;color:#94a3b8"><?= $site_nom_sel ? h($site_nom_sel) . ' · stock PMMA' : 'Survoler pour le détail par site' ?></div>
       </div>
       <button onclick="document.getElementById('modal-pmma').style.display='none'" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:24px;line-height:1;padding:4px 8px">&times;</button>
     </div>
-    <div style="overflow:auto;padding:22px"><div style="width:100%;position:relative"><canvas id="cPmma" height="<?= $pmma_ch_h ?>"></canvas></div></div>
+    <div style="overflow:auto;padding:22px">
+      <?php if ($site_id && empty($pmma_par_type)): ?>
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:32px 20px;text-align:center">
+        <div style="width:48px;height:48px;border-radius:14px;background:#f0f9ff;display:flex;align-items:center;justify-content:center;color:#0891b2;font-size:24px"><i class="ph-duotone ph-printer"></i></div>
+        <div style="font-weight:700;font-size:14px;color:#06033A">PMMA non configuré pour ce site</div>
+        <div style="font-size:12px;color:#64748b;max-width:340px">Le stock PMMA n'est pas encore enregistré pour <strong><?= h($site_nom_sel) ?></strong>. Contactez un administrateur pour configurer les niveaux PMMA de ce site.</div>
+      </div>
+      <?php else: ?>
+      <div style="width:100%;position:relative"><canvas id="cPmma" height="<?= $pmma_ch_h ?>"></canvas></div>
+      <?php endif; ?>
+    </div>
   </div>
 </div>
 
