@@ -2146,26 +2146,51 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
     charger(urlDuFiltre(f));
   }, true);
 
-  var enCours = false;
+  // Requête en vol. Plutôt qu'un verrou qui ignore les demandes suivantes,
+  // une nouvelle demande remplace la précédente : l'utilisateur a changé
+  // d'avis, c'est son dernier choix qui compte.
+  var enVol = null;
+
   function charger(url) {
-    if (enCours) return;
-    enCours = true;
+    if (enVol) { try { enVol.abort(); } catch (e) {} }
+    var ctrl = window.AbortController ? new AbortController() : null;
+    enVol = ctrl;
+
     var avant = lire();                       // valeurs actuellement affichées
     document.body.classList.add('pdg-busy');
 
-    // Le verrou doit être relâché quoi qu'il arrive : bloqué à true,
-    // il rendrait tous les changements suivants inopérants.
+    // Le serveur peut mettre longtemps à répondre après une période
+    // d'inactivité (réveil de l'hébergement). Passé ce délai, on rend la
+    // main au navigateur : son propre indicateur de chargement vaut mieux
+    // qu'une page qui paraît figée.
+    var minuterie = setTimeout(function () {
+      if (enVol !== ctrl) return;
+      enVol = null;
+      if (ctrl) { try { ctrl.abort(); } catch (e) {} }
+      location.href = url;
+    }, 12000);
+
+    function courante() { return enVol === ctrl; }
     function fini() {
-      enCours = false;
+      clearTimeout(minuterie);
+      if (courante()) enVol = null;
       document.body.classList.remove('pdg-busy');
     }
 
-    fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'fetch' } })
+    fetch(url, {
+      credentials: 'same-origin',
+      signal: ctrl ? ctrl.signal : undefined,
+      headers: { 'X-Requested-With': 'fetch' }
+    })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
       .then(function (html) {
+        if (!courante()) return;              // remplacée par une demande plus récente
         var doc = new DOMParser().parseFromString(html, 'text/html');
         var neuf = doc.querySelector('.pdg');
         var ancien = document.querySelector('.pdg');
+        // Pas de tableau de bord dans la réponse : session expirée, le
+        // serveur renvoie la page de connexion. On y va vraiment, pour que
+        // l'utilisateur le voie au lieu de rester sur des chiffres périmés.
         if (!neuf || !ancien) throw new Error('structure');
 
         // Données des graphes : les variables sont des `var` de premier
@@ -2182,6 +2207,7 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
           } catch (e) {}
         }
 
+        solder();                             // avant de détacher les éléments animés
         ancien.replaceWith(neuf);
         history.pushState({ pdg: 1 }, '', url);
         fini();
@@ -2190,7 +2216,13 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
         // L'animation est un confort : si elle échoue, la page reste juste.
         try { animer(avant); } catch (e) {}
       })
-      .catch(function () { fini(); location.href = url; });   // repli : navigation classique
+      .catch(function (e) {
+        // Abandon volontaire (demande remplacée, ou minuterie) : ne rien faire.
+        if (e && e.name === 'AbortError') return;
+        if (!courante()) return;
+        fini();
+        location.href = url;                  // repli : navigation classique
+      });
   }
 
   function redessiner() {
@@ -2223,8 +2255,24 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
 
   // ── Rejoue l'écart entre les valeurs d'avant et celles qui viennent
   //    d'être posées dans le DOM.
+  // Animation en cours, gardée pour pouvoir la solder à tout moment.
+  var anim = null;
+
+  // Termine immédiatement l'animation en vol en posant son état d'arrivée.
+  // Sans cela, une animation abandonnée continuerait d'écrire dans des
+  // éléments retirés du DOM et retirerait pdg-move sous les pieds de la
+  // suivante, coupant net sa transition.
+  function solder() {
+    if (!anim) return;
+    var a = anim; anim = null;
+    if (a.id) cancelAnimationFrame(a.id);
+    a.poser();
+  }
+
   function animer(av) {
+    solder();
     if (!av || SOBRE) return;
+
     // Barres : on repart de l'ancienne taille, le navigateur interpole
     var barres = [];
     document.querySelectorAll('[data-b]').forEach(function (el) {
@@ -2235,14 +2283,6 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
       var arr = parseFloat(el.getAttribute('data-p'));
       if (isNaN(arr) || Math.abs(arr - dep) < 0.01) return;
       barres.push([el, el.getAttribute('data-ax') === 'h' ? 'height' : 'width', dep, arr]);
-    });
-    barres.forEach(function (b) { b[0].style[b[1]] = b[2] + '%'; });
-
-    requestAnimationFrame(function () {
-      document.body.classList.add('pdg-move');
-      requestAnimationFrame(function () {
-        barres.forEach(function (b) { b[0].style[b[1]] = b[3] + '%'; });
-      });
     });
 
     // Chiffres : décompte de l'ancienne valeur vers la nouvelle
@@ -2260,34 +2300,64 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
       nombres.push({ el: el, u: unite, dep: dep, arr: arr,
                      d: parseInt(el.getAttribute('data-d'), 10) || 0, s: signe });
     });
-    if (!nombres.length) return;
+
+    if (!barres.length && !nombres.length) return;
+
+    // Pose l'état d'arrivée sans transition. Appelable à tout moment, y
+    // compris avant que le mouvement ait commencé : la page reste juste.
+    function poser() {
+      barres.forEach(function (b) { b[0].style[b[1]] = b[3] + '%'; });
+      nombres.forEach(function (x) {
+        x.el.textContent = (x.s && x.arr > 0 ? '+' : '') + fmt(x.arr, x.d);
+        if (x.u && x.u.parentNode !== x.el) x.el.appendChild(x.u);
+      });
+      document.body.classList.remove('pdg-move');
+    }
+
+    // Onglet en arrière-plan : requestAnimationFrame ne s'exécute pas.
+    // Animer y laisserait les chiffres figés sur l'ancienne valeur.
+    if (document.hidden) { poser(); return; }
+
+    anim = { id: 0, poser: poser };
 
     // La valeur de départ est écrite tout de suite, pas au premier frame :
     // sinon la valeur finale reste affichée une frame avant de reculer.
+    barres.forEach(function (b) { b[0].style[b[1]] = b[2] + '%'; });
     nombres.forEach(function (x) {
       if (x.u) x.u.remove();
       x.el.textContent = (x.s && x.dep > 0 ? '+' : '') + fmt(x.dep, x.d);
     });
 
+    var mien = anim;
+    requestAnimationFrame(function () {
+      if (anim !== mien) return;                 // soldée entre-temps
+      document.body.classList.add('pdg-move');
+      requestAnimationFrame(function () {
+        if (anim !== mien) return;
+        barres.forEach(function (b) { b[0].style[b[1]] = b[3] + '%'; });
+      });
+    });
+
     var t0 = null;
     function pas(t) {
+      if (anim !== mien) return;
       if (t0 === null) t0 = t;
       var k = Math.min(1, (t - t0) / DUREE), e = adouci(k);
       nombres.forEach(function (x) {
         var v = x.dep + (x.arr - x.dep) * e;
         x.el.textContent = (x.s && v > 0 ? '+' : '') + fmt(v, x.d);
       });
-      if (k < 1) { requestAnimationFrame(pas); }
-      else {
-        nombres.forEach(function (x) {
-          x.el.textContent = (x.s && x.arr > 0 ? '+' : '') + fmt(x.arr, x.d);
-          if (x.u) x.el.appendChild(x.u);
-        });
-        document.body.classList.remove('pdg-move');
-      }
+      if (k < 1) { mien.id = requestAnimationFrame(pas); }
+      else { anim = null; poser(); }
     }
-    requestAnimationFrame(pas);
+    mien.id = requestAnimationFrame(pas);
   }
+
+  // L'onglet part en arrière-plan pendant le mouvement : on solde, plutôt
+  // que de laisser des chiffres figés à mi-course jusqu'au retour.
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) solder();
+  });
 })();
 </script>
 
