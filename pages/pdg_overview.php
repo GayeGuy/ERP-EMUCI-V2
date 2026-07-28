@@ -1939,8 +1939,22 @@ function rrect(ctx, x, y, w, h, r) {
 }
 
 function pfwUpdate() {
-    if (!pfwSites.length) return;
+    if (!pfwSites.length) {
+        // Plus aucun site dans le périmètre : on efface, sinon le tracé
+        // précédent resterait affiché comme s'il était à jour.
+        const vide = document.getElementById('pfwChart');
+        if (vide) vide.getContext('2d').clearRect(0, 0, vide.width, vide.height);
+        return;
+    }
+    // La liste des sites change avec le filtre. Un index gardé d'un
+    // affichage précédent peut désigner un site qui n'existe plus :
+    // pfwSites[idx] valait alors undefined et toute la mise à jour
+    // échouait en silence, laissant le bloc sur ses anciennes données.
+    if (!(pfwSiteIdx >= 0 && pfwSiteIdx < pfwSites.length)) pfwSiteIdx = 0;
+    const sel = document.getElementById('pfwSiteSelect');
+    if (sel && +sel.value !== pfwSiteIdx) sel.value = String(pfwSiteIdx);
     const site = pfwSites[pfwSiteIdx];
+    if (!site) return;
     // Panneau gauche
     document.getElementById('pfwLeft').style.background = site.color;
     document.getElementById('pfwMoy').textContent   = site.moy_vh ? site.moy_vh + ' v/h' : '—';
@@ -2300,9 +2314,14 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
       });
   }
 
+  // Les erreurs sont contenues pour ne pas casser la page, mais signalées :
+  // un échec muet ici laisse un graphe sur ses anciennes données sans que
+  // rien ne l'indique.
   function redessiner() {
-    try { if (typeof render === 'function') render(); } catch (e) {}
-    try { if (typeof pfwUpdate === 'function' && window.pfwSites && pfwSites.length) pfwUpdate(); } catch (e) {}
+    try { if (typeof render === 'function') render(); }
+    catch (e) { if (window.console) console.warn('pdg : redessin des graphes', e); }
+    try { if (typeof pfwUpdate === 'function' && window.pfwSites) pfwUpdate(); }
+    catch (e) { if (window.console) console.warn('pdg : redessin performance par site', e); }
   }
 
   // Retour arrière : on recharge, plus simple et toujours juste.
