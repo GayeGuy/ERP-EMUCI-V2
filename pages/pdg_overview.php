@@ -308,6 +308,19 @@ $pfw_quarter_def = max(1, (int)ceil((int)substr($mois, 5, 2) / 3));
 $df   = "TO_CHAR(date_point,'YYYY-MM')=?";     // filtre mois sur la table des points
 $df_p = "TO_CHAR(p.date_point,'YYYY-MM')=?";   // idem quand la table est aliasée p
 
+// Affichage en nombre entier. Une valeur non nulle qui tomberait à zéro
+// par arrondi s'affiche « < 1 » : un faux zéro se lirait comme l'absence
+// de problème, ce qui serait faux pour une gâche de 0,4 %.
+if (!function_exists('ent')) {
+    function ent(?float $v, bool $signe = false): string {
+        if ($v === null) return '—';
+        $r = (int)round($v);
+        if ($r === 0 && $v >  0.0001) return '&lt; 1';
+        if ($r === 0 && $v < -0.0001) return '&gt; -1';
+        return ($signe && $r > 0 ? '+' : '') . number_format($r, 0, ',', ' ');
+    }
+}
+
 // Chaque requête est isolée : si une colonne manque encore en base (migration
 // non passée), l'indicateur concerné affiche « — » au lieu de casser la page.
 $biz = null;
@@ -952,7 +965,7 @@ include __DIR__ . '/../templates/header.php';
         <div class="biz-hero-val">—</div>
         <div class="biz-hero-note">Aucun point journalier saisi sur la période. Le taux se calcule dès la première journée validée.</div>
       <?php else: ?>
-        <div class="biz-hero-val" data-k="service" data-v="<?= $taux_service ?>" data-d="1"><?= number_format($taux_service, 1, ',', ' ') ?><span class="biz-hero-u">%</span></div>
+        <div class="biz-hero-val" data-k="service" data-v="<?= $taux_service ?>" data-d="0"><?= ent($taux_service) ?><span class="biz-hero-u">%</span></div>
         <div class="biz-hero-note">
           <b><?= number_format($posees, 0, ',', ' ') ?></b> plaques posées sur <b><?= number_format($demande, 0, ',', ' ') ?></b> demandées.
           <?php if ($np_total > 0): ?>
@@ -979,7 +992,7 @@ include __DIR__ . '/../templates/header.php';
         <div class="biz-dem-key">
           <span><span class="biz-dot" style="background:#86efac"></span>Posées <b><?= number_format($posees, 0, ',', ' ') ?></b></span>
           <span><span class="biz-dot" style="background:#fca5a5"></span>Non posées <b><?= number_format($np_total, 0, ',', ' ') ?></b></span>
-          <span>Manque à gagner <b><?= number_format($pc_ko, 1, ',', ' ') ?> %</b></span>
+          <span>Manque à gagner <b><?= ent($pc_ko) ?> %</b></span>
         </div>
       <?php endif; ?>
     </div>
@@ -1000,7 +1013,7 @@ include __DIR__ . '/../templates/header.php';
           <div class="biz-m-val biz-m-na">—</div>
           <div class="biz-m-sub">Aucune consommation de film enregistrée</div>
         <?php else: ?>
-          <div class="biz-m-val" data-k="gache" data-v="<?= $taux_gache ?>" data-d="2"><?= number_format($taux_gache, 2, ',', ' ') ?><span class="biz-m-u">%</span></div>
+          <div class="biz-m-val" data-k="gache" data-v="<?= $taux_gache ?>" data-d="0"><?= ent($taux_gache) ?><span class="biz-m-u">%</span></div>
           <div class="biz-m-sub"><?= number_format($f_ko, 0, ',', ' ') ?> films détruits sur <?= number_format($f_ok + $f_ko, 0, ',', ' ') ?> engagés</div>
         <?php endif; ?>
       </div>
@@ -1018,7 +1031,7 @@ include __DIR__ . '/../templates/header.php';
           <div class="biz-m-val biz-m-na">—</div>
           <div class="biz-m-sub">Aucun rivet posé sur la période</div>
         <?php else: ?>
-          <div class="biz-m-val" data-k="rivets" data-v="<?= $taux_gache_riv ?>" data-d="2"><?= number_format($taux_gache_riv, 2, ',', ' ') ?><span class="biz-m-u">%</span></div>
+          <div class="biz-m-val" data-k="rivets" data-v="<?= $taux_gache_riv ?>" data-d="0"><?= ent($taux_gache_riv) ?><span class="biz-m-u">%</span></div>
           <div class="biz-m-sub"><?= number_format($riv_ko, 0, ',', ' ') ?> rivets cassés sur <?= number_format($riv_ok + $riv_ko, 0, ',', ' ') ?> posés</div>
         <?php endif; ?>
       </div>
@@ -1029,7 +1042,7 @@ include __DIR__ . '/../templates/header.php';
           <div class="biz-m-val biz-m-na">—</div>
           <div class="biz-m-sub">Heures de travail non renseignées</div>
         <?php else: ?>
-          <div class="biz-m-val" data-k="prod" data-v="<?= $prod_reelle ?>" data-d="1"><?= number_format($prod_reelle, 1, ',', ' ') ?><span class="biz-m-u">pl./h</span></div>
+          <div class="biz-m-val" data-k="prod" data-v="<?= $prod_reelle ?>" data-d="0"><?= ent($prod_reelle) ?><span class="biz-m-u">pl./h</span></div>
           <div class="biz-m-sub"><?= number_format($posees, 0, ',', ' ') ?> plaques sur <?= number_format($heures, 0, ',', ' ') ?> h travaillées</div>
         <?php endif; ?>
       </div>
@@ -1040,7 +1053,7 @@ include __DIR__ . '/../templates/header.php';
           <div class="biz-m-val biz-m-na">—</div>
           <div class="biz-m-sub">Mix des engins non renseigné</div>
         <?php else: ?>
-          <div class="biz-m-val" data-k="ecart" data-v="<?= $ecart_plq_pct ?>" data-d="1"><?= ($ecart_plq_pct > 0 ? '+' : '') . number_format($ecart_plq_pct, 1, ',', ' ') ?><span class="biz-m-u">%</span></div>
+          <div class="biz-m-val" data-k="ecart" data-v="<?= $ecart_plq_pct ?>" data-d="0"><?= ent($ecart_plq_pct, true) ?><span class="biz-m-u">%</span></div>
           <div class="biz-m-sub"><?= number_format($posees, 0, ',', ' ') ?> posées vs <?= number_format($theo_plq, 0, ',', ' ') ?> attendues d'après le mix</div>
         <?php endif; ?>
       </div>
@@ -1062,10 +1075,10 @@ include __DIR__ . '/../templates/header.php';
       </div>
     </div>
     <?php if ($mix_total > 0): ?>
-    <div class="biz-mix" role="img" aria-label="Répartition des engins : <?= h(implode(', ', array_map(fn($m) => $m['lbl'].' '.number_format($m['pct'],1,',',' ').' %', $mix))) ?>">
+    <div class="biz-mix" role="img" aria-label="Répartition des engins : <?= h(implode(', ', array_map(fn($m) => $m['lbl'].' '.ent($m['pct']).' %', $mix))) ?>">
       <?php foreach ($mix as $m): if ($m['n'] <= 0) continue; ?>
         <div class="biz-mix-s biz-<?= $m['k'] ?>" data-b="mix-<?= $m['k'] ?>" data-p="<?= round($m['pct'],2) ?>" data-ax="w" style="width:<?= round($m['pct'],2) ?>%">
-          <?php if ($m['pct'] >= 6): ?><span class="biz-pct"><?= number_format($m['pct'], 1, ',', ' ') ?> %</span><?php endif; ?>
+          <?php if ($m['pct'] >= 6): ?><span class="biz-pct"><?= ent($m['pct']) ?> %</span><?php endif; ?>
         </div>
       <?php endforeach; ?>
     </div>
@@ -1078,7 +1091,7 @@ include __DIR__ . '/../templates/header.php';
           <div class="biz-mix-k-t"><span class="biz-dot biz-dot-<?= $m['k'] ?><?= $mix_total > 0 ? '' : ' biz-dot-off' ?>"></span><?= h($m['lbl']) ?></div>
           <?php if ($mix_total > 0): ?>
             <div class="biz-mix-k-v" data-k="mixv-<?= $m['k'] ?>" data-v="<?= (int)$m['n'] ?>" data-d="0"><?= number_format($m['n'], 0, ',', ' ') ?></div>
-            <div class="biz-mix-k-p"><?= number_format($m['pct'], 1, ',', ' ') ?> % du volume</div>
+            <div class="biz-mix-k-p"><?= ent($m['pct']) ?> % du volume</div>
           <?php else: ?>
             <div class="biz-mix-k-v biz-mix-k-off">—</div>
             <div class="biz-mix-k-p">aucune saisie</div>
@@ -1115,7 +1128,7 @@ include __DIR__ . '/../templates/header.php';
           <div style="min-width:0">
             <div class="biz-cov-n"><?= h($c['nom']) ?></div>
             <div class="biz-cov-s">
-              <?= number_format($c['restants'], 0, ',', ' ') ?> films<?= $c['conso_j'] > 0 ? ' · ' . number_format($c['conso_j'], 1, ',', ' ') . ' /j' : '' ?>
+              <?= number_format($c['restants'], 0, ',', ' ') ?> films<?= $c['conso_j'] > 0 ? ' · ' . ent($c['conso_j']) . ' /j' : '' ?>
             </div>
           </div>
           <div class="biz-cov-bar">
@@ -1195,7 +1208,7 @@ include __DIR__ . '/../templates/header.php';
             <div class="biz-risk-t">Concordance EMUCI ↔ DigiStock</div>
             <div class="biz-risk-s"><?= number_format($rec_total - $rec_majeurs, 0, ',', ' ') ?> comparaisons alignées sur <?= number_format($rec_total, 0, ',', ' ') ?></div>
           </div>
-          <div class="biz-risk-n"><?= number_format($taux_recon, 1, ',', ' ') ?> %</div>
+          <div class="biz-risk-n" data-k="recon" data-v="<?= $taux_recon ?>" data-d="0"><?= ent($taux_recon) ?> %</div>
         </div>
         <?php endif; ?>
 
@@ -1311,7 +1324,7 @@ include __DIR__ . '/../templates/header.php';
       <div class="eq-stats">
         <div>
           <div class="eq-big-l">Taux de disponibilité</div>
-          <div class="eq-big" data-k="dispo" data-v="<?= $eq_dispo ?>" data-d="1"><?= number_format($eq_dispo, 1, ',', ' ') ?><span class="eq-big-u">%</span></div>
+          <div class="eq-big" data-k="dispo" data-v="<?= $eq_dispo ?>" data-d="0"><?= ent($eq_dispo) ?><span class="eq-big-u">%</span></div>
         </div>
         <div class="eq-r">
           <span class="eq-sq sq-op"></span><span class="eq-r-l">Opérationnels</span>
@@ -2303,8 +2316,16 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
     document.body.classList.remove('pdg-busy', 'pdg-move');
   });
 
-  // Reproduit number_format($n, $d, ',', ' ')
+  // Reproduit l'affichage du serveur, y compris sa règle sur les valeurs
+  // non nulles qui tomberaient à zéro par arrondi : sans cela l'animation
+  // finirait sur « 0 » là où la page rend « < 1 ».
   function fmt(n, d) {
+    if (d === 0) {
+      var r = Math.round(n);
+      if (r === 0 && n >  0.0001) return '< 1';
+      if (r === 0 && n < -0.0001) return '> -1';
+      n = r;
+    }
     var p = n.toFixed(d).split('.');
     p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
     return p.join(',');
