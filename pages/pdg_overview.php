@@ -1672,8 +1672,13 @@ function fmtN(n) { return Number(n).toLocaleString('fr-FR'); }
 
 function initCv(id) {
     const el = document.getElementById(id); if (!el) return null;
+    // el.height est écrasé plus bas par la taille en pixels physiques
+    // (hauteur x DPR). Relire l'attribut au redessin suivant donnerait
+    // donc une hauteur déjà multipliée, et le canvas grandirait à chaque
+    // passage jusqu'à sortir de son cadre. On mémorise la valeur voulue.
+    if (!el.dataset.hCss) el.dataset.hCss = parseInt(el.getAttribute('height') || 200);
     const w  = el.parentElement.getBoundingClientRect().width || 400;
-    const h  = parseInt(el.getAttribute('height') || 200);
+    const h  = parseInt(el.dataset.hCss);
     el.width  = Math.round(w * DPR);
     el.height = Math.round(h * DPR);
     el.style.width  = Math.round(w) + 'px';
@@ -1755,7 +1760,10 @@ function drawEvol() {
 // ── Donut
 function drawDonut(id, values, colors) {
     const el = document.getElementById(id); if (!el) return;
-    const sz = parseInt(el.getAttribute('width') || 120);
+    // Même précaution que dans initCv : l'attribut width est écrasé par
+    // sz x DPR, le relire ferait enfler l'anneau à chaque redessin.
+    if (!el.dataset.szCss) el.dataset.szCss = parseInt(el.getAttribute('width') || 120);
+    const sz = parseInt(el.dataset.szCss);
     el.width = sz*DPR; el.height = sz*DPR;
     el.style.width = sz+'px'; el.style.height = sz+'px';
     const ctx = el.getContext('2d');
