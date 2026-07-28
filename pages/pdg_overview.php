@@ -2196,15 +2196,14 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
     return arr;                                  // libellés, couleurs : inchangés
   }
 
+  // Seuls les chiffres ont besoin de leur valeur d'avant : ils parcourent
+  // l'écart. Les barres et les tracés repartent de zéro, il n'y a donc rien
+  // à photographier pour eux.
   function lire() {
-    var o = { n: {}, b: {}, s: lireSeries() };
+    var o = { n: {} };
     document.querySelectorAll('[data-k]').forEach(function (el) {
       var v = parseFloat(el.getAttribute('data-v'));
       if (!isNaN(v)) o.n[el.getAttribute('data-k')] = v;
-    });
-    document.querySelectorAll('[data-b]').forEach(function (el) {
-      var v = parseFloat(el.getAttribute('data-p'));
-      if (!isNaN(v)) o.b[el.getAttribute('data-b')] = v;
     });
     return o;
   }
@@ -2368,6 +2367,7 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
     if (!anim) return;
     var a = anim; anim = null;
     if (a.id) cancelAnimationFrame(a.id);
+    if (a.secours) clearTimeout(a.secours);
     a.poser();
   }
 
@@ -2375,16 +2375,15 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
     solder();
     if (!av || SOBRE) return;
 
-    // Barres : on repart de l'ancienne taille, le navigateur interpole
+    // Barres : elles repartent systématiquement de zéro. Elles portent des
+    // proportions, et une proportion bouge peu ou pas d'un site à l'autre —
+    // partir de l'ancienne valeur les laissait souvent immobiles alors que
+    // les chiffres, eux, changeaient.
     var barres = [];
     document.querySelectorAll('[data-b]').forEach(function (el) {
-      var cle = el.getAttribute('data-b');
-      // Rien avant (site sans saisie, ou colonne nouvelle) : on part de zéro
-      // pour que l'apparition se voie aussi.
-      var dep = (cle in av.b) ? av.b[cle] : 0;
       var arr = parseFloat(el.getAttribute('data-p'));
-      if (isNaN(arr) || Math.abs(arr - dep) < 0.01) return;
-      barres.push([el, el.getAttribute('data-ax') === 'h' ? 'height' : 'width', dep, arr]);
+      if (isNaN(arr)) return;
+      barres.push([el, el.getAttribute('data-ax') === 'h' ? 'height' : 'width', 0, arr]);
     });
 
     // Chiffres : décompte de l'ancienne valeur vers la nouvelle
@@ -2403,14 +2402,12 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
                      d: parseInt(el.getAttribute('data-d'), 10) || 0, s: signe });
     });
 
-    // Séries des graphes : le départ vient de la page quittée, la cible
-    // est déjà en place puisque les globales ont été rafraîchies.
-    var serDep = av.s || {};
+    // Séries des graphes : même règle que les barres HTML, les tracés se
+    // remplissent depuis zéro. Un départ vide suffit, interp() traite une
+    // valeur absente comme un zéro.
+    var serDep = {};
     var serCib = lireSeries();
-    var serCles = SERIES.filter(function (k) {
-      return serCib[k] !== undefined
-          && JSON.stringify(serDep[k]) !== JSON.stringify(serCib[k]);
-    });
+    var serCles = SERIES.filter(function (k) { return serCib[k] !== undefined; });
 
     if (!barres.length && !nombres.length && !serCles.length) return;
 
@@ -2433,7 +2430,14 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
     // Animer y laisserait les chiffres figés sur l'ancienne valeur.
     if (document.hidden) { poser(); return; }
 
-    anim = { id: 0, poser: poser };
+    anim = { id: 0, secours: 0, poser: poser };
+    // Filet indépendant des frames : si elles n'arrivent jamais (rendu
+    // suspendu par le navigateur), l'état final est posé quand même. Les
+    // barres démarrant à zéro, une animation restée en plan se lirait
+    // comme une absence de données.
+    anim.secours = setTimeout(function () {
+      if (anim && anim.poser === poser) { var a = anim; anim = null; a.poser(); }
+    }, DUREE + 700);
 
     // La valeur de départ est écrite tout de suite, pas au premier frame :
     // sinon la valeur finale reste affichée une frame avant de reculer.
@@ -2475,7 +2479,7 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
         redessiner();
       }
       if (k < 1) { mien.id = requestAnimationFrame(pas); }
-      else { anim = null; poser(); }
+      else { clearTimeout(mien.secours); anim = null; poser(); }
     }
     mien.id = requestAnimationFrame(pas);
   }
