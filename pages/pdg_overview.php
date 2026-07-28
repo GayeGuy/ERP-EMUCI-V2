@@ -961,7 +961,7 @@ include __DIR__ . '/../templates/header.php';
       <?php if (empty($couverture)): ?>
         <div class="biz-m-sub">Aucun site actif.</div>
       <?php else: ?>
-      <div class="biz-cov">
+      <div class="biz-cov"<?= count($couverture)>4 ? ' style="max-height:240px;overflow-y:auto;"' : '' ?>>
         <?php foreach ($couverture as $c):
           // Échelle de lecture : 60 jours d'autonomie remplissent la barre
           $pct  = $c['jours'] !== null ? min(100, $c['jours'] / 60 * 100) : 0;
@@ -1116,60 +1116,6 @@ include __DIR__ . '/../templates/header.php';
       <?php endif; ?>
     </div>
   </div>
-</div>
-
-<!-- ══════════ COUVERTURE DE STOCK ══════════ -->
-<div style="background:#fff;border-radius:16px;border:1px solid #e2e8f0;padding:20px 22px;margin-bottom:20px">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-    <div>
-      <div style="font-weight:800;font-size:15px;color:#06033A">Couverture de stock</div>
-      <div style="font-size:12px;color:#94a3b8;margin-top:2px">Jours de film restants au rythme observé · repère à 15 j</div>
-    </div>
-    <?php if ($couv_critiques > 0): ?>
-    <div style="display:flex;align-items:center;gap:6px;background:#fff7ed;border:1px solid #fed7aa;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;color:#c2410c;white-space:nowrap">
-      <i class="ph-duotone ph-warning-circle"></i> <?= $couv_critiques ?> site<?= $couv_critiques>1?'s':'' ?> sous 15 j
-    </div>
-    <?php else: ?>
-    <div style="display:flex;align-items:center;gap:6px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:700;color:#15803d;white-space:nowrap">
-      <i class="ph-duotone ph-check-circle"></i> Tous les sites OK
-    </div>
-    <?php endif; ?>
-  </div>
-
-  <?php if (empty($couverture)): ?>
-  <div style="text-align:center;padding:24px;color:#94a3b8;font-size:13px">Aucune donnée de couverture disponible</div>
-  <?php else: ?>
-  <div style="margin-top:14px;<?= count($couverture)>4 ? 'max-height:240px;overflow-y:auto;overflow-x:hidden;' : '' ?>">
-    <?php foreach ($couverture as $idx => $cs):
-      $j      = $cs['jours'];
-      $jlbl   = $j === null ? '—' : $j;
-      $reappro= $j !== null && $j < $seuil_couv_bas;
-      $pct    = $j === null ? 0 : min(100, round($j / 60 * 100));
-      $col    = $reappro ? '#d97706' : '#16a34a';
-      $border = $idx < count($couverture)-1 ? 'border-bottom:1px solid #f1f5f9' : '';
-    ?>
-    <div style="display:flex;align-items:center;gap:14px;padding:11px 0;<?= $border ?>">
-      <!-- Nom + conso -->
-      <div style="min-width:160px;flex-shrink:0">
-        <div style="font-weight:700;font-size:13px;color:#06033A"><?= h($cs['nom']) ?></div>
-        <div style="font-size:11px;color:#94a3b8;margin-top:1px"><?= number_format($cs['restants'],0,',',' ') ?> films · <?= round($cs['conso_j'],1) ?>/j</div>
-      </div>
-      <!-- Barre -->
-      <div style="flex:1;background:#f1f5f9;border-radius:6px;height:8px;overflow:hidden;position:relative">
-        <div style="height:100%;width:<?= $pct ?>%;background:<?= $col ?>;border-radius:6px;transition:.6s ease"></div>
-        <div style="position:absolute;left:25%;top:0;width:1.5px;height:100%;background:#cbd5e1"></div>
-      </div>
-      <!-- Jours + badge -->
-      <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-        <span style="font-size:20px;font-weight:800;color:<?= $col ?>;min-width:36px;text-align:right;line-height:1"><?= $jlbl ?><?php if ($j !== null): ?><span style="font-size:12px;font-weight:600;color:#94a3b8"> j</span><?php endif; ?></span>
-        <?php if ($reappro): ?>
-        <span style="background:#fff7ed;border:1px solid #fed7aa;color:#c2410c;font-size:11px;font-weight:700;padding:3px 9px;border-radius:20px">réappro</span>
-        <?php endif; ?>
-      </div>
-    </div>
-    <?php endforeach; ?>
-  </div>
-  <?php endif; ?>
 </div>
 
 <!-- ══════════ CHARTS ROW ══════════ -->
