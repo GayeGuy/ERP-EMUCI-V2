@@ -893,8 +893,8 @@ include __DIR__ . '/../templates/header.php';
 
 /* 2. Arrivée : les valeurs rejoignent leur cible depuis l'ancienne.
    Piloté en JS, uniquement après un changement de filtre. */
-.pdg-move .biz-dem-s,.pdg-move .biz-mix-s{transition:width .42s cubic-bezier(.22,1,.36,1)}
-.pdg-move .eq-seg{transition:height .42s cubic-bezier(.22,1,.36,1)}
+.pdg-move .biz-dem-s,.pdg-move .biz-mix-s{transition:width .58s cubic-bezier(.22,1,.36,1)}
+.pdg-move .eq-seg{transition:height .58s cubic-bezier(.22,1,.36,1)}
 
 @media(prefers-reduced-motion:reduce){
   .pdg-bar::after{animation:none;width:100%}
@@ -2079,7 +2079,8 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
 (function () {
   var CLE   = 'pdgSnap';
   var SOBRE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  var form  = document.getElementById('pdg-filter-form');
+  // Filtres de la page : celui du haut et celui du bloc parc matériel.
+  var forms = document.querySelectorAll('#pdg-filter-form, .eq form');
 
   function lire() {
     var o = { n: {}, b: {} };
@@ -2095,12 +2096,18 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
   }
 
   // ── Départ : photo de l'état courant, puis signal d'attente
-  if (form) {
-    form.addEventListener('submit', function () {
-      try { sessionStorage.setItem(CLE, JSON.stringify(lire())); } catch (e) {}
-      document.body.classList.add('pdg-busy');
-    });
+  function partir() {
+    try { sessionStorage.setItem(CLE, JSON.stringify(lire())); } catch (e) {}
+    document.body.classList.add('pdg-busy');
   }
+  // Les champs déclenchent la navigation par this.form.submit(), qui
+  // n'émet PAS d'événement submit. On écoute donc « change », en phase
+  // de capture pour passer avant le onchange qui lance le chargement.
+  Array.prototype.forEach.call(forms, function (f) {
+    f.addEventListener('change', partir, true);
+    // Filet, si un jour la soumission passe par un bouton ou requestSubmit.
+    f.addEventListener('submit', partir);
+  });
 
   // Retour arrière : le navigateur peut restaurer la page telle quelle,
   // état d'attente compris. On le lève systématiquement à l'affichage.
@@ -2123,7 +2130,7 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
     return p.join(',');
   }
 
-  var DUREE = 460;
+  var DUREE = 620;
   var adouci = function (t) { return 1 - Math.pow(1 - t, 3); };   // ease-out cubique
 
   // Exécution synchrone : tous les éléments visés précèdent ce script.
