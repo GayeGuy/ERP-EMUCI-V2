@@ -143,7 +143,7 @@ $cmd_stats = db_fetch_one(
             SUM(CASE WHEN statut='en_attente_livraison' THEN 1 ELSE 0 END) AS a_livrer,
             SUM(CASE WHEN statut='en_cours_livraison' THEN 1 ELSE 0 END) AS en_route,
             SUM(CASE WHEN statut='livre' AND TO_CHAR(created_at,'YYYY-MM')=? THEN 1 ELSE 0 END) AS livrees_mois
-     FROM commandes",
+     FROM commandes WHERE 1=1 $sf",
     [$mois]
 );
 
@@ -173,7 +173,7 @@ $pmma_detail = db_fetch_all(
 
 // ── ALERTES
 $alertes_stock  = (int)db_fetch_value("SELECT COUNT(*) FROM articles WHERE stock_global <= seuil_alerte AND seuil_alerte > 0");
-$rivets_bas     = (int)db_fetch_value("SELECT COUNT(*) FROM op_stock_rivets WHERE quantite < 200");
+$rivets_bas     = (int)db_fetch_value("SELECT COUNT(*) FROM op_stock_rivets WHERE quantite < 200 $sf");
 $points_attente = (int)($ops['points_attente'] ?? 0);
 $cmd_en_attente = (int)($cmd_stats['en_attente'] ?? 0);
 $total_alertes  = $points_attente + $cmd_en_attente + $alertes_stock + $rivets_bas;
@@ -446,10 +446,10 @@ $ec_films = $bob_perdues_films = 0;
 $taux_recon = null;
 try {
     $fiab = db_fetch_one(
-        "SELECT (SELECT COUNT(*)                        FROM ecarts_bobines WHERE statut = 'ouvert') AS ec_ouverts,
-                (SELECT COALESCE(SUM(ABS(ecart)),0)     FROM ecarts_bobines WHERE statut = 'ouvert') AS ec_films,
-                (SELECT COUNT(*)                        FROM op_bobines     WHERE statut = 'perdue') AS bob_perdues,
-                (SELECT COALESCE(SUM(films_restants),0) FROM op_bobines     WHERE statut = 'perdue') AS bob_perdues_films"
+        "SELECT (SELECT COUNT(*) FROM ecarts_bobines eb JOIN op_bobines b ON b.id=eb.bobine_id WHERE eb.statut='ouvert' $sf_b) AS ec_ouverts,
+                (SELECT COALESCE(SUM(ABS(eb.ecart)),0) FROM ecarts_bobines eb JOIN op_bobines b ON b.id=eb.bobine_id WHERE eb.statut='ouvert' $sf_b) AS ec_films,
+                (SELECT COUNT(*)                        FROM op_bobines WHERE statut='perdue' $sf) AS bob_perdues,
+                (SELECT COALESCE(SUM(films_restants),0) FROM op_bobines WHERE statut='perdue' $sf) AS bob_perdues_films"
     );
     $ec_ouverts        = (int)($fiab['ec_ouverts'] ?? 0);
     $ec_films          = (int)($fiab['ec_films'] ?? 0);
@@ -462,7 +462,7 @@ try {
                 COALESCE(SUM(CASE WHEN statut_ecart = 'majeur' THEN 1 ELSE 0 END),0)                AS majeurs,
                 COALESCE(SUM(CASE WHEN statut_ecart = 'majeur' AND ajuste = 0 THEN 1 ELSE 0 END),0) AS majeurs_ouverts
          FROM comparaisons_stock
-         WHERE TO_CHAR(date_comparaison,'YYYY-MM')=?",
+         WHERE TO_CHAR(date_comparaison,'YYYY-MM')=? $sf",
         [$mois]
     );
     $rec_total   = (int)($recon['total'] ?? 0);
