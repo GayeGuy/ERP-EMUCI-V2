@@ -956,7 +956,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="biz-mix" role="img" aria-label="Répartition des engins : <?= h(implode(', ', array_map(fn($m) => $m['lbl'].' '.number_format($m['pct'],1,',',' ').' %', $mix))) ?>">
       <?php foreach ($mix as $m): if ($m['n'] <= 0) continue; ?>
         <div class="biz-mix-s biz-<?= $m['k'] ?>" style="width:<?= round($m['pct'],2) ?>%">
-          <?php if ($m['pct'] >= 11): ?><span class="biz-pct"><?= number_format($m['pct'], 1, ',', ' ') ?> %</span><?php endif; ?>
+          <?php if ($m['pct'] >= 6): ?><span class="biz-pct"><?= number_format($m['pct'], 1, ',', ' ') ?> %</span><?php endif; ?>
         </div>
       <?php endforeach; ?>
     </div>
