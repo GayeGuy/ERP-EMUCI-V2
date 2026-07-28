@@ -765,6 +765,11 @@ include __DIR__ . '/../templates/header.php';
 .biz-mix-k-v{font-size:19px;font-weight:900;color:var(--navy,#06033A);font-family:'Montserrat',sans-serif;
   line-height:1;margin-top:4px;font-variant-numeric:tabular-nums}
 .biz-mix-k-p{font-size:11px;color:var(--biz-muted);margin-top:3px}
+/* Absence de saisie : la barre reste, vide et rayée, pour dire « rien
+   à répartir » plutôt que de laisser croire à un bloc manquant. */
+.biz-mix-vide{background:repeating-linear-gradient(-45deg,#f1f5f9 0 6px,#e8edf3 6px 12px)}
+.biz-dot-off{background:#cbd5e1 !important}
+.biz-mix-k-off{color:#94a3b8}
 
 /* Couverture + fiabilité */
 .biz-split{display:grid;grid-template-columns:1.15fr 1fr;gap:14px}
@@ -1037,15 +1042,20 @@ include __DIR__ . '/../templates/header.php';
     </div>
   </div>
 
-  <!-- Mix produit -->
-  <?php if ($mix_total > 0): ?>
+  <!-- Mix produit — toujours présent : un bloc qui disparaît fait croire
+       à une erreur, là où il n'y a qu'une absence de saisie. -->
   <div class="biz-card">
     <div class="biz-card-hd">
       <div>
         <div class="biz-card-t">Mix produit</div>
-        <div class="biz-card-s"><?= number_format($mix_total, 0, ',', ' ') ?> engins traités · pilote la demande en séries de bobines</div>
+        <div class="biz-card-s">
+          <?= $mix_total > 0
+              ? number_format($mix_total, 0, ',', ' ') . ' engins traités · pilote la demande en séries de bobines'
+              : 'Aucun engin saisi sur la période' ?>
+        </div>
       </div>
     </div>
+    <?php if ($mix_total > 0): ?>
     <div class="biz-mix" role="img" aria-label="Répartition des engins : <?= h(implode(', ', array_map(fn($m) => $m['lbl'].' '.number_format($m['pct'],1,',',' ').' %', $mix))) ?>">
       <?php foreach ($mix as $m): if ($m['n'] <= 0) continue; ?>
         <div class="biz-mix-s biz-<?= $m['k'] ?>" data-b="mix-<?= $m['k'] ?>" data-p="<?= round($m['pct'],2) ?>" data-ax="w" style="width:<?= round($m['pct'],2) ?>%">
@@ -1053,17 +1063,24 @@ include __DIR__ . '/../templates/header.php';
         </div>
       <?php endforeach; ?>
     </div>
+    <?php else: ?>
+    <div class="biz-mix biz-mix-vide" role="img" aria-label="Aucun engin saisi : répartition indisponible"></div>
+    <?php endif; ?>
     <div class="biz-mix-key">
       <?php foreach ($mix as $m): ?>
         <div>
-          <div class="biz-mix-k-t"><span class="biz-dot biz-dot-<?= $m['k'] ?>"></span><?= h($m['lbl']) ?></div>
-          <div class="biz-mix-k-v"><?= number_format($m['n'], 0, ',', ' ') ?></div>
-          <div class="biz-mix-k-p"><?= number_format($m['pct'], 1, ',', ' ') ?> % du volume</div>
+          <div class="biz-mix-k-t"><span class="biz-dot biz-dot-<?= $m['k'] ?><?= $mix_total > 0 ? '' : ' biz-dot-off' ?>"></span><?= h($m['lbl']) ?></div>
+          <?php if ($mix_total > 0): ?>
+            <div class="biz-mix-k-v"><?= number_format($m['n'], 0, ',', ' ') ?></div>
+            <div class="biz-mix-k-p"><?= number_format($m['pct'], 1, ',', ' ') ?> % du volume</div>
+          <?php else: ?>
+            <div class="biz-mix-k-v biz-mix-k-off">—</div>
+            <div class="biz-mix-k-p">aucune saisie</div>
+          <?php endif; ?>
         </div>
       <?php endforeach; ?>
     </div>
   </div>
-  <?php endif; ?>
 
   <div class="biz-split">
 
@@ -2136,6 +2153,13 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
     var avant = lire();                       // valeurs actuellement affichées
     document.body.classList.add('pdg-busy');
 
+    // Le verrou doit être relâché quoi qu'il arrive : bloqué à true,
+    // il rendrait tous les changements suivants inopérants.
+    function fini() {
+      enCours = false;
+      document.body.classList.remove('pdg-busy');
+    }
+
     fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'fetch' } })
       .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
       .then(function (html) {
@@ -2145,24 +2169,28 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
         if (!neuf || !ancien) throw new Error('structure');
 
         // Données des graphes : les variables sont des `var` de premier
-        // niveau, donc des propriétés de window, réassignables.
+        // niveau, donc des propriétés de window, réassignables. Un bloc
+        // illisible ne doit pas faire échouer l'échange : les graphes
+        // gardent alors leurs données, le reste de la page est à jour.
         var bloc = doc.getElementById('pdg-data');
         if (bloc) {
-          var d = JSON.parse(bloc.textContent);
-          Object.keys(d).forEach(function (k) {
-            if (k !== 'pfwQuarterDef') window[k] = d[k];
-          });
+          try {
+            var d = JSON.parse(bloc.textContent);
+            Object.keys(d).forEach(function (k) {
+              if (k !== 'pfwQuarterDef') window[k] = d[k];
+            });
+          } catch (e) {}
         }
 
         ancien.replaceWith(neuf);
         history.pushState({ pdg: 1 }, '', url);
-        document.body.classList.remove('pdg-busy');
+        fini();
 
         redessiner();
-        animer(avant);
-        enCours = false;
+        // L'animation est un confort : si elle échoue, la page reste juste.
+        try { animer(avant); } catch (e) {}
       })
-      .catch(function () { location.href = url; });   // repli : navigation classique
+      .catch(function () { fini(); location.href = url; });   // repli : navigation classique
   }
 
   function redessiner() {
