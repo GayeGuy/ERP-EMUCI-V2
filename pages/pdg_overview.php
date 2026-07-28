@@ -1139,7 +1139,7 @@ include __DIR__ . '/../templates/header.php';
   <?php if (empty($couverture)): ?>
   <div style="text-align:center;padding:24px;color:#94a3b8;font-size:13px">Aucune donnée de couverture disponible</div>
   <?php else: ?>
-  <div style="<?= count($couverture)>4 ? 'max-height:180px;overflow-y:auto;' : '' ?>margin-top:14px;display:flex;flex-direction:column;gap:0">
+  <div style="margin-top:14px;<?= count($couverture)>4 ? 'max-height:240px;overflow-y:auto;overflow-x:hidden;' : '' ?>">
     <?php foreach ($couverture as $idx => $cs):
       $j      = $cs['jours'];
       $jlbl   = $j === null ? '—' : $j;
