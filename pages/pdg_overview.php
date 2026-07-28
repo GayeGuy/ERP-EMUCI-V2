@@ -1071,7 +1071,7 @@ include __DIR__ . '/../templates/header.php';
         <div>
           <div class="biz-mix-k-t"><span class="biz-dot biz-dot-<?= $m['k'] ?><?= $mix_total > 0 ? '' : ' biz-dot-off' ?>"></span><?= h($m['lbl']) ?></div>
           <?php if ($mix_total > 0): ?>
-            <div class="biz-mix-k-v"><?= number_format($m['n'], 0, ',', ' ') ?></div>
+            <div class="biz-mix-k-v" data-k="mixv-<?= $m['k'] ?>" data-v="<?= (int)$m['n'] ?>" data-d="0"><?= number_format($m['n'], 0, ',', ' ') ?></div>
             <div class="biz-mix-k-p"><?= number_format($m['pct'], 1, ',', ' ') ?> % du volume</div>
           <?php else: ?>
             <div class="biz-mix-k-v biz-mix-k-off">—</div>
@@ -1113,14 +1113,14 @@ include __DIR__ . '/../templates/header.php';
             </div>
           </div>
           <div class="biz-cov-bar">
-            <div class="biz-cov-f<?= $bas ? ' low' : '' ?>" style="width:<?= round($pct,1) ?>%"></div>
+            <div class="biz-cov-f<?= $bas ? ' low' : '' ?>" data-b="cov-<?= (int)$c['site_id'] ?>" data-p="<?= round($pct,1) ?>" data-ax="w" style="width:<?= round($pct,1) ?>%"></div>
             <div class="biz-cov-mk" style="left:<?= round($seuil_couv_bas / 60 * 100, 1) ?>%"></div>
           </div>
           <div class="biz-cov-d">
             <?php if ($c['jours'] === null): ?>
               <span class="hc-badge" style="background:#f1f5f9;color:#5a6678">pas de conso.</span>
             <?php else: ?>
-              <span class="biz-cov-num"><?= $c['jours'] ?></span><span class="biz-cov-u">j</span>
+              <span class="biz-cov-num" data-k="covj-<?= (int)$c['site_id'] ?>" data-v="<?= (int)$c['jours'] ?>" data-d="0"><?= $c['jours'] ?></span><span class="biz-cov-u">j</span>
               <?php if ($bas): ?><span class="hc-badge hc-orange">réappro</span><?php endif; ?>
             <?php endif; ?>
           </div>
@@ -1147,7 +1147,7 @@ include __DIR__ . '/../templates/header.php';
             <div class="biz-risk-t">Écarts d'inventaire non résolus</div>
             <div class="biz-risk-s"><?= number_format($ec_films, 0, ',', ' ') ?> films d'écart cumulé, en attente d'arbitrage</div>
           </div>
-          <div class="biz-risk-n"><?= $ec_ouverts ?></div>
+          <div class="biz-risk-n" data-k="ec-ouverts" data-v="<?= (int)$ec_ouverts ?>" data-d="0"><?= $ec_ouverts ?></div>
         </div>
         <?php endif; ?>
 
@@ -1158,7 +1158,7 @@ include __DIR__ . '/../templates/header.php';
             <div class="biz-risk-t">Bobines déclarées perdues</div>
             <div class="biz-risk-s"><?= number_format($bob_perdues_films, 0, ',', ' ') ?> films non consommés, sortis du stock</div>
           </div>
-          <div class="biz-risk-n"><?= $bob_perdues ?></div>
+          <div class="biz-risk-n" data-k="bob-perdues" data-v="<?= (int)$bob_perdues ?>" data-d="0"><?= $bob_perdues ?></div>
         </div>
         <?php endif; ?>
 
@@ -1169,7 +1169,7 @@ include __DIR__ . '/../templates/header.php';
             <div class="biz-risk-t">Écarts EMUCI majeurs non ajustés</div>
             <div class="biz-risk-s">Comparaisons EMUCI / DigiStock au-delà du seuil, sans ajustement</div>
           </div>
-          <div class="biz-risk-n"><?= $rec_ouverts ?></div>
+          <div class="biz-risk-n" data-k="rec-ouverts" data-v="<?= (int)$rec_ouverts ?>" data-d="0"><?= $rec_ouverts ?></div>
         </div>
         <?php endif; ?>
 
@@ -2107,8 +2107,45 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
 (function () {
   var SOBRE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // Séries derrière les graphes canvas. Elles sont animées comme les
+  // chiffres : sans cela les courbes sautaient d'un état à l'autre
+  // pendant que le reste de la page bougeait.
+  var SERIES = ['evolEngins', 'evolPlaques', 'filmsValues', 'bobinesData',
+                'cmdsData', 'pmmaTotals', 'pmmaBas', 'pfwSites'];
+
+  function lireSeries() {
+    var o = {};
+    SERIES.forEach(function (k) {
+      if (window[k] == null) return;
+      try { o[k] = JSON.parse(JSON.stringify(window[k])); } catch (e) {}
+    });
+    return o;
+  }
+
+  // Interpolation en profondeur : nombres, tableaux, objets imbriqués.
+  // Les données mensuelles par site sont de la forme
+  // { '2026-07': { films, engins, moy_vh } } et doivent suivre aussi.
+  function interp(dep, arr, e) {
+    if (typeof arr === 'number') {
+      var d = (typeof dep === 'number') ? dep : 0;
+      var v = d + (arr - d) * e;
+      // Des comptes entiers doivent le rester : une étiquette « 12,4
+      // engins » en cours de route ferait douter du chiffre.
+      return (arr % 1 === 0 && d % 1 === 0) ? Math.round(v) : v;
+    }
+    if (Array.isArray(arr)) {
+      return arr.map(function (v, i) { return interp(dep ? dep[i] : undefined, v, e); });
+    }
+    if (arr && typeof arr === 'object') {
+      var o = {};
+      Object.keys(arr).forEach(function (k) { o[k] = interp(dep ? dep[k] : undefined, arr[k], e); });
+      return o;
+    }
+    return arr;                                  // libellés, couleurs : inchangés
+  }
+
   function lire() {
-    var o = { n: {}, b: {} };
+    var o = { n: {}, b: {}, s: lireSeries() };
     document.querySelectorAll('[data-k]').forEach(function (el) {
       var v = parseFloat(el.getAttribute('data-v'));
       if (!isNaN(v)) o.n[el.getAttribute('data-k')] = v;
@@ -2301,7 +2338,16 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
                      d: parseInt(el.getAttribute('data-d'), 10) || 0, s: signe });
     });
 
-    if (!barres.length && !nombres.length) return;
+    // Séries des graphes : le départ vient de la page quittée, la cible
+    // est déjà en place puisque les globales ont été rafraîchies.
+    var serDep = av.s || {};
+    var serCib = lireSeries();
+    var serCles = SERIES.filter(function (k) {
+      return serCib[k] !== undefined
+          && JSON.stringify(serDep[k]) !== JSON.stringify(serCib[k]);
+    });
+
+    if (!barres.length && !nombres.length && !serCles.length) return;
 
     // Pose l'état d'arrivée sans transition. Appelable à tout moment, y
     // compris avant que le mouvement ait commencé : la page reste juste.
@@ -2311,6 +2357,10 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
         x.el.textContent = (x.s && x.arr > 0 ? '+' : '') + fmt(x.arr, x.d);
         if (x.u && x.u.parentNode !== x.el) x.el.appendChild(x.u);
       });
+      if (serCles.length) {
+        serCles.forEach(function (k) { window[k] = serCib[k]; });
+        redessiner();
+      }
       document.body.classList.remove('pdg-move');
     }
 
@@ -2338,7 +2388,13 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
       });
     });
 
-    var t0 = null;
+    // Point de départ des courbes, posé avant le premier tracé
+    if (serCles.length) {
+      serCles.forEach(function (k) { window[k] = interp(serDep[k], serCib[k], 0); });
+      redessiner();
+    }
+
+    var t0 = null, frame = 0;
     function pas(t) {
       if (anim !== mien) return;
       if (t0 === null) t0 = t;
@@ -2347,6 +2403,12 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
         var v = x.dep + (x.arr - x.dep) * e;
         x.el.textContent = (x.s && v > 0 ? '+' : '') + fmt(v, x.d);
       });
+      // Un redessin canvas coûte plus cher qu'une écriture de texte :
+      // une frame sur deux suffit à donner le mouvement.
+      if (serCles.length && (frame++ % 2) === 0) {
+        serCles.forEach(function (k) { window[k] = interp(serDep[k], serCib[k], e); });
+        redessiner();
+      }
       if (k < 1) { mien.id = requestAnimationFrame(pas); }
       else { anim = null; poser(); }
     }
