@@ -172,16 +172,19 @@ $pmma_detail = db_fetch_all(
 );
 
 // ── ALERTES
-$alertes_stock  = (int)db_fetch_value("SELECT COUNT(*) FROM articles WHERE stock_global <= seuil_alerte AND seuil_alerte > 0");
+$sf_art = $site_id ? "AND (site_id = $site_id OR site_id IS NULL)" : "";
+$alertes_stock  = (int)db_fetch_value("SELECT COUNT(*) FROM articles WHERE stock_global <= seuil_alerte AND seuil_alerte > 0 $sf_art");
 $rivets_bas     = (int)db_fetch_value("SELECT COUNT(*) FROM op_stock_rivets WHERE quantite < 200 $sf");
 $points_attente = (int)($ops['points_attente'] ?? 0);
 $cmd_en_attente = (int)($cmd_stats['en_attente'] ?? 0);
 $total_alertes  = $points_attente + $cmd_en_attente + $alertes_stock + $rivets_bas;
 
 // ── DEMANDES INTERNES
-$di_pending = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE statut IN ('en_attente','en_cours')");
-$di_mois    = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE TO_CHAR(created_at,'YYYY-MM')=? AND statut != 'brouillon'", [$mois]);
-$di_approuv = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE TO_CHAR(updated_at,'YYYY-MM')=? AND statut IN ('approuve','approuve_traitement')", [$mois]);
+$sf_di = $site_id ? "AND d.site_id = $site_id" : "";
+$sf_di_bare = $site_id ? "AND site_id = $site_id" : "";
+$di_pending = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE statut IN ('en_attente','en_cours') $sf_di_bare");
+$di_mois    = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE TO_CHAR(created_at,'YYYY-MM')=? AND statut != 'brouillon' $sf_di_bare", [$mois]);
+$di_approuv = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE TO_CHAR(updated_at,'YYYY-MM')=? AND statut IN ('approuve','approuve_traitement') $sf_di_bare", [$mois]);
 $di_tx      = $di_mois > 0 ? round($di_approuv / $di_mois * 100) : 0;
 $di_recents = db_fetch_all(
     "SELECT d.id, d.numero, dt.label AS type_lbl, d.statut,
@@ -189,7 +192,7 @@ $di_recents = db_fetch_all(
      FROM di_demandes d
      JOIN di_types dt ON dt.code = d.type_code
      JOIN users u ON u.id = d.demandeur_id
-     WHERE d.statut IN ('en_attente','en_cours')
+     WHERE d.statut IN ('en_attente','en_cours') $sf_di
      ORDER BY d.created_at DESC LIMIT 5"
 );
 

@@ -238,13 +238,14 @@ function di_creer(array $user, string $typeCode, array $champs, bool $soumettre,
         $n1UserId = $n1Row ? (int)$n1Row['user_id'] : null;
     }
 
-    $numero = di_generate_numero();
+    $numero       = di_generate_numero();
+    $demandeur_site_id = $user['site_id'] ? (int)$user['site_id'] : null;
     db_query(
         "INSERT INTO di_demandes
-         (numero, type_code, statut, etape_actuelle, demandeur_id, n1_user_id, champs, historique, signatures,
+         (numero, type_code, statut, etape_actuelle, demandeur_id, n1_user_id, site_id, champs, historique, signatures,
           workflow_snapshot, priorite, submitted_at, created_at, updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        [$numero, $typeCode, $statut, $etape, $user['id'], $n1UserId,
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        [$numero, $typeCode, $statut, $etape, $user['id'], $n1UserId, $demandeur_site_id,
          json_encode($champs, JSON_UNESCAPED_UNICODE),
          json_encode($hist, JSON_UNESCAPED_UNICODE),
          '[]',
