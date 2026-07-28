@@ -879,27 +879,23 @@ include __DIR__ . '/../templates/header.php';
    il ne se passait rien, et l'arrivée, où les chiffres apparaissaient
    d'un coup. */
 
-/* 1. Attente : trait de progression + blocs de données en retrait. */
+/* 1. Attente : un trait de progression, rien d'autre. Le contenu reste
+   entier et lisible — le rechargement ne doit pas se voir. */
 .pdg-bar{position:fixed;top:0;left:0;right:0;height:2px;z-index:9999;background:transparent;
   opacity:0;transition:opacity .15s;pointer-events:none}
 .pdg-busy .pdg-bar{opacity:1}
 .pdg-bar::after{content:'';position:absolute;top:0;left:0;height:100%;width:38%;
   background:var(--navy,#06033A);animation:pdg-slide 1.05s cubic-bezier(.65,0,.35,1) infinite}
 @keyframes pdg-slide{0%{left:-38%}100%{left:100%}}
-.pdg-busy .biz,.pdg-busy .pfw-card,.pdg-busy .eq,.pdg-busy .charts-row,.pdg-busy .bottom-row{
-  opacity:.42;transition:opacity .18s ease-out;pointer-events:none}
-.pdg-busy .pdg-controls{pointer-events:none}
-.pdg-busy .month-inp{cursor:progress}
+.pdg-busy .month-inp,.pdg-busy .eq-sel{cursor:progress}
 
 /* 2. Arrivée : les valeurs rejoignent leur cible depuis l'ancienne.
-   Piloté en JS, uniquement après un changement de filtre. */
-.pdg-move .biz-dem-s,.pdg-move .biz-mix-s{transition:width .58s cubic-bezier(.22,1,.36,1)}
-.pdg-move .eq-seg{transition:height .58s cubic-bezier(.22,1,.36,1)}
+   Même durée que le décompte des chiffres, pour qu'ils arrivent ensemble. */
+.pdg-move .biz-dem-s,.pdg-move .biz-mix-s{transition:width 1.5s cubic-bezier(.22,1,.36,1)}
+.pdg-move .eq-seg{transition:height 1.5s cubic-bezier(.22,1,.36,1)}
 
 @media(prefers-reduced-motion:reduce){
   .pdg-bar::after{animation:none;width:100%}
-  .pdg-busy .biz,.pdg-busy .pfw-card,.pdg-busy .eq,
-  .pdg-busy .charts-row,.pdg-busy .bottom-row{transition:none}
   .pdg-move .biz-dem-s,.pdg-move .biz-mix-s,.pdg-move .eq-seg{transition:none}
 }
 </style>
@@ -1641,18 +1637,18 @@ include __DIR__ . '/../templates/header.php';
 <div id="pdg-tip" style="display:none;position:fixed;z-index:3000;background:white;border:1px solid #e2e8f0;border-radius:12px;padding:12px 16px;box-shadow:0 8px 24px rgba(0,0,0,.13);pointer-events:none;min-width:180px;font-size:12px;line-height:1.7"></div>
 
 <script>
-const evolLabels  = <?= $js_evol_labels ?>;
-const evolEngins  = <?= $js_evol_engins ?>;
-const evolPlaques = <?= $js_evol_plaques ?>;
-const filmsLabels = <?= $js_films_labels ?>;
-const filmsValues = <?= $js_films_values ?>;
-const filmsDetail = <?= $js_films_detail ?>;
-const bobinesData = <?= $js_bobines ?>;
-const cmdsData    = <?= $js_cmds ?>;
-const pmmaLabels  = <?= $js_pmma_labels ?>;
-const pmmaTotals  = <?= $js_pmma_totals ?>;
-const pmmaBas     = <?= $js_pmma_bas ?>;
-const pmmaDetail  = <?= $js_pmma_detail ?>;
+var evolLabels  = <?= $js_evol_labels ?>;
+var evolEngins  = <?= $js_evol_engins ?>;
+var evolPlaques = <?= $js_evol_plaques ?>;
+var filmsLabels = <?= $js_films_labels ?>;
+var filmsValues = <?= $js_films_values ?>;
+var filmsDetail = <?= $js_films_detail ?>;
+var bobinesData = <?= $js_bobines ?>;
+var cmdsData    = <?= $js_cmds ?>;
+var pmmaLabels  = <?= $js_pmma_labels ?>;
+var pmmaTotals  = <?= $js_pmma_totals ?>;
+var pmmaBas     = <?= $js_pmma_bas ?>;
+var pmmaDetail  = <?= $js_pmma_detail ?>;
 const DPR = window.devicePixelRatio || 1;
 
 function fmtN(n) { return Number(n).toLocaleString('fr-FR'); }
@@ -1818,7 +1814,7 @@ function showTip(e, html) {
 function hideTip() { document.getElementById('pdg-tip').style.display='none'; }
 
 // ══════ TOOLTIP COUVERTURE DE STOCK ══════
-const covTypes = <?= $js_cov_types ?>;
+var covTypes = <?= $js_cov_types ?>;
 (function(){
   const tip = document.createElement('div');
   tip.className = 'cov-tip';
@@ -1852,7 +1848,7 @@ const covTypes = <?= $js_cov_types ?>;
 })();
 
 // ══════ WIDGET PERFORMANCE PAR SITE ══════
-const pfwSites = <?= $js_pfw_sites ?>;
+var pfwSites = <?= $js_pfw_sites ?>;
 let pfwSiteIdx  = 0;
 let pfwQuarter  = <?= $pfw_quarter_def ?>;
 const pfwAnnee  = '<?= $annee ?>';
@@ -2069,18 +2065,30 @@ window.addEventListener('load',   () => { setTimeout(render, 80); });
 window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=setTimeout(render,200); });
 </script>
 
+<!-- Données des graphes, relues telles quelles lors d'un changement de
+     filtre : c'est ce qui évite de recharger la page pour les mettre à jour. -->
+<script type="application/json" id="pdg-data">
+{"evolLabels":<?= $js_evol_labels ?>,"evolEngins":<?= $js_evol_engins ?>,
+ "evolPlaques":<?= $js_evol_plaques ?>,"filmsLabels":<?= $js_films_labels ?>,
+ "filmsValues":<?= $js_films_values ?>,"filmsDetail":<?= $js_films_detail ?>,
+ "bobinesData":<?= $js_bobines ?>,"cmdsData":<?= $js_cmds ?>,
+ "pmmaLabels":<?= $js_pmma_labels ?>,"pmmaTotals":<?= $js_pmma_totals ?>,
+ "pmmaBas":<?= $js_pmma_bas ?>,"pmmaDetail":<?= $js_pmma_detail ?>,
+ "covTypes":<?= $js_cov_types ?>,"pfwSites":<?= $js_pfw_sites ?>,
+ "pfwQuarterDef":<?= (int)$pfw_quarter_def ?>}
+</script>
+
 <div class="pdg-bar" aria-hidden="true"></div>
 <script>
-/* ══════════ Rendre le changement de filtre perceptible ══════════
-   La page se recharge en GET : sans aide, les chiffres sautent d'une
-   valeur à l'autre sans qu'on voie ce qui a bougé. On photographie
-   donc les valeurs avant de partir, et on rejoue l'écart à l'arrivée.
-   Rien de tout ceci ne se déclenche au premier chargement.          */
+/* ══════════ Changer de filtre sans rechargement visible ══════════
+   Le formulaire rechargeait la page : page blanche, puis des chiffres
+   déjà à leur nouvelle valeur. On récupère désormais la page en
+   arrière-plan, on échange son contenu sur place, et chaque chiffre
+   parcourt l'écart depuis la valeur qui était affichée.
+   Sans fetch, sans DOMParser ou en cas d'erreur, la navigation
+   classique reprend la main.                                        */
 (function () {
-  var CLE   = 'pdgSnap';
   var SOBRE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  // Filtres de la page : celui du haut et celui du bloc parc matériel.
-  var forms = document.querySelectorAll('#pdg-filter-form, .eq form');
 
   function lire() {
     var o = { n: {}, b: {} };
@@ -2095,18 +2103,76 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
     return o;
   }
 
-  // ── Départ : photo de l'état courant, puis signal d'attente
-  function partir() {
-    try { sessionStorage.setItem(CLE, JSON.stringify(lire())); } catch (e) {}
-    document.body.classList.add('pdg-busy');
+  // ══ Changement de filtre sans recharger la page ══
+  // La page est récupérée en arrière-plan et son contenu échangé sur
+  // place : l'utilisateur ne voit ni page blanche ni rechargement, et
+  // les chiffres partent de leur valeur affichée vers la nouvelle.
+  // En cas d'échec, on retombe sur la navigation classique.
+
+  function urlDuFiltre(f) {
+    var p = new URLSearchParams(location.search);
+    new FormData(f).forEach(function (v, k) { p.set(k, v); });
+    return location.pathname + '?' + p.toString();
   }
-  // Les champs déclenchent la navigation par this.form.submit(), qui
-  // n'émet PAS d'événement submit. On écoute donc « change », en phase
-  // de capture pour passer avant le onchange qui lance le chargement.
-  Array.prototype.forEach.call(forms, function (f) {
-    f.addEventListener('change', partir, true);
-    // Filet, si un jour la soumission passe par un bouton ou requestSubmit.
-    f.addEventListener('submit', partir);
+
+  function estFiltre(f) {
+    return f && (f.id === 'pdg-filter-form' || (f.closest && f.closest('.eq')));
+  }
+
+  // Capture sur le document : survit au remplacement du contenu, et passe
+  // avant le onchange="this.form.submit()" qu'on neutralise ici.
+  document.addEventListener('change', function (ev) {
+    var f = ev.target && ev.target.form;
+    if (!estFiltre(f)) return;
+    if (!window.fetch || !window.DOMParser || !history.pushState) return;  // repli natif
+    ev.stopPropagation();
+    charger(urlDuFiltre(f));
+  }, true);
+
+  var enCours = false;
+  function charger(url) {
+    if (enCours) return;
+    enCours = true;
+    var avant = lire();                       // valeurs actuellement affichées
+    document.body.classList.add('pdg-busy');
+
+    fetch(url, { credentials: 'same-origin', headers: { 'X-Requested-With': 'fetch' } })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+      .then(function (html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        var neuf = doc.querySelector('.pdg');
+        var ancien = document.querySelector('.pdg');
+        if (!neuf || !ancien) throw new Error('structure');
+
+        // Données des graphes : les variables sont des `var` de premier
+        // niveau, donc des propriétés de window, réassignables.
+        var bloc = doc.getElementById('pdg-data');
+        if (bloc) {
+          var d = JSON.parse(bloc.textContent);
+          Object.keys(d).forEach(function (k) {
+            if (k !== 'pfwQuarterDef') window[k] = d[k];
+          });
+        }
+
+        ancien.replaceWith(neuf);
+        history.pushState({ pdg: 1 }, '', url);
+        document.body.classList.remove('pdg-busy');
+
+        redessiner();
+        animer(avant);
+        enCours = false;
+      })
+      .catch(function () { location.href = url; });   // repli : navigation classique
+  }
+
+  function redessiner() {
+    try { if (typeof render === 'function') render(); } catch (e) {}
+    try { if (typeof pfwUpdate === 'function' && window.pfwSites && pfwSites.length) pfwUpdate(); } catch (e) {}
+  }
+
+  // Retour arrière : on recharge, plus simple et toujours juste.
+  window.addEventListener('popstate', function (ev) {
+    if (ev.state && ev.state.pdg) location.reload();
   });
 
   // Retour arrière : le navigateur peut restaurer la page telle quelle,
@@ -2115,14 +2181,6 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
     document.body.classList.remove('pdg-busy', 'pdg-move');
   });
 
-  // ── Arrivée
-  var av = null;
-  try {
-    av = JSON.parse(sessionStorage.getItem(CLE) || 'null');
-    sessionStorage.removeItem(CLE);
-  } catch (e) {}
-  if (!av || SOBRE) return;          // premier chargement, ou motion réduite
-
   // Reproduit number_format($n, $d, ',', ' ')
   function fmt(n, d) {
     var p = n.toFixed(d).split('.');
@@ -2130,13 +2188,15 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
     return p.join(',');
   }
 
-  var DUREE = 620;
+  // Assez lent pour être suivi à l'oeil : le but est de voir le chiffre
+  // parcourir l'écart, pas de le voir arriver.
+  var DUREE = 1500;
   var adouci = function (t) { return 1 - Math.pow(1 - t, 3); };   // ease-out cubique
 
-  // Exécution synchrone : tous les éléments visés précèdent ce script.
-  // Attendre DOMContentLoaded afficherait les valeurs finales avant de
-  // les remettre en arrière, ce qui se verrait comme un scintillement.
-  (function () {
+  // ── Rejoue l'écart entre les valeurs d'avant et celles qui viennent
+  //    d'être posées dans le DOM.
+  function animer(av) {
+    if (!av || SOBRE) return;
     // Barres : on repart de l'ancienne taille, le navigateur interpole
     var barres = [];
     document.querySelectorAll('[data-b]').forEach(function (el) {
@@ -2196,7 +2256,7 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
       }
     }
     requestAnimationFrame(pas);
-  })();
+  }
 })();
 </script>
 
