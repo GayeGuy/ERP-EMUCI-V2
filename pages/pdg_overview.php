@@ -410,6 +410,7 @@ $cov_types_by_site = [];
 try {
     foreach (db_fetch_all(
         "SELECT b.site_id,
+                b.type_code AS code,
                 COALESCE(t.libelle, b.type_code) AS lbl,
                 SUM(b.films_restants) AS films
          FROM op_bobines b
@@ -419,6 +420,7 @@ try {
          ORDER BY b.site_id, films DESC"
     ) as $tr) {
         $cov_types_by_site[$tr['site_id']][] = [
+            'code'  => $tr['code'],
             'lbl'   => $tr['lbl'],
             'films' => (int)$tr['films'],
         ];
@@ -1591,7 +1593,7 @@ const covTypes = <?= $js_cov_types ?>;
       const rows = covTypes[sid];
       if (!rows || !rows.length) return;
       tip.innerHTML = rows.map(r =>
-        `<div class="cov-tip-row"><span class="cov-tip-lbl">${r.lbl}</span><span class="cov-tip-val">${fmt(r.films)} films</span></div>`
+        `<div class="cov-tip-row"><span class="cov-tip-lbl"><b style="color:#fff;margin-right:6px">${r.code}</b>${r.lbl}</span><span class="cov-tip-val">${fmt(r.films)}</span></div>`
       ).join('');
       tip.style.opacity = '1';
       positionTip(e);
