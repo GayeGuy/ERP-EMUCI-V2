@@ -66,6 +66,7 @@ function di_user_roles(int $userId): array {
         'superviseur_it'    => ['it'],
         'maintenance_info'  => ['it'],
         'directeur_general' => ['dg'],
+        'lecteur'           => ['dg'],  // PDG — rôle ERP "lecteur" = visa Direction Générale
         // Administrateurs : visent toutes les étapes (jamais leur propre demande, cf. di_can_validate)
         'superadmin'        => ['n1', 'raf', 'daf', 'dg', 'it', 'gestionnaire'],
         'admin'             => ['n1', 'raf', 'daf', 'dg', 'it', 'gestionnaire'],
@@ -82,18 +83,29 @@ function di_user_roles(int $userId): array {
 
 // ── Demandes que CET utilisateur peut viser (étape courante = un de ses rôles).
 //    Enrichit chaque demande de _etape_label et _demandeur.
-function di_a_valider(array $user): array {
+function di_a_valider(array $user, ?string $from = null, ?string $to = null): array {
     $roles    = di_user_roles((int)$user['id']);
-    // Un N+1 de département peut valider même sans rôle global dans di_user_roles
+    // N+1 département
     $is_n1_dept = (bool)db_fetch_value(
         "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND is_n1=1",
         [(int)$user['id']]
     );
-    if (!$roles && !$is_n1_dept) return [];
+    // Membre d'un département lié à un rôle di (ex : Administration → gestionnaire)
+    $has_dept_role = (bool)db_fetch_value(
+        "SELECT COUNT(*) FROM user_departements ud
+         JOIN di_roles dr ON dr.departement_id = ud.departement_id
+         WHERE ud.user_id=?",
+        [(int)$user['id']]
+    );
+    if (!$roles && !$is_n1_dept && !$has_dept_role) return [];
+
+    $dateWhere = ''; $dateParams = [];
+    if ($from) { $dateWhere .= " AND submitted_at >= ?"; $dateParams[] = $from . ' 00:00:00'; }
+    if ($to)   { $dateWhere .= " AND submitted_at <= ?"; $dateParams[] = $to   . ' 23:59:59'; }
 
     $pending = db_fetch_all(
-        "SELECT id FROM di_demandes WHERE statut IN ('en_attente','en_cours') AND demandeur_id <> ? ORDER BY created_at ASC",
-        [$user['id']]
+        "SELECT id FROM di_demandes WHERE statut IN ('en_attente','en_cours') AND demandeur_id <> ? $dateWhere ORDER BY created_at ASC",
+        array_merge([(int)$user['id']], $dateParams)
     );
     $out = [];
     foreach ($pending as $p) {
@@ -105,6 +117,34 @@ function di_a_valider(array $user): array {
             $d['_demandeur']   = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$d['demandeur_id']]);
             $out[] = $d;
         }
+    }
+    return $out;
+}
+
+// ── Demandes déjà traitées par cet utilisateur (a signé au moins une étape)
+function di_deja_traite(array $user, ?string $from = null, ?string $to = null): array {
+    $uid   = (int)$user['id'];
+    $param = json_encode([['user_id' => $uid]]);
+    $dateWhere = ''; $dateParams = [];
+    if ($from) { $dateWhere .= " AND submitted_at >= ?"; $dateParams[] = $from . ' 00:00:00'; }
+    if ($to)   { $dateWhere .= " AND submitted_at <= ?"; $dateParams[] = $to   . ' 23:59:59'; }
+    $rows  = db_fetch_all(
+        "SELECT id FROM di_demandes
+         WHERE demandeur_id <> ?
+           AND signatures != '[]'
+           AND (signatures::jsonb) @> ?::jsonb
+           $dateWhere
+         ORDER BY updated_at DESC LIMIT 100",
+        array_merge([$uid, $param], $dateParams)
+    );
+    $out = [];
+    foreach ($rows as $r) {
+        $d = di_get((int)$r['id']);
+        if (!$d) continue;
+        $wf = di_workflow_of($d);
+        $d['_etape_label'] = $wf[(int)$d['etape_actuelle']]['label'] ?? '';
+        $d['_demandeur']   = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$d['demandeur_id']]);
+        $out[] = $d;
     }
     return $out;
 }
@@ -123,8 +163,15 @@ function di_can_validate(array $userRoles, int $userId, array $workflow, int $cu
     if ($userId === $demandeurId) return false;
     $role = $workflow[$currentStep]['role'];
     if ($role === 'n1') {
-        // N+1 résolu spécifiquement pour cette demande — ou fallback rôle global si non défini
         return $n1UserId !== null ? $userId === $n1UserId : in_array('n1', $userRoles, true);
+    }
+    // Si ce rôle est lié à un département, tout membre du département peut valider
+    $dept_id = db_fetch_value("SELECT departement_id FROM di_roles WHERE code=?", [$role]);
+    if ($dept_id) {
+        return (bool)db_fetch_value(
+            "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND departement_id=?",
+            [$userId, (int)$dept_id]
+        );
     }
     return in_array($role, $userRoles, true);
 }
@@ -147,10 +194,20 @@ function di_notify(int $userId, string $message, ?int $demandeId = null): void {
         [$userId, $message, $lien]
     );
 }
-// Notifier tous les porteurs d'un rôle de validation
+// Notifier tous les porteurs d'un rôle de validation (di_user_roles + membres du département lié)
 function di_notify_role(string $roleCode, string $message, ?int $demandeId = null): void {
-    $users = db_fetch_all("SELECT user_id FROM di_user_roles WHERE role_code = ?", [$roleCode]);
-    foreach ($users as $u) di_notify((int)$u['user_id'], $message, $demandeId);
+    $notified = [];
+    foreach (db_fetch_all("SELECT user_id FROM di_user_roles WHERE role_code = ?", [$roleCode]) as $u) {
+        $uid = (int)$u['user_id'];
+        if (!in_array($uid, $notified, true)) { di_notify($uid, $message, $demandeId); $notified[] = $uid; }
+    }
+    $dept_id = db_fetch_value("SELECT departement_id FROM di_roles WHERE code=?", [$roleCode]);
+    if ($dept_id) {
+        foreach (db_fetch_all("SELECT user_id FROM user_departements WHERE departement_id=?", [(int)$dept_id]) as $u) {
+            $uid = (int)$u['user_id'];
+            if (!in_array($uid, $notified, true)) { di_notify($uid, $message, $demandeId); $notified[] = $uid; }
+        }
+    }
 }
 
 // ── Créer / soumettre une demande. Retourne l'id créé.
