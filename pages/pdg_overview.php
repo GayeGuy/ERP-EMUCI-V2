@@ -221,22 +221,11 @@ $js_evol_labels  = json_encode(array_map(fn($r) => ($mc[substr($r['mois'],5,2)]?
 $js_evol_engins  = json_encode(array_map(fn($r) => (int)$r['engins'], $evol));
 $js_evol_plaques = json_encode(array_map(fn($r) => (int)$r['plaques'], $evol));
 $js_statuts      = json_encode([(int)($ops['points_valides']??0),(int)($ops['points_attente']??0),(int)($ops['points_rejetes']??0)]);
-// Films modal : consommation (tous sites) OU stock restant par type (site sélectionné)
-if ($site_id && !empty($cov_types_by_site[$site_id])) {
-    // Site sélectionné → affiche films restants en stock par type
-    $_ftypes = $cov_types_by_site[$site_id];
-    $js_films_labels   = json_encode(array_column($_ftypes, 'code'));
-    $js_films_values   = json_encode(array_column($_ftypes, 'films'));
-    $js_films_detail   = json_encode(array_map(fn($t) => [['site'=>$site_nom_sel,'films'=>$t['films']]], $_ftypes));
-    $films_modal_title = 'Films disponibles par type';
-    $films_modal_sub   = h($site_nom_sel) . ' · stock restant';
-} else {
-    // Tous sites → affiche consommation du mois
-    $js_films_labels   = json_encode(array_keys($films_par_type));
-    $js_films_values   = json_encode(array_values($films_par_type));
-    $films_modal_title = 'Films utilisés par type de bobine';
-    $films_modal_sub   = h($mois_display);
-}
+// Films modal labels/values provisoires (tous sites) — sera recalculé après $cov_types_by_site
+$js_films_labels   = json_encode(array_keys($films_par_type));
+$js_films_values   = json_encode(array_values($films_par_type));
+$films_modal_title = 'Films utilisés par type de bobine';
+$films_modal_sub   = h($mois_display);
 $js_bobines      = json_encode([(int)($bobines_stats['en_cours']??0),(int)($bobines_stats['en_stock']??0),(int)($bobines_stats['epuisees']??0)]);
 $js_cmds         = json_encode([(int)($cmd_stats['en_attente']??0),(int)(($cmd_stats['a_livrer']??0)+($cmd_stats['en_route']??0)),(int)($cmd_stats['livrees_mois']??0)]);
 $pmma_by_type = [];
@@ -255,7 +244,6 @@ foreach ($rps as $site => $types) {
 $js_riv_labels = json_encode(['Gonflable','Éclaté']);
 $js_riv_totals = json_encode([$riv_total_gonfl,$riv_total_eclat]);
 $js_riv_detail = json_encode($riv_type_detail);
-$films_ch_h    = max(160, count(json_decode($js_films_labels, true)) * 46);
 $pmma_ch_h     = max(140, count($pmma_par_type) * 46);
 
 // Palette sites (couleurs identifiables par site)
@@ -456,6 +444,17 @@ try {
     }
 } catch (Throwable $e) {}
 $js_cov_types = json_encode($cov_types_by_site);
+
+// Films modal : consommation (tous sites) OU stock restant par type (site sélectionné)
+if ($site_id && !empty($cov_types_by_site[$site_id])) {
+    $_ftypes = $cov_types_by_site[$site_id];
+    $js_films_labels   = json_encode(array_column($_ftypes, 'code'));
+    $js_films_values   = json_encode(array_column($_ftypes, 'films'));
+    $js_films_detail   = json_encode(array_map(fn($t) => [['site'=>$site_nom_sel,'films'=>$t['films']]], $_ftypes));
+    $films_modal_title = 'Films disponibles par type';
+    $films_modal_sub   = h($site_nom_sel) . ' · stock restant';
+}
+$films_ch_h = max(160, count(json_decode($js_films_labels, true)) * 46);
 
 // 5 ── Fiabilité du stock : écarts d'inventaire + réconciliation EMUCI
 $ec_ouverts = $bob_perdues = $rec_total = $rec_majeurs = $rec_ouverts = 0;
