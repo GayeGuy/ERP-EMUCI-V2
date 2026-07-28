@@ -639,6 +639,12 @@ include __DIR__ . '/../templates/header.php';
 @media(max-width:900px){.charts-row{grid-template-columns:1fr 1fr}}
 @media(max-width:580px){.charts-row{grid-template-columns:1fr}}
 .ch-box{background:#fff;border:1.5px solid var(--border,#e2e8f0);border-radius:18px;padding:20px 22px}
+/* Sans min-width:0, une piste de grille ne descend pas sous la taille de
+   son contenu : un canvas trop large élargit sa colonne et pousse les
+   voisines hors du cadre. Le max-width borne le dégât à la source. */
+.charts-row > *{min-width:0}
+.ch-box canvas{display:block;max-width:100%}
+.pfw-right canvas{display:block;max-width:100%}
 .ch-ttl{font-size:13px;font-weight:800;color:var(--navy,#06033A);margin-bottom:4px}
 .ch-sub{font-size:11px;color:var(--muted,#94a3b8);margin-bottom:14px}
 .donut-wrap{display:flex;align-items:center;justify-content:center;gap:16px;padding:8px 0}
@@ -1670,6 +1676,17 @@ const DPR = window.devicePixelRatio || 1;
 
 function fmtN(n) { return Number(n).toLocaleString('fr-FR'); }
 
+// Largeur réellement disponible dans un conteneur. Sa boîte de bordure
+// inclut padding et bordure : s'en servir rend le canvas plus large que
+// la place offerte, la piste de grille s'élargit pour l'accueillir, et
+// le redessin suivant lit une largeur encore plus grande. Emballement.
+function largeurUtile(p, defaut) {
+    if (!p) return defaut;
+    const cs = getComputedStyle(p);
+    const w = p.clientWidth - parseFloat(cs.paddingLeft || 0) - parseFloat(cs.paddingRight || 0);
+    return w > 40 ? Math.round(w) : defaut;
+}
+
 function initCv(id) {
     const el = document.getElementById(id); if (!el) return null;
     // el.height est écrasé plus bas par la taille en pixels physiques
@@ -1677,7 +1694,7 @@ function initCv(id) {
     // donc une hauteur déjà multipliée, et le canvas grandirait à chaque
     // passage jusqu'à sortir de son cadre. On mémorise la valeur voulue.
     if (!el.dataset.hCss) el.dataset.hCss = parseInt(el.getAttribute('height') || 200);
-    const w  = el.parentElement.getBoundingClientRect().width || 400;
+    const w  = largeurUtile(el.parentElement, 400);
     const h  = parseInt(el.dataset.hCss);
     el.width  = Math.round(w * DPR);
     el.height = Math.round(h * DPR);
@@ -1923,7 +1940,7 @@ function pfwUpdate() {
 function pfwDrawChart(site) {
     const el = document.getElementById('pfwChart'); if (!el) return;
     const container = el.parentElement;
-    const W = container.getBoundingClientRect().width || 500;
+    const W = largeurUtile(container, 500);
     const H = 230;
     el.width  = Math.round(W * DPR);
     el.height = Math.round(H * DPR);
