@@ -873,6 +873,35 @@ include __DIR__ . '/../templates/header.php';
 .eq-empty i{font-size:28px;color:#cbd5e1}
 .eq-empty-t{font-size:13.5px;font-weight:700;color:var(--navy,#06033A);margin-top:9px}
 .eq-empty-s{font-size:12px;color:var(--biz-muted);margin-top:5px;line-height:1.55;max-width:46ch;margin-inline:auto}
+
+/* ══════════ CHANGEMENT DE FILTRE ══════════
+   Le filtre recharge la page. Deux moments à couvrir : l'attente, où
+   il ne se passait rien, et l'arrivée, où les chiffres apparaissaient
+   d'un coup. */
+
+/* 1. Attente : trait de progression + blocs de données en retrait. */
+.pdg-bar{position:fixed;top:0;left:0;right:0;height:2px;z-index:9999;background:transparent;
+  opacity:0;transition:opacity .15s;pointer-events:none}
+.pdg-busy .pdg-bar{opacity:1}
+.pdg-bar::after{content:'';position:absolute;top:0;left:0;height:100%;width:38%;
+  background:var(--navy,#06033A);animation:pdg-slide 1.05s cubic-bezier(.65,0,.35,1) infinite}
+@keyframes pdg-slide{0%{left:-38%}100%{left:100%}}
+.pdg-busy .biz,.pdg-busy .pfw-card,.pdg-busy .eq,.pdg-busy .charts-row,.pdg-busy .bottom-row{
+  opacity:.42;transition:opacity .18s ease-out;pointer-events:none}
+.pdg-busy .pdg-controls{pointer-events:none}
+.pdg-busy .month-inp{cursor:progress}
+
+/* 2. Arrivée : les valeurs rejoignent leur cible depuis l'ancienne.
+   Piloté en JS, uniquement après un changement de filtre. */
+.pdg-move .biz-dem-s,.pdg-move .biz-mix-s{transition:width .42s cubic-bezier(.22,1,.36,1)}
+.pdg-move .eq-seg{transition:height .42s cubic-bezier(.22,1,.36,1)}
+
+@media(prefers-reduced-motion:reduce){
+  .pdg-bar::after{animation:none;width:100%}
+  .pdg-busy .biz,.pdg-busy .pfw-card,.pdg-busy .eq,
+  .pdg-busy .charts-row,.pdg-busy .bottom-row{transition:none}
+  .pdg-move .biz-dem-s,.pdg-move .biz-mix-s,.pdg-move .eq-seg{transition:none}
+}
 </style>
 
 <div class="pdg">
@@ -916,7 +945,7 @@ include __DIR__ . '/../templates/header.php';
         <div class="biz-hero-val">—</div>
         <div class="biz-hero-note">Aucun point journalier saisi sur la période. Le taux se calcule dès la première journée validée.</div>
       <?php else: ?>
-        <div class="biz-hero-val"><?= number_format($taux_service, 1, ',', ' ') ?><span class="biz-hero-u">%</span></div>
+        <div class="biz-hero-val" data-k="service" data-v="<?= $taux_service ?>" data-d="1"><?= number_format($taux_service, 1, ',', ' ') ?><span class="biz-hero-u">%</span></div>
         <div class="biz-hero-note">
           <b><?= number_format($posees, 0, ',', ' ') ?></b> plaques posées sur <b><?= number_format($demande, 0, ',', ' ') ?></b> demandées.
           <?php if ($np_total > 0): ?>
@@ -930,12 +959,12 @@ include __DIR__ . '/../templates/header.php';
         <div class="biz-dem" role="img"
              aria-label="Demande : <?= number_format($posees,0,',',' ') ?> plaques posées, <?= number_format($np_total,0,',',' ') ?> non posées">
           <?php if ($pc_ok > 0): ?>
-            <div class="biz-dem-s biz-dem-ok" style="width:<?= round($pc_ok,2) ?>%">
+            <div class="biz-dem-s biz-dem-ok" data-b="dem-ok" data-p="<?= round($pc_ok,2) ?>" data-ax="w" style="width:<?= round($pc_ok,2) ?>%">
               <?php if ($pc_ok >= 26): ?><span class="biz-dem-lbl"><?= number_format($posees, 0, ',', ' ') ?> posées</span><?php endif; ?>
             </div>
           <?php endif; ?>
           <?php if ($pc_ko > 0): ?>
-            <div class="biz-dem-s biz-dem-ko" style="width:<?= round($pc_ko,2) ?>%">
+            <div class="biz-dem-s biz-dem-ko" data-b="dem-ko" data-p="<?= round($pc_ko,2) ?>" data-ax="w" style="width:<?= round($pc_ko,2) ?>%">
               <?php if ($pc_ko >= 26): ?><span class="biz-dem-lbl"><?= number_format($np_total, 0, ',', ' ') ?> non posées</span><?php endif; ?>
             </div>
           <?php endif; ?>
@@ -964,7 +993,7 @@ include __DIR__ . '/../templates/header.php';
           <div class="biz-m-val biz-m-na">—</div>
           <div class="biz-m-sub">Aucune consommation de film enregistrée</div>
         <?php else: ?>
-          <div class="biz-m-val"><?= number_format($taux_gache, 2, ',', ' ') ?><span class="biz-m-u">%</span></div>
+          <div class="biz-m-val" data-k="gache" data-v="<?= $taux_gache ?>" data-d="2"><?= number_format($taux_gache, 2, ',', ' ') ?><span class="biz-m-u">%</span></div>
           <div class="biz-m-sub"><?= number_format($f_ko, 0, ',', ' ') ?> films détruits sur <?= number_format($f_ok + $f_ko, 0, ',', ' ') ?> engagés</div>
         <?php endif; ?>
       </div>
@@ -982,7 +1011,7 @@ include __DIR__ . '/../templates/header.php';
           <div class="biz-m-val biz-m-na">—</div>
           <div class="biz-m-sub">Aucun rivet posé sur la période</div>
         <?php else: ?>
-          <div class="biz-m-val"><?= number_format($taux_gache_riv, 2, ',', ' ') ?><span class="biz-m-u">%</span></div>
+          <div class="biz-m-val" data-k="rivets" data-v="<?= $taux_gache_riv ?>" data-d="2"><?= number_format($taux_gache_riv, 2, ',', ' ') ?><span class="biz-m-u">%</span></div>
           <div class="biz-m-sub"><?= number_format($riv_ko, 0, ',', ' ') ?> rivets cassés sur <?= number_format($riv_ok + $riv_ko, 0, ',', ' ') ?> posés</div>
         <?php endif; ?>
       </div>
@@ -993,7 +1022,7 @@ include __DIR__ . '/../templates/header.php';
           <div class="biz-m-val biz-m-na">—</div>
           <div class="biz-m-sub">Heures de travail non renseignées</div>
         <?php else: ?>
-          <div class="biz-m-val"><?= number_format($prod_reelle, 1, ',', ' ') ?><span class="biz-m-u">pl./h</span></div>
+          <div class="biz-m-val" data-k="prod" data-v="<?= $prod_reelle ?>" data-d="1"><?= number_format($prod_reelle, 1, ',', ' ') ?><span class="biz-m-u">pl./h</span></div>
           <div class="biz-m-sub"><?= number_format($posees, 0, ',', ' ') ?> plaques sur <?= number_format($heures, 0, ',', ' ') ?> h travaillées</div>
         <?php endif; ?>
       </div>
@@ -1004,7 +1033,7 @@ include __DIR__ . '/../templates/header.php';
           <div class="biz-m-val biz-m-na">—</div>
           <div class="biz-m-sub">Mix des engins non renseigné</div>
         <?php else: ?>
-          <div class="biz-m-val"><?= ($ecart_plq_pct > 0 ? '+' : '') . number_format($ecart_plq_pct, 1, ',', ' ') ?><span class="biz-m-u">%</span></div>
+          <div class="biz-m-val" data-k="ecart" data-v="<?= $ecart_plq_pct ?>" data-d="1"><?= ($ecart_plq_pct > 0 ? '+' : '') . number_format($ecart_plq_pct, 1, ',', ' ') ?><span class="biz-m-u">%</span></div>
           <div class="biz-m-sub"><?= number_format($posees, 0, ',', ' ') ?> posées vs <?= number_format($theo_plq, 0, ',', ' ') ?> attendues d'après le mix</div>
         <?php endif; ?>
       </div>
@@ -1023,7 +1052,7 @@ include __DIR__ . '/../templates/header.php';
     </div>
     <div class="biz-mix" role="img" aria-label="Répartition des engins : <?= h(implode(', ', array_map(fn($m) => $m['lbl'].' '.number_format($m['pct'],1,',',' ').' %', $mix))) ?>">
       <?php foreach ($mix as $m): if ($m['n'] <= 0) continue; ?>
-        <div class="biz-mix-s biz-<?= $m['k'] ?>" style="width:<?= round($m['pct'],2) ?>%">
+        <div class="biz-mix-s biz-<?= $m['k'] ?>" data-b="mix-<?= $m['k'] ?>" data-p="<?= round($m['pct'],2) ?>" data-ax="w" style="width:<?= round($m['pct'],2) ?>%">
           <?php if ($m['pct'] >= 6): ?><span class="biz-pct"><?= number_format($m['pct'], 1, ',', ' ') ?> %</span><?php endif; ?>
         </div>
       <?php endforeach; ?>
@@ -1263,7 +1292,7 @@ include __DIR__ . '/../templates/header.php';
       <div class="eq-stats">
         <div>
           <div class="eq-big-l">Taux de disponibilité</div>
-          <div class="eq-big"><?= number_format($eq_dispo, 1, ',', ' ') ?><span class="eq-big-u">%</span></div>
+          <div class="eq-big" data-k="dispo" data-v="<?= $eq_dispo ?>" data-d="1"><?= number_format($eq_dispo, 1, ',', ' ') ?><span class="eq-big-u">%</span></div>
         </div>
         <div class="eq-r">
           <span class="eq-sq sq-op"></span><span class="eq-r-l">Opérationnels</span>
@@ -1313,12 +1342,15 @@ include __DIR__ . '/../templates/header.php';
             <div class="eq-cols">
               <?php foreach ($eq_series as $s):
                 $o = (int)$s['op']; $m = (int)$s['mt']; $x = (int)$s['hs'];
+                // Clé stable d'une page à l'autre : le libellé, pas l'index.
+                // Une colonne qui change de rang garde ainsi son animation.
+                $si = preg_replace('/[^a-z0-9]+/', '-', strtolower((string)$s['lbl']));
               ?>
               <div class="eq-col" role="img"
                    aria-label="<?= h($s['lbl']) ?> : <?= $o ?> opérationnels, <?= $m ?> en maintenance, <?= $x ?> hors service">
-                <?php if ($x > 0): ?><div class="eq-seg seg-hs" style="height:<?= round($x / $eq_plaf * 100, 2) ?>%"></div><?php endif; ?>
-                <?php if ($m > 0): ?><div class="eq-seg seg-mt" style="height:<?= round($m / $eq_plaf * 100, 2) ?>%"></div><?php endif; ?>
-                <?php if ($o > 0): ?><div class="eq-seg seg-op" style="height:<?= round($o / $eq_plaf * 100, 2) ?>%"></div><?php endif; ?>
+                <?php if ($x > 0): ?><div class="eq-seg seg-hs" data-b="eq-<?= $si ?>-hs" data-p="<?= round($x / $eq_plaf * 100, 2) ?>" data-ax="h" style="height:<?= round($x / $eq_plaf * 100, 2) ?>%"></div><?php endif; ?>
+                <?php if ($m > 0): ?><div class="eq-seg seg-mt" data-b="eq-<?= $si ?>-mt" data-p="<?= round($m / $eq_plaf * 100, 2) ?>" data-ax="h" style="height:<?= round($m / $eq_plaf * 100, 2) ?>%"></div><?php endif; ?>
+                <?php if ($o > 0): ?><div class="eq-seg seg-op" data-b="eq-<?= $si ?>-op" data-p="<?= round($o / $eq_plaf * 100, 2) ?>" data-ax="h" style="height:<?= round($o / $eq_plaf * 100, 2) ?>%"></div><?php endif; ?>
               </div>
               <?php endforeach; ?>
             </div>
@@ -2035,6 +2067,130 @@ function render() {
 
 window.addEventListener('load',   () => { setTimeout(render, 80); });
 window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=setTimeout(render,200); });
+</script>
+
+<div class="pdg-bar" aria-hidden="true"></div>
+<script>
+/* ══════════ Rendre le changement de filtre perceptible ══════════
+   La page se recharge en GET : sans aide, les chiffres sautent d'une
+   valeur à l'autre sans qu'on voie ce qui a bougé. On photographie
+   donc les valeurs avant de partir, et on rejoue l'écart à l'arrivée.
+   Rien de tout ceci ne se déclenche au premier chargement.          */
+(function () {
+  var CLE   = 'pdgSnap';
+  var SOBRE = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var form  = document.getElementById('pdg-filter-form');
+
+  function lire() {
+    var o = { n: {}, b: {} };
+    document.querySelectorAll('[data-k]').forEach(function (el) {
+      var v = parseFloat(el.getAttribute('data-v'));
+      if (!isNaN(v)) o.n[el.getAttribute('data-k')] = v;
+    });
+    document.querySelectorAll('[data-b]').forEach(function (el) {
+      var v = parseFloat(el.getAttribute('data-p'));
+      if (!isNaN(v)) o.b[el.getAttribute('data-b')] = v;
+    });
+    return o;
+  }
+
+  // ── Départ : photo de l'état courant, puis signal d'attente
+  if (form) {
+    form.addEventListener('submit', function () {
+      try { sessionStorage.setItem(CLE, JSON.stringify(lire())); } catch (e) {}
+      document.body.classList.add('pdg-busy');
+    });
+  }
+
+  // Retour arrière : le navigateur peut restaurer la page telle quelle,
+  // état d'attente compris. On le lève systématiquement à l'affichage.
+  window.addEventListener('pageshow', function () {
+    document.body.classList.remove('pdg-busy', 'pdg-move');
+  });
+
+  // ── Arrivée
+  var av = null;
+  try {
+    av = JSON.parse(sessionStorage.getItem(CLE) || 'null');
+    sessionStorage.removeItem(CLE);
+  } catch (e) {}
+  if (!av || SOBRE) return;          // premier chargement, ou motion réduite
+
+  // Reproduit number_format($n, $d, ',', ' ')
+  function fmt(n, d) {
+    var p = n.toFixed(d).split('.');
+    p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return p.join(',');
+  }
+
+  var DUREE = 460;
+  var adouci = function (t) { return 1 - Math.pow(1 - t, 3); };   // ease-out cubique
+
+  // Exécution synchrone : tous les éléments visés précèdent ce script.
+  // Attendre DOMContentLoaded afficherait les valeurs finales avant de
+  // les remettre en arrière, ce qui se verrait comme un scintillement.
+  (function () {
+    // Barres : on repart de l'ancienne taille, le navigateur interpole
+    var barres = [];
+    document.querySelectorAll('[data-b]').forEach(function (el) {
+      var cle = el.getAttribute('data-b');
+      if (!(cle in av.b)) return;                  // colonne nouvelle : pas d'écart à montrer
+      var arr = parseFloat(el.getAttribute('data-p'));
+      if (isNaN(arr) || Math.abs(arr - av.b[cle]) < 0.01) return;
+      barres.push([el, el.getAttribute('data-ax') === 'h' ? 'height' : 'width', av.b[cle], arr]);
+    });
+    barres.forEach(function (b) { b[0].style[b[1]] = b[2] + '%'; });
+
+    requestAnimationFrame(function () {
+      document.body.classList.add('pdg-move');
+      requestAnimationFrame(function () {
+        barres.forEach(function (b) { b[0].style[b[1]] = b[3] + '%'; });
+      });
+    });
+
+    // Chiffres : décompte de l'ancienne valeur vers la nouvelle
+    var nombres = [];
+    document.querySelectorAll('[data-k]').forEach(function (el) {
+      var cle = el.getAttribute('data-k');
+      if (!(cle in av.n)) return;
+      var arr = parseFloat(el.getAttribute('data-v'));
+      var dep = av.n[cle];
+      if (isNaN(arr) || Math.abs(arr - dep) < 0.005) return;
+      // Le suffixe (%, pl./h) vit dans un <span> qu'il faut préserver
+      var unite = el.querySelector('span');
+      var signe = el.textContent.trim().charAt(0) === '+';
+      nombres.push({ el: el, u: unite, dep: dep, arr: arr,
+                     d: parseInt(el.getAttribute('data-d'), 10) || 0, s: signe });
+    });
+    if (!nombres.length) return;
+
+    // La valeur de départ est écrite tout de suite, pas au premier frame :
+    // sinon la valeur finale reste affichée une frame avant de reculer.
+    nombres.forEach(function (x) {
+      if (x.u) x.u.remove();
+      x.el.textContent = (x.s && x.dep > 0 ? '+' : '') + fmt(x.dep, x.d);
+    });
+
+    var t0 = null;
+    function pas(t) {
+      if (t0 === null) t0 = t;
+      var k = Math.min(1, (t - t0) / DUREE), e = adouci(k);
+      nombres.forEach(function (x) {
+        var v = x.dep + (x.arr - x.dep) * e;
+        x.el.textContent = (x.s && v > 0 ? '+' : '') + fmt(v, x.d);
+      });
+      if (k < 1) { requestAnimationFrame(pas); }
+      else {
+        nombres.forEach(function (x) {
+          x.el.textContent = (x.s && x.arr > 0 ? '+' : '') + fmt(x.arr, x.d);
+          if (x.u) x.el.appendChild(x.u);
+        });
+        document.body.classList.remove('pdg-move');
+      }
+    }
+    requestAnimationFrame(pas);
+  })();
+})();
 </script>
 
 <?php include __DIR__ . '/../templates/footer.php'; ?>
