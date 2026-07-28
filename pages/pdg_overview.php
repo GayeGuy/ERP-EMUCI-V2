@@ -503,6 +503,76 @@ $mix = [
 foreach ($mix as &$m) { $m['pct'] = $mix_total > 0 ? round($m['n'] / $mix_total * 100, 1) : 0; }
 unset($m);
 
+// ══════════════════════════════════════════════════════════
+//  POINT DU PARC MATÉRIEL — opérationnel / maintenance / HS
+//  L'état du parc est une photo du moment : il ne suit pas le
+//  filtre mensuel de la page.
+// ══════════════════════════════════════════════════════════
+$eq_type = (int)($_GET['eq'] ?? 0);      // nomenclature_id, 0 = tous
+
+// Trois états seulement : ce qui tourne, ce qui est récupérable,
+// ce qui est mort. La nuance neuf/bon/usagé ne change pas la décision.
+$eq_sel = "COUNT(*) AS total,
+           COALESCE(SUM(CASE WHEN e.etat IN ('neuf','bon','usage') THEN 1 ELSE 0 END),0) AS op,
+           COALESCE(SUM(CASE WHEN e.etat = 'maintenance'           THEN 1 ELSE 0 END),0) AS mt,
+           COALESCE(SUM(CASE WHEN e.etat = 'hs'                    THEN 1 ELSE 0 END),0) AS hs";
+$eq_where  = "e.actif = 1 AND e.categorie = 'informatique'";
+$eq_params = [];
+// Le bloc suit le filtre site de la page, comme le reste de la vue.
+if ($site_id > 0) { $eq_where .= " AND e.site_id = ?";        $eq_params[] = $site_id; }
+if ($eq_type > 0) { $eq_where .= " AND e.nomenclature_id = ?"; $eq_params[] = $eq_type; }
+
+$eq_tot = ['total'=>0,'op'=>0,'mt'=>0,'hs'=>0];
+try {
+    $r = db_fetch_one("SELECT $eq_sel FROM equipements e WHERE $eq_where", $eq_params);
+    if ($r) $eq_tot = array_map('intval', $r);
+} catch (Throwable $e) {}
+$eq_parc  = $eq_tot['total'];
+$eq_dispo = $eq_parc > 0 ? round($eq_tot['op'] / $eq_parc * 100, 1) : null;
+$eq_immo  = $eq_tot['mt'] + $eq_tot['hs'];
+
+// Sans filtre, l'axe porte les types d'équipement ; dès qu'un type
+// est choisi, il bascule sur les sites — le forage attendu. Quand la
+// page est déjà épinglée sur un site, cet axe n'aurait qu'une colonne :
+// on reste alors sur les types.
+$eq_par_site = ($eq_type > 0 && $site_id === 0);
+$eq_series   = [];
+try {
+    $eq_series = $eq_par_site
+        ? db_fetch_all(
+            "SELECT COALESCE(s.nom,'Non affecté') AS lbl, $eq_sel
+             FROM equipements e LEFT JOIN sites s ON s.id = e.site_id
+             WHERE $eq_where GROUP BY s.nom ORDER BY total DESC LIMIT 8", $eq_params)
+        : db_fetch_all(
+            "SELECT COALESCE(n.libelle,'Sans type') AS lbl, $eq_sel
+             FROM equipements e LEFT JOIN nomenclatures n ON n.id = e.nomenclature_id
+             WHERE $eq_where GROUP BY n.libelle ORDER BY total DESC LIMIT 8", $eq_params);
+} catch (Throwable $e) {}
+
+// Échelle : un plafond rond au-dessus de la plus haute colonne
+$eq_max = 0;
+foreach ($eq_series as $s) $eq_max = max($eq_max, (int)$s['total']);
+$eq_pas  = $eq_max <= 10 ? 2 : ($eq_max <= 50 ? 10 : ($eq_max <= 200 ? 25 : 100));
+$eq_plaf = max($eq_pas, (int)(ceil($eq_max / $eq_pas) * $eq_pas));
+$eq_grads = [];
+for ($v = $eq_plaf; $v >= 0; $v -= $eq_pas) $eq_grads[] = $v;
+
+// Types disponibles pour le filtre
+$eq_types = [];
+try {
+    // Les comptes de la liste suivent le même périmètre que le graphe.
+    $eq_types = db_fetch_all(
+        "SELECT n.id, n.libelle, COUNT(e.id) AS n
+         FROM nomenclatures n
+         LEFT JOIN equipements e ON e.nomenclature_id = n.id AND e.actif = 1
+              " . ($site_id > 0 ? "AND e.site_id = ?" : "") . "
+         WHERE n.categorie = 'informatique'
+         GROUP BY n.id, n.libelle HAVING COUNT(e.id) > 0 ORDER BY n.libelle",
+        $site_id > 0 ? [$site_id] : []);
+} catch (Throwable $e) {}
+$eq_type_nom = '';
+foreach ($eq_types as $t) if ((int)$t['id'] === $eq_type) $eq_type_nom = $t['libelle'];
+
 include __DIR__ . '/../templates/header.php';
 ?>
 <style>
@@ -757,6 +827,72 @@ include __DIR__ . '/../templates/header.php';
 .biz-risk-ok .biz-risk-s{color:#15803d}
 .biz-risk-ft{display:flex;justify-content:space-between;align-items:center;gap:12px;
   padding-top:12px;border-top:1px solid #f1f5f9;margin-top:3px}
+
+/* ══════════ POINT DU PARC MATÉRIEL ══════════ */
+.eq{--biz-muted:#5a6678}
+.eq-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.eq-t{font-size:15px;font-weight:900;color:var(--navy,#06033A);font-family:'Montserrat',sans-serif}
+.eq-s{font-size:11.5px;color:var(--biz-muted);margin-top:3px}
+.eq-tools{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.eq-sel{padding:7px 28px 7px 11px;border:1.5px solid var(--border,#e2e8f0);border-radius:9px;font-size:12.5px;
+  font-weight:700;color:var(--navy,#06033A);font-family:inherit;cursor:pointer;appearance:none;-webkit-appearance:none;
+  outline:none;transition:border-color .15s;
+  background:#fff url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 4.5L6 8.5L10 4.5' stroke='%235a6678' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E") no-repeat right 9px center/11px}
+.eq-sel:hover{border-color:#94a3b8}
+.eq-sel:focus-visible{border-color:var(--navy,#06033A);box-shadow:0 0 0 3px rgba(6,3,58,.12)}
+.eq-leg{display:flex;gap:13px;flex-wrap:wrap}
+.eq-leg-i{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700;color:var(--navy,#06033A)}
+.eq-sq{width:10px;height:10px;border-radius:3px;flex-shrink:0}
+.sq-op{background:var(--navy,#06033A)}
+.sq-mt{background:#f59e0b}
+.sq-hs{background:#dc2626}
+
+.eq-body{display:grid;grid-template-columns:210px 1fr;gap:22px;align-items:start}
+@media(max-width:820px){.eq-body{grid-template-columns:1fr}}
+.eq-stats{display:flex;flex-direction:column;gap:11px}
+.eq-big{font-size:40px;font-weight:900;color:var(--navy,#06033A);font-family:'Montserrat',sans-serif;
+  line-height:1;font-variant-numeric:tabular-nums}
+.eq-big-u{font-size:18px;color:var(--biz-muted);margin-left:2px}
+.eq-big-l{font-size:10px;font-weight:700;color:var(--biz-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px}
+.eq-r{display:flex;align-items:center;gap:9px;font-size:12.5px}
+.eq-r-n{font-weight:900;color:var(--navy,#06033A);font-family:'Montserrat',sans-serif;
+  font-variant-numeric:tabular-nums;margin-left:auto;font-size:15px}
+.eq-r-l{color:var(--biz-muted);font-weight:600}
+
+/* Graphe empilé. L'axe X vit dans la même grille que le tracé :
+   ses libellés s'alignent sur les colonnes par construction.
+   Sur mobile c'est le graphe qui défile, jamais la page. */
+.eq-scroll{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
+.eq-chart{display:grid;grid-template-columns:auto 1fr;column-gap:10px}
+.eq-yax{grid-column:1;grid-row:1;position:relative;height:210px;min-width:2.2em;
+  font-size:10.5px;color:var(--biz-muted);font-variant-numeric:tabular-nums;font-weight:600}
+/* Chaque graduation est centrée sur sa ligne, pas posée à côté. */
+.eq-yax span{position:absolute;right:0;transform:translateY(-50%);line-height:1;white-space:nowrap}
+.eq-plot{grid-column:2;grid-row:1;position:relative;height:210px}
+.eq-grid{position:absolute;inset:0}
+.eq-grid span{position:absolute;left:0;right:0;border-top:1px dashed #e2e8f0}
+.eq-cols{position:absolute;inset:0;display:flex;align-items:flex-end;gap:10px;padding:0 2px}
+.eq-col{flex:1;min-width:0;max-width:64px;margin:0 auto;height:100%;
+  display:flex;flex-direction:column;justify-content:flex-end;gap:3px}
+.eq-seg{border-radius:6px;min-height:3px;transition:height .22s ease-out}
+.seg-op{background:var(--navy,#06033A)}
+.seg-mt{background:#f59e0b}
+.seg-hs{background:#dc2626}
+.eq-xax{grid-column:2;grid-row:2;display:flex;gap:10px;padding:9px 2px 0}
+.eq-xc{flex:1;min-width:0;text-align:center}
+.eq-xl{font-size:11px;font-weight:700;color:var(--navy,#06033A);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* Une colonne peu volumineuse mais très dégradée doit se lire :
+   le taux prend le pas sur la hauteur de la barre. */
+.eq-xn{font-size:10.5px;color:var(--biz-muted);font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px}
+.eq-xn b{font-weight:800}
+.eq-xn.warn b{color:#b45309}
+.eq-xn.bad b{color:#b91c1c}
+@media(prefers-reduced-motion:reduce){.eq-seg{transition:none}}
+
+.eq-empty{text-align:center;padding:30px 20px}
+.eq-empty i{font-size:28px;color:#cbd5e1}
+.eq-empty-t{font-size:13.5px;font-weight:700;color:var(--navy,#06033A);margin-top:9px}
+.eq-empty-s{font-size:12px;color:var(--biz-muted);margin-top:5px;line-height:1.55;max-width:46ch;margin-inline:auto}
 </style>
 
 <div class="pdg">
@@ -1172,6 +1308,135 @@ include __DIR__ . '/../templates/header.php';
       <?php endif; ?>
     </div>
   </div>
+</div>
+
+<!-- ══════════ POINT DU PARC MATÉRIEL ══════════ -->
+<div class="biz-card eq" style="margin-bottom:20px">
+  <div class="eq-hd">
+    <div>
+      <div class="eq-t">Point du parc matériel</div>
+      <div class="eq-s">
+        État du parc informatique aujourd'hui<?= $eq_type > 0 ? ' · ' . h($eq_type_nom) : '' ?>
+        <?= $eq_par_site ? ' · réparti par site' : '' ?>
+      </div>
+    </div>
+    <div class="eq-tools">
+      <div class="eq-leg">
+        <span class="eq-leg-i"><span class="eq-sq sq-op"></span> Opérationnel</span>
+        <span class="eq-leg-i"><span class="eq-sq sq-mt"></span> Maintenance</span>
+        <span class="eq-leg-i"><span class="eq-sq sq-hs"></span> Hors service</span>
+      </div>
+      <?php if (!empty($eq_types)): ?>
+      <form method="get" style="margin:0">
+        <input type="hidden" name="mois" value="<?= h($mois) ?>">
+        <?php if ($site_id > 0): ?><input type="hidden" name="site_id" value="<?= $site_id ?>"><?php endif; ?>
+        <select name="eq" class="eq-sel" aria-label="Filtrer par type d'équipement" onchange="this.form.submit()">
+          <option value="0">Tous les équipements</option>
+          <?php foreach ($eq_types as $t): ?>
+            <option value="<?= (int)$t['id'] ?>" <?= $eq_type === (int)$t['id'] ? 'selected' : '' ?>>
+              <?= h($t['libelle']) ?> (<?= (int)$t['n'] ?>)
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </form>
+      <?php endif; ?>
+    </div>
+  </div>
+
+  <?php if ($eq_parc === 0): ?>
+    <div class="eq-empty">
+      <i class="ph-duotone ph-monitor"></i>
+      <div class="eq-empty-t">Aucun équipement dans ce périmètre</div>
+      <div class="eq-empty-s">
+        <?= $eq_type > 0
+            ? 'Aucun matériel de ce type. Repassez sur « Tous les équipements » pour voir le parc entier.'
+            : 'Le parc informatique est vide. Les équipements saisis depuis la page Équipements apparaîtront ici avec leur état.' ?>
+      </div>
+    </div>
+  <?php else: ?>
+    <div class="eq-body">
+
+      <div class="eq-stats">
+        <div>
+          <div class="eq-big-l">Taux de disponibilité</div>
+          <div class="eq-big"><?= number_format($eq_dispo, 1, ',', ' ') ?><span class="eq-big-u">%</span></div>
+        </div>
+        <div class="eq-r">
+          <span class="eq-sq sq-op"></span><span class="eq-r-l">Opérationnels</span>
+          <span class="eq-r-n"><?= number_format($eq_tot['op'], 0, ',', ' ') ?></span>
+        </div>
+        <div class="eq-r">
+          <span class="eq-sq sq-mt"></span><span class="eq-r-l">En maintenance</span>
+          <span class="eq-r-n"><?= number_format($eq_tot['mt'], 0, ',', ' ') ?></span>
+        </div>
+        <div class="eq-r">
+          <span class="eq-sq sq-hs"></span><span class="eq-r-l">Hors service</span>
+          <span class="eq-r-n"><?= number_format($eq_tot['hs'], 0, ',', ' ') ?></span>
+        </div>
+        <div class="eq-s" style="border-top:1px solid #f1f5f9;padding-top:10px">
+          <?= number_format($eq_parc, 0, ',', ' ') ?> équipements au total<?php
+            echo $eq_immo > 0
+              ? ', dont ' . number_format($eq_immo, 0, ',', ' ') . ' immobilisé' . ($eq_immo > 1 ? 's' : '') . '.'
+              : ', tous en service.'; ?>
+        </div>
+      </div>
+
+      <?php if (empty($eq_series)): ?>
+        <div class="eq-empty">
+          <i class="ph-duotone ph-chart-bar"></i>
+          <div class="eq-empty-t">Rien à représenter</div>
+        </div>
+      <?php else: ?>
+        <?php
+          $eq_ng = max(1, count($eq_grads) - 1);
+          // Largeur plancher : sous ce seuil les colonnes deviennent illisibles,
+          // le conteneur défile alors au lieu d'écraser les barres.
+          $eq_minw = 40 + count($eq_series) * 54;
+        ?>
+        <div class="eq-scroll">
+        <div class="eq-chart" style="min-width:<?= $eq_minw ?>px">
+          <div class="eq-yax" aria-hidden="true">
+            <?php foreach ($eq_grads as $i => $g): ?>
+              <span style="top:<?= round($i / $eq_ng * 100, 3) ?>%"><?= $g ?></span>
+            <?php endforeach; ?>
+          </div>
+          <div class="eq-plot">
+            <div class="eq-grid" aria-hidden="true">
+              <?php foreach ($eq_grads as $i => $g): ?>
+                <span style="top:<?= round($i / $eq_ng * 100, 3) ?>%"></span>
+              <?php endforeach; ?>
+            </div>
+            <div class="eq-cols">
+              <?php foreach ($eq_series as $s):
+                $o = (int)$s['op']; $m = (int)$s['mt']; $x = (int)$s['hs'];
+              ?>
+              <div class="eq-col" role="img"
+                   aria-label="<?= h($s['lbl']) ?> : <?= $o ?> opérationnels, <?= $m ?> en maintenance, <?= $x ?> hors service">
+                <?php if ($x > 0): ?><div class="eq-seg seg-hs" style="height:<?= round($x / $eq_plaf * 100, 2) ?>%"></div><?php endif; ?>
+                <?php if ($m > 0): ?><div class="eq-seg seg-mt" style="height:<?= round($m / $eq_plaf * 100, 2) ?>%"></div><?php endif; ?>
+                <?php if ($o > 0): ?><div class="eq-seg seg-op" style="height:<?= round($o / $eq_plaf * 100, 2) ?>%"></div><?php endif; ?>
+              </div>
+              <?php endforeach; ?>
+            </div>
+          </div>
+          <div class="eq-xax">
+            <?php foreach ($eq_series as $s):
+              $st = (int)$s['total']; $so = (int)$s['op'];
+              $sd = $st > 0 ? (int)round($so / $st * 100) : 0;
+              $cl = $sd === 100 ? '' : ($sd >= 85 ? ' warn' : ' bad');
+            ?>
+              <div class="eq-xc">
+                <div class="eq-xl" title="<?= h($s['lbl']) ?>"><?= h($s['lbl']) ?></div>
+                <div class="eq-xn<?= $cl ?>"><?= $st ?><?= $sd < 100 ? ' · <b>' . $sd . ' %</b>' : '' ?></div>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        </div>
+        </div>
+      <?php endif; ?>
+
+    </div>
+  <?php endif; ?>
 </div>
 
 <!-- ══════════ CHARTS ROW ══════════ -->
