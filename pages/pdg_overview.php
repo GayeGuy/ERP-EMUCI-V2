@@ -172,7 +172,7 @@ $di_mois    = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE TO_CHA
 $di_approuv = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE TO_CHAR(updated_at,'YYYY-MM')=? AND statut IN ('approuve','approuve_traitement')", [$mois]);
 $di_tx      = $di_mois > 0 ? round($di_approuv / $di_mois * 100) : 0;
 $di_recents = db_fetch_all(
-    "SELECT d.numero, dt.label AS type_lbl, d.statut,
+    "SELECT d.id, d.numero, dt.label AS type_lbl, d.statut,
             (u.prenom||' '||u.nom) AS demandeur
      FROM di_demandes d
      JOIN di_types dt ON dt.code = d.type_code
