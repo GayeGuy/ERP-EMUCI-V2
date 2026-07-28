@@ -13,8 +13,9 @@ $user = current_user();
 $page_title  = 'Vue PDG';
 $active_page = 'pdg_overview';
 
-$mois  = trim($_GET['mois'] ?? date('Y-m'));
-$annee = substr($mois, 0, 4);
+$mois    = trim($_GET['mois'] ?? date('Y-m'));
+$site_id = (int)($_GET['site_id'] ?? 0);
+$annee   = substr($mois, 0, 4);
 $mc = ['01'=>'Jan','02'=>'Fév','03'=>'Mar','04'=>'Avr','05'=>'Mai','06'=>'Juin',
        '07'=>'Juil','08'=>'Aoû','09'=>'Sep','10'=>'Oct','11'=>'Nov','12'=>'Déc'];
 $ml = ['01'=>'Janvier','02'=>'Février','03'=>'Mars','04'=>'Avril','05'=>'Mai','06'=>'Juin',
@@ -22,6 +23,17 @@ $ml = ['01'=>'Janvier','02'=>'Février','03'=>'Mars','04'=>'Avril','05'=>'Mai','
 $mois_display = ($ml[substr($mois,5,2)] ?? '') . ' ' . $annee;
 $mois_prec    = date('Y-m', strtotime($mois.'-01 -1 month'));
 $mois_prec_lbl= ($mc[substr($mois_prec,5,2)] ?? '') . ' ' . substr($mois_prec,0,4);
+
+// ── LISTE DES SITES pour le filtre
+$sites_list = db_fetch_all("SELECT id, nom FROM sites WHERE actif=1 ORDER BY nom");
+$site_nom_sel = '';
+foreach ($sites_list as $_s) { if ((int)$_s['id'] === $site_id) { $site_nom_sel = $_s['nom']; break; } }
+
+// ── HELPERS SQL site-filter (site_id=0 → tous les sites, int donc safe en interpolation)
+$sf   = $site_id ? "AND site_id = $site_id"   : "";   // colonne site_id directe
+$sf_p = $site_id ? "AND p.site_id = $site_id" : "";   // table aliasée p
+$sf_s = $site_id ? "AND s.id = $site_id"      : "";   // table sites aliasée s
+$sf_b = $site_id ? "AND b.site_id = $site_id" : "";   // table op_bobines aliasée b
 
 // ── OPÉRATIONS mois courant
 $ops = db_fetch_one(
@@ -34,7 +46,7 @@ $ops = db_fetch_one(
             COALESCE(SUM(rivets_utilises),0) AS rivets_utilises,
             COALESCE(ROUND(AVG(NULLIF(moyenne_prod,0)),1),0) AS moy_prod
      FROM op_points_journaliers
-     WHERE TO_CHAR(date_point,'YYYY-MM')=? AND statut != 'brouillon'",
+     WHERE TO_CHAR(date_point,'YYYY-MM')=? AND statut != 'brouillon' $sf",
     [$mois]
 );
 
@@ -43,7 +55,7 @@ $ops_prec = db_fetch_one(
     "SELECT COALESCE(SUM(total_engins),0) AS total_engins,
             COALESCE(SUM(total_plaques),0) AS total_plaques
      FROM op_points_journaliers
-     WHERE TO_CHAR(date_point,'YYYY-MM')=? AND statut != 'brouillon'",
+     WHERE TO_CHAR(date_point,'YYYY-MM')=? AND statut != 'brouillon' $sf",
     [$mois_prec]
 );
 $engins_curr = (int)($ops['total_engins'] ?? 0);
@@ -62,7 +74,7 @@ $prod_par_site = db_fetch_all(
      FROM sites s
      LEFT JOIN op_points_journaliers p ON p.site_id=s.id
                 AND TO_CHAR(p.date_point,'YYYY-MM')=? AND p.statut != 'brouillon'
-     WHERE s.actif=1
+     WHERE s.actif=1 $sf_s
      GROUP BY s.id, s.nom, s.type ORDER BY engins DESC",
     [$mois]
 );
@@ -81,20 +93,20 @@ $bobines_stats = db_fetch_one(
             SUM(CASE WHEN statut='en_stock' THEN 1 ELSE 0 END) AS en_stock,
             SUM(CASE WHEN statut='epuisee' THEN 1 ELSE 0 END) AS epuisees,
             COALESCE(SUM(films_restants),0) AS films_restants
-     FROM op_bobines"
+     FROM op_bobines WHERE 1=1 $sf"
 );
 $films_mois = (int)db_fetch_value(
     "SELECT COALESCE(SUM(fu.films_utilises),0)
      FROM op_films_utilises fu
      JOIN op_points_journaliers p ON p.id=fu.point_id
-     WHERE TO_CHAR(p.date_point,'YYYY-MM')=?",
+     WHERE TO_CHAR(p.date_point,'YYYY-MM')=? $sf_p",
     [$mois]
 );
 $films_mois_prec = (int)db_fetch_value(
     "SELECT COALESCE(SUM(fu.films_utilises),0)
      FROM op_films_utilises fu
      JOIN op_points_journaliers p ON p.id=fu.point_id
-     WHERE TO_CHAR(p.date_point,'YYYY-MM')=?",
+     WHERE TO_CHAR(p.date_point,'YYYY-MM')=? $sf_p",
     [$mois_prec]
 );
 $films_par_site = db_fetch_all(
@@ -102,7 +114,7 @@ $films_par_site = db_fetch_all(
      FROM sites s
      LEFT JOIN op_points_journaliers p ON p.site_id=s.id AND TO_CHAR(p.date_point,'YYYY-MM')=?
      LEFT JOIN op_films_utilises fu ON fu.point_id=p.id
-     WHERE s.actif=1
+     WHERE s.actif=1 $sf_s
      GROUP BY s.id, s.nom ORDER BY films DESC",
     [$mois]
 );
@@ -112,7 +124,7 @@ $films_detail_raw = db_fetch_all(
      JOIN op_points_journaliers p ON p.site_id=s.id AND TO_CHAR(p.date_point,'YYYY-MM')=?
      JOIN op_films_utilises fu ON fu.point_id=p.id
      JOIN op_bobines b ON b.id=fu.bobine_id
-     WHERE s.actif=1
+     WHERE s.actif=1 $sf_s
      GROUP BY s.id, s.nom, b.type_code ORDER BY s.nom, b.type_code",
     [$mois]
 );
@@ -139,7 +151,7 @@ $cmd_stats = db_fetch_one(
 $rivets = db_fetch_all(
     "SELECT s.nom, sr.type_rivet, COALESCE(sr.quantite,0) AS quantite
      FROM sites s JOIN op_stock_rivets sr ON sr.site_id=s.id
-     WHERE s.actif=1
+     WHERE s.actif=1 $sf_s
      ORDER BY s.nom, array_position(ARRAY['gonflable','eclate']::text[], (sr.type_rivet)::text)"
 );
 $rps = [];
@@ -150,13 +162,13 @@ $pmma_par_type = db_fetch_all(
     "SELECT sp.type_pmma, COALESCE(SUM(sp.quantite),0) AS total,
             COUNT(CASE WHEN sp.quantite < sp.seuil_alerte THEN 1 END) AS nb_bas
      FROM stock_pmma_site sp JOIN sites s ON s.id=sp.site_id
-     WHERE s.actif=1
+     WHERE s.actif=1 $sf_s
      GROUP BY sp.type_pmma ORDER BY total DESC"
 );
 $pmma_detail = db_fetch_all(
     "SELECT s.nom, sp.type_pmma, COALESCE(sp.quantite,0) AS quantite, COALESCE(sp.seuil_alerte,10) AS seuil
      FROM sites s JOIN stock_pmma_site sp ON sp.site_id=s.id
-     WHERE s.actif=1 ORDER BY sp.type_pmma, s.nom"
+     WHERE s.actif=1 $sf_s ORDER BY sp.type_pmma, s.nom"
 );
 
 // ── ALERTES
@@ -187,7 +199,7 @@ $evol = db_fetch_all(
             SUM(total_engins) AS engins,
             SUM(total_plaques) AS plaques
      FROM op_points_journaliers
-     WHERE date_point >= (CURRENT_DATE - INTERVAL '6 MONTH') AND statut != 'brouillon'
+     WHERE date_point >= (CURRENT_DATE - INTERVAL '6 MONTH') AND statut != 'brouillon' $sf
      GROUP BY TO_CHAR(date_point,'YYYY-MM') ORDER BY mois ASC"
 );
 
@@ -197,7 +209,7 @@ $pts_attente = db_fetch_all(
      FROM op_points_journaliers p
      JOIN sites s ON s.id=p.site_id
      LEFT JOIN users u ON u.id=p.created_by
-     WHERE p.statut='en_attente_validation'
+     WHERE p.statut='en_attente_validation' $sf_p
      ORDER BY p.date_point DESC LIMIT 8"
 );
 
@@ -244,7 +256,7 @@ $site_monthly_raw = db_fetch_all(
           AND TO_CHAR(p.date_point,'YYYY')=?
           AND p.statut != 'brouillon'
      LEFT JOIN op_films_utilises fu ON fu.point_id=p.id
-     WHERE s.actif=1
+     WHERE s.actif=1 $sf_s
      GROUP BY s.id, s.nom, TO_CHAR(p.date_point,'YYYY-MM')
      ORDER BY s.id, mois",
     [$annee]
@@ -263,7 +275,7 @@ try {
     foreach (db_fetch_all(
         "SELECT s.nom, COALESCE(SUM(b.films_restants),0) AS fr
          FROM sites s LEFT JOIN op_bobines b ON b.site_id=s.id AND b.statut IN ('en_cours','en_stock')
-         WHERE s.actif=1 GROUP BY s.id, s.nom"
+         WHERE s.actif=1 $sf_s GROUP BY s.id, s.nom"
     ) as $r) $films_rest_by_site[$r['nom']] = (int)$r['fr'];
 } catch (Throwable $e) {}
 $films_mois_by_site = [];
@@ -307,7 +319,7 @@ $biz = db_fetch_one(
             COALESCE(SUM(rivets_endommages),0)          AS riv_ko,
             COALESCE(SUM(nb_heures_travail),0)          AS heures
      FROM op_points_journaliers
-     WHERE $df AND statut <> 'brouillon'",
+     WHERE $df AND statut <> 'brouillon' $sf",
     [$mois]
 );
 } catch (Throwable $e) {}
@@ -328,7 +340,7 @@ $gache = db_fetch_one(
             COALESCE(SUM(fu.films_endommages),0) AS ko
      FROM op_films_utilises fu
      JOIN op_points_journaliers p ON p.id = fu.point_id
-     WHERE $df_p AND p.statut <> 'brouillon'",
+     WHERE $df_p AND p.statut <> 'brouillon' $sf_p",
     [$mois]
 );
 } catch (Throwable $e) {}
@@ -384,7 +396,7 @@ $couv_raw = db_fetch_all(
         SELECT site_id, SUM(films_restants) AS restants
         FROM op_bobines WHERE statut IN ('en_stock','en_cours') GROUP BY site_id
      ) st ON st.site_id = s.id
-     WHERE s.actif = 1
+     WHERE s.actif = 1 $sf_s
      ORDER BY s.nom",
     [$mois]
 );
@@ -415,7 +427,7 @@ try {
                 SUM(b.films_restants) AS films
          FROM op_bobines b
          LEFT JOIN op_types_bobines t ON t.code = b.type_code
-         WHERE b.statut IN ('en_cours','en_stock') AND b.site_id IS NOT NULL
+         WHERE b.statut IN ('en_cours','en_stock') AND b.site_id IS NOT NULL $sf_b
          GROUP BY b.site_id, b.type_code, t.libelle
          ORDER BY b.site_id, films DESC"
     ) as $tr) {
@@ -492,6 +504,7 @@ include __DIR__ . '/../templates/header.php';
 .alrt-ok{background:#f0fdf4;color:#166534;border:1px solid #bbf7d0}
 .month-inp{padding:7px 11px;border:1.5px solid var(--border,#e2e8f0);border-radius:9px;font-size:13px;
   background:white;outline:none;font-family:inherit;cursor:pointer}
+.month-inp:focus{border-color:#1B75BC;box-shadow:0 0 0 3px rgba(27,117,188,.12)}
 
 /* ── HERO (top KPI row) */
 .hero-row{display:grid;grid-template-columns:1.8fr 1fr 1fr 1fr 1fr;gap:14px;margin-bottom:20px}
@@ -736,20 +749,19 @@ include __DIR__ . '/../templates/header.php';
 <div class="pdg-topbar">
   <div>
     <div class="pdg-title">Vue Exécutive</div>
-    <div class="pdg-sub">Express Multiservices CI · DigiStock</div>
+    <div class="pdg-sub">Express Multiservices CI · DigiStock<?= $site_nom_sel ? ' · <strong style="color:var(--navy,#06033A)">'.h($site_nom_sel).'</strong>' : '' ?></div>
   </div>
   <div class="pdg-controls">
-    <?php if ($total_alertes > 0): ?>
-    <div style="display:flex;gap:6px;flex-wrap:wrap">
-      <?php if($points_attente>0): ?><span class="alrt-pill alrt-warn"><i class="ph-duotone ph-clock"></i> <?= $points_attente ?> point(s) à valider</span><?php endif; ?>
-      <?php if($cmd_en_attente>0): ?><span class="alrt-pill alrt-warn"><i class="ph-duotone ph-package"></i> <?= $cmd_en_attente ?> commande(s)</span><?php endif; ?>
-      <?php if($alertes_stock>0): ?><span class="alrt-pill alrt-warn"><i class="ph-duotone ph-warning"></i> <?= $alertes_stock ?> stock(s) bas</span><?php endif; ?>
-      <?php if($rivets_bas>0): ?><span class="alrt-pill alrt-warn"><i class="ph-duotone ph-nut"></i> <?= $rivets_bas ?> rivets bas</span><?php endif; ?>
-    </div>
-    <?php else: ?>
-    <span class="alrt-pill alrt-ok"><i class="ph-duotone ph-check-circle"></i> Aucune alerte</span>
-    <?php endif; ?>
-    <form method="get" style="display:flex;align-items:center;gap:6px">
+    <form method="get" id="pdg-filter-form" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <select name="site_id" class="month-inp" onchange="this.form.submit()" title="Filtrer par site"
+              style="min-width:140px;max-width:220px;text-overflow:ellipsis">
+        <option value="0"<?= $site_id===0 ? ' selected' : '' ?>>Tous les sites</option>
+        <?php foreach ($sites_list as $_s): ?>
+        <option value="<?= (int)$_s['id'] ?>"<?= $site_id===(int)$_s['id'] ? ' selected' : '' ?>>
+          <?= h($_s['nom']) ?>
+        </option>
+        <?php endforeach; ?>
+      </select>
       <input type="month" name="mois" value="<?= h($mois) ?>" class="month-inp" onchange="this.form.submit()">
     </form>
   </div>
@@ -836,7 +848,7 @@ include __DIR__ . '/../templates/header.php';
 
   <div class="biz-hd">
     <div class="biz-hd-t">Performance business</div>
-    <div class="biz-hd-s"><?= h($mois_display) ?> · demande servie, pertes matière et couverture</div>
+    <div class="biz-hd-s"><?= h($mois_display) ?><?= $site_nom_sel ? ' · '.h($site_nom_sel) : '' ?> · demande servie, pertes matière et couverture</div>
   </div>
 
   <div class="biz-lead">
