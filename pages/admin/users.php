@@ -191,6 +191,17 @@ include __DIR__ . '/../../templates/header.php';
 .tab-btn.active{color:var(--blue-mid, #1a56a0);border-bottom-color:var(--blue-mid, #1a56a0)}
 .tab-pane{display:none}
 .tab-pane.active{display:block}
+/* Stats rapides — dashboard */
+.stats-dash{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px;margin-bottom:18px}
+.stat-tile{position:relative;overflow:hidden;background:white;border:1px solid var(--border);border-radius:12px;padding:11px 14px 11px 16px}
+.stat-tile::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent,var(--muted))}
+.stat-tile-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.stat-tile-value{font-family:'Montserrat',sans-serif;font-size:21px;font-weight:700;color:var(--navy)}
+.stat-tile-empty{opacity:.5}
+.stat-tile-total{background:var(--navy);border-color:var(--navy)}
+.stat-tile-total::before{display:none}
+.stat-tile-total .stat-tile-label{color:rgba(255,255,255,.65)}
+.stat-tile-total .stat-tile-value{color:white}
 </style>
 
 <!-- TOOLBAR -->
@@ -222,18 +233,23 @@ include __DIR__ . '/../../templates/header.php';
 </div>
 
 <!-- STATS RAPIDES -->
-<div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap">
+<?php
+$role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B7950B','#5D6D7E'];
+?>
+<div class="stats-dash">
+  <div class="stat-tile stat-tile-total">
+    <div class="stat-tile-label">Total actifs</div>
+    <div class="stat-tile-value"><?= (int)db_fetch_value("SELECT COUNT(*) FROM users WHERE actif=1") ?></div>
+  </div>
   <?php foreach($roles_list as $r):
-    $cnt=(int)db_fetch_value("SELECT COUNT(*) FROM users WHERE role_id=? AND actif=1",[$r['id']]);
+    $cnt = (int)db_fetch_value("SELECT COUNT(*) FROM users WHERE role_id=? AND actif=1",[$r['id']]);
+    $accent = $role_palette[$r['id'] % count($role_palette)];
   ?>
-  <div style="padding:8px 16px;background:white;border:1px solid var(--border);border-radius:20px;font-size:13px;display:flex;align-items:center;gap:8px">
-    <span class="role-badge <?= $r['slug'] ?>"><?= h($r['slug']) ?></span>
-    <strong><?= $cnt ?></strong>
+  <div class="stat-tile<?= $cnt===0?' stat-tile-empty':'' ?>" style="--accent:<?= $accent ?>">
+    <div class="stat-tile-label"><?= h($r['nom']) ?></div>
+    <div class="stat-tile-value"><?= $cnt ?></div>
   </div>
   <?php endforeach; ?>
-  <div style="padding:8px 16px;background:var(--lighter);border-radius:20px;font-size:13px;color:var(--muted)">
-    Total actifs : <strong><?= (int)db_fetch_value("SELECT COUNT(*) FROM users WHERE actif=1") ?></strong>
-  </div>
 </div>
 
 <!-- TABLE -->
