@@ -2321,9 +2321,11 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
     a.poser();
   }
 
-  function animer(avant, racine) {
+  // Préparation. Elle s'exécute pendant que le nouveau contenu est encore
+  // détaché du document : l'appliquer après insertion faisait apparaître la
+  // page, puis disparaître le temps d'une frame, avant de revenir.
+  function preparer(avant, racine) {
     solder();
-    if (SOBRE) { redessiner(); return; }
 
     // Chiffres : de leur valeur précédente vers la nouvelle, ou de zéro
     // s'ils n'existaient pas avant.
@@ -2347,14 +2349,16 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
     var serCib = lireSeries();
     var serCles = SERIES.filter(function (k) { return serCib[k] !== undefined; });
 
-    // Blocs : révélation décalée, pour que la mise à jour se lise d'un
-    // coup d'œil même là où aucune valeur n'a bougé.
+    // Blocs : un simple glissement, sans variation d'opacité. Masquer le
+    // contenu creusait un blanc entre l'ancien et le nouveau. Le test de
+    // visibilité ne peut pas reposer sur la hauteur : à ce stade l'élément
+    // n'est pas encore dans le document et la mesure vaudrait zéro.
     var blocs = [];
     for (var b = 0; b < racine.children.length && blocs.length < 8; b++) {
       var bl = racine.children[b];
-      if (!bl.offsetHeight) continue;
-      // La barre de filtres reste immobile : faire clignoter le sélecteur
-      // qu'on vient d'actionner donnerait l'impression d'avoir raté son clic.
+      if (!bl.firstElementChild && !bl.textContent.trim()) continue;
+      // La barre de filtres reste immobile : faire bouger le sélecteur qu'on
+      // vient d'actionner donnerait l'impression d'avoir raté son clic.
       if (bl.querySelector('#pdg-filter-form')) continue;
       blocs.push(bl);
     }
@@ -2368,7 +2372,7 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
         barres[j].el.style[barres[j].axe] = barres[j].arr + '%';
       }
       for (var l = 0; l < blocs.length; l++) {
-        blocs[l].style.transition = ''; blocs[l].style.opacity = ''; blocs[l].style.transform = '';
+        blocs[l].style.transition = ''; blocs[l].style.transform = '';
       }
       if (serCles.length) {
         serCles.forEach(function (k) { window[k] = serCib[k]; });
@@ -2376,13 +2380,43 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
       }
     }
 
-    if (!nombres.length && !barres.length && !serCles.length && !blocs.length) {
-      redessiner(); return;
+    // Motion réduite, onglet en arrière-plan où les frames ne viennent pas,
+    // ou rien à animer : on pose l'état final et il n'y a rien à lancer.
+    if (SOBRE || document.hidden ||
+        (!nombres.length && !barres.length && !serCles.length && !blocs.length)) {
+      poser();
+      return null;
     }
 
-    // Onglet en arrière-plan : requestAnimationFrame ne s'exécute pas.
-    // Animer y laisserait les barres figées à zéro.
-    if (document.hidden) { poser(); return; }
+    // État de départ, écrit tout de suite : sinon la valeur finale reste
+    // affichée une frame avant de reculer, ce qui se voit.
+    for (var i = 0; i < nombres.length; i++) {
+      ecrire(nombres[i].el, fmt(nombres[i].dep, nombres[i].d, nombres[i].s, nombres[i].p));
+    }
+    for (var j = 0; j < barres.length; j++) {
+      barres[j].el.style.transition = 'none';
+      barres[j].el.style[barres[j].axe] = '0%';
+    }
+    for (var l = 0; l < blocs.length; l++) {
+      blocs[l].style.transition = 'none';
+      blocs[l].style.transform = 'translateY(9px)';
+    }
+    if (serCles.length) {
+      serCles.forEach(function (k) { window[k] = interp(undefined, serCib[k], 0); });
+    }
+
+    return { nombres: nombres, barres: barres, blocs: blocs,
+             serCib: serCib, serCles: serCles, poser: poser };
+  }
+
+  // Lancement, une fois le contenu inséré : les canvas ont besoin d'être
+  // dans le document pour se dimensionner.
+  function lancer(plan) {
+    if (!plan) { redessiner(); return; }
+    var nombres = plan.nombres, barres = plan.barres, blocs = plan.blocs;
+    var serCib = plan.serCib, serCles = plan.serCles, poser = plan.poser;
+
+    redessiner();
 
     anim = { id: 0, secours: 0, poser: poser };
     var mien = anim;
@@ -2393,41 +2427,20 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
       if (anim === mien) { anim = null; poser(); }
     }, Math.max(DUREE, GLISSE) + 700);
 
-    // État de départ, posé tout de suite : au premier frame la valeur
-    // finale resterait visible avant de reculer, ce qui se verrait.
-    for (var i = 0; i < nombres.length; i++) {
-      ecrire(nombres[i].el, fmt(nombres[i].dep, nombres[i].d, nombres[i].s, nombres[i].p));
-    }
-    for (var j = 0; j < barres.length; j++) {
-      barres[j].el.style.transition = 'none';
-      barres[j].el.style[barres[j].axe] = '0%';
-    }
-    for (var l = 0; l < blocs.length; l++) {
-      blocs[l].style.transition = 'none';
-      blocs[l].style.opacity = '0';
-      blocs[l].style.transform = 'translateY(10px)';
-    }
-    if (serCles.length) {
-      serCles.forEach(function (k) { window[k] = interp(undefined, serCib[k], 0); });
-      redessiner();
-    }
-
     requestAnimationFrame(function () {
       if (anim !== mien) return;
       for (var j = 0; j < barres.length; j++) {
         barres[j].el.style.transition = barres[j].axe + ' ' + (GLISSE / 1000) + 's ' + COURBE;
       }
       for (var l = 0; l < blocs.length; l++) {
-        blocs[l].style.transition = 'opacity .5s ease-out ' + (l * 55) + 'ms, transform .5s ' + COURBE + ' ' + (l * 55) + 'ms';
+        blocs[l].style.transition = 'transform .5s ' + COURBE + ' ' + (l * 55) + 'ms';
       }
       requestAnimationFrame(function () {
         if (anim !== mien) return;
         for (var j = 0; j < barres.length; j++) {
           barres[j].el.style[barres[j].axe] = barres[j].arr + '%';
         }
-        for (var l = 0; l < blocs.length; l++) {
-          blocs[l].style.opacity = ''; blocs[l].style.transform = '';
-        }
+        for (var l = 0; l < blocs.length; l++) { blocs[l].style.transform = ''; }
       });
     });
 
@@ -2536,12 +2549,17 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
           } catch (e) {}
         }
 
-        solder();                                  // avant de détacher
+        // L'état de départ est posé sur le nouveau contenu encore détaché :
+        // inséré tel quel, il ne clignote pas.
+        var plan = null;
+        try { plan = preparer(avant, neuf); }
+        catch (e) { if (window.console) console.warn('pdg : préparation', e); }
+
         ancien.replaceWith(neuf);
         history.pushState({ pdg: 1 }, '', url);
         fini();
 
-        try { animer(avant, neuf); }
+        try { lancer(plan); }
         catch (e) {
           if (window.console) console.warn('pdg : animation', e);
           redessiner();                            // la page reste juste
