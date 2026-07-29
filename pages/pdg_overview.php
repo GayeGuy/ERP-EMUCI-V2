@@ -192,13 +192,13 @@ $di_tx      = $di_mois > 0 ? round($di_approuv / $di_mois * 100) : 0;
 $di_recents = [];
 try {
     $di_recents = db_fetch_all(
-        "SELECT d.id, d.numero, dt.label AS type_lbl, d.statut,
+        "SELECT d.id, d.numero, dt.label AS type_lbl, d.statut, d.demandeur_id,
                 d.etape_actuelle, d.workflow_snapshot,
-                e.label AS etape_lbl
+                e.label AS etape_lbl, e.role_code AS etape_role
          FROM di_demandes d
          JOIN di_types dt ON dt.code = d.type_code
          LEFT JOIN (
-            SELECT type_id, label,
+            SELECT type_id, label, role_code,
                    ROW_NUMBER() OVER (PARTITION BY type_id ORDER BY ordre ASC) - 1 AS idx
             FROM di_etapes
          ) e ON e.type_id = dt.id AND e.idx = d.etape_actuelle
@@ -216,6 +216,29 @@ foreach ($di_recents as &$_dr) {
     if (is_array($_snap) && isset($_snap[$_i]['label']) && $_snap[$_i]['label'] !== '') {
         $_dr['etape_lbl'] = $_snap[$_i]['label'];
     }
+    if (is_array($_snap) && !empty($_snap[$_i]['role'])) {
+        $_dr['etape_role'] = $_snap[$_i]['role'];
+    }
+
+    // "En attente chez" doit afficher le département, pas le libellé de l'étape :
+    // le N+1 est un rôle dynamique (résolu via le département du demandeur lui-même),
+    // les autres rôles (RAF/DAF/DG/IT/Administration) ont un département fixe
+    // configurable dans Admin → Rôles demandes (di_roles.departement_id).
+    $_dept_lbl = null;
+    try {
+        if (($_dr['etape_role'] ?? null) === 'n1') {
+            $_dept_lbl = db_fetch_value(
+                "SELECT d.label FROM user_departements ud JOIN departements d ON d.id = ud.departement_id
+                 WHERE ud.user_id = ? LIMIT 1", [(int)$_dr['demandeur_id']]
+            );
+        } elseif (!empty($_dr['etape_role'])) {
+            $_dept_lbl = db_fetch_value(
+                "SELECT d.label FROM di_roles r JOIN departements d ON d.id = r.departement_id
+                 WHERE r.code = ?", [$_dr['etape_role']]
+            );
+        }
+    } catch (Throwable $e) {}
+    $_dr['etape_lbl'] = $_dept_lbl ?: ($_dr['etape_lbl'] ?? null);
 }
 unset($_dr);
 
