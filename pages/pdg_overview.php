@@ -1761,6 +1761,14 @@ var pmmaBas     = <?= $js_pmma_bas ?>;
 var pmmaDetail  = <?= $js_pmma_detail ?>;
 const DPR = window.devicePixelRatio || 1;
 
+// Avancement du dessin des graphes, de 0 à 1.
+// Ces graphes sont relatifs à leur propre échelle : un anneau ne montre que
+// des rapports, une courbe se cale sur son propre maximum. Mettre toute la
+// série à l'échelle laisse donc le tracé strictement identique — c'est
+// pourquoi l'animation y était invisible. On anime la géométrie à la place,
+// l'échelle restant calculée sur les valeurs finales.
+var pdgProg = 1;
+
 function fmtN(n) { return Number(n).toLocaleString('fr-FR'); }
 
 // Largeur réellement disponible dans un conteneur. Sa boîte de bordure
@@ -1804,8 +1812,11 @@ function drawEvol() {
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText('Aucune donnée', w/2, h/2); return;
     }
+    // L'echelle se calcule sur les valeurs finales : l'axe ne bouge pas
+    // pendant que la courbe monte. Seule la hauteur tracee suit pdgProg.
     const max = Math.max(...evolEngins, 1);
     const step = cW / Math.max(n - 1, 1);
+    const P = Math.max(0, Math.min(1, pdgProg));
 
     // Grid lines
     ctx.strokeStyle = '#f1f5f9'; ctx.lineWidth = 1;
@@ -1821,7 +1832,7 @@ function drawEvol() {
     ctx.beginPath();
     evolEngins.forEach((v, i) => {
         const x = pad.l + i * step;
-        const y = pad.t + cH * (1 - v / max);
+        const y = pad.t + cH * (1 - (v * P) / max);
         i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
     ctx.lineTo(pad.l + (n-1) * step, pad.t + cH);
@@ -1838,7 +1849,7 @@ function drawEvol() {
     ctx.strokeStyle = '#1B75BC'; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
     evolEngins.forEach((v, i) => {
         const x = pad.l + i * step;
-        const y = pad.t + cH * (1 - v / max);
+        const y = pad.t + cH * (1 - (v * P) / max);
         i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
     ctx.stroke();
@@ -1846,14 +1857,14 @@ function drawEvol() {
     // Dots + values
     evolEngins.forEach((v, i) => {
         const x = pad.l + i * step;
-        const y = pad.t + cH * (1 - v / max);
+        const y = pad.t + cH * (1 - (v * P) / max);
         ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI*2);
         ctx.fillStyle = '#fff'; ctx.fill();
         ctx.strokeStyle = '#1B75BC'; ctx.lineWidth = 2; ctx.stroke();
         if (v > 0) {
             ctx.fillStyle = '#06033A'; ctx.font = 'bold 10px DM Sans,sans-serif';
             ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-            ctx.fillText(fmtN(v), x, y - 6);
+            ctx.fillText(fmtN(Math.round(v * P)), x, y - 6);
         }
         ctx.fillStyle = '#94a3b8'; ctx.font = '10px DM Sans,sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'top';
@@ -1883,19 +1894,28 @@ function drawDonut(id, values, colors) {
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText('0', cx, cy); return;
     }
-    let angle = -Math.PI/2;
+    // Les parts gardent leurs proportions ; c'est le balayage qui progresse.
+    const debut  = -Math.PI/2;
+    const limite = debut + Math.max(0, Math.min(1, pdgProg)) * Math.PI*2;
+    // Fond de l'anneau, pour que la couronne existe avant d'être remplie
+    ctx.fillStyle = '#f1f5f9';
+    ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fill();
+    let angle = debut;
     values.forEach((v,i) => {
         if (!v) return;
         const slice = (v/total)*Math.PI*2;
-        ctx.fillStyle = colors[i];
-        ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,R,angle,angle+slice); ctx.closePath(); ctx.fill();
+        const fin   = Math.min(angle + slice, limite);
+        if (fin > angle) {
+            ctx.fillStyle = colors[i];
+            ctx.beginPath(); ctx.moveTo(cx,cy); ctx.arc(cx,cy,R,angle,fin); ctx.closePath(); ctx.fill();
+        }
         angle += slice;
     });
     ctx.fillStyle='#fff';
     ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
     ctx.fillStyle='#06033A'; ctx.font='bold 14px Montserrat,sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(total, cx, cy);
+    ctx.fillText(Math.round(total * Math.max(0, Math.min(1, pdgProg))), cx, cy);
 }
 
 // ── Horizontal bar (films + PMMA)
@@ -2085,13 +2105,14 @@ function pfwDrawChart(site) {
         ctx.fillText(fmtN(v), W-pad.r+10, y);
     });
 
+    const PB = Math.max(0, Math.min(1, pdgProg));
     months.forEach((m, i) => {
         const bx = pad.l + slot*i + (slot - bW) / 2;
         const ev = enginVals[i];
         const fv = filmVals[i];
 
         // ── Bar films (hatché gauche)
-        const fh = Math.max(4, (fv/maxF) * cH);
+        const fh = Math.max(4, (fv/maxF) * cH * PB);
         const fy = pad.t + cH - fh;
         // fond léger
         ctx.fillStyle = hexRgba(col, 0.12);
@@ -2106,7 +2127,7 @@ function pfwDrawChart(site) {
         ctx.restore();
         // pill valeur films
         if (fv > 0) {
-            const lbl = fmtN(fv);
+            const lbl = fmtN(Math.round(fv * PB));
             ctx.font = 'bold 10px DM Sans,sans-serif';
             const lw = ctx.measureText(lbl).width + 12;
             const lh = 19; const lx = bx + (b1W-lw)/2; const ly = fy-lh-4;
@@ -2118,13 +2139,13 @@ function pfwDrawChart(site) {
 
         // ── Bar engins (solide droite)
         const ex = bx + b1W + gap;
-        const eh = Math.max(4, (ev/maxE) * cH);
+        const eh = Math.max(4, (ev/maxE) * cH * PB);
         const ey = pad.t + cH - eh;
         ctx.fillStyle = ev > 0 ? col : '#f1f5f9';
         rrect(ctx, ex, ey, b2W, eh, [6,6,0,0]); ctx.fill();
         // pill valeur engins
         if (ev > 0) {
-            const lbl = fmtN(ev);
+            const lbl = fmtN(Math.round(ev * PB));
             ctx.font = 'bold 10px DM Sans,sans-serif';
             const lw = ctx.measureText(lbl).width + 12;
             const lh = 19; const lx = ex + (b2W-lw)/2; const ly = ey-lh-4;
@@ -2341,36 +2362,13 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
   }
 
   // ── Séries derrière les graphes dessinés ──────────────────────────
-  var SERIES = ['evolEngins', 'evolPlaques', 'filmsValues', 'bobinesData',
-                'cmdsData', 'pmmaTotals', 'pmmaBas', 'pfwSites'];
-
-  function lireSeries() {
-    var o = {};
-    for (var i = 0; i < SERIES.length; i++) {
-      var k = SERIES[i];
-      if (window[k] == null) continue;
-      try { o[k] = JSON.parse(JSON.stringify(window[k])); } catch (e) {}
-    }
-    return o;
-  }
-
-  // Interpolation en profondeur. Les données mensuelles par site sont de
-  // la forme { mois: { films, engins, moy_vh } } et doivent suivre aussi.
-  function interp(dep, arr, e) {
-    if (typeof arr === 'number') {
-      var d = (typeof dep === 'number') ? dep : 0;
-      var v = d + (arr - d) * e;
-      return (arr % 1 === 0 && d % 1 === 0) ? Math.round(v) : v;
-    }
-    if (Array.isArray(arr)) {
-      return arr.map(function (v, i) { return interp(dep ? dep[i] : undefined, v, e); });
-    }
-    if (arr && typeof arr === 'object') {
-      var o = {};
-      Object.keys(arr).forEach(function (k) { o[k] = interp(dep ? dep[k] : undefined, arr[k], e); });
-      return o;
-    }
-    return arr;                                       // libellés, couleurs
+  // Les graphes dessines sont pilotes par pdgProg, un simple avancement de
+  // 0 a 1 que leurs fonctions de trace appliquent a la geometrie. Interpoler
+  // leurs donnees ne servait a rien : ces graphes sont relatifs a leur propre
+  // echelle, mettre toute la serie a l'echelle laisse le trace identique.
+  function progres(p) {
+    window.pdgProg = p;
+    redessiner();
   }
 
   // Les erreurs sont contenues pour ne pas casser la page, mais signalées :
@@ -2417,9 +2415,11 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
       barres.push({ el: el, axe: axe, arr: val });
     });
 
-    // Séries des graphes : même règle, remplissage depuis zéro.
-    var serCib = lireSeries();
-    var serCles = SERIES.filter(function (k) { return serCib[k] !== undefined; });
+    // Les graphes dessinés participent toujours au mouvement : leur tracé
+    // part de la ligne de base et se remplit, sans que leurs données bougent.
+    // On interroge le contenu qui arrive, pas le document : à cet instant
+    // l'ancien est encore en place et répondrait à sa place.
+    var aGraphes = !!racine.querySelector('canvas');
 
     // Blocs : un simple glissement, sans variation d'opacité. Masquer le
     // contenu creusait un blanc entre l'ancien et le nouveau. Le test de
@@ -2446,16 +2446,13 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
       for (var l = 0; l < blocs.length; l++) {
         blocs[l].style.transition = ''; blocs[l].style.transform = '';
       }
-      if (serCles.length) {
-        serCles.forEach(function (k) { window[k] = serCib[k]; });
-        redessiner();
-      }
+      progres(1);
     }
 
     // Motion réduite, onglet en arrière-plan où les frames ne viennent pas,
     // ou rien à animer : on pose l'état final et il n'y a rien à lancer.
     if (SOBRE || document.hidden ||
-        (!nombres.length && !barres.length && !serCles.length && !blocs.length)) {
+        (!nombres.length && !barres.length && !aGraphes && !blocs.length)) {
       poser();
       return null;
     }
@@ -2473,12 +2470,12 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
       blocs[l].style.transition = 'none';
       blocs[l].style.transform = 'translateY(9px)';
     }
-    if (serCles.length) {
-      serCles.forEach(function (k) { window[k] = interp(undefined, serCib[k], 0); });
-    }
+    // Les canvas ne sont pas encore dans le document : on note seulement le
+    // point de départ, le premier tracé aura lieu au lancement.
+    window.pdgProg = 0;
 
     return { nombres: nombres, barres: barres, blocs: blocs,
-             serCib: serCib, serCles: serCles, poser: poser };
+             aGraphes: aGraphes, poser: poser };
   }
 
   // Lancement, une fois le contenu inséré : les canvas ont besoin d'être
@@ -2486,9 +2483,9 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
   function lancer(plan) {
     if (!plan) { redessiner(); return; }
     var nombres = plan.nombres, barres = plan.barres, blocs = plan.blocs;
-    var serCib = plan.serCib, serCles = plan.serCles, poser = plan.poser;
+    var aGraphes = plan.aGraphes, poser = plan.poser;
 
-    redessiner();
+    progres(0);                       // tracé initial, à la ligne de base
 
     anim = { id: 0, secours: 0, poser: poser };
     var mien = anim;
@@ -2527,10 +2524,7 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
       }
       // Un redessin canvas coûte plus cher qu'une écriture de texte :
       // une frame sur deux suffit à donner le mouvement.
-      if (serCles.length && (frame++ % 2) === 0) {
-        serCles.forEach(function (kk) { window[kk] = interp(undefined, serCib[kk], e); });
-        redessiner();
-      }
+      if (aGraphes && (frame++ % 2) === 0) progres(e);
       if (k < 1) { mien.id = requestAnimationFrame(pas); }
       else { clearTimeout(mien.secours); anim = null; poser(); }
     }
@@ -2653,7 +2647,11 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
         try { lancer(plan); }
         catch (e) {
           if (window.console) console.warn('pdg : animation', e);
-          redessiner();                            // la page reste juste
+          // La préparation a mis l'avancement à zéro : sans ce retour à 1,
+          // les graphes resteraient vides. La page doit rester juste même
+          // quand l'animation échoue.
+          progres(1);
+          if (plan && plan.poser) { try { plan.poser(); } catch (e2) {} }
         }
       })
       .catch(function (e) {
