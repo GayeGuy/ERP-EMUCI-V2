@@ -367,6 +367,34 @@ if (!function_exists('ent')) {
     }
 }
 
+// Répartit des parts en pourcentages entiers dont la somme vaut exactement
+// 100 (méthode du plus grand reste). Arrondir chaque part séparément peut
+// faire dépasser 100 au total — invisible sur un indicateur seul, mais
+// flagrant dès que plusieurs pourcentages s'affichent côte à côte, comme
+// le mix produit.
+if (!function_exists('pct_entiers')) {
+    function pct_entiers(array $valeurs, float $total): array {
+        $n = count($valeurs);
+        if ($total <= 0) return array_fill(0, $n, 0);
+        $bruts = array_map(fn($v) => $v / $total * 100, $valeurs);
+        $bas   = array_map(fn($p) => (int)floor($p), $bruts);
+        $reste = 100 - array_sum($bas);
+        $ordre = range(0, $n - 1);
+        usort($ordre, fn($a, $b) => ($bruts[$b] - $bas[$b]) <=> ($bruts[$a] - $bas[$a]));
+        for ($i = 0; $i < $reste; $i++) $bas[$ordre[$i]]++;
+        return $bas;
+    }
+}
+// Affiche l'entier apportionné, avec la même règle que ent() pour une part
+// non nulle qui tomberait à zéro : « < 1 » plutôt qu'un zéro trompeur.
+if (!function_exists('pct_txt')) {
+    function pct_txt(float $n, int $pctInt): string {
+        if ($n <= 0) return '0';
+        if ($pctInt === 0) return '&lt; 1';
+        return number_format($pctInt, 0, ',', ' ');
+    }
+}
+
 // Chaque requête est isolée : si une colonne manque encore en base (migration
 // non passée), l'indicateur concerné affiche « — » au lieu de casser la page.
 $biz = null;
@@ -559,7 +587,14 @@ $mix = [
     ['lbl'=>'Semi-remorques',        'n'=>$nb_smi,'k'=>'c'],
     ['lbl'=>'Motos',                 'n'=>$nb_mot,'k'=>'d'],
 ];
-foreach ($mix as &$m) { $m['pct'] = $mix_total > 0 ? round($m['n'] / $mix_total * 100, 1) : 0; }
+// pct : proportion exacte, pour la largeur de barre (visuelle, n'a pas
+// besoin de sommer à 100 pile). pct_int : entier apportionné, pour tout
+// texte affiché — c'est lui qui garantit une somme de 100.
+$mix_pcts = pct_entiers(array_column($mix, 'n'), (float)$mix_total);
+foreach ($mix as $i => &$m) {
+    $m['pct']     = $mix_total > 0 ? $m['n'] / $mix_total * 100 : 0;
+    $m['pct_int'] = $mix_pcts[$i];
+}
 unset($m);
 
 // ══════════════════════════════════════════════════════════
@@ -1140,10 +1175,10 @@ include __DIR__ . '/../templates/header.php';
       </div>
     </div>
     <?php if ($mix_total > 0): ?>
-    <div class="biz-mix" role="img" aria-label="Répartition des engins : <?= h(implode(', ', array_map(fn($m) => $m['lbl'].' '.ent($m['pct']).' %', $mix))) ?>">
+    <div class="biz-mix" role="img" aria-label="Répartition des engins : <?= h(implode(', ', array_map(fn($m) => $m['lbl'].' '.pct_txt($m['n'], $m['pct_int']).' %', $mix))) ?>">
       <?php foreach ($mix as $m): if ($m['n'] <= 0) continue; ?>
         <div class="biz-mix-s biz-<?= $m['k'] ?>" data-b="mix-<?= $m['k'] ?>" data-p="<?= round($m['pct'],2) ?>" data-ax="w" style="width:<?= round($m['pct'],2) ?>%">
-          <?php if ($m['pct'] >= 6): ?><span class="biz-pct"><?= ent($m['pct']) ?> %</span><?php endif; ?>
+          <?php if ($m['pct'] >= 6): ?><span class="biz-pct"><?= pct_txt($m['n'], $m['pct_int']) ?> %</span><?php endif; ?>
         </div>
       <?php endforeach; ?>
     </div>
@@ -1156,7 +1191,7 @@ include __DIR__ . '/../templates/header.php';
           <div class="biz-mix-k-t"><span class="biz-dot biz-dot-<?= $m['k'] ?><?= $mix_total > 0 ? '' : ' biz-dot-off' ?>"></span><?= h($m['lbl']) ?></div>
           <?php if ($mix_total > 0): ?>
             <div class="biz-mix-k-v" data-k="mixv-<?= $m['k'] ?>" data-v="<?= (int)$m['n'] ?>" data-d="0"><?= number_format($m['n'], 0, ',', ' ') ?></div>
-            <div class="biz-mix-k-p"><?= ent($m['pct']) ?> % du volume</div>
+            <div class="biz-mix-k-p"><?= pct_txt($m['n'], $m['pct_int']) ?> % du volume</div>
           <?php else: ?>
             <div class="biz-mix-k-v biz-mix-k-off">—</div>
             <div class="biz-mix-k-p">aucune saisie</div>
