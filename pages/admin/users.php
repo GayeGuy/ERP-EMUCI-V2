@@ -165,7 +165,7 @@ $sites_list = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom"
 include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
-.user-avatar-sm{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--blue-mid, #1a56a0),var(--accent-d));display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:700;flex-shrink:0}
+.user-avatar-sm{width:38px;height:38px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:700;flex-shrink:0}
 .role-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.5px}
 .role-badge.superadmin{background:#fdf0ef;color:var(--danger)}
 .role-badge.admin{background:#fef9e7;color:var(--warning)}
@@ -457,7 +457,7 @@ function viewU(id){
     document.getElementById('udT').textContent=r.prenom+' '+r.nom;
     document.getElementById('udB').innerHTML=`
       <div style="text-align:center;margin-bottom:20px">
-        <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--blue-mid, #1a56a0),var(--accent-d));display:flex;align-items:center;justify-content:center;color:white;font-size:26px;font-weight:700;margin:0 auto 12px">${r.prenom[0]}${r.nom[0]}</div>
+        <div style="width:72px;height:72px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:white;font-size:26px;font-weight:700;margin:0 auto 12px">${r.prenom[0]}${r.nom[0]}</div>
         <div style="font-family:'Montserrat',sans-serif;font-size:18px;font-weight:700">${r.prenom} ${r.nom}</div>
         <span class="role-badge ${r.role_slug}" style="margin-top:6px;display:inline-block">${r.role_slug}</span>
       </div>
