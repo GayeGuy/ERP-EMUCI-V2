@@ -1,12 +1,12 @@
 <?php
 // ============================================================
-//  pages/delegations.php
+//  pages/admin/delegations.php
 //  Gestion des délégations — Superviseur Opération → Gestionnaire Opération
 // ============================================================
-require_once __DIR__ . '/../includes/db.php';
-require_once __DIR__ . '/../includes/session.php';
-require_once __DIR__ . '/../includes/helpers.php';
-require_once __DIR__ . '/../includes/notifications.php';
+require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/session.php';
+require_once __DIR__ . '/../../includes/helpers.php';
+require_once __DIR__ . '/../../includes/notifications.php';
 require_auth();
 
 $user      = current_user();
@@ -15,7 +15,7 @@ $page_title  = 'Délégations';
 $active_page = 'delegations';
 
 if (!in_array($role_slug, ['superviseur_operation','admin','superadmin'])) {
-    http_response_code(403); include __DIR__.'/../templates/403.php'; exit;
+    http_response_code(403); include __DIR__ . '/../../templates/403.php'; exit;
 }
 
 // ── TÂCHES DÉLÉGABLES
@@ -79,7 +79,7 @@ foreach ($delegations_actives as $d) {
     $deleg_map[$d['gestionnaire_id']][$d['module']] = true;
 }
 
-include __DIR__ . '/../templates/header.php';
+include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
 .deleg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:20px}
@@ -157,4 +157,4 @@ function toggle(gestId, module, actif) {
 }
 </script>
 
-<?php include __DIR__ . '/../templates/footer.php'; ?>
+<?php include __DIR__ . '/../../templates/footer.php'; ?>

@@ -513,7 +513,7 @@ include __DIR__ . '/../templates/header.php';
   <div class="dash-card">
     <div class="dash-card-header">
       <h3>🏢 Sites</h3>
-      <a href="<?= APP_URL ?>/pages/sites.php" style="font-size:12px;color:var(--blue-mid,#1a56a0);text-decoration:none">Voir les sites →</a>
+      <a href="<?= APP_URL ?>/pages/admin/sites.php" style="font-size:12px;color:var(--blue-mid,#1a56a0);text-decoration:none">Voir les sites →</a>
     </div>
     <div class="dash-card-body">
       <?php

@@ -1,12 +1,12 @@
 <?php
 // ============================================================
-//  pages/nomenclatures.php  —  Types d'équipements & liaisons
+//  pages/admin/nomenclatures.php  —  Types d'équipements & liaisons
 // ============================================================
-require_once __DIR__ . '/../includes/db.php';
-require_once __DIR__ . '/../includes/session.php';
-require_once __DIR__ . '/../includes/audit.php';
-require_once __DIR__ . '/../includes/helpers.php';
-require_once __DIR__ . '/../includes/notifications.php';
+require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/session.php';
+require_once __DIR__ . '/../../includes/audit.php';
+require_once __DIR__ . '/../../includes/helpers.php';
+require_once __DIR__ . '/../../includes/notifications.php';
 
 require_auth();
 require_permission('nomenclatures','can_read');
@@ -106,7 +106,7 @@ $noms = db_fetch_all(
 );
 $noms_json = json_encode(array_map(fn($n)=>['id'=>$n['id'],'code'=>$n['code'],'libelle'=>$n['libelle']],$noms));
 
-include __DIR__.'/../templates/header.php';
+include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
 .nom-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-bottom:24px}
@@ -169,7 +169,7 @@ include __DIR__.'/../templates/header.php';
     <?php if(can('nomenclatures','can_delete')&&$n['stock_total']==0): ?>
     <button class="btn btn-danger btn-sm" onclick="delN(<?= $n['id'] ?>,'<?= h($n['code']) ?>')">🗑</button>
     <?php endif; ?>
-    <a href="equipements.php?nom=<?= $n['id'] ?>" class="btn btn-secondary btn-sm" style="margin-left:auto">📋 Stock</a>
+    <a href="../equipements.php?nom=<?= $n['id'] ?>" class="btn btn-secondary btn-sm" style="margin-left:auto">📋 Stock</a>
   </div>
 </div>
 <?php endforeach; ?>
@@ -323,4 +323,4 @@ document.getElementById('mN').addEventListener('click',e=>{if(e.target===e.curre
 document.getElementById('mND').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');});
 </script>
 
-<?php include __DIR__.'/../templates/footer.php'; ?>
+<?php include __DIR__ . '/../../templates/footer.php'; ?>

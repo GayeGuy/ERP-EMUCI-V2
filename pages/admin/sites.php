@@ -1,6 +1,6 @@
 <?php
 // ============================================================
-//  pages/sites.php  —  Gestion des sites
+//  pages/admin/sites.php  —  Gestion des sites
 // ============================================================
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx as XlsxWriter;
@@ -9,12 +9,12 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/../includes/db.php';
-require_once __DIR__ . '/../includes/session.php';
-require_once __DIR__ . '/../includes/audit.php';
-require_once __DIR__ . '/../includes/helpers.php';
-require_once __DIR__ . '/../includes/notifications.php';
+require_once __DIR__ . '/../../vendor/autoload.php';
+require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/session.php';
+require_once __DIR__ . '/../../includes/audit.php';
+require_once __DIR__ . '/../../includes/helpers.php';
+require_once __DIR__ . '/../../includes/notifications.php';
 
 require_auth();
 require_permission('sites', 'can_read');
@@ -381,7 +381,7 @@ if (isset($_GET['export'])) {
     }
 }
 
-include __DIR__ . '/../templates/header.php';
+include __DIR__ . '/../../templates/header.php';
 
 // Couleurs par type
 $type_colors = [
@@ -1068,4 +1068,4 @@ async function ignorerSiteEmuci(id,nom){
 </script>
 <?php endif; ?>
 
-<?php include __DIR__ . '/../templates/footer.php'; ?>
+<?php include __DIR__ . '/../../templates/footer.php'; ?>
