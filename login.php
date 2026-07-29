@@ -412,7 +412,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     }
 
     btn.classList.add('loading');
-    btn.querySelector('span').style.display = 'block';
 
     const fd = new FormData();
     fd.append('email', email);
