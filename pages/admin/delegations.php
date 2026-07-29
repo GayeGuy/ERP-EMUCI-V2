@@ -85,7 +85,11 @@ include __DIR__ . '/../../templates/header.php';
 .deleg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:20px}
 .deleg-card{background:white;border-radius:16px;border:1px solid var(--border);padding:0;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.06)}
 .deleg-head{background:var(--navy);padding:16px 20px;display:flex;align-items:center;gap:12px}
-.deleg-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--blue),var(--sky));display:flex;align-items:center;justify-content:center;font-weight:800;color:white;font-size:15px}
+/* Fond uni navy (14:1 avec du blanc). Le dégradé précédent utilisait
+   var(--sky), qui n'est definie nulle part : la déclaration entière
+   devenait invalide, le fond disparaissait et les initiales blanches
+   restaient invisibles. */
+.deleg-avatar{width:40px;height:40px;border-radius:50%;background:var(--navy,#1E2B4A);display:flex;align-items:center;justify-content:center;font-weight:800;color:white;font-size:15px}
 .deleg-name{color:white;font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700}
 .deleg-site{color:#94c2d4;font-size:11px;margin-top:2px}
 .deleg-body{padding:16px 20px}

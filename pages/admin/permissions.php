@@ -135,9 +135,34 @@ $users_by_role = array_column(
 include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
-.perm-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px;overflow-x:auto}
-.perm-tab{padding:12px 20px;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;white-space:nowrap;font-family:'DM Sans',sans-serif;transition:all .15s}
-.perm-tab.active{color:var(--blue-mid, #1a56a0);border-bottom-color:var(--blue-mid, #1a56a0)}
+/* Maitre-detail. minmax(0,1fr) et non 1fr : sans le minimum a zero, la
+   colonne de detail refuserait de descendre sous la largeur de son tableau
+   et repousserait la mise en page. */
+.perm-layout{display:grid;grid-template-columns:236px minmax(0,1fr);gap:24px;align-items:start}
+.perm-panes{min-width:0}
+
+.perm-tabs{display:flex;flex-direction:column;gap:2px;
+  background:var(--card,#fff);border:1px solid var(--border);border-radius:12px;padding:8px;
+  max-height:calc(100vh - 210px);overflow-y:auto;position:sticky;top:88px}
+.perm-tab{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;
+  padding:9px 12px;font-size:13px;font-weight:500;color:var(--text,#2c3e50);
+  cursor:pointer;text-align:left;width:100%;
+  background:none;border:none;border-radius:8px;
+  font-family:'DM Sans',sans-serif;transition:background .15s,color .15s}
+.perm-tab:hover{background:var(--lighter,#f0f4f8)}
+.perm-tab.active{background:var(--navy,#1E2B4A);color:#fff;font-weight:700}  /* navy et non --blue-mid : depuis la refonte de palette --blue-mid vaut
+     #5B76FF, ce qui ne donne que 3,83:1 avec du blanc. navy donne 14:1. */
+.perm-tab.active span{opacity:.85 !important}
+.perm-tabs::-webkit-scrollbar{width:8px}
+.perm-tabs::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px}
+
+/* Sous 980px la colonne passe au-dessus, en rangee defilante : garder une
+   liste verticale y mangerait toute la hauteur utile. */
+@media(max-width:980px){
+  .perm-layout{grid-template-columns:1fr;gap:16px}
+  .perm-tabs{flex-direction:row;position:static;max-height:none;overflow-x:auto;overflow-y:hidden;padding:6px}
+  .perm-tab{width:auto;flex:0 0 auto;white-space:nowrap;flex-wrap:nowrap}
+}
 .perm-pane{display:none}
 .perm-pane.active{display:block}
 
@@ -193,16 +218,20 @@ include __DIR__ . '/../../templates/header.php';
   <?php endif; ?>
 </div>
 
-<!-- TABS PAR RÔLE -->
-<div class="perm-tabs" id="permTabs">
+<!-- LISTE DES RÔLES + PANNEAU : avec 17 rôles, une rangée d'onglets
+     obligeait à défiler pour savoir lesquels existent. En colonne, ils
+     sont tous lisibles d'un regard. -->
+<div class="perm-layout">
+<nav class="perm-tabs" id="permTabs" aria-label="Rôles">
   <?php foreach($roles as $i=>$r): ?>
   <button class="perm-tab <?= $i===0?'active':'' ?>" onclick="showPerm('role-<?= $r['id'] ?>',this)">
     <?= h($r['nom']) ?>
     <span style="margin-left:6px;font-size:11px;opacity:.6">(<?= $users_by_role[$r['id']]??0 ?> user<?= ($users_by_role[$r['id']]??0)>1?'s':'' ?>)</span>
   </button>
   <?php endforeach; ?>
-</div>
+</nav>
 
+<div class="perm-panes">
 <?php foreach($roles as $r):
   $is_superadmin = $r['slug'] === 'superadmin';
   $can_edit      = $user['role_slug'] === 'superadmin' && !$is_superadmin;
@@ -225,7 +254,7 @@ include __DIR__ . '/../../templates/header.php';
       🔒 Accès total — non modifiable
     </div>
     <?php elseif($can_edit): ?>
-    <button class="btn" style="background:var(--blue-mid, #1a56a0);color:white" onclick="savePerms(<?= $r['id'] ?>)">
+    <button class="btn" style="background:var(--navy,#1E2B4A);color:white" onclick="savePerms(<?= $r['id'] ?>)">
       💾 Sauvegarder
     </button>
     <?php else: ?>
@@ -312,6 +341,8 @@ include __DIR__ . '/../../templates/header.php';
   <?php endif; ?>
 </div>
 <?php endforeach; ?>
+</div><!-- /perm-panes -->
+</div><!-- /perm-layout -->
 
 <!-- MODAL NOUVEAU RÔLE -->
 <div class="modal-overlay" id="mRole">

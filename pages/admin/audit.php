@@ -214,7 +214,7 @@ include __DIR__ . '/../../templates/header.php';
           <td>
             <?php if($l['user_nom']): ?>
             <div style="display:flex;align-items:center;gap:8px">
-              <div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--blue-mid, #1a56a0),var(--accent-d));display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:700;flex-shrink:0">
+              <div style="width:28px;height:28px;border-radius:50%;background:var(--navy,#1E2B4A);display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:700;flex-shrink:0">
                 <?= strtoupper(substr($l['user_nom'],0,2)) ?>
               </div>
               <div>
