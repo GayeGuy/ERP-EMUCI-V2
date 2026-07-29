@@ -385,7 +385,8 @@ include __DIR__ . '/../templates/header.php';
 
 // Couleurs par type
 $type_colors = [
-    'saisie'  => ['bg'=>'#e6f1fb','color'=>'#1B75BC','icon'=>'ph-desktop'],
+    // #1B75BC ne donnait que 4.25:1 sur #e6f1fb (sous le seuil AA de 4.5) → assombri à 6.7:1
+    'saisie'  => ['bg'=>'#e6f1fb','color'=>'#15568B','icon'=>'ph-desktop'],
     'pose'    => ['bg'=>'#e8f8ef','color'=>'#166534','icon'=>'ph-wrench'],
     'mixte'   => ['bg'=>'#fff3e8','color'=>'#9a3412','icon'=>'ph-arrows-left-right'],
     'entrepot'=> ['bg'=>'#e6f9f7','color'=>'#134e4a','icon'=>'ph-warehouse'],
@@ -400,13 +401,16 @@ $type_colors = [
 .kpi-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
 .kpi-chip{display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:22px;font-size:12.5px;font-weight:600;border:1px solid transparent;cursor:default}
 .kpi-chip .cn{font-family:'Montserrat',sans-serif;font-size:18px;font-weight:900;line-height:1}
-.sites-table th{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;padding:10px 14px;background:#f8fafc;border-bottom:2px solid var(--border)}
+/* !important nécessaire : header.php impose th{background:var(--tertiary)!important;color:var(--muted)!important} */
+.sites-table th{font-size:11.5px;font-weight:700;color:#475569!important;text-transform:uppercase;letter-spacing:.4px;padding:10px 14px;border-bottom:2px solid var(--border)}
 .sites-table td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
 .sites-table tr:hover td{background:#f8fafc}
 .sites-table tr.inactive td{opacity:.55}
 .type-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
-.stat-pill{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:700;padding:5px 12px;border-radius:10px}
-.stat-pill i{font-size:15px}
+/* Compteurs Équip./Util. : nombre nu, lisible d'un coup d'œil.
+   Les pastilles bleu pâle précédentes plafonnaient à 4.25:1 (sous le seuil AA). */
+.count-cell{font-family:'Plus Jakarta Sans',sans-serif;font-size:15.5px;font-weight:800;color:var(--navy)}
+.count-cell.zero{color:var(--muted);font-weight:600}
 .resp-avatar{width:30px;height:30px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;flex-shrink:0;letter-spacing:.2px}
 .action-btn{width:32px;height:32px;border-radius:8px;border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;transition:all .15s;background:#EFF6FF;color:#1B75BC}
 .action-btn:hover{background:#1B75BC;color:white;transform:scale(1.08)}
@@ -584,16 +588,10 @@ $type_colors = [
           </td>
           <td style="font-size:13px;color:var(--muted)"><?= $s['ville'] ? h($s['ville']) : '—' ?></td>
           <td style="text-align:center">
-            <span class="stat-pill" style="background:#e6f1fb;color:#1B75BC">
-              <i class="ph-duotone ph-desktop" style="font-size:12px"></i>
-              <?= (int)$s['nb_equip'] ?>
-            </span>
+            <span class="count-cell<?= (int)$s['nb_equip'] === 0 ? ' zero' : '' ?>"><?= (int)$s['nb_equip'] ?></span>
           </td>
           <td style="text-align:center">
-            <span class="stat-pill" style="background:#f0f4f8;color:#475569">
-              <i class="ph-duotone ph-users" style="font-size:12px"></i>
-              <?= (int)$s['nb_users'] ?>
-            </span>
+            <span class="count-cell<?= (int)$s['nb_users'] === 0 ? ' zero' : '' ?>"><?= (int)$s['nb_users'] ?></span>
           </td>
           <td>
             <?php if ($s['responsable_nom']): ?>
