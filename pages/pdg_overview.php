@@ -744,10 +744,13 @@ include __DIR__ . '/../templates/header.php';
 .pfw-site-sel{display:flex;align-items:center;gap:6px;cursor:pointer}
 .pfw-site-sel select{font-size:16px;font-weight:900;color:#06033A;background:transparent;border:none;outline:none;cursor:pointer;font-family:inherit;appearance:none;-webkit-appearance:none;padding-right:4px}
 .pfw-site-arr{font-size:11px;color:#94a3b8}
-.pfw-quarters{display:flex;gap:6px}
-.pfw-q{padding:7px 16px;border-radius:20px;border:1.5px solid #e2e8f0;background:#f8fafc;font-size:13px;font-weight:700;color:#94a3b8;cursor:pointer;font-family:inherit;transition:.15s;white-space:nowrap}
+.pfw-quarters{display:flex;gap:5px;align-items:center}
+.pfw-q{padding:4px 11px;border-radius:16px;border:1.5px solid #e2e8f0;background:#f8fafc;font-size:11px;font-weight:700;color:#94a3b8;cursor:pointer;font-family:inherit;transition:.15s;white-space:nowrap}
 .pfw-q:hover{border-color:#06033A;color:#06033A}
 .pfw-q.active{background:#06033A;color:#fff;border-color:#06033A}
+.pfw-legend{display:flex;align-items:center;gap:14px;padding:10px 20px 0;font-size:11px;color:#64748b}
+.pfw-leg-i{display:flex;align-items:center;gap:5px;font-weight:600}
+.pfw-leg-sq{width:10px;height:10px;border-radius:2px;flex-shrink:0}
 .pfw-body{display:grid;grid-template-columns:200px 1fr;min-height:250px}
 @media(max-width:700px){.pfw-body{grid-template-columns:1fr}}
 .pfw-left{padding:22px 16px 22px 20px;display:flex;gap:10px;transition:background .35s;border-radius:0 0 0 18px}
@@ -1278,7 +1281,7 @@ include __DIR__ . '/../templates/header.php';
       <button class="pfw-q<?= $q===$pfw_quarter_def?' active':'' ?>" data-q="<?= $q ?>" onclick="pfwChangeQ(this)"><?= $ql ?></button>
       <?php endforeach; ?>
       <button onclick="document.getElementById('modal-ops').style.display='flex'"
-        style="padding:7px 13px;border:1.5px solid #e2e8f0;border-radius:20px;background:#f8fafc;font-size:12px;font-weight:700;color:#06033A;cursor:pointer;font-family:inherit;white-space:nowrap;margin-left:6px">
+        style="padding:4px 11px;border:1.5px solid #e2e8f0;border-radius:16px;background:#f8fafc;font-size:11px;font-weight:700;color:#06033A;cursor:pointer;font-family:inherit;white-space:nowrap;margin-left:4px">
         <i class="ph-duotone ph-arrows-out"></i> Détails
       </button>
     </div>
@@ -1309,6 +1312,10 @@ include __DIR__ . '/../templates/header.php';
       <?php if (empty($prod_par_site)): ?>
       <div class="pfw-empty">Aucune donnée disponible</div>
       <?php else: ?>
+      <div class="pfw-legend">
+        <span class="pfw-leg-i"><span class="pfw-leg-sq" id="pfwLegFilmsSq" style="opacity:.55"></span>Films</span>
+        <span class="pfw-leg-i"><span class="pfw-leg-sq" id="pfwLegEnginsSq"></span>Engins</span>
+      </div>
       <canvas id="pfwChart" height="230"></canvas>
       <?php endif; ?>
     </div>
@@ -2024,7 +2031,13 @@ function pfwDrawChart(site) {
     const enginVals = months.map(m => { const k=pfwAnnee+'-'+m; return site.monthly[k]?site.monthly[k].engins:0; });
     const filmVals  = months.map(m => { const k=pfwAnnee+'-'+m; return site.monthly[k]?site.monthly[k].films:0; });
 
-    const pad = {t:48, r:58, b:36, l:18};
+    // Mise à jour légende HTML
+    const lsq = document.getElementById('pfwLegFilmsSq');
+    const esq = document.getElementById('pfwLegEnginsSq');
+    if (lsq) lsq.style.background = site.color;
+    if (esq) esq.style.background = site.color;
+
+    const pad = {t:28, r:58, b:36, l:18};
     const cW = W - pad.l - pad.r;
     const cH = H - pad.t - pad.b;
     const n  = months.length;
@@ -2104,15 +2117,6 @@ function pfwDrawChart(site) {
         ctx.fillText(pfwMLbls[m], bx+bW/2, pad.t+cH+8);
     });
 
-    // Légende
-    const legY = 6;
-    [['Films (▨)', hexRgba(col,0.55)],['Engins (■)', col]].forEach(([lbl, c], i) => {
-        const lx = pad.l + i*130;
-        ctx.fillStyle = c; ctx.fillRect(lx, legY+3, 10, 10);
-        ctx.fillStyle = '#64748b'; ctx.font='10px DM Sans,sans-serif';
-        ctx.textAlign='left'; ctx.textBaseline='middle';
-        ctx.fillText(lbl, lx+14, legY+8);
-    });
 }
 
 window.addEventListener('load', () => { if (pfwSites.length) setTimeout(pfwUpdate, 80); });
