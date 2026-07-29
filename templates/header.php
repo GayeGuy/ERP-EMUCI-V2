@@ -197,6 +197,12 @@ $unread = count($notifs);
       flex: 1;
       display: flex; flex-direction: column;
       min-height: 100vh;
+      /* Item flex : sans min-width:0 il garde min-width:auto et refuse de
+         descendre sous la largeur de son contenu. Un tableau large ou une
+         barre d'onglets nombreuse l'étirait alors au-delà du viewport, et
+         c'était toute l'application — barre du haut comprise — qui partait
+         en défilement horizontal, au lieu du seul bloc concerné. */
+      min-width: 0;
     }
 
     /* ===== TOP BAR ===== */
