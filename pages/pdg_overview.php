@@ -1453,9 +1453,6 @@ include __DIR__ . '/../templates/header.php';
 
 <!-- ══════════ CHARTS ROW ══════════ -->
 <div class="charts-row">
-
-<!-- ══════════ CHARTS ROW ══════════ -->
-<div class="charts-row">
   <!-- Bobines donut -->
   <div class="ch-box">
     <div class="ch-ttl">État des bobines</div>
