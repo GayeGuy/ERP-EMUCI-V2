@@ -21,8 +21,11 @@ function _groupes_def(): array {
             'gradient'    => 'linear-gradient(135deg, #06033A 0%, #1B75BC 100%)',
             'first_page'  => 'pages/dashboard.php',
             'nav' => [
+                // Le lecteur n'a que la Vue PDG : le tableau de bord
+                // opérationnel ne lui sert pas.
                 ['label'=>'Tableau de bord','icon'=>'ph-squares-four',
-                 'url'=>'pages/dashboard.php','active_keys'=>['dashboard']],
+                 'url'=>'pages/dashboard.php','active_keys'=>['dashboard'],
+                 'roles_exclude'=>['lecteur']],
                 ['label'=>'Vue PDG','icon'=>'ph-chart-pie-slice',
                  'url'=>'pages/pdg_overview.php','active_keys'=>['pdg_overview'],
                  'roles_include'=>['lecteur']],

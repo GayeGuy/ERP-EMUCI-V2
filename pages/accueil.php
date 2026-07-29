@@ -26,7 +26,12 @@ if (!empty($_GET['set_groupe'])) {
     if (in_array($slug, $accessibles)) {
         $_SESSION['groupe_actif'] = $slug;
         $def = get_groupe_def($slug);
-        $first = $def['first_page'] ?? 'pages/dashboard.php';
+        // On atterrit sur la première entrée réellement accessible au rôle,
+        // plutôt que sur une page fixe : le lecteur n'a pas le tableau de
+        // bord dans son menu et serait envoyé sur une page absente de sa
+        // navigation.
+        $items = get_groupe_nav_items($slug);
+        $first = $items[0]['url'] ?? ($def['first_page'] ?? 'pages/dashboard.php');
         header('Location: ' . APP_URL . '/' . $first);
         exit;
     }
