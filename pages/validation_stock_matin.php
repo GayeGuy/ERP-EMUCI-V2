@@ -134,7 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     : null;
 
                 $ecart_val = $films_optoplate !== null
-                    ? ($films_optoplate - $films_utilises)
+                    ? ($films_optoplate - $films_total_pj)
                     : 0;
                 $has_ecart = $films_optoplate !== null && $ecart_val !== 0;
 
@@ -1518,11 +1518,8 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
           <tr style="background:#06033A">
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:left">N° Bobine</th>
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:left">Type</th>
-            <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Stock départ</th>
-            <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Utilisé (PJ)</th>
-            <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Endommagé</th>
-            <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Restant</th>
-            ${hasImport ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">EMUCI</th><th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Écart</th>' : ''}
+            <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Stock physique (PJ)</th>
+            ${hasImport ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Stock système (EMUCI)</th><th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Écart</th>' : ''}
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Statut</th>
             ${<?= $can_valider ? 'true' : 'false' ?> ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Action</th>' : ''}
           </tr>
@@ -1534,15 +1531,13 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
       const rowBg = hasEcart ? '#FFF7ED' : (i%2===0 ? 'white' : '#F8FAFC');
       const ecartColor = b.ecart > 0 ? '#DC2626' : '#D97706';
 
+      const stockEmuci = (hasImport && b.films_optoplate !== null) ? (b.stock_debut - b.films_optoplate) : null;
       html += `<tr style="background:${rowBg}">
         <td style="padding:9px 12px;font-family:monospace;font-weight:800;color:#06033A">${b.numero}</td>
         <td style="padding:9px 12px;font-size:11.5px;color:var(--muted)">${b.type_code||b.format||'—'}</td>
-        <td style="padding:9px 12px;text-align:center;font-weight:600">${b.stock_debut}</td>
-        <td style="padding:9px 12px;text-align:center;font-weight:800;color:#1B75BC;font-size:15px">${b.films_utilises}</td>
-        <td style="padding:9px 12px;text-align:center;color:${b.films_endommages>0?'#DC2626':'var(--muted)'};font-weight:${b.films_endommages>0?'700':'400'}">${b.films_endommages>0?b.films_endommages:'—'}</td>
-        <td style="padding:9px 12px;text-align:center;font-weight:700;color:${b.films_restants<=0?'#DC2626':b.films_restants<50?'#D97706':'#065F46'}">${b.films_restants}</td>
+        <td style="padding:9px 12px;text-align:center;font-weight:700;color:${b.films_restants<=0?'#DC2626':b.films_restants<50?'#D97706':'#065F46'};font-size:14px">${b.films_restants}</td>
         ${hasImport ? `
-        <td style="padding:9px 12px;text-align:center;font-weight:600">${b.films_optoplate !== null ? b.films_optoplate : '<span style="color:var(--muted)">—</span>'}</td>
+        <td style="padding:9px 12px;text-align:center;font-weight:600;color:#06033A">${stockEmuci !== null ? stockEmuci : '<span style="color:var(--muted)">—</span>'}</td>
         <td style="padding:9px 12px;text-align:center;font-weight:800;color:${hasEcart?ecartColor:'var(--success)'}">
           ${hasEcart ? (b.ecart>0?'+':'')+b.ecart : '✓'}
         </td>` : ''}
