@@ -186,15 +186,38 @@ $di_pending = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE statut
 $di_mois    = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE TO_CHAR(created_at,'YYYY-MM')=? AND statut != 'brouillon' $sf_di_bare", [$mois]);
 $di_approuv = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE TO_CHAR(updated_at,'YYYY-MM')=? AND statut IN ('approuve','approuve_traitement') $sf_di_bare", [$mois]);
 $di_tx      = $di_mois > 0 ? round($di_approuv / $di_mois * 100) : 0;
-$di_recents = db_fetch_all(
-    "SELECT d.id, d.numero, dt.label AS type_lbl, d.statut,
-            (u.prenom||' '||u.nom) AS demandeur
-     FROM di_demandes d
-     JOIN di_types dt ON dt.code = d.type_code
-     JOIN users u ON u.id = d.demandeur_id
-     WHERE d.statut IN ('en_attente','en_cours') $sf_di
-     ORDER BY d.created_at DESC LIMIT 5"
-);
+// L'étape qui retient la demande est plus utile que son auteur : elle dit
+// chez qui elle attend. etape_actuelle indexe la liste des étapes triées par
+// ordre, à partir de zéro : ROW_NUMBER reproduit exactement cet index.
+$di_recents = [];
+try {
+    $di_recents = db_fetch_all(
+        "SELECT d.id, d.numero, dt.label AS type_lbl, d.statut,
+                d.etape_actuelle, d.workflow_snapshot,
+                e.label AS etape_lbl
+         FROM di_demandes d
+         JOIN di_types dt ON dt.code = d.type_code
+         LEFT JOIN (
+            SELECT type_id, label,
+                   ROW_NUMBER() OVER (PARTITION BY type_id ORDER BY ordre ASC) - 1 AS idx
+            FROM di_etapes
+         ) e ON e.type_id = dt.id AND e.idx = d.etape_actuelle
+         WHERE d.statut IN ('en_attente','en_cours') $sf_di
+         ORDER BY d.created_at DESC LIMIT 5"
+    );
+} catch (Throwable $e) {}
+
+// Une demande transporte parfois sa propre copie du circuit, figée à la
+// soumission : elle prime sur la définition courante du type, qui a pu
+// changer depuis.
+foreach ($di_recents as &$_dr) {
+    $_snap = json_decode($_dr['workflow_snapshot'] ?? 'null', true);
+    $_i    = (int)($_dr['etape_actuelle'] ?? 0);
+    if (is_array($_snap) && isset($_snap[$_i]['label']) && $_snap[$_i]['label'] !== '') {
+        $_dr['etape_lbl'] = $_snap[$_i]['label'];
+    }
+}
+unset($_dr);
 
 // ── ÉVOLUTION 6 MOIS
 $evol = db_fetch_all(
@@ -1490,13 +1513,20 @@ include __DIR__ . '/../templates/header.php';
 
     <?php if (!empty($di_recents)): ?>
     <table class="dtbl">
-      <thead><tr><th>Réf.</th><th>Type</th><th>Demandeur</th><th>Statut</th></tr></thead>
+      <thead><tr><th>Réf.</th><th>Type</th><th>En attente chez</th><th>Statut</th></tr></thead>
       <tbody>
       <?php foreach ($di_recents as $dr): ?>
       <tr onclick="location.href='<?= APP_URL ?>/pages/demandes.php?id=<?= (int)$dr['id'] ?>'" style="cursor:pointer;transition:.15s" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background=''">
         <td style="font-weight:700;color:#3B4FBE"><?= h($dr['numero'] ?? '—') ?></td>
         <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"><?= h($dr['type_lbl']) ?></td>
-        <td><?= h($dr['demandeur']) ?></td>
+        <td style="max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+            title="<?= h($dr['etape_lbl'] ?? '') ?>">
+          <?php if (!empty($dr['etape_lbl'])): ?>
+            <span class="d-statut ds-enc" style="font-weight:600"><?= h($dr['etape_lbl']) ?></span>
+          <?php else: ?>
+            <span style="color:#94a3b8">—</span>
+          <?php endif; ?>
+        </td>
         <td><span class="d-statut <?= $dr['statut']==='en_cours'?'ds-enc':'ds-att' ?>"><?= $dr['statut']==='en_cours'?'En cours':'En attente' ?></span></td>
       </tr>
       <?php endforeach; ?>
