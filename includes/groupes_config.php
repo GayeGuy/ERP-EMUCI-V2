@@ -235,8 +235,11 @@ function get_groupes_pour_role(string $role_slug): array {
         'gestionnaire'               => ['DASHBOARD','STOCK'],
         // GSB (gestionnaire stock bobines)
         'gestionnaire_stock_bobines' => ['DASHBOARD','OPERATIONS','BOBINES','STOCK'],
-        // Lecture seule
-        'lecteur'                    => ['DASHBOARD','OPERATIONS','BOBINES','STOCK','RAPPORTS'],
+        // Lecture seule : uniquement la vue PDG et les demandes à valider.
+        // Les droits fins page par page (ex. resume_superviseur.php, qui
+        // autorise explicitement 'lecteur') ne changent pas — seule la
+        // page d'accueil et la navigation par groupes se resserrent.
+        'lecteur'                    => ['DASHBOARD'],
         // RAF / DAF — validation administrative et financière
         'raf'                        => ['DASHBOARD','RAPPORTS'],
         'daf'                        => ['DASHBOARD','RAPPORTS'],
