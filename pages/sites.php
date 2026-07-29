@@ -405,7 +405,9 @@ $type_colors = [
 .sites-table tr:hover td{background:#f8fafc}
 .sites-table tr.inactive td{opacity:.55}
 .type-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
-.stat-pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;padding:2px 9px;border-radius:10px}
+.stat-pill{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:700;padding:5px 12px;border-radius:10px}
+.stat-pill i{font-size:15px}
+.resp-avatar{width:30px;height:30px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;flex-shrink:0;letter-spacing:.2px}
 .action-btn{width:32px;height:32px;border-radius:8px;border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;transition:all .15s;background:#EFF6FF;color:#1B75BC}
 .action-btn:hover{background:#1B75BC;color:white;transform:scale(1.08)}
 .action-btn.edit-btn{background:#F0FDF4;color:#166534}
@@ -595,14 +597,14 @@ $type_colors = [
           </td>
           <td>
             <?php if ($s['responsable_nom']): ?>
-            <div style="display:flex;align-items:center;gap:7px">
-              <div style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--navy),var(--blue));display:flex;align-items:center;justify-content:center;color:white;font-size:9px;font-weight:700;flex-shrink:0">
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="resp-avatar">
                 <?= strtoupper(implode('',array_map(fn($w)=>$w[0],array_slice(explode(' ',$s['responsable_nom']),0,2)))) ?>
               </div>
-              <span style="font-size:12.5px"><?= h($s['responsable_nom']) ?></span>
+              <span style="font-size:13px;font-weight:600;color:var(--text)"><?= h($s['responsable_nom']) ?></span>
             </div>
             <?php else: ?>
-            <span style="font-size:12px;color:var(--muted)">—</span>
+            <span style="font-size:12.5px;color:var(--muted)">—</span>
             <?php endif; ?>
           </td>
           <td style="text-align:center">
@@ -878,7 +880,7 @@ function viewS(id){
       </div>`).join('')||'<p style="color:var(--muted);font-size:13px">Aucun équipement.</p>';
     const users=r.utilisateurs.map(u=>`
       <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
-        <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--navy),var(--blue));display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700">${u.nom.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase()}</div>
+        <div class="resp-avatar">${u.nom.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase()}</div>
         <div><div style="font-size:13px;font-weight:500">${u.nom}</div><div style="font-size:11px;color:var(--muted)">${u.email} · ${u.role}</div></div>
       </div>`).join('')||'<p style="color:var(--muted);font-size:13px">Aucun utilisateur.</p>';
     document.getElementById('sdB').innerHTML=`
