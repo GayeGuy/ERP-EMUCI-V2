@@ -195,26 +195,26 @@ include __DIR__ . '/../../templates/header.php';
 
 <!-- TOOLBAR -->
 <div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;align-items:center">
-  <form method="GET" style="display:flex;gap:8px;flex:1;flex-wrap:wrap">
+  <form method="GET" id="usersFilterForm" style="display:flex;gap:8px;flex:1;flex-wrap:wrap">
     <div style="position:relative;flex:1;min-width:200px">
       <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none">🔍</span>
-      <input type="text" name="q" value="<?= h($search) ?>" placeholder="Nom, prénom, email…"
+      <input type="text" name="q" value="<?= h($search) ?>" placeholder="Nom, prénom, email…" autocomplete="off"
              style="width:100%;padding:10px 14px 10px 38px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;outline:none;font-family:'DM Sans',sans-serif">
     </div>
-    <select name="role" class="fsel" onchange="this.form.submit()">
+    <select name="role" class="fsel">
       <option value="0">Tous les rôles</option>
       <?php foreach($roles_list as $r): ?>
       <option value="<?= $r['id'] ?>" <?= $f_role===$r['id']?'selected':'' ?>><?= h($r['nom']) ?></option>
       <?php endforeach; ?>
     </select>
-    <select name="actif" class="fsel" onchange="this.form.submit()">
+    <select name="actif" class="fsel">
       <option value="">Tous statuts</option>
       <option value="1" <?= $f_actif==='1'?'selected':'' ?>>Actifs</option>
       <option value="0" <?= $f_actif==='0'?'selected':'' ?>>Inactifs</option>
     </select>
-    <?php if($search||$f_role||$f_actif!==''): ?>
+    <span id="clearFiltersWrap"><?php if($search||$f_role||$f_actif!==''): ?>
     <a href="users.php" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;text-decoration:none;color:var(--text)">✕</a>
-    <?php endif; ?>
+    <?php endif; ?></span>
   </form>
   <?php if(can('users','can_create')): ?>
   <button class="btn btn-primary" onclick="openMU()">+ Nouvel utilisateur</button>
@@ -237,7 +237,7 @@ include __DIR__ . '/../../templates/header.php';
 </div>
 
 <!-- TABLE -->
-<div class="card">
+<div class="card" id="usersTableWrap">
   <div class="card-header">
     <h3>👥 Utilisateurs <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= fmt_number($total) ?>)</span></h3>
   </div>
@@ -490,6 +490,61 @@ function ap(data){
   return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
 }
 ['mU','mUD','mPwd'].forEach(id=>document.getElementById(id).addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');}));
+
+// ── Recherche / filtres réactifs (sans rechargement) ──────────
+(function(){
+  const form   = document.getElementById('usersFilterForm');
+  const qInput = form.querySelector('input[name="q"]');
+  const rSel   = form.querySelector('select[name="role"]');
+  const aSel   = form.querySelector('select[name="actif"]');
+  let debounceTimer, controller;
+
+  function buildUrl(){
+    const params = new URLSearchParams();
+    for (const [k,v] of new FormData(form).entries()) if (v !== '') params.set(k, v);
+    const qs = params.toString();
+    return 'users.php' + (qs ? '?' + qs : '');
+  }
+
+  function loadUsers(url, push){
+    if (controller) controller.abort();
+    controller = new AbortController();
+    fetch(url, {signal: controller.signal})
+      .then(r => r.text())
+      .then(html => {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        ['usersTableWrap', 'clearFiltersWrap'].forEach(id => {
+          const fresh = doc.getElementById(id), cur = document.getElementById(id);
+          if (fresh && cur) cur.innerHTML = fresh.innerHTML;
+        });
+        const params = new URLSearchParams(url.split('?')[1] || '');
+        if (document.activeElement !== qInput) qInput.value = params.get('q') || '';
+        rSel.value = params.get('role') || '0';
+        aSel.value = params.get('actif') || '';
+        if (push) history.pushState({}, '', url);
+      })
+      .catch(err => { if (err.name !== 'AbortError') console.error(err); });
+  }
+
+  qInput.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => loadUsers(buildUrl(), true), 350);
+  });
+  rSel.addEventListener('change', () => loadUsers(buildUrl(), true));
+  aSel.addEventListener('change', () => loadUsers(buildUrl(), true));
+  form.addEventListener('submit', e => { e.preventDefault(); clearTimeout(debounceTimer); loadUsers(buildUrl(), true); });
+
+  // Liens interceptés : pagination (dans le tableau) + bouton "effacer les filtres"
+  document.addEventListener('click', e => {
+    const a = e.target.closest('#usersTableWrap a[href], #clearFiltersWrap a[href]');
+    if (!a) return;
+    e.preventDefault();
+    clearTimeout(debounceTimer);
+    loadUsers(a.getAttribute('href'), true);
+  });
+
+  window.addEventListener('popstate', () => loadUsers(location.pathname + location.search, false));
+})();
 </script>
 
 <?php include __DIR__ . '/../../templates/footer.php'; ?>
