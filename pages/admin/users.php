@@ -179,15 +179,15 @@ include __DIR__ . '/../../templates/header.php';
 .modal{background:white;border-radius:16px;max-width:95vw;max-height:92vh;overflow-y:auto;animation:mIn .25s cubic-bezier(.22,1,.36,1)}
 @keyframes mIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
 .mhdr{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:white;z-index:10}
-.mhdr h3{font-family:'Montserrat',sans-serif;font-size:17px;font-weight:700}
+.mhdr h3{font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:700}
 .mclose{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:none;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
 .mbody{padding:24px}
 .mfoot{padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;background:white}
-.fsel{padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;cursor:pointer;outline:none;font-family:'DM Sans',sans-serif}
+.fsel{padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;cursor:pointer;outline:none;font-family:'Manrope',sans-serif}
 .fsel:focus{border-color:var(--blue-mid, #1a56a0)}
 /* Tabs */
 .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px}
-.tab-btn{padding:12px 20px;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition:all .15s;font-family:'DM Sans',sans-serif}
+.tab-btn{padding:12px 20px;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition:all .15s;font-family:'Manrope',sans-serif}
 .tab-btn.active{color:var(--blue-mid, #1a56a0);border-bottom-color:var(--blue-mid, #1a56a0)}
 .tab-pane{display:none}
 .tab-pane.active{display:block}
@@ -196,7 +196,7 @@ include __DIR__ . '/../../templates/header.php';
 .stat-tile{position:relative;overflow:hidden;background:white;border:1px solid var(--border);border-radius:12px;padding:11px 14px 11px 16px}
 .stat-tile::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent,var(--muted))}
 .stat-tile-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
-.stat-tile-value{font-family:'Montserrat',sans-serif;font-size:21px;font-weight:700;color:var(--navy)}
+.stat-tile-value{font-family:'Plus Jakarta Sans',sans-serif;font-size:21px;font-weight:700;color:var(--navy)}
 .stat-tile-empty{opacity:.5}
 .stat-tile-total{background:var(--navy);border-color:var(--navy)}
 .stat-tile-total::before{display:none}
@@ -210,7 +210,7 @@ include __DIR__ . '/../../templates/header.php';
     <div style="position:relative;flex:1;min-width:200px">
       <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none">🔍</span>
       <input type="text" name="q" value="<?= h($search) ?>" placeholder="Nom, prénom, email…" autocomplete="off"
-             style="width:100%;padding:10px 14px 10px 38px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;outline:none;font-family:'DM Sans',sans-serif">
+             style="width:100%;padding:10px 14px 10px 38px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;outline:none;font-family:'Manrope',sans-serif">
     </div>
     <select name="role" class="fsel">
       <option value="0">Tous les rôles</option>
@@ -286,7 +286,7 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
           <td><span class="role-badge <?= $r['role_slug'] ?>"><?= h($r['role_slug']) ?></span></td>
           <td style="font-size:12.5px"><?= h($r['site_nom'] ?? '—') ?></td>
           <td style="text-align:center">
-            <span style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:15px;color:var(--navy)"><?= $r['nb_actions'] ?></span>
+            <span style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:15px;color:var(--navy)"><?= $r['nb_actions'] ?></span>
           </td>
           <td style="text-align:center">
             <div style="display:flex;align-items:center;justify-content:center;gap:6px">
@@ -458,7 +458,7 @@ function viewU(id){
     document.getElementById('udB').innerHTML=`
       <div style="text-align:center;margin-bottom:20px">
         <div style="width:72px;height:72px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:white;font-size:26px;font-weight:700;margin:0 auto 12px">${r.prenom[0]}${r.nom[0]}</div>
-        <div style="font-family:'Montserrat',sans-serif;font-size:18px;font-weight:700">${r.prenom} ${r.nom}</div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:700">${r.prenom} ${r.nom}</div>
         <span class="role-badge ${r.role_slug}" style="margin-top:6px;display:inline-block">${r.role_slug}</span>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 20px">

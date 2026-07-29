@@ -113,13 +113,13 @@ include __DIR__ . '/../../templates/header.php';
 .nom-card{background:white;border:1px solid var(--border);border-radius:14px;overflow:hidden;transition:box-shadow .2s}
 .nom-card:hover{box-shadow:0 4px 20px rgba(0,0,0,.08)}
 .nom-card-top{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
-.nom-code{width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,var(--navy),#2563a8);display:flex;align-items:center;justify-content:center;font-family:'Montserrat',sans-serif;font-size:11px;font-weight:800;color:white;letter-spacing:.5px;flex-shrink:0}
-.nom-info h4{font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;color:var(--navy)}
+.nom-code{width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,var(--navy),#2563a8);display:flex;align-items:center;justify-content:center;font-family:'Plus Jakarta Sans',sans-serif;font-size:11px;font-weight:800;color:white;letter-spacing:.5px;flex-shrink:0}
+.nom-info h4{font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700;color:var(--navy)}
 .nom-info span{font-size:12px;color:var(--muted)}
 .nom-stats{display:flex}
 .nom-stat{flex:1;padding:12px;text-align:center;border-right:1px solid var(--border)}
 .nom-stat:last-child{border-right:none}
-.nom-stat .sv{font-family:'Montserrat',sans-serif;font-size:20px;font-weight:800;color:var(--navy)}
+.nom-stat .sv{font-family:'Plus Jakarta Sans',sans-serif;font-size:20px;font-weight:800;color:var(--navy)}
 .nom-stat .sl{font-size:11px;color:var(--muted);margin-top:2px}
 .nom-actions{padding:10px 18px;display:flex;gap:6px;background:var(--lighter);flex-wrap:wrap}
 .modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(13,31,53,.5);backdrop-filter:blur(4px);align-items:center;justify-content:center}
@@ -127,7 +127,7 @@ include __DIR__ . '/../../templates/header.php';
 .modal{background:white;border-radius:16px;width:620px;max-width:95vw;max-height:92vh;overflow-y:auto;animation:mIn .25s cubic-bezier(.22,1,.36,1)}
 @keyframes mIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
 .mhdr{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:white;z-index:10}
-.mhdr h3{font-family:'Montserrat',sans-serif;font-size:17px;font-weight:700}
+.mhdr h3{font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:700}
 .mclose{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:none;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
 .mbody{padding:24px}
 .mfoot{padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;background:white}
@@ -280,7 +280,7 @@ function viewN(id){
             <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${l}</div>
             <div style="font-size:13.5px">${v}</div></div>`).join('')}
       </div>
-      <h4 style="font-family:'Montserrat',sans-serif;font-size:14px;margin-bottom:10px">🔗 Composition du poste</h4>
+      <h4 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;margin-bottom:10px">🔗 Composition du poste</h4>
       <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Définissez les composants requis pour constituer un poste complet de ce type.</p>
       <div id="liensC">${liens||'<div style="color:var(--muted);font-size:13px;margin-bottom:8px">Aucun composant défini.</div>'}</div>
       ${addForm}`;

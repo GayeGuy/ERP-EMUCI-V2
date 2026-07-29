@@ -400,7 +400,7 @@ $type_colors = [
 .filter-bar input:focus,.filter-bar select:focus{border-color:var(--blue)}
 .kpi-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
 .kpi-chip{display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:22px;font-size:12.5px;font-weight:600;border:1px solid transparent;cursor:default}
-.kpi-chip .cn{font-family:'Montserrat',sans-serif;font-size:18px;font-weight:900;line-height:1}
+.kpi-chip .cn{font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:900;line-height:1}
 /* !important nécessaire : header.php impose th{background:var(--tertiary)!important;color:var(--muted)!important} */
 .sites-table th{font-size:11.5px;font-weight:700;color:#475569!important;text-transform:uppercase;letter-spacing:.4px;padding:10px 14px;border-bottom:2px solid var(--border)}
 .sites-table td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
@@ -412,35 +412,38 @@ $type_colors = [
 .count-cell{font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700;color:var(--navy);padding:6px 8px;background:white;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;min-width:40px}
 .count-cell.zero{color:var(--muted);font-weight:600}
 .resp-avatar{width:40px;height:40px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:700;flex-shrink:0;letter-spacing:.3px}
-.action-btn{width:32px;height:32px;border-radius:8px;border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;transition:all .15s;background:#EFF6FF;color:#1B75BC}
-.action-btn:hover{background:#1B75BC;color:white;transform:scale(1.08)}
+/* #15568B et non #1B75BC : sur le fond #EFF6FF ce dernier ne donnait que
+   4,47:1, sous le seuil AA de 4,5. Le nouveau donne 7,05:1. */
+.action-btn{width:32px;height:32px;border-radius:8px;border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;transition:all .15s;background:#EFF6FF;color:#15568B}
+.action-btn:hover{background:#15568B;color:white;transform:scale(1.08)}
 .action-btn.edit-btn{background:#F0FDF4;color:#166534}
 .action-btn.edit-btn:hover{background:#166534;color:white}
 .action-btn.warn{background:#FFF7ED;color:#C2410C}
 .action-btn.warn:hover{background:#C2410C;color:white}
 .action-btn.success{background:#F0FDF4;color:#15803D}
 .action-btn.success:hover{background:#15803D;color:white}
-.action-btn.danger{background:#FEF2F2;color:#DC2626}
-.action-btn.danger:hover{background:#DC2626;color:white}
+/* #B91C1C : 5,91:1 contre 4,41:1 pour #DC2626 sur ce fond. */
+.action-btn.danger{background:#FEF2F2;color:#B91C1C}
+.action-btn.danger:hover{background:#B91C1C;color:white}
 /* Modals */
 .modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(13,31,53,.5);backdrop-filter:blur(4px);align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
 .modal{background:white;border-radius:16px;max-width:95vw;max-height:92vh;overflow-y:auto;animation:mIn .25s cubic-bezier(.22,1,.36,1)}
 @keyframes mIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
 .mhdr{padding:16px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:white;z-index:10}
-.mhdr h3{font-family:'Montserrat',sans-serif;font-size:16px;font-weight:700}
+.mhdr h3{font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700}
 .mclose{width:30px;height:30px;border-radius:7px;border:1px solid var(--border);background:none;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center}
 .mbody{padding:22px}
 .mfoot{padding:12px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;background:white}
 /* Capacité */
 .capa-result{text-align:center;padding:24px;background:linear-gradient(135deg,var(--navy),#1a3c5e);border-radius:12px;color:white;margin-bottom:18px}
-.capa-number{font-family:'Montserrat',sans-serif;font-size:60px;font-weight:800;line-height:1}
+.capa-number{font-family:'Plus Jakarta Sans',sans-serif;font-size:60px;font-weight:800;line-height:1}
 .capa-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
 .capa-bar{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden}
 .capa-fill{height:100%;border-radius:3px}
 /* Config */
 .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:18px}
-.tab-btn{padding:10px 18px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition:all .15s;font-family:'DM Sans',sans-serif}
+.tab-btn{padding:10px 18px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition:all .15s;font-family:'Manrope',sans-serif}
 .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue)}
 .tab-pane{display:none}
 .tab-pane.active{display:block}
@@ -450,7 +453,7 @@ $type_colors = [
 <!-- ── TOOLBAR ─────────────────────────────────── -->
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
   <div>
-    <h2 style="font-family:'Montserrat',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">Gestion des Sites</h2>
+    <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">Gestion des Sites</h2>
     <p style="font-size:12px;color:var(--muted);margin-top:2px"><?= $total_actifs ?> actif(s) sur <?= $total_all ?> sites au total</p>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -874,7 +877,7 @@ function viewS(id){
       <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
         <span style="font-size:10px;font-weight:700;background:var(--lighter);border:1px solid var(--border);border-radius:5px;padding:2px 6px">${e.code}</span>
         <span style="flex:1;font-size:13px">${e.libelle}</span>
-        <span style="font-family:'Montserrat',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">${e.total}</span>
+        <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">${e.total}</span>
       </div>`).join('')||'<p style="color:var(--muted);font-size:13px">Aucun équipement.</p>';
     const users=r.utilisateurs.map(u=>`
       <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
@@ -885,9 +888,9 @@ function viewS(id){
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 18px;margin-bottom:18px">
         ${[['Code',r.code],['Type',r.type],['Ville',r.ville||'—'],['Responsable',r.responsable_nom||'—'],['Adresse',r.adresse||'—'],['Statut',r.actif==1?'✅ Actif':'❌ Inactif']].map(([l,v])=>`<div style="padding:6px 0;border-bottom:1px solid var(--border)"><div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">${l}</div><div style="font-size:13px">${v}</div></div>`).join('')}
       </div>
-      <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;margin-bottom:8px">Équipements (${r.equip_par_type.reduce((s,e)=>s+parseInt(e.total),0)})</h4>
+      <h4 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;margin-bottom:8px">Équipements (${r.equip_par_type.reduce((s,e)=>s+parseInt(e.total),0)})</h4>
       ${equips}
-      <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;margin:14px 0 8px">Utilisateurs (${r.utilisateurs.length})</h4>
+      <h4 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;margin:14px 0 8px">Utilisateurs (${r.utilisateurs.length})</h4>
       ${users}`;
   });
 }
@@ -910,14 +913,14 @@ function calcCapa(type){
         <span style="font-size:11px;color:var(--muted);margin:0 8px">${r.disponible}/${r.requis}</span>
         <div class="capa-bar"><div class="capa-fill" style="width:${Math.min(pct,100)}%;background:${r.ok?'var(--success)':'var(--danger)'}"></div></div>
         <span style="margin-left:8px;font-size:16px;width:18px">${r.ok?'✓':'✗'}</span>
-        <span style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:800;width:30px;text-align:right;color:var(--navy)">${r.couvre}</span>
+        <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;font-weight:800;width:30px;text-align:right;color:var(--navy)">${r.couvre}</span>
       </div>`;}).join('');
     document.getElementById('capaResult').innerHTML=`
       <div class="capa-result" style="border-top:4px solid ${col}">
         <div class="capa-number" style="color:${col}">${nb_sites}</div>
         <div style="font-size:13px;opacity:.75">site(s) «${type}» réalisable(s)</div>
       </div>
-      <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;margin-bottom:8px">Détail par équipement</h4>${rows}`;
+      <h4 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;margin-bottom:8px">Détail par équipement</h4>${rows}`;
   });
 }
 
@@ -1004,7 +1007,7 @@ function saveCfg(type){
 <!-- Modal Lier EMUCI -->
 <div id="modalLierEmuci" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.55);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:26px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-    <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:14px">🔗 Lier site EMUCI</h3>
+    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:14px">🔗 Lier site EMUCI</h3>
     <div id="alertLierEmuci"></div>
     <input type="hidden" id="lierId">
     <div style="background:#EFF6FF;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#1D4ED8">Nom EMUCI : <strong id="lierNomEmuci"></strong></div>
@@ -1024,7 +1027,7 @@ function saveCfg(type){
 <!-- Modal Créer depuis EMUCI -->
 <div id="modalCreerEmuci" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.55);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:26px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-    <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:14px">➕ Créer site depuis EMUCI</h3>
+    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:14px">➕ Créer site depuis EMUCI</h3>
     <div id="alertCreerEmuci"></div>
     <input type="hidden" id="creerId">
     <div style="background:#EFF6FF;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#1D4ED8">Nom EMUCI : <strong id="creerNomEmuci"></strong></div>

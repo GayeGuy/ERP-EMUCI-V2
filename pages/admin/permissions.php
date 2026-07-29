@@ -148,7 +148,7 @@ include __DIR__ . '/../../templates/header.php';
   padding:9px 12px;font-size:13px;font-weight:500;color:var(--text,#2c3e50);
   cursor:pointer;text-align:left;width:100%;
   background:none;border:none;border-radius:8px;
-  font-family:'DM Sans',sans-serif;transition:background .15s,color .15s}
+  font-family:'Manrope',sans-serif;transition:background .15s,color .15s}
 .perm-tab:hover{background:var(--lighter,#f0f4f8)}
 .perm-tab.active{background:var(--navy,#1E2B4A);color:#fff;font-weight:700}  /* navy et non --blue-mid : depuis la refonte de palette --blue-mid vaut
      #5B76FF, ce qui ne donne que 3,83:1 avec du blanc. navy donne 14:1. */
@@ -195,7 +195,7 @@ include __DIR__ . '/../../templates/header.php';
 
 .role-header{display:flex;align-items:center;gap:14px;padding:20px;background:linear-gradient(135deg,var(--navy),#1a3c5e);border-radius:12px;margin-bottom:20px;color:white}
 .role-avatar{width:52px;height:52px;border-radius:14px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0}
-.role-title{font-family:'Montserrat',sans-serif;font-size:18px;font-weight:800}
+.role-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800}
 .role-sub{font-size:12px;opacity:.65;margin-top:3px}
 
 .modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(13,31,53,.5);backdrop-filter:blur(4px);align-items:center;justify-content:center}
@@ -203,7 +203,7 @@ include __DIR__ . '/../../templates/header.php';
 .modal{background:white;border-radius:16px;width:480px;max-width:95vw;max-height:92vh;overflow-y:auto;animation:mIn .25s cubic-bezier(.22,1,.36,1)}
 @keyframes mIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
 .mhdr{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:white;z-index:10}
-.mhdr h3{font-family:'Montserrat',sans-serif;font-size:17px;font-weight:700}
+.mhdr h3{font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:700}
 .mclose{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:none;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
 .mbody{padding:24px}
 .mfoot{padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px}

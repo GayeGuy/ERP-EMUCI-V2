@@ -104,7 +104,7 @@ include __DIR__ . '/../../templates/header.php';
 .role-badge.gestionnaire{background:#d6eaf8;color:#1a5276}
 .role-badge.lecteur{background:#eaecee;color:#424949}
 
-.fsel{padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;cursor:pointer;outline:none;font-family:'DM Sans',sans-serif}
+.fsel{padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;cursor:pointer;outline:none;font-family:'Manrope',sans-serif}
 .fsel:focus{border-color:var(--blue-mid, #1a56a0)}
 
 .diff-block{background:var(--lighter);border-radius:8px;padding:12px;font-size:12px;font-family:monospace;max-height:200px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
@@ -116,7 +116,7 @@ include __DIR__ . '/../../templates/header.php';
 .modal{background:white;border-radius:16px;width:680px;max-width:95vw;max-height:92vh;overflow-y:auto;animation:mIn .25s cubic-bezier(.22,1,.36,1)}
 @keyframes mIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
 .mhdr{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:white;z-index:10}
-.mhdr h3{font-family:'Montserrat',sans-serif;font-size:17px;font-weight:700}
+.mhdr h3{font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:700}
 .mclose{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:none;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
 .mbody{padding:24px}
 
@@ -154,7 +154,7 @@ include __DIR__ . '/../../templates/header.php';
       <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted)">🔍</span>
       <input type="text" name="q" value="<?= h($search) ?>"
              placeholder="Rechercher dans les descriptions…"
-             style="width:100%;padding:9px 14px 9px 36px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none;font-family:'DM Sans',sans-serif">
+             style="width:100%;padding:9px 14px 9px 36px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none;font-family:'Manrope',sans-serif">
     </div>
     <select name="user_id" class="fsel" onchange="this.form.submit()">
       <option value="0">Tous les utilisateurs</option>
