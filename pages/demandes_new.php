@@ -15,6 +15,17 @@ $_SESSION['groupe_actif'] = 'DEMANDES';
 $page_title  = 'Nouvelle demande';
 $active_page = 'demandes_new';
 
+// Le lien est retiré du menu pour le lecteur, mais l'adresse resterait
+// atteignable et le formulaire soumissible : on ferme ici, pour la page
+// comme pour l'envoi.
+if (!di_peut_creer($user)) {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        json_response(false, "Votre profil ne permet pas de déposer une demande.");
+    }
+    redirect_to('/pages/demandes.php');
+    exit;
+}
+
 // ── AJAX : création / soumission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     header('Content-Type: application/json');

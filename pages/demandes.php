@@ -442,7 +442,9 @@ include __DIR__ . '/../templates/header.php';
 <?php else: ?>
   <div class="di-topbar">
     <h2 style="margin:0">Mes demandes</h2>
-    <a href="<?= APP_URL ?>/pages/demandes_new.php" class="di-btn di-btn-primary"><i class="ph-duotone ph-plus"></i> Nouvelle demande</a>
+    <?php if (di_peut_creer($user)): ?>
+      <a href="<?= APP_URL ?>/pages/demandes_new.php" class="di-btn di-btn-primary"><i class="ph-duotone ph-plus"></i> Nouvelle demande</a>
+    <?php endif; ?>
   </div>
 
   <div class="di-stats">
@@ -507,8 +509,12 @@ include __DIR__ . '/../templates/header.php';
         <a href="?" class="di-btn di-btn-ghost" style="margin-top:8px">Effacer les filtres</a>
       <?php else: ?>
         <i class="ph-duotone ph-tray" style="font-size:44px;color:#cbd5e1"></i>
-        <p>Vous n'avez pas encore de demande.</p>
-        <a href="<?= APP_URL ?>/pages/demandes_new.php" class="di-btn di-btn-primary" style="margin-top:8px">Créer ma première demande</a>
+        <?php if (di_peut_creer($user)): ?>
+          <p>Vous n'avez pas encore de demande.</p>
+          <a href="<?= APP_URL ?>/pages/demandes_new.php" class="di-btn di-btn-primary" style="margin-top:8px">Créer ma première demande</a>
+        <?php else: ?>
+          <p>Aucune demande à votre nom. Votre profil permet de valider celles des autres, pas d'en déposer.</p>
+        <?php endif; ?>
       <?php endif; ?>
     </div>
   <?php else: ?>

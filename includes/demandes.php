@@ -361,3 +361,12 @@ function di_rejeter(array $demande, array $user, string $motif): void {
     di_notify((int)$demande['demandeur_id'],
         "Votre demande « {$type['label']} » a été rejetée à l'étape « $stepLabel » : $motif", (int)$demande['id']);
 }
+
+// ── Qui peut déposer une demande
+// Le lecteur consulte et valide, mais ne dépose pas : son profil est un
+// profil de consultation. La règle vit ici pour que le menu, la page de
+// création et les boutons d'appel s'appuient tous sur la même.
+function di_peut_creer(?array $user = null): bool {
+    $user = $user ?? current_user();
+    return ($user['role_slug'] ?? '') !== 'lecteur';
+}

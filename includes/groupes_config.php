@@ -164,8 +164,10 @@ function _groupes_def(): array {
             'nav' => [
                 ['label'=>'Mes demandes',    'icon'=>'ph-list-checks',
                  'url'=>'pages/demandes.php','active_keys'=>['demandes']],
+                // Le lecteur consulte et valide, il ne dépose pas de demande.
                 ['label'=>'Nouvelle demande','icon'=>'ph-plus-circle',
-                 'url'=>'pages/demandes_new.php','active_keys'=>['demandes_new']],
+                 'url'=>'pages/demandes_new.php','active_keys'=>['demandes_new'],
+                 'roles_exclude'=>['lecteur']],
                 ['label'=>'À valider',       'icon'=>'ph-seal-check',
                  'url'=>'pages/demandes_a_valider.php','active_keys'=>['demandes_valider'],
                  'roles_exclude'=>['coordinateur_site']],
