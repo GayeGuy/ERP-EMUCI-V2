@@ -409,9 +409,9 @@ $type_colors = [
 .type-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
 /* Compteurs Équip./Util. : nombre nu, lisible d'un coup d'œil.
    Les pastilles bleu pâle précédentes plafonnaient à 4.25:1 (sous le seuil AA). */
-.count-cell{font-family:'Plus Jakarta Sans',sans-serif;font-size:15.5px;font-weight:800;color:var(--navy)}
+.count-cell{font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700;color:var(--navy);padding:6px 8px;background:white;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;min-width:40px}
 .count-cell.zero{color:var(--muted);font-weight:600}
-.resp-avatar{width:30px;height:30px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700;flex-shrink:0;letter-spacing:.2px}
+.resp-avatar{width:40px;height:40px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:700;flex-shrink:0;letter-spacing:.3px}
 .action-btn{width:32px;height:32px;border-radius:8px;border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;transition:all .15s;background:#EFF6FF;color:#1B75BC}
 .action-btn:hover{background:#1B75BC;color:white;transform:scale(1.08)}
 .action-btn.edit-btn{background:#F0FDF4;color:#166534}
