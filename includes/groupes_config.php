@@ -162,9 +162,12 @@ function _groupes_def(): array {
             'gradient'    => 'linear-gradient(135deg, #3B4FBE 0%, #7C92FF 100%)',
             'first_page'  => 'pages/demandes.php',
             'nav' => [
+                // Le lecteur ne dépose pas de demande : ni la création, ni la
+                // liste de ses propres demandes n'ont de sens pour lui. Il ne
+                // garde que la file de validation.
                 ['label'=>'Mes demandes',    'icon'=>'ph-list-checks',
-                 'url'=>'pages/demandes.php','active_keys'=>['demandes']],
-                // Le lecteur consulte et valide, il ne dépose pas de demande.
+                 'url'=>'pages/demandes.php','active_keys'=>['demandes'],
+                 'roles_exclude'=>['lecteur']],
                 ['label'=>'Nouvelle demande','icon'=>'ph-plus-circle',
                  'url'=>'pages/demandes_new.php','active_keys'=>['demandes_new'],
                  'roles_exclude'=>['lecteur']],

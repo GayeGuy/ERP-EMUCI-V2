@@ -44,6 +44,44 @@ $deja_traite = di_deja_traite($user, $fFrom, $fTo);
 $type_labels = [];
 foreach (di_types_actifs() as $t) $type_labels[$t['code']] = $t['label'];
 
+// ── Filtres complémentaires
+$fRef  = trim($_GET['ref'] ?? '');
+$fType = trim($_GET['type'] ?? '');
+$fDem  = trim($_GET['dem'] ?? '');
+$fStat = trim($_GET['statut'] ?? '');
+
+// Les listes déroulantes sont bâties sur le périmètre du validateur, avant
+// filtrage : proposer une valeur qui ne renverrait rien n'aide personne, et
+// une valeur absente de la liste ne serait plus sélectionnable.
+$opt_types = $opt_dems = $opt_stats = [];
+foreach (array_merge($a_valider, $deja_traite) as $d) {
+    $c = $d['type_code'] ?? '';
+    if ($c !== '') $opt_types[$c] = $type_labels[$c] ?? $c;
+    $dm = trim((string)($d['_demandeur'] ?? ''));
+    if ($dm !== '') $opt_dems[$dm] = $dm;
+    $st = $d['statut'] ?? '';
+    if ($st !== '') $opt_stats[$st] = di_statut_label($st)[0];
+}
+asort($opt_types); asort($opt_dems); asort($opt_stats);
+
+// La référence se cherche par fragment, le reste par égalité.
+function di_filtre(array $lignes, string $ref, string $type, string $dem, string $stat): array {
+    if ($ref === '' && $type === '' && $dem === '' && $stat === '') return $lignes;
+    return array_values(array_filter($lignes, function ($d) use ($ref, $type, $dem, $stat) {
+        if ($ref !== '' && stripos((string)($d['numero'] ?? ''), $ref) === false) return false;
+        if ($type !== '' && ($d['type_code'] ?? '') !== $type) return false;
+        if ($dem !== '' && trim((string)($d['_demandeur'] ?? '')) !== $dem) return false;
+        if ($stat !== '' && ($d['statut'] ?? '') !== $stat) return false;
+        return true;
+    }));
+}
+
+$total_av = count($a_valider);
+$total_dj = count($deja_traite);
+$a_valider   = di_filtre($a_valider,   $fRef, $fType, $fDem, $fStat);
+$deja_traite = di_filtre($deja_traite, $fRef, $fType, $fDem, $fStat);
+$filtre_actif = ($fRef !== '' || $fType !== '' || $fDem !== '' || $fStat !== '' || $fFrom || $fTo);
+
 include __DIR__ . '/../templates/header.php';
 ?>
 <style>
@@ -76,6 +114,28 @@ include __DIR__ . '/../templates/header.php';
   .fbtn{padding:7px 16px;border:none;border-radius:9px;background:#3B4FBE;color:#fff;
     font-size:13px;font-weight:700;cursor:pointer;font-family:inherit}
   .fbtn-ghost{background:var(--input,#f0f4f8);color:var(--text,#2c3e50)}
+
+  /* Seconde barre : filtres sur le contenu */
+  .fbar-2{margin-top:-10px}
+  .fgrp{display:flex;flex-direction:column;gap:4px;min-width:0}
+  .fgrp .fbar-label{font-size:10px;text-transform:uppercase;letter-spacing:.4px}
+  .ftxt{min-width:180px}
+  .fsel{min-width:150px;max-width:230px;cursor:pointer;
+    text-overflow:ellipsis;padding-right:26px;appearance:none;-webkit-appearance:none;
+    background-image:url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2 4.5L6 8.5L10 4.5' stroke='%237f8c8d' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 9px center;background-size:11px}
+  .fbar-2 .fbtn{align-self:flex-end}
+
+  /* Au-delà de quatre lignes, la liste défile dans son cadre : la section
+     suivante reste atteignable sans parcourir tout l'historique. */
+  .di-scroll{max-height:calc(44px + 4 * 45px);overflow-y:auto;
+    border:1.5px solid var(--border,#e2e8f0);border-radius:14px;background:var(--card,#fff)}
+  .di-scroll .di-tbl{border:none;border-radius:0}
+  .di-scroll .di-tbl thead th{position:sticky;top:0;z-index:1;
+    background:var(--input,#f8fafc);box-shadow:0 1px 0 var(--border,#e2e8f0)}
+  .di-scroll::-webkit-scrollbar{width:9px}
+  .di-scroll::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:9px}
+  .di-scroll::-webkit-scrollbar-track{background:transparent}
 </style>
 
 <div class="di-wrap">
@@ -92,6 +152,14 @@ include __DIR__ . '/../templates/header.php';
     <span class="fbar-label">Période</span>
 
     <?php
+    // Changer de période ne doit pas effacer les filtres de contenu.
+    $lien = function (array $over) use ($periode, $date_from, $date_to, $fRef, $fType, $fDem, $fStat) {
+        $p = ['periode'=>$periode, 'date_from'=>$date_from, 'date_to'=>$date_to,
+              'ref'=>$fRef, 'type'=>$fType, 'dem'=>$fDem, 'statut'=>$fStat];
+        $p = array_merge($p, $over);
+        $p = array_filter($p, fn($v) => $v !== '' && $v !== null);
+        return $p ? '?' . http_build_query($p) : '?';
+    };
     $pills = [
         ''       => 'Tout',
         'today'  => "Aujourd'hui",
@@ -101,12 +169,11 @@ include __DIR__ . '/../templates/header.php';
         'custom' => 'Personnalisé',
     ];
     foreach ($pills as $val => $lbl):
-        $active = ($periode === $val && !($val === '' && $periode !== '')) || ($val === '' && $periode === '') ? 'active' : '';
-        // Pour "Tout" : actif si aucun filtre
-        if ($val === '') $active = ($periode === '' || ($periode !== 'today' && $periode !== 'week' && $periode !== 'month' && $periode !== '3months' && $periode !== 'custom')) && $periode === '' ? 'active' : '';
-        $active = ($periode === $val) ? 'active' : ($val === '' && $periode === '' ? 'active' : '');
+        $active = ($periode === $val) ? 'active' : '';
+        // « Tout » remet aussi les dates à zéro.
+        $href = $lien(['periode' => $val, 'date_from' => '', 'date_to' => '']);
     ?>
-      <a href="?periode=<?= $val ?>" class="fpill <?= $active ?>"><?= $lbl ?></a>
+      <a href="<?= h($href) ?>" class="fpill <?= $active ?>"><?= $lbl ?></a>
     <?php endforeach; ?>
 
     <div id="custom-dates" style="display:<?= $periode === 'custom' ? 'flex' : 'none' ?>;align-items:center;gap:8px">
@@ -115,9 +182,61 @@ include __DIR__ . '/../templates/header.php';
       <span class="fsep">au</span>
       <input type="date" name="date_to" class="fdate" value="<?= h($date_to) ?>">
       <input type="hidden" name="periode" value="custom">
+      <?php // Les filtres de contenu voyagent avec, sinon choisir des dates les effacerait. ?>
+      <?php if ($fRef  !== ''): ?><input type="hidden" name="ref"    value="<?= h($fRef)  ?>"><?php endif; ?>
+      <?php if ($fType !== ''): ?><input type="hidden" name="type"   value="<?= h($fType) ?>"><?php endif; ?>
+      <?php if ($fDem  !== ''): ?><input type="hidden" name="dem"    value="<?= h($fDem)  ?>"><?php endif; ?>
+      <?php if ($fStat !== ''): ?><input type="hidden" name="statut" value="<?= h($fStat) ?>"><?php endif; ?>
       <button type="submit" class="fbtn">Appliquer</button>
-      <a href="?" class="fbtn fbtn-ghost" style="text-decoration:none;padding:7px 14px">Réinitialiser</a>
     </div>
+  </form>
+
+  <!-- ── Filtres sur le contenu -->
+  <form method="get" class="fbar fbar-2">
+    <?php if ($periode !== ''): ?><input type="hidden" name="periode" value="<?= h($periode) ?>"><?php endif; ?>
+    <?php if ($date_from !== ''): ?><input type="hidden" name="date_from" value="<?= h($date_from) ?>"><?php endif; ?>
+    <?php if ($date_to !== ''): ?><input type="hidden" name="date_to" value="<?= h($date_to) ?>"><?php endif; ?>
+
+    <div class="fgrp">
+      <label class="fbar-label" for="f-ref">Référence</label>
+      <input type="search" id="f-ref" name="ref" class="fdate ftxt" value="<?= h($fRef) ?>"
+             placeholder="Numéro ou fragment" autocomplete="off">
+    </div>
+
+    <div class="fgrp">
+      <label class="fbar-label" for="f-type">Type</label>
+      <select id="f-type" name="type" class="fdate fsel">
+        <option value="">Tous</option>
+        <?php foreach ($opt_types as $code => $lbl): ?>
+          <option value="<?= h($code) ?>"<?= $fType === $code ? ' selected' : '' ?>><?= h($lbl) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+
+    <div class="fgrp">
+      <label class="fbar-label" for="f-dem">Demandeur</label>
+      <select id="f-dem" name="dem" class="fdate fsel">
+        <option value="">Tous</option>
+        <?php foreach ($opt_dems as $nom): ?>
+          <option value="<?= h($nom) ?>"<?= $fDem === $nom ? ' selected' : '' ?>><?= h($nom) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+
+    <div class="fgrp">
+      <label class="fbar-label" for="f-stat">Statut</label>
+      <select id="f-stat" name="statut" class="fdate fsel">
+        <option value="">Tous</option>
+        <?php foreach ($opt_stats as $code => $lbl): ?>
+          <option value="<?= h($code) ?>"<?= $fStat === $code ? ' selected' : '' ?>><?= h($lbl) ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+
+    <button type="submit" class="fbtn">Filtrer</button>
+    <?php if ($filtre_actif): ?>
+      <a href="?" class="fbtn fbtn-ghost" style="text-decoration:none;padding:7px 14px">Tout effacer</a>
+    <?php endif; ?>
   </form>
 
   <?php if ($fFrom || $fTo): ?>
@@ -139,15 +258,16 @@ include __DIR__ . '/../templates/header.php';
   <!-- ── En attente de mon visa -->
   <div class="di-section">
     En attente de mon visa
-    <span class="di-count"><?= count($a_valider) ?></span>
+    <span class="di-count"><?= count($a_valider) ?><?= count($a_valider) < $total_av ? ' / ' . $total_av : '' ?></span>
   </div>
 
   <?php if (empty($a_valider)): ?>
     <div class="di-empty">
       <i class="ph-duotone ph-seal-check" style="font-size:40px;color:#cbd5e1"></i>
-      <p style="margin:10px 0 0">Rien à valider<?= $fFrom || $fTo ? ' sur cette période' : ' pour le moment' ?>.</p>
+      <p style="margin:10px 0 0">Rien à valider<?= $filtre_actif ? ' avec ces filtres' : ' pour le moment' ?>.</p>
     </div>
   <?php else: ?>
+    <div<?= count($a_valider) > 4 ? ' class="di-scroll"' : '' ?>>
     <table class="di-tbl">
       <thead><tr><th>Référence</th><th>Type</th><th>Demandeur</th><th>Étape</th><th>Soumise le</th><th>Statut</th></tr></thead>
       <tbody>
@@ -163,32 +283,36 @@ include __DIR__ . '/../templates/header.php';
       <?php endforeach; ?>
       </tbody>
     </table>
+    </div>
   <?php endif; ?>
 
   <!-- ── Demandes où j'ai déjà visé -->
   <?php if (!empty($deja_traite)): ?>
   <div class="di-section">
     Demandes où j'ai déjà visé
-    <span class="di-count done"><?= count($deja_traite) ?></span>
+    <span class="di-count done"><?= count($deja_traite) ?><?= count($deja_traite) < $total_dj ? ' / ' . $total_dj : '' ?></span>
   </div>
-  <table class="di-tbl">
-    <thead><tr><th>Référence</th><th>Type</th><th>Demandeur</th><th>Étape courante</th><th>Soumise le</th><th>Statut</th></tr></thead>
-    <tbody>
-    <?php foreach ($deja_traite as $d): ?>
-      <tr onclick="location.href='<?= APP_URL ?>/pages/demandes.php?id=<?= (int)$d['id'] ?>'">
-        <td style="font-weight:700"><?= h($d['numero']) ?></td>
-        <td><?= h($type_labels[$d['type_code']] ?? $d['type_code']) ?></td>
-        <td><?= h($d['_demandeur'] ?? '') ?></td>
-        <td><span class="di-chip done"><?= h($d['_etape_label']) ?></span></td>
-        <td style="color:var(--muted,#7f8c8d);font-size:13px"><?= $d['submitted_at'] ? date('d/m/Y', strtotime($d['submitted_at'])) : '—' ?></td>
-        <td><?= di_badge($d['statut']) ?></td>
-      </tr>
-    <?php endforeach; ?>
-    </tbody>
-  </table>
-  <?php elseif ($fFrom || $fTo): ?>
-  <div class="di-section">Demandes où j'ai déjà visé <span class="di-count done">0</span></div>
-  <div class="di-empty">Aucune demande traitée sur cette période.</div>
+  <?php // Au-delà de quatre lignes la liste défile dans son cadre. ?>
+  <div<?= count($deja_traite) > 4 ? ' class="di-scroll"' : '' ?>>
+    <table class="di-tbl">
+      <thead><tr><th>Référence</th><th>Type</th><th>Demandeur</th><th>Étape courante</th><th>Soumise le</th><th>Statut</th></tr></thead>
+      <tbody>
+      <?php foreach ($deja_traite as $d): ?>
+        <tr onclick="location.href='<?= APP_URL ?>/pages/demandes.php?id=<?= (int)$d['id'] ?>'">
+          <td style="font-weight:700"><?= h($d['numero']) ?></td>
+          <td><?= h($type_labels[$d['type_code']] ?? $d['type_code']) ?></td>
+          <td><?= h($d['_demandeur'] ?? '') ?></td>
+          <td><span class="di-chip done"><?= h($d['_etape_label']) ?></span></td>
+          <td style="color:var(--muted,#7f8c8d);font-size:13px"><?= $d['submitted_at'] ? date('d/m/Y', strtotime($d['submitted_at'])) : '—' ?></td>
+          <td><?= di_badge($d['statut']) ?></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+  <?php elseif ($filtre_actif): ?>
+  <div class="di-section">Demandes où j'ai déjà visé <span class="di-count done">0<?= $total_dj ? ' / ' . $total_dj : '' ?></span></div>
+  <div class="di-empty">Aucune demande traitée ne correspond à ces filtres.</div>
   <?php endif; ?>
 
 </div>
