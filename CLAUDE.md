@@ -4,8 +4,8 @@
 
 Application web de gestion de stock industriel (bobines, équipements, EMUCI, opérations terrain).
 **Nom interne :** DigiStock / StockApp
-**GitHub :** RUTHAXELLE/stockapp, branche `main`
-**Production :** https://stockapp-production-e306.up.railway.app (auto-déployé depuis GitHub via Railway + Docker)
+**GitHub :** RUTHAXELLE/stockapp, branche `main` (Render/PostgreSQL, déployée) — voir aussi la branche parallèle `vps-mysql` ci-dessous
+**Production :** https://stockapp-p8us.onrender.com (auto-déployé depuis GitHub `main` via Render + Docker, service `stockapp`, région Frankfurt)
 
 ---
 
@@ -14,9 +14,9 @@ Application web de gestion de stock industriel (bobines, équipements, EMUCI, op
 | Couche | Technologie |
 |---|---|
 | Langage | PHP 8.2 (pas de framework) |
-| Base de données | MySQL (PDO, `utf8mb4`) |
-| Hébergement | Railway (Docker, `php -S 0.0.0.0:8080`) |
-| Dev local | XAMPP (localhost, DB `stockapp`) |
+| Base de données | PostgreSQL (Neon, PDO `pdo_pgsql`, `sslmode=require`) — migré depuis MySQL le 2026-07-21 |
+| Hébergement | Render (Docker, `php -S 0.0.0.0:$PORT`) |
+| Dev local | Config par variables d'environnement (`includes/db.php` → `env()`), valeurs par défaut PostgreSQL local si absentes |
 | Export Excel | `phpoffice/phpspreadsheet ^1.29` |
 | Export PDF | `dompdf/dompdf ^3.1` |
 | Export PPTX | ZipArchive natif PHP (Open XML manuel) |
@@ -30,7 +30,8 @@ Application web de gestion de stock industriel (bobines, équipements, EMUCI, op
 stockapp/
 ├── index.php                   # Entrée principale (routeur simple)
 ├── login.php / logout.php
-├── Dockerfile                  # php:8.2-cli + php -S (Railway)
+├── Dockerfile                  # php:8.2-cli + pdo_pgsql + php -S (Render)
+├── render.yaml                 # Render Blueprint (service web + env vars sync:false)
 ├── composer.json
 ├── includes/
 │   ├── db.php                  # PDO, constantes DB, helpers SQL
@@ -78,7 +79,7 @@ db_last_id(): string
 db_begin() / db_commit() / db_rollback()
 ```
 
-**Constantes disponibles partout :** `DB_HOST`, `DB_PORT`, `DB_NAME`, `APP_URL`, `APP_NAME`, `APP_TIMEZONE`
+**Constantes disponibles partout :** `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS`, `DB_SSLMODE`, `APP_URL`, `APP_NAME`, `APP_TIMEZONE`
 
 ---
 
@@ -156,16 +157,21 @@ get_groupe_nav_items(slug): array     // items nav filtrés par permissions
 
 ---
 
-## Configuration Railway / environnement
+## Configuration Render / environnement
 
-**`includes/db.php`** détecte l'environnement :
-- Railway : `file_exists('/.dockerenv')` → utilise les constantes hardcodées Railway
-- Local : connexion `localhost` / `stockapp` / `root` / pas de mot de passe
+**`includes/db.php`** lit tout via `env()` (getenv + $_ENV + $_SERVER), sans aucun secret en dur dans le code. Variables attendues : `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS`, `DB_SSLMODE` (`require` pour Neon), `APP_URL`. En local, des valeurs par défaut PostgreSQL (`localhost:5432`) s'appliquent si les env vars sont absentes.
 
-> **⚠️ Problème connu :** Les credentials Railway sont en clair dans le code committé sur GitHub.
-> Pour un VPS : migrer vers `getenv('DB_HOST')` etc. et stocker les secrets en variables d'environnement.
+Sur Render, les env vars sont définies dans le dashboard du service (`render.yaml` les déclare en `sync:false`, à renseigner manuellement) — DB pointant vers le projet Neon `erp-emuci-stockapp` (Frankfurt).
 
-`APP_URL` est hardcodé sur l'URL Railway même en local. Cela peut causer des redirections login vers le domaine Railway depuis XAMPP — normal, c'est intentionnel pour la démo.
+> **Dette de sécurité historique :** l'ancien mot de passe MySQL Railway est resté en clair dans l'historique Git (avant la migration du 2026-07-21) — à révoquer si ce n'est pas déjà fait. Le mot de passe admin par défaut `Admin@2024` est aussi à changer en prod.
+
+---
+
+## Branche parallèle `vps-mysql`
+
+Pour un déploiement sur le VPS de l'utilisateur (Ubuntu + Apache + PHP 8.4 + MySQL 8), il existe une branche séparée **`vps-mysql`** (dialecte MySQL d'origine, `includes/db.php` en `pdo_mysql`, mêmes principes env-based). Guide : `DEPLOY-VPS-MYSQL.md`.
+
+**Règle importante :** ne jamais merger `vps-mysql` → `main` (casserait Render/PostgreSQL — dialectes SQL incompatibles). Toute feature touchant du SQL doit être portée manuellement sur les deux branches ; les changements purement front-end (HTML/CSS/JS, comme la réactivité de certaines pages) n'ont besoin d'être portés que si le fichier diverge déjà entre les deux branches.
 
 ---
 
@@ -280,34 +286,35 @@ Variables CSS globales (définies dans `templates/header.php`) :
 
 ## Pages à ne pas oublier
 
-- `fix_columns.php` à la racine — script de migration one-shot, **à supprimer** une fois les migrations Railway confirmées
+- `fix_columns.php` à la racine — script de migration one-shot, **à supprimer** une fois les migrations confirmées
 - `pages/admin/permissions.php` — vérifier que `coordinateur_site` a `can_create` + `can_update` sur `inventaire_bobines`
 
 ---
 
 ## Tâches en cours / backlog
 
-- [ ] Migrer `includes/db.php` pour utiliser des variables d'environnement (`getenv()`) au lieu des credentials hardcodés
 - [ ] Supprimer `fix_columns.php` (migration one-shot terminée)
-- [ ] Déploiement VPS : Nginx + PHP-FPM 8.2 + MySQL + Certbot (guide préparé, VPS non encore provisionné)
+- [ ] Déploiement VPS : Nginx/Apache + PHP-FPM + MySQL + Certbot (branche `vps-mysql`, guide `DEPLOY-VPS-MYSQL.md`)
 - [ ] Vérifier permissions `coordinateur_site` sur `inventaire_bobines` dans Admin → Permissions
+- [ ] Révoquer l'ancien mot de passe MySQL Railway exposé dans l'historique Git ; changer le mot de passe admin par défaut `Admin@2024`
+- [x] Migration MySQL → PostgreSQL/Neon + déploiement Render (2026-07-21, branche `main`)
 - [x] Flux correction bobines GSB → Coordinateur (table `corrections_bobines` + UI des deux côtés)
 - [x] Page Rapports & Exports GSB (`pages/rapports_gsb.php`)
 - [x] validation_stock_matin.php : onglets, filtres, légende, masquage bouton coordinateur
 - [x] point_journalier.php : restauration brouillon, double déduction stock, point vide bloqué
-- ⚠️ Exécuter `create_missing_tables.php?secret=emuci2026import` en production pour créer `corrections_bobines`
+- [x] Recherche + filtres réactifs sur la page Utilisateurs (`pages/admin/users.php`)
 
 ---
 
 ## Commandes utiles
 
 ```bash
-# Dev local XAMPP
-# Ouvrir http://localhost/stockapp/
-
-# Déployer (push suffit — Railway auto-déploie depuis GitHub main)
+# Déployer (push suffit — Render auto-déploie depuis GitHub main)
 git push origin main
 
-# Voir les logs Railway
-# Dashboard Railway → service stockapp → Deployments → logs
+# Voir les logs Render
+# Dashboard Render → service stockapp → Logs
+
+# Charger le schéma PostgreSQL sur Neon
+psql "<connection string Neon>" < sql/stockapp_pg.sql
 ```
