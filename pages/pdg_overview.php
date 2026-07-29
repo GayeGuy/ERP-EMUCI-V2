@@ -594,7 +594,19 @@ include __DIR__ . '/../templates/header.php';
 .pdg *{box-sizing:border-box}
 
 /* ── TOP BAR */
-.pdg-topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:28px;gap:12px;flex-wrap:wrap}
+/* Barre de filtres collante, calée sous celle du site. Le filtre reste
+   ainsi atteignable depuis n'importe quel bloc, sans remonter. Le fond
+   reprend celui de la page : invisible en haut, opaque dès qu'un contenu
+   passe dessous. */
+.pdg-topbar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+  position:sticky;top:var(--topbar-h,64px);z-index:40;
+  background:var(--tertiary,#F0F4FF);
+  margin:0 -10px 28px;padding:14px 10px 12px;
+  border-bottom:1px solid transparent;
+  transition:border-color .18s,box-shadow .18s}
+.pdg-collee .pdg-topbar{border-bottom-color:var(--border,#e2e8f0);
+  box-shadow:0 6px 14px -10px rgba(6,3,58,.35)}
+@media(max-width:700px){.pdg-topbar{position:static;margin:0 0 20px;padding:0}}
 .pdg-title{font-size:24px;font-weight:900;color:var(--navy,#06033A);letter-spacing:-.5px}
 .pdg-sub{font-size:13px;color:var(--muted,#94a3b8);margin-top:2px}
 .pdg-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -2471,6 +2483,19 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
     if (document.hidden) solder();
   });
 
+  // Le navigateur ne doit pas repositionner le défilement à sa guise : on
+  // s'en charge nous-mêmes lors de l'échange de contenu.
+  if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+
+  // Ombre sous la barre de filtres dès qu'un contenu passe dessous. La
+  // classe vit sur body, elle survit donc au remplacement du contenu.
+  function majCollee() {
+    var y = window.pageYOffset || document.documentElement.scrollTop || 0;
+    document.body.classList.toggle('pdg-collee', y > 8);
+  }
+  window.addEventListener('scroll', majCollee, { passive: true });
+  majCollee();
+
   // ── Changement de filtre sans rechargement visible ────────────────
   function urlDuFiltre(f) {
     var p = new URLSearchParams(location.search);
@@ -2555,8 +2580,14 @@ window.addEventListener('resize', () => { clearTimeout(window._rt); window._rt=s
         try { plan = preparer(avant, neuf); }
         catch (e) { if (window.console) console.warn('pdg : préparation', e); }
 
+        // Remplacer le contenu fait momentanément varier la hauteur du
+        // document, et le navigateur ramène alors le défilement vers le
+        // haut. On le remet où il était : on consulte un bloc, on change
+        // le filtre, on reste devant ce bloc.
+        var y = window.pageYOffset || document.documentElement.scrollTop || 0;
         ancien.replaceWith(neuf);
         history.pushState({ pdg: 1 }, '', url);
+        if (y && Math.abs((window.pageYOffset || 0) - y) > 1) window.scrollTo(0, y);
         fini();
 
         try { lancer(plan); }
