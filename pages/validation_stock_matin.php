@@ -854,7 +854,6 @@ $statut_colors = [
   <table class="vsm-tbl">
     <thead><tr>
       <th>Site</th>
-      <th class="tc">Bobines actives</th>
       <th class="tc">Écarts</th>
       <th class="tc">Statut</th>
       <th class="tc">Actions</th>
@@ -863,7 +862,6 @@ $statut_colors = [
     <?php foreach($sites_non_valides as $s): ?>
     <tr>
       <td><div class="vsm-site-name"><?= h($s['nom']) ?></div></td>
-      <td class="tc" style="font-weight:700"><?= $s['nb_bobines'] ?></td>
       <td class="tc"><span class="vsm-ecart-chip">⚠️ <?= $s['nb_ecarts'] ?> écart(s)</span></td>
       <td class="tc"><span class="vsm-badge en_attente">En attente</span></td>
       <td class="tc">
@@ -909,7 +907,6 @@ $statut_colors = [
       <th>Site</th>
       <th class="tc">Date validation</th>
       <th class="tc">Statut</th>
-      <th class="tc">Bobines</th>
       <th>Traité par</th>
       <th>Commentaire</th>
       <th class="tc">Actions</th>
@@ -945,7 +942,6 @@ $statut_colors = [
         </div>
       </td>
       <td class="tc"><?= $statut_badge ?></td>
-      <td class="tc" style="font-weight:700"><?= $v['nb_bobines_actives'] ?></td>
       <td style="font-size:12.5px"><?= $v['gsb_nom'] ? h($v['gsb_nom']) : '<span style="color:var(--muted)">Automatique</span>' ?></td>
       <td style="font-size:12px;color:var(--muted);max-width:180px"><?= $v['commentaire'] ? h($v['commentaire']) : '<span style="color:var(--border)">—</span>' ?></td>
       <td class="tc">
@@ -1032,7 +1028,6 @@ $statut_colors = [
       <th>Site</th>
       <th class="tc">Date validation</th>
       <th class="tc">Statut</th>
-      <th class="tc">Bobines</th>
       <th>Traité par</th>
       <th>Commentaire</th>
       <th class="tc">Détails</th>
@@ -1064,7 +1059,6 @@ $statut_colors = [
         </div>
       </td>
       <td class="tc"><?= $hbadge ?></td>
-      <td class="tc" style="font-weight:700"><?= $v['nb_bobines_actives'] ?? '—' ?></td>
       <td style="font-size:12.5px"><?= $v['gsb_nom'] ? h($v['gsb_nom']) : '<span style="color:var(--muted)">Automatique</span>' ?></td>
       <td style="font-size:12px;color:var(--muted);max-width:160px"><?= $v['commentaire'] ? h($v['commentaire']) : '<span style="color:var(--border)">—</span>' ?></td>
       <td class="tc">
