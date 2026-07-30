@@ -20,12 +20,11 @@ $active_page = 'validation_stock_matin';
 $is_coord   = ($role_slug === 'coordinateur_site');
 $site_force = ($is_coord && ($user['site_id'] ?? 0)) ? (int)$user['site_id'] : 0;
 
-$gsb_roles   = ['admin','superadmin','superviseur_it','gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation'];
-$can_valider = in_array($role_slug, $gsb_roles) || is_support_it_with('gestionnaire_bobines');
+$can_valider = can('validation_stock', 'can_create') || is_support_it_with('gestionnaire_bobines');
 
 if (!$can_valider && !$is_coord) {
     http_response_code(403);
-    echo '<p style="padding:40px;color:red">Accès refusé.</p>';
+    include __DIR__ . '/../templates/403.php';
     exit;
 }
 

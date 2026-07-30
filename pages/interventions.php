@@ -10,7 +10,7 @@ require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
 
 require_auth();
-// Permissions vérifiées via can() sur les actions
+require_permission('interventions', 'can_read');
 
 $user      = current_user();
 $role_slug = $user['role_slug'] ?? '';

@@ -9,6 +9,7 @@ require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/notifications.php';
 
 require_auth();
+require_permission('operations', 'can_read');
 
 $user        = current_user();
 $page_title  = 'Point Journalier';

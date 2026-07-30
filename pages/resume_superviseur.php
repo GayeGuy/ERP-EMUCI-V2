@@ -17,9 +17,7 @@ $role_slug = $user['role_slug'] ?? '';
 $page_title  = 'Résumé Superviseur';
 $active_page = 'resume_superviseur';
 
-if (!in_array($role_slug, ['superviseur_operation','admin','superadmin','gestionnaire_stock_bobines','lecteur'])) {
-    http_response_code(403); echo '<p style="padding:40px;color:red">Accès refusé.</p>'; exit;
-}
+require_permission('rapports', 'can_read');
 
 $sites_list = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom");
 
