@@ -81,6 +81,20 @@ WHERE r.slug = 'superviseur_achat'
 ON CONFLICT (role_id, module) DO UPDATE SET
     can_read = GREATEST(permissions.can_read, EXCLUDED.can_read);
 
+-- ── 5. Dashboard : bloc "Commandes de bobines" pour gestionnaire_operation.
+--     Le bloc pointait vers le module 'commandes' (corrigé en
+--     'commandes_bobines' par une migration parallèle, includes/dashboard.php
+--     commit 8ce14b1) : gestionnaire_operation avait 'commandes' mais jamais
+--     'commandes_bobines', qui n'existait pour personne avant la migration
+--     27 modules et n'a pas été complété pour ce rôle. Sans ce correctif, son
+--     profil (déjà réduit à 3 blocs) tombe à 2.
+INSERT INTO permissions (role_id, module, can_read, can_create, can_update, can_delete, can_export)
+SELECT r.id, 'commandes_bobines', 1, 0, 0, 0, 0
+FROM roles r
+WHERE r.slug = 'gestionnaire_operation'
+ON CONFLICT (role_id, module) DO UPDATE SET
+    can_read = GREATEST(permissions.can_read, EXCLUDED.can_read);
+
 COMMIT;
 
 -- ══════════════════════════════════════════════════════════════
