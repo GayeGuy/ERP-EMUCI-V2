@@ -172,16 +172,24 @@ $pmma_detail = db_fetch_all(
 );
 
 // ── ALERTES
-$sf_art = $site_id ? "AND (site_id = $site_id OR site_id IS NULL)" : "";
-$alertes_stock  = (int)db_fetch_value("SELECT COUNT(*) FROM articles WHERE stock_global <= seuil_alerte AND seuil_alerte > 0 $sf_art");
+// La table articles est un catalogue global : elle porte stock_global et
+// seuil_alerte, sans aucune colonne de site. Le filtre par site appliqué ici
+// référençait donc une colonne inexistante et faisait échouer toute la page
+// dès qu'un site était choisi (SQLSTATE 42703). Le compte reste global,
+// puisque c'est la seule lecture que le schéma permet.
+$alertes_stock  = (int)db_fetch_value("SELECT COUNT(*) FROM articles WHERE stock_global <= seuil_alerte AND seuil_alerte > 0");
 $rivets_bas     = (int)db_fetch_value("SELECT COUNT(*) FROM op_stock_rivets WHERE quantite < 200 $sf");
 $points_attente = (int)($ops['points_attente'] ?? 0);
 $cmd_en_attente = (int)($cmd_stats['en_attente'] ?? 0);
 $total_alertes  = $points_attente + $cmd_en_attente + $alertes_stock + $rivets_bas;
 
 // ── DEMANDES INTERNES
-$sf_di = $site_id ? "AND d.site_id = $site_id" : "";
-$sf_di_bare = $site_id ? "AND site_id = $site_id" : "";
+// di_demandes ne porte pas de site : une demande est rattachée à son
+// demandeur, et c'est le site du demandeur qui la situe. Les deux filtres
+// visaient une colonne di_demandes.site_id qui n'existe pas — même panne que
+// pour les articles ci-dessus, masquée par elle.
+$sf_di      = $site_id ? "AND d.demandeur_id IN (SELECT id FROM users WHERE site_id = $site_id)" : "";
+$sf_di_bare = $site_id ? "AND demandeur_id IN (SELECT id FROM users WHERE site_id = $site_id)"   : "";
 $di_pending = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE statut IN ('en_attente','en_cours') $sf_di_bare");
 $di_mois    = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE TO_CHAR(created_at,'YYYY-MM')=? AND statut != 'brouillon' $sf_di_bare", [$mois]);
 $di_approuv = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE TO_CHAR(updated_at,'YYYY-MM')=? AND statut IN ('approuve','approuve_traitement') $sf_di_bare", [$mois]);
@@ -1177,7 +1185,7 @@ include __DIR__ . '/../templates/header.php';
         <div class="leg-item"><div class="leg-dot" style="background:#7c3aed"></div>En cours<span class="leg-val"><?= $bobines_stats['en_cours']??0 ?></span></div>
         <div class="leg-item"><div class="leg-dot" style="background:#1B75BC"></div>En stock<span class="leg-val"><?= $bobines_stats['en_stock']??0 ?></span></div>
         <div class="leg-item"><div class="leg-dot" style="background:#e2e8f0"></div>Épuisées<span class="leg-val"><?= $bobines_stats['epuisees']??0 ?></span></div>
-        <div style="margin-top:6px;padding-top:6px;border-top:1px solid #f1f5f9;font-size:11px;color:#94a3b8">
+        <div style="margin-top:6px;padding-top:6px;border-top:1px solid #f1f5f9;font-size:11px;color:#5a6678">
           Films restants : <strong style="color:#06033A"><?= number_format((int)($bobines_stats['films_restants']??0),0,',',' ') ?></strong>
         </div>
       </div>
@@ -1194,7 +1202,7 @@ include __DIR__ . '/../templates/header.php';
         <div class="leg-item"><div class="leg-dot" style="background:#d97706"></div>En attente<span class="leg-val"><?= $cmd_stats['en_attente']??0 ?></span></div>
         <div class="leg-item"><div class="leg-dot" style="background:#1B75BC"></div>En livraison<span class="leg-val"><?= ($cmd_stats['a_livrer']??0)+($cmd_stats['en_route']??0) ?></span></div>
         <div class="leg-item"><div class="leg-dot" style="background:#16a34a"></div>Livrées ce mois<span class="leg-val"><?= $cmd_stats['livrees_mois']??0 ?></span></div>
-        <div style="margin-top:6px;padding-top:6px;border-top:1px solid #f1f5f9;font-size:11px;color:#94a3b8">
+        <div style="margin-top:6px;padding-top:6px;border-top:1px solid #f1f5f9;font-size:11px;color:#5a6678">
           Rivets posés : <strong style="color:#06033A"><?= number_format((int)($ops['rivets_utilises']??0),0,',',' ') ?></strong>
         </div>
       </div>
@@ -1211,7 +1219,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="card-sub">Validation administrative en cours</div>
     <div class="kpi-mini">
       <div class="kpi-m">
-        <div class="kpi-m-val" style="color:<?= $di_pending>0?'#d97706':'#16a34a' ?>"><?= $di_pending ?></div>
+        <div class="kpi-m-val" style="color:<?= $di_pending>0?'#d97706':'#15803d' ?>"><?= $di_pending ?></div>
         <div class="kpi-m-lbl">En attente</div>
       </div>
       <div class="kpi-m">
@@ -1219,11 +1227,11 @@ include __DIR__ . '/../templates/header.php';
         <div class="kpi-m-lbl">Soumises ce mois</div>
       </div>
       <div class="kpi-m">
-        <div class="kpi-m-val" style="color:#16a34a"><?= $di_approuv ?></div>
+        <div class="kpi-m-val" style="color:#15803d"><?= $di_approuv ?></div>
         <div class="kpi-m-lbl">Approuvées</div>
       </div>
       <div class="kpi-m">
-        <div class="kpi-m-val" style="color:<?= $di_tx>=75?'#16a34a':($di_tx>=40?'#d97706':'#dc2626') ?>"><?= $di_tx ?>%</div>
+        <div class="kpi-m-val" style="color:<?= $di_tx>=75?'#15803d':($di_tx>=40?'#d97706':'#dc2626') ?>"><?= $di_tx ?>%</div>
         <div class="kpi-m-lbl">Taux approbation</div>
       </div>
     </div>
@@ -1241,7 +1249,7 @@ include __DIR__ . '/../templates/header.php';
           <?php if (!empty($dr['etape_lbl'])): ?>
             <span class="d-statut ds-enc" style="font-weight:600"><?= h($dr['etape_lbl']) ?></span>
           <?php else: ?>
-            <span style="color:#94a3b8">—</span>
+            <span style="color:#5a6678">—</span>
           <?php endif; ?>
         </td>
         <td><span class="d-statut <?= $dr['statut']==='en_cours'?'ds-enc':'ds-att' ?>"><?= $dr['statut']==='en_cours'?'En cours':'En attente' ?></span></td>
@@ -1250,7 +1258,7 @@ include __DIR__ . '/../templates/header.php';
       </tbody>
     </table>
     <?php else: ?>
-    <div style="text-align:center;padding:24px;color:#94a3b8;font-size:13px">
+    <div style="text-align:center;padding:24px;color:#5a6678;font-size:13px">
       <i class="ph-duotone ph-check-circle" style="font-size:32px;display:block;margin-bottom:8px;color:#bbf7d0"></i>
       Aucune demande en attente
     </div>
@@ -1269,15 +1277,15 @@ include __DIR__ . '/../templates/header.php';
       <?php foreach ($pts_attente as $pt): ?>
       <tr>
         <td style="font-weight:700;color:var(--navy,#06033A)"><?= h($pt['site']) ?></td>
-        <td style="color:#94a3b8;white-space:nowrap"><?= fmt_date($pt['date_point']) ?></td>
+        <td style="color:#5a6678;white-space:nowrap"><?= fmt_date($pt['date_point']) ?></td>
         <td><span class="type-pill"><?= ['point_9h'=>'9h','point_13h'=>'13h','point_18h'=>'18h'][$pt['type_point']] ?? $pt['type_point'] ?></span></td>
-        <td style="color:#94a3b8"><?= h($pt['coord']??'—') ?></td>
+        <td style="color:#5a6678"><?= h($pt['coord']??'—') ?></td>
       </tr>
       <?php endforeach; ?>
       </tbody>
     </table>
     <?php else: ?>
-    <div style="text-align:center;padding:20px 0;color:#94a3b8;font-size:13px;border-bottom:1px solid #f1f5f9;margin-bottom:14px">
+    <div style="text-align:center;padding:20px 0;color:#5a6678;font-size:13px;border-bottom:1px solid #f1f5f9;margin-bottom:14px">
       <i class="ph-duotone ph-check-circle" style="font-size:28px;display:block;margin-bottom:6px;color:#bbf7d0"></i>
       Aucun point en attente de validation
     </div>
@@ -1285,26 +1293,26 @@ include __DIR__ . '/../templates/header.php';
 
     <!-- Stock résumé rapide -->
     <div style="margin-top:<?= empty($pts_attente)?'0':'18px' ?>">
-      <div style="font-size:11px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Résumé stock</div>
+      <div style="font-size:11px;font-weight:700;color:#5a6678;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Résumé stock</div>
       <div class="stock-stat-row">
         <span style="color:#06033A">Bobines actives</span>
         <span class="stock-val" style="color:#7c3aed"><?= $bobines_stats['en_cours']??0 ?></span>
       </div>
       <div class="stock-stat-row">
         <span style="color:#06033A">Films restants (total)</span>
-        <span class="stock-val" style="color:<?= ($bobines_stats['films_restants']??0)<500?'#dc2626':'#16a34a' ?>"><?= number_format((int)($bobines_stats['films_restants']??0),0,',',' ') ?></span>
+        <span class="stock-val" style="color:<?= ($bobines_stats['films_restants']??0)<500?'#dc2626':'#15803d' ?>"><?= number_format((int)($bobines_stats['films_restants']??0),0,',',' ') ?></span>
       </div>
       <div class="stock-stat-row">
         <span style="color:#06033A">Articles stock bas</span>
-        <span class="stock-val" style="color:<?= $alertes_stock>0?'#dc2626':'#16a34a' ?>"><?= $alertes_stock ?></span>
+        <span class="stock-val" style="color:<?= $alertes_stock>0?'#dc2626':'#15803d' ?>"><?= $alertes_stock ?></span>
       </div>
       <div class="stock-stat-row">
         <span style="color:#06033A">Sites rivets sous seuil</span>
-        <span class="stock-val" style="color:<?= $rivets_bas>0?'#dc2626':'#16a34a' ?>"><?= $rivets_bas ?></span>
+        <span class="stock-val" style="color:<?= $rivets_bas>0?'#dc2626':'#15803d' ?>"><?= $rivets_bas ?></span>
       </div>
       <div class="stock-stat-row">
         <span style="color:#06033A">Rivets gonflable total</span>
-        <span class="stock-val" style="color:#0891b2"><?= number_format($riv_total_gonfl,0,',',' ') ?></span>
+        <span class="stock-val" style="color:#0e7490"><?= number_format($riv_total_gonfl,0,',',' ') ?></span>
       </div>
       <div class="stock-stat-row">
         <span style="color:#06033A">Rivets éclaté total</span>
@@ -1317,7 +1325,7 @@ include __DIR__ . '/../templates/header.php';
       <button onclick="openFilmsModal()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 14px;background:#f5f3ff;border:1px solid #ede9fe;border-radius:10px;font-size:12px;font-weight:700;color:#7c3aed;cursor:pointer;white-space:nowrap">
         <i class="ph-duotone ph-chart-bar-horizontal"></i> Films par bobine
       </button>
-      <button onclick="openPmmaModal()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 14px;background:#ecfeff;border:1px solid #cffafe;border-radius:10px;font-size:12px;font-weight:700;color:#0891b2;cursor:pointer;white-space:nowrap">
+      <button onclick="openPmmaModal()" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 14px;background:#ecfeff;border:1px solid #cffafe;border-radius:10px;font-size:12px;font-weight:700;color:#0e7490;cursor:pointer;white-space:nowrap">
         <i class="ph-duotone ph-printer"></i> PMMA par site
       </button>
     </div>
@@ -1333,9 +1341,9 @@ include __DIR__ . '/../templates/header.php';
       <div style="width:36px;height:36px;border-radius:12px;background:#f5f3ff;display:flex;align-items:center;justify-content:center;color:#7c3aed;font-size:18px"><i class="ph-duotone ph-chart-bar-horizontal"></i></div>
       <div>
         <div style="font-weight:800;font-size:14px;color:#06033A"><?= h($films_modal_title) ?></div>
-        <div style="font-size:12px;color:#94a3b8"><?= $films_modal_sub ?></div>
+        <div style="font-size:12px;color:#5a6678"><?= $films_modal_sub ?></div>
       </div>
-      <button onclick="document.getElementById('modal-films').style.display='none'" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:24px;line-height:1;padding:4px 8px">&times;</button>
+      <button onclick="document.getElementById('modal-films').style.display='none'" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#5a6678;font-size:24px;line-height:1;padding:4px 8px">&times;</button>
     </div>
     <div style="overflow:auto;padding:22px"><div style="width:100%;position:relative"><canvas id="cFilms" height="<?= $films_ch_h ?>"></canvas></div></div>
   </div>
@@ -1344,17 +1352,17 @@ include __DIR__ . '/../templates/header.php';
 <div id="modal-pmma" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(6,3,58,.5);align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.style.display='none'">
   <div style="background:white;border-radius:18px;width:100%;max-width:680px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <div style="display:flex;align-items:center;gap:12px;padding:18px 22px;border-bottom:1px solid #e2e8f0;flex-shrink:0">
-      <div style="width:36px;height:36px;border-radius:12px;background:#ecfeff;display:flex;align-items:center;justify-content:center;color:#0891b2;font-size:18px"><i class="ph-duotone ph-printer"></i></div>
+      <div style="width:36px;height:36px;border-radius:12px;background:#ecfeff;display:flex;align-items:center;justify-content:center;color:#0e7490;font-size:18px"><i class="ph-duotone ph-printer"></i></div>
       <div>
         <div style="font-weight:800;font-size:14px;color:#06033A">Stock PMMA par type</div>
-        <div style="font-size:12px;color:#94a3b8"><?= $site_nom_sel ? h($site_nom_sel) . ' · stock PMMA' : 'Survoler pour le détail par site' ?></div>
+        <div style="font-size:12px;color:#5a6678"><?= $site_nom_sel ? h($site_nom_sel) . ' · stock PMMA' : 'Survoler pour le détail par site' ?></div>
       </div>
-      <button onclick="document.getElementById('modal-pmma').style.display='none'" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:24px;line-height:1;padding:4px 8px">&times;</button>
+      <button onclick="document.getElementById('modal-pmma').style.display='none'" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#5a6678;font-size:24px;line-height:1;padding:4px 8px">&times;</button>
     </div>
     <div style="overflow:auto;padding:22px">
       <?php if ($site_id && empty($pmma_par_type)): ?>
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:32px 20px;text-align:center">
-        <div style="width:48px;height:48px;border-radius:14px;background:#f0f9ff;display:flex;align-items:center;justify-content:center;color:#0891b2;font-size:24px"><i class="ph-duotone ph-printer"></i></div>
+        <div style="width:48px;height:48px;border-radius:14px;background:#f0f9ff;display:flex;align-items:center;justify-content:center;color:#0e7490;font-size:24px"><i class="ph-duotone ph-printer"></i></div>
         <div style="font-weight:700;font-size:14px;color:#06033A">PMMA non configuré pour ce site</div>
         <div style="font-size:12px;color:#64748b;max-width:340px">Le stock PMMA n'est pas encore enregistré pour <strong><?= h($site_nom_sel) ?></strong>. Contactez un administrateur pour configurer les niveaux PMMA de ce site.</div>
       </div>
@@ -1371,9 +1379,9 @@ include __DIR__ . '/../templates/header.php';
       <div style="width:36px;height:36px;border-radius:12px;background:#eef0f8;display:flex;align-items:center;justify-content:center;color:#06033A;font-size:18px"><i class="ph-duotone ph-table"></i></div>
       <div>
         <div style="font-weight:800;font-size:14px;color:#06033A">Détails par site — Opérations</div>
-        <div style="font-size:12px;color:#94a3b8">Points journaliers · <?= h($mois_display) ?></div>
+        <div style="font-size:12px;color:#5a6678">Points journaliers · <?= h($mois_display) ?></div>
       </div>
-      <button onclick="document.getElementById('modal-ops').style.display='none'" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:24px;line-height:1;padding:4px 8px">&times;</button>
+      <button onclick="document.getElementById('modal-ops').style.display='none'" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#5a6678;font-size:24px;line-height:1;padding:4px 8px">&times;</button>
     </div>
     <div style="overflow:auto;padding:0 22px 22px">
       <table class="ptbl" style="margin-top:0">
@@ -1395,7 +1403,7 @@ include __DIR__ . '/../templates/header.php';
               <div style="width:8px;height:8px;border-radius:50%;background:<?= $col ?>;flex-shrink:0"></div>
               <div>
                 <div style="font-weight:700;color:#06033A"><?= h($s['nom']) ?></div>
-                <div style="font-size:11px;color:#94a3b8"><?= h($s['type']??'') ?></div>
+                <div style="font-size:11px;color:#5a6678"><?= h($s['type']??'') ?></div>
               </div>
             </div>
           </td>
@@ -1404,20 +1412,20 @@ include __DIR__ . '/../templates/header.php';
               <div style="flex:1;background:#e2e8f0;border-radius:3px;height:5px;overflow:hidden">
                 <div style="height:100%;width:<?= $pct ?>%;background:<?= $col ?>;border-radius:3px"></div>
               </div>
-              <span style="font-size:11px;color:#94a3b8;min-width:30px"><?= $pct ?>%</span>
+              <span style="font-size:11px;color:#5a6678;min-width:30px"><?= $pct ?>%</span>
             </div>
           </td>
           <td style="font-weight:800;font-family:'Montserrat',sans-serif;color:#06033A"><?= number_format((int)$s['engins'],0,',',' ') ?></td>
           <td style="font-weight:700;color:#1B75BC"><?= number_format((int)$s['plaques'],0,',',' ') ?></td>
           <td><span class="mvh <?= $mvh_cls ?>"><?= $mvh ?></span></td>
-          <td style="color:#94a3b8"><?= $s['nb_points'] ?></td>
+          <td style="color:#5a6678"><?= $s['nb_points'] ?></td>
           <td>
             <?php if($s['en_attente']>0): ?>
               <span class="type-pill"><?= $s['en_attente'] ?> att.</span>
             <?php elseif($s['nb_points']>0): ?>
-              <i class="ph-duotone ph-check-circle" style="color:#16a34a;font-size:18px"></i>
+              <i class="ph-duotone ph-check-circle" style="color:#15803d;font-size:18px"></i>
             <?php else: ?>
-              <span style="color:#94a3b8">—</span>
+              <span style="color:#5a6678">—</span>
             <?php endif; ?>
           </td>
         </tr>
@@ -1492,7 +1500,7 @@ function drawEvol() {
     const cW = w - pad.l - pad.r, cH = h - pad.t - pad.b;
     const n  = evolLabels.length;
     if (!n) {
-        ctx.fillStyle='#94a3b8'; ctx.font='12px DM Sans,sans-serif';
+        ctx.fillStyle='#5a6678'; ctx.font='12px DM Sans,sans-serif';
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText('Aucune donnée', w/2, h/2); return;
     }
@@ -1507,7 +1515,7 @@ function drawEvol() {
     for (let i = 0; i <= 4; i++) {
         const y = pad.t + cH * (1 - i / 4);
         ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(w - pad.r, y); ctx.stroke();
-        ctx.fillStyle = '#94a3b8'; ctx.font = '10px DM Sans,sans-serif';
+        ctx.fillStyle = '#5a6678'; ctx.font = '10px DM Sans,sans-serif';
         ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
         ctx.fillText(Math.round(max * i / 4), pad.l - 5, y);
     }
@@ -1550,7 +1558,7 @@ function drawEvol() {
             ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
             ctx.fillText(fmtN(Math.round(v * P)), x, y - 6);
         }
-        ctx.fillStyle = '#94a3b8'; ctx.font = '10px DM Sans,sans-serif';
+        ctx.fillStyle = '#5a6678'; ctx.font = '10px DM Sans,sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'top';
         ctx.fillText(evolLabels[i] || '', x, pad.t + cH + 6);
     });
@@ -1574,7 +1582,7 @@ function drawDonut(id, values, colors) {
         ctx.beginPath(); ctx.arc(cx,cy,R,0,Math.PI*2); ctx.fill();
         ctx.fillStyle='#fff';
         ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
-        ctx.fillStyle='#94a3b8'; ctx.font='bold 12px Montserrat,sans-serif';
+        ctx.fillStyle='#5a6678'; ctx.font='bold 12px Montserrat,sans-serif';
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText('0', cx, cy); return;
     }
@@ -1607,7 +1615,7 @@ function drawHBar(id, labels, values, color, detail, basList) {
     const c = initCv(id); if (!c) return;
     const {ctx, w, h} = c;
     if (!labels.length) {
-        ctx.fillStyle='#94a3b8'; ctx.font='12px DM Sans,sans-serif';
+        ctx.fillStyle='#5a6678'; ctx.font='12px DM Sans,sans-serif';
         ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText('Aucune donnée', w/2, h/2); return;
     }
@@ -1840,7 +1848,7 @@ function pfwDrawChart(site) {
         }
 
         // Label mois centré sous la paire
-        ctx.fillStyle = '#94a3b8'; ctx.font = '11px DM Sans,sans-serif';
+        ctx.fillStyle = '#5a6678'; ctx.font = '11px DM Sans,sans-serif';
         ctx.textAlign = 'center'; ctx.textBaseline = 'top';
         ctx.fillText(pfwMLbls[m], bx+bW/2, pad.t+cH+8);
     });
@@ -1864,7 +1872,7 @@ function openFilmsModal() {
                     const d=filmsDetail[idx]||[];
                     let html=`<div style="font-weight:700;color:#06033A;margin-bottom:6px">${filmsLabels[idx]}</div>`;
                     d.forEach(s=>{html+=`<div style="display:flex;justify-content:space-between;gap:16px"><span>${s.site}</span><span style="font-weight:700">${fmtN(s.films)}</span></div>`;});
-                    if(!d.length) html+=`<div style="color:#94a3b8">Aucune donnée</div>`;
+                    if(!d.length) html+=`<div style="color:#5a6678">Aucune donnée</div>`;
                     showTip(e, html);
                 } else hideTip();
             });
