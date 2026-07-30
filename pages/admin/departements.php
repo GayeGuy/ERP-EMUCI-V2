@@ -9,9 +9,7 @@ require_once __DIR__ . '/../../includes/notifications.php';
 
 require_auth();
 $user = current_user();
-if (!in_array($user['role_slug'] ?? '', ['admin','superadmin'])) {
-    http_response_code(403); include __DIR__ . '/../../templates/403.php'; exit;
-}
+require_permission('departements', 'can_read');
 $_SESSION['groupe_actif'] = 'ADMINISTRATION';
 $page_title  = 'Départements';
 $active_page = 'departements';

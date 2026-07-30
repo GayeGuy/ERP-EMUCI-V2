@@ -30,11 +30,7 @@ $role_slug = $user['role_slug'] ?? '';
 $page_title  = 'Vue Stock Bobines';
 $active_page = 'stock_bobines_vue';
 
-$roles_autorises = ['gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation',
-                    'admin','superadmin','lecteur'];
-if (!in_array($role_slug, $roles_autorises)) {
-    http_response_code(403); include __DIR__ . '/../templates/403.php'; exit;
-}
+require_permission('stock_bobines', 'can_read');
 
 // ── FILTRES ──────────────────────────────────────────────────
 $f_site   = (int)($_GET['site']   ?? 0);

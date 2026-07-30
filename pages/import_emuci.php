@@ -16,11 +16,7 @@ $role_slug = $user['role_slug'] ?? '';
 $page_title  = 'Import EMUCI';
 $active_page = 'import_emuci';
 
-if (!in_array($role_slug, ['admin','superadmin','superviseur_operation','controleur_production'])) {
-    http_response_code(403);
-    include __DIR__ . '/../templates/403.php';
-    exit;
-}
+require_permission('import_emuci', 'can_read');
 
 $sites_list = db_fetch_all("SELECT id, nom, nom_emuci FROM sites WHERE actif=1 ORDER BY nom");
 

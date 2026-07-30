@@ -17,6 +17,7 @@ require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/notifications.php';
 
 require_auth();
+require_permission('rivets', 'can_read');
 $user        = current_user();
 $page_title  = 'Stock Rivets';
 $active_page = 'rivets';

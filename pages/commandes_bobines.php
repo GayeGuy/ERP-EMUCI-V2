@@ -25,9 +25,7 @@ $entrepot_id = (int)(db_fetch_value("SELECT id FROM sites WHERE type='entrepot' 
 $page_title  = 'Commandes Bobines';
 $active_page = 'commandes_bobines';
 
-if (!$is_coord && !$is_sup && !$is_gsb) {
-    http_response_code(403); include __DIR__ . '/../templates/403.php'; exit;
-}
+require_permission('commandes_bobines', 'can_read');
 
 // ============================================================
 //  AJAX

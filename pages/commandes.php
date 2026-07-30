@@ -27,6 +27,7 @@ $is_gestionnaire = in_array($role_slug, ['admin','superadmin','gestionnaire_stoc
 $voir_prix     = !$is_coord; // coordinateur ne voit pas les prix
 
 $site_force    = ($is_coord && $user['site_id']) ? (int)$user['site_id'] : 0;
+require_permission('commandes', 'can_read');
 $can_create    = can('commandes', 'can_create');
 $sites_list    = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom");
 
