@@ -311,8 +311,15 @@ function dash_carte_debut(array $bloc): void {
     }
     echo '</div>';
     if ($lien) {
-        echo '<a href="' . APP_URL . h($lien[0]) . '" style="font-size:12px;font-weight:700;color:#15568B;'
-           . 'text-decoration:none;white-space:nowrap">' . h($lien[1]) . ' →</a>';
+        // Le lien n'est affiché que si l'utilisateur a le droit requis sur
+        // le module cible. lien_module et lien_droit permettent de cibler
+        // un module ou un niveau différent de celui qui conditionne le bloc.
+        $lm = $bloc['lien_module'] ?? ($bloc['module'] ?? null);
+        $ld = $bloc['lien_droit']  ?? 'can_read';
+        if ($lm === null || can($lm, $ld)) {
+            echo '<a href="' . APP_URL . h($lien[0]) . '" style="font-size:12px;font-weight:700;color:#15568B;'
+               . 'text-decoration:none;white-space:nowrap">' . h($lien[1]) . ' →</a>';
+        }
     }
     echo '</div><div style="margin-top:16px">';
 }
@@ -406,10 +413,11 @@ function dash_registre(): array {
 
     // ── Points en attente de validation ───────────────────────────────
     'points_attente' => [
-        'titre'     => 'Points en attente de validation',
-        'soustitre' => 'Relevés encore en brouillon',
-        'module'    => 'operations',
-        'lien'      => ['/pages/operations/point_journalier.php', 'Valider'],
+        'titre'      => 'Points en attente de validation',
+        'soustitre'  => 'Relevés encore en brouillon',
+        'module'     => 'operations',
+        'lien'       => ['/pages/operations/point_journalier.php', 'Valider'],
+        'lien_droit' => 'can_update',
         'donnees'   => function (array $p) {
             [$w, $args] = dash_filtre_site($p, 'pj.site_id');
             return db_fetch_all(
@@ -446,10 +454,11 @@ function dash_registre(): array {
 
     // ── Corrections de saisie en attente ──────────────────────────────
     'corrections_attente' => [
-        'titre'     => 'Corrections en attente',
-        'soustitre' => 'Demandes de correction de saisie',
-        'module'    => 'validation_stock',
-        'lien'      => ['/pages/validation_stock_matin.php', 'Traiter'],
+        'titre'      => 'Corrections en attente',
+        'soustitre'  => 'Demandes de correction de saisie',
+        'module'     => 'validation_stock',
+        'lien'       => ['/pages/validation_stock_matin.php', 'Traiter'],
+        'lien_droit' => 'can_create',
         'donnees'   => function (array $p) {
             [$w, $args] = dash_filtre_site($p, 'pj.site_id');
             return db_fetch_all(
@@ -481,10 +490,12 @@ function dash_registre(): array {
 
     // ── Validations du stock du matin ─────────────────────────────────
     'validations_matin' => [
-        'titre'     => 'Validations du stock matin',
-        'soustitre' => 'Sept derniers jours',
-        'module'    => 'inventaire_bobines',
-        'lien'      => ['/pages/validation_stock_matin.php', 'Voir le détail'],
+        'titre'       => 'Validations du stock matin',
+        'soustitre'   => 'Sept derniers jours',
+        'module'      => 'inventaire_bobines',
+        'lien'        => ['/pages/validation_stock_matin.php', 'Voir le détail'],
+        'lien_module' => 'validation_stock',
+        'lien_droit'  => 'can_create',
         'donnees'   => function (array $p) {
             [$w, $args] = dash_filtre_site($p, 'v.site_id');
             return db_fetch_all(
