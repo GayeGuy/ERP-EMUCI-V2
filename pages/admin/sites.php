@@ -404,6 +404,9 @@ $type_colors = [
 /* !important nécessaire : header.php impose th{background:var(--tertiary)!important;color:var(--muted)!important} */
 .sites-table th{font-size:11.5px;font-weight:700;color:#475569!important;text-transform:uppercase;letter-spacing:.4px;padding:10px 14px;border-bottom:2px solid var(--border)}
 .sites-table td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+/* Scroll interne au-delà de 5 lignes : hauteur = header + 5 lignes (~62px/ligne) */
+.sites-table-wrap{max-height:346px;overflow-y:auto}
+.sites-table thead th{position:sticky;top:0;z-index:1}
 .sites-table tr:hover td{background:#f8fafc}
 .sites-table tr.inactive td{opacity:.55}
 .type-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
@@ -548,7 +551,7 @@ $type_colors = [
 
 <!-- ── TABLEAU DES SITES ────────────────────────── -->
 <div class="card">
-  <div class="table-wrap">
+  <div class="table-wrap sites-table-wrap">
     <table class="sites-table" style="width:100%">
       <thead>
         <tr>
@@ -980,9 +983,9 @@ function saveCfg(type){
     </h3>
     <span style="font-size:12px;color:#92400E">Ces sites apparaissent dans vos imports mais ne sont pas encore dans DigiStock.</span>
   </div>
-  <div class="table-wrap">
+  <div class="table-wrap sites-table-wrap">
     <table>
-      <thead><tr><th>Nom EMUCI</th><th>Source</th><th style="text-align:center">Occ.</th><th>Dernière apparition</th><th style="text-align:center">Action</th></tr></thead>
+      <thead><tr><th style="position:sticky;top:0;z-index:1">Nom EMUCI</th><th style="position:sticky;top:0;z-index:1">Source</th><th style="text-align:center;position:sticky;top:0;z-index:1">Occ.</th><th style="position:sticky;top:0;z-index:1">Dernière apparition</th><th style="text-align:center;position:sticky;top:0;z-index:1">Action</th></tr></thead>
       <tbody>
       <?php foreach ($sites_inconnus_emuci as $si): ?>
       <tr>
