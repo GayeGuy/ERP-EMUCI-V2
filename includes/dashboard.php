@@ -198,11 +198,12 @@ function dash_profils(): array {
             'stock_bas', 'bobines_sites', 'rivets',
         ],
 
-        // Supervision des opérations : ce qui attend une validation.
+        // Supervision des opérations : vue complète pour le patron des opérations.
+        // Ordre : action immédiate → KPIs du jour → vigilance → bilan mensuel → logistique → audit.
         'superviseur_op' => [
-            'points_attente', 'corrections_attente', 'validations_matin',
-            'points_recents', 'receptions_site', 'interventions',
-            'bobines_sites', 'activites',
+            'synthese_jour', 'points_attente', 'corrections_attente',
+            'validations_matin', 'points_rejetes', 'bobines_sites',
+            'performance_mois', 'receptions_site', 'activites',
         ],
 
         // Gestion opérationnelle : peu de droits, donc peu de blocs et des
@@ -962,6 +963,162 @@ function dash_registre(): array {
                    . '</span></div></div>';
             }
             echo '</div>';
+        },
+    ],
+
+    // ── Synthèse opérationnelle du jour ──────────────────────────────
+    'synthese_jour' => [
+        'titre'      => 'Synthèse du jour',
+        'soustitre'  => 'Indicateurs clés — aujourd\'hui',
+        'module'     => 'operations',
+        'largeur'    => 'plein',
+        'lien'       => ['/pages/resume_superviseur.php', 'Rapport détaillé'],
+        'lien_module'=> 'rapports',
+        'donnees'    => function (array $p) {
+            $today = date('Y-m-d');
+            [$w, $args] = dash_filtre_site($p, 'site_id');
+            $plaques    = (int)db_fetch_value("SELECT COALESCE(SUM(total_plaques),0)    FROM op_points_journaliers WHERE date_point=? $w", array_merge([$today], $args));
+            $engins     = (int)db_fetch_value("SELECT COALESCE(SUM(total_engins),0)     FROM op_points_journaliers WHERE date_point=? $w", array_merge([$today], $args));
+            $rivets_j   = (int)db_fetch_value("SELECT COALESCE(SUM(rivets_utilises),0)  FROM op_points_journaliers WHERE date_point=? $w", array_merge([$today], $args));
+            $en_attente = (int)db_fetch_value("SELECT COUNT(*) FROM op_points_journaliers WHERE date_point=? AND statut='en_attente_validation' $w", array_merge([$today], $args));
+            $valides    = (int)db_fetch_value("SELECT COUNT(*) FROM op_points_journaliers WHERE date_point=? AND statut='valide' $w", array_merge([$today], $args));
+            $in_use     = (int)db_fetch_value("SELECT COUNT(*) FROM import_optoplate WHERE date_import=? AND statut_plaque='in_use' $w", array_merge([$today], $args));
+            return compact('plaques', 'engins', 'rivets_j', 'en_attente', 'valides', 'in_use');
+        },
+        'rendu' => function (array $d) {
+            $ecart   = $d['in_use'] - $d['plaques'];
+            $e_str   = ($ecart > 0 ? '+' : '') . $ecart;
+            $e_col   = $ecart === 0 ? '#166534' : '#dc2626';
+            $e_bg    = $ecart === 0 ? '#dcfce7' : '#fee2e2';
+            $att_col = $d['en_attente'] > 0 ? '#92400e' : '#166534';
+            $att_bg  = $d['en_attente'] > 0 ? '#fef3c7' : '#dcfce7';
+            $kpis = [
+                ['val' => ent((float)$d['plaques']),    'lbl' => 'Plaques posées',        'col' => '#1B75BC', 'bg' => '#dbeafe'],
+                ['val' => ent((float)$d['engins']),     'lbl' => 'Engins traités',        'col' => '#06033A', 'bg' => '#f0f4ff'],
+                ['val' => ent((float)$d['rivets_j']),   'lbl' => 'Rivets utilisés',       'col' => '#6d28d9', 'bg' => '#f3e8ff'],
+                ['val' => ent((float)$d['in_use']),     'lbl' => 'In Use EMUCI',          'col' => '#92400e', 'bg' => '#fef3c7'],
+                ['val' => $e_str,                        'lbl' => 'Écart EMUCI / PJ',      'col' => $e_col,    'bg' => $e_bg],
+                ['val' => ent((float)$d['valides']),    'lbl' => 'Points validés',        'col' => '#166534', 'bg' => '#dcfce7'],
+                ['val' => ent((float)$d['en_attente']), 'lbl' => 'En attente validation', 'col' => $att_col,  'bg' => $att_bg],
+            ];
+            echo '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px">';
+            foreach ($kpis as $k) {
+                echo '<div style="background:' . $k['bg'] . ';border-radius:12px;padding:14px 16px;min-width:0">'
+                   . '<div style="font-size:26px;font-weight:900;color:' . $k['col'] . ';line-height:1;font-variant-numeric:tabular-nums">' . $k['val'] . '</div>'
+                   . '<div style="font-size:11px;font-weight:700;color:' . $k['col'] . ';opacity:.75;text-transform:uppercase;letter-spacing:.4px;margin-top:6px;line-height:1.3">' . h($k['lbl']) . '</div>'
+                   . '</div>';
+            }
+            echo '</div>';
+        },
+    ],
+
+    // ── Performance mensuelle par site ────────────────────────────────
+    'performance_mois' => [
+        'titre'      => 'Performance du mois',
+        'soustitre'  => 'Mois en cours — taux de validation par site',
+        'module'     => 'operations',
+        'largeur'    => 'plein',
+        'lien'       => ['/pages/resume_superviseur.php?vue=mensuel', 'Rapport mensuel'],
+        'lien_module'=> 'rapports',
+        'donnees'    => function (array $p) {
+            [$w, $args] = dash_filtre_site($p, 'p.site_id');
+            return db_fetch_all(
+                "SELECT s.nom AS site_nom,
+                        COUNT(*) AS nb_points,
+                        SUM(CASE WHEN p.statut='valide' THEN 1 ELSE 0 END) AS points_valides,
+                        SUM(p.total_plaques)   AS total_plaques,
+                        SUM(p.total_engins)    AS total_engins,
+                        SUM(p.rivets_utilises) AS rivets_utilises,
+                        AVG(p.moyenne_prod)    AS moy_vh
+                 FROM op_points_journaliers p
+                 JOIN sites s ON s.id = p.site_id
+                 WHERE TO_CHAR(p.date_point,'YYYY-MM') = ? $w
+                 GROUP BY p.site_id, s.nom
+                 ORDER BY total_plaques DESC
+                 LIMIT 12",
+                array_merge([date('Y-m')], $args)
+            );
+        },
+        'rendu' => function (array $d) {
+            if (!$d) { dash_vide('Aucune donnée ce mois-ci.'); return; }
+            echo '<div class="table-wrap"><table class="ptbl"><thead><tr>'
+               . '<th style="text-align:left">Site</th>'
+               . '<th style="text-align:center">Validés / Total</th>'
+               . '<th style="text-align:center">Taux</th>'
+               . '<th style="text-align:right">Plaques</th>'
+               . '<th style="text-align:right">Engins</th>'
+               . '<th style="text-align:right">Rivets</th>'
+               . '<th style="text-align:right">Moy. V/H</th>'
+               . '</tr></thead><tbody>';
+            $tp = 0; $tv = 0; $tpl = 0; $te = 0; $tr = 0;
+            foreach ($d as $r) {
+                $nb   = (int)$r['nb_points'];
+                $val  = (int)$r['points_valides'];
+                $taux = $nb > 0 ? round($val / $nb * 100) : 0;
+                $col  = $taux >= 90 ? '#166534' : ($taux >= 60 ? '#92400e' : '#dc2626');
+                $bg   = $taux >= 90 ? '#dcfce7' : ($taux >= 60 ? '#fef3c7' : '#fee2e2');
+                $tp  += $nb;   $tv  += $val;
+                $tpl += (int)$r['total_plaques'];
+                $te  += (int)$r['total_engins'];
+                $tr  += (int)$r['rivets_utilises'];
+                echo '<tr>'
+                   . '<td style="font-weight:600;color:#06033A">' . h($r['site_nom']) . '</td>'
+                   . '<td style="text-align:center">' . $val . ' / ' . $nb . '</td>'
+                   . '<td style="text-align:center"><span style="background:' . $bg . ';color:' . $col . ';border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700">' . $taux . ' %</span></td>'
+                   . '<td style="text-align:right;font-weight:700;color:#1B75BC">' . ent((float)$r['total_plaques']) . '</td>'
+                   . '<td style="text-align:right">' . ent((float)$r['total_engins']) . '</td>'
+                   . '<td style="text-align:right">' . ent((float)$r['rivets_utilises']) . '</td>'
+                   . '<td style="text-align:right;color:#5a6678">' . number_format((float)($r['moy_vh'] ?? 0), 1) . ' V/H</td>'
+                   . '</tr>';
+            }
+            $tt    = $tp > 0 ? round($tv / $tp * 100) : 0;
+            $col_t = $tt >= 90 ? '#166534' : ($tt >= 60 ? '#92400e' : '#dc2626');
+            $bg_t  = $tt >= 90 ? '#dcfce7' : ($tt >= 60 ? '#fef3c7' : '#fee2e2');
+            echo '<tr style="border-top:2px solid var(--border);background:var(--bg,#f8fafc)">'
+               . '<td style="font-weight:800;color:#06033A">TOTAL</td>'
+               . '<td style="text-align:center;font-weight:700">' . $tv . ' / ' . $tp . '</td>'
+               . '<td style="text-align:center"><span style="background:' . $bg_t . ';color:' . $col_t . ';border-radius:20px;padding:2px 10px;font-size:12px;font-weight:800">' . $tt . ' %</span></td>'
+               . '<td style="text-align:right;font-weight:800;color:#1B75BC">' . ent((float)$tpl) . '</td>'
+               . '<td style="text-align:right;font-weight:700">' . ent((float)$te) . '</td>'
+               . '<td style="text-align:right;font-weight:700">' . ent((float)$tr) . '</td>'
+               . '<td style="text-align:right">—</td>'
+               . '</tr></tbody></table></div>';
+        },
+    ],
+
+    // ── Points rejetés récemment ──────────────────────────────────────
+    'points_rejetes' => [
+        'titre'    => 'Points rejetés',
+        'soustitre'=> 'Sept derniers jours',
+        'module'   => 'operations',
+        'donnees'  => function (array $p) {
+            [$w, $args] = dash_filtre_site($p, 'pj.site_id');
+            return db_fetch_all(
+                "SELECT pj.date_point, pj.type_point, pj.motif_rejet,
+                        s.nom AS site_nom,
+                        CONCAT(u.prenom, ' ', u.nom) AS auteur
+                 FROM op_points_journaliers pj
+                 JOIN sites s ON s.id = pj.site_id
+                 LEFT JOIN users u ON u.id = pj.created_by
+                 WHERE pj.statut = 'rejete'
+                   AND pj.date_point >= (CURRENT_DATE - INTERVAL '7 DAY') $w
+                 ORDER BY pj.date_point DESC
+                 LIMIT 6",
+                $args
+            );
+        },
+        'rendu' => function (array $d) {
+            if (!$d) { dash_vide('Aucun point rejeté cette semaine.', true); return; }
+            foreach ($d as $r) {
+                echo '<div class="biz-risk-r" style="margin-bottom:9px">'
+                   . '<div class="biz-risk-i" style="background:#fee2e2;color:#dc2626"><i class="ph-duotone ph-x-circle"></i></div>'
+                   . '<div class="biz-risk-b">'
+                   . '<div class="biz-risk-t">' . h($r['site_nom']) . ' · '
+                   . h(fmt_date($r['date_point'], 'd/m')) . ' ' . h(dash_type_point($r['type_point'])) . '</div>'
+                   . '<div class="biz-risk-s">' . h($r['motif_rejet'] ?? 'Aucun motif indiqué') . '</div>'
+                   . '<div class="biz-risk-s" style="margin-top:2px">Par ' . h($r['auteur'] ?? '—') . '</div>'
+                   . '</div></div>';
+            }
         },
     ],
 
