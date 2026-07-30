@@ -188,7 +188,7 @@ function dash_profils(): array {
     return [
         // Terrain : ce qui se passe sur mon site aujourd'hui.
         'coordinateur' => [
-            'points_recents', 'corrections_attente', 'receptions_site',
+            'synthese_coord', 'points_recents', 'corrections_attente', 'receptions_site',
             'stock_conso_site', 'bobines_sites', 'equipements', 'rivets',
         ],
 
@@ -961,6 +961,52 @@ function dash_registre(): array {
                    . round((float)$r['montant'] / $max * 100) . '%"></div></div>'
                    . '<div class="biz-cov-d"><span class="biz-cov-num">' . ent((float)$r['montant'])
                    . '</span></div></div>';
+            }
+            echo '</div>';
+        },
+    ],
+
+    // ── Synthèse du jour — coordinateur de site ──────────────────────
+    'synthese_coord' => [
+        'titre'    => 'Synthèse du jour',
+        'soustitre'=> 'Mon site — aujourd\'hui',
+        'module'   => 'operations',
+        'largeur'  => 'plein',
+        'donnees'  => function (array $p) {
+            $today = date('Y-m-d');
+            $sid   = $p['site_id'];
+            if (!$sid) return null;
+            $plaques  = (int)db_fetch_value("SELECT COALESCE(SUM(total_plaques),0)   FROM op_points_journaliers WHERE date_point=? AND site_id=?", [$today, $sid]);
+            $engins   = (int)db_fetch_value("SELECT COALESCE(SUM(total_engins),0)    FROM op_points_journaliers WHERE date_point=? AND site_id=?", [$today, $sid]);
+            $rivets_j = (int)db_fetch_value("SELECT COALESCE(SUM(rivets_utilises),0) FROM op_points_journaliers WHERE date_point=? AND site_id=?", [$today, $sid]);
+            $brouillon= (int)db_fetch_value("SELECT COUNT(*) FROM op_points_journaliers WHERE date_point=? AND site_id=? AND statut='brouillon'",             [$today, $sid]);
+            $soumis   = (int)db_fetch_value("SELECT COUNT(*) FROM op_points_journaliers WHERE date_point=? AND site_id=? AND statut='en_attente_validation'", [$today, $sid]);
+            $valide   = (int)db_fetch_value("SELECT COUNT(*) FROM op_points_journaliers WHERE date_point=? AND site_id=? AND statut='valide'",                [$today, $sid]);
+            $bobines  = (int)db_fetch_value("SELECT COUNT(*) FROM op_bobines WHERE site_id=? AND statut IN ('en_cours','en_stock')", [$sid]);
+            $stock_rivets = (int)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM op_stock_rivets WHERE site_id=?", [$sid]);
+            return compact('plaques','engins','rivets_j','brouillon','soumis','valide','bobines','stock_rivets');
+        },
+        'rendu' => function ($d) {
+            if (!$d) { dash_vide('Site non configuré pour ce compte.'); return; }
+            $pt_col = $d['valide'] > 0 ? '#166534' : ($d['soumis'] > 0 ? '#92400e' : '#5a6678');
+            $pt_bg  = $d['valide'] > 0 ? '#dcfce7' : ($d['soumis'] > 0 ? '#fef3c7' : '#f1f5f9');
+            $rv_col = $d['stock_rivets'] < 100 ? '#dc2626' : ($d['stock_rivets'] < 500 ? '#92400e' : '#166534');
+            $rv_bg  = $d['stock_rivets'] < 100 ? '#fee2e2' : ($d['stock_rivets'] < 500 ? '#fef3c7' : '#dcfce7');
+            $kpis = [
+                ['val' => ent((float)$d['plaques']),      'lbl' => 'Plaques posées',    'col' => '#1B75BC', 'bg' => '#dbeafe'],
+                ['val' => ent((float)$d['engins']),       'lbl' => 'Engins traités',    'col' => '#06033A', 'bg' => '#f0f4ff'],
+                ['val' => ent((float)$d['rivets_j']),     'lbl' => 'Rivets utilisés',   'col' => '#6d28d9', 'bg' => '#f3e8ff'],
+                ['val' => ent((float)$d['bobines']),      'lbl' => 'Bobines actives',   'col' => '#0369a1', 'bg' => '#e0f2fe'],
+                ['val' => ent((float)$d['stock_rivets']), 'lbl' => 'Stock rivets',      'col' => $rv_col,   'bg' => $rv_bg],
+                ['val' => $d['valide'] . ' / ' . ($d['brouillon'] + $d['soumis'] + $d['valide']),
+                          'lbl' => 'Points validés',      'col' => $pt_col,             'bg' => $pt_bg],
+            ];
+            echo '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:12px">';
+            foreach ($kpis as $k) {
+                echo '<div style="background:' . $k['bg'] . ';border-radius:12px;padding:14px 16px;min-width:0">'
+                   . '<div style="font-size:26px;font-weight:900;color:' . $k['col'] . ';line-height:1;font-variant-numeric:tabular-nums">' . $k['val'] . '</div>'
+                   . '<div style="font-size:11px;font-weight:700;color:' . $k['col'] . ';opacity:.75;text-transform:uppercase;letter-spacing:.4px;margin-top:6px;line-height:1.3">' . h($k['lbl']) . '</div>'
+                   . '</div>';
             }
             echo '</div>';
         },
