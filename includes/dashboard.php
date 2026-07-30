@@ -189,7 +189,7 @@ function dash_profils(): array {
         // Terrain : ce qui se passe sur mon site aujourd'hui.
         'coordinateur' => [
             'points_recents', 'corrections_attente', 'receptions_site',
-            'stock_conso_site', 'equipements', 'rivets',
+            'stock_conso_site', 'bobines_sites', 'equipements', 'rivets',
         ],
 
         // Stock bobines : la file d'attente de service.
