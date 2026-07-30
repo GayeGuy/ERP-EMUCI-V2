@@ -380,4 +380,60 @@
   .pdg-bar::after{animation:none;width:100%}
   .pdg *{transition:none !important}
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   TABLEAUX DE BORD PAR PROFIL
+
+   Le bureau et le téléphone comptent autant l'un que l'autre ici : le
+   coordinateur consulte depuis le terrain, le superviseur depuis son
+   bureau. La version étroite est donc traitée comme une mise en page à
+   part entière, pas comme une dégradation de la large.
+
+   À noter, la largeur réellement disponible est bien plus petite que la
+   fenêtre : la coquille du site prend 68 px de rail latéral et 2 x 28 px
+   de marge, soit 251 px utiles sur un écran de 375. Les seuils ci-dessous
+   sont calés là-dessus.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* En-tête de carte : titre à gauche, lien d'action à droite. */
+.dash-tete{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.dash-lien{font-size:12px;font-weight:700;color:#15568B;text-decoration:none;white-space:nowrap;
+  border-radius:8px;transition:background-color .15s,color .15s}
+.dash-lien:hover{color:#0e3d63;background:#eff6ff}
+.dash-lien:focus-visible{outline:2px solid #1B75BC;outline-offset:2px}
+
+/* Corps de carte. Le défilement horizontal vit ici parce que .card est en
+   overflow:hidden : sans ce conteneur, un tableau plus large que sa carte
+   est tronqué en silence au lieu de pouvoir défiler. */
+.dash-corps{margin-top:16px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* Un lien de 17 px de haut n'est pas atteignable au doigt.
+   Deux conditions plutôt qu'une : pointer:coarse vise le tactile, mais tous
+   les appareils ne l'annoncent pas — un navigateur en fenêtre étroite, ou un
+   portable à écran tactile, passent à côté. La largeur sert donc de second
+   déclencheur, parce qu'un écran étroit est presque toujours un doigt.
+   Sur bureau large, la règle ne s'applique pas : agrandir les liens y
+   casserait l'alignement avec le titre sans rien apporter. */
+@media(pointer:coarse),(max-width:580px){
+  .dash-lien{display:inline-flex;align-items:center;min-height:44px;padding:0 10px;margin:-10px -10px -10px 0}
+  .pdg .eq-sel,.pdg .month-inp{min-height:44px}
+}
+
+/* Métriques de synthèse en écran étroit : une ligne par métrique, libellé
+   à gauche et valeur à droite, plutôt que quatre cartes hautes empilées.
+   Même information, moitié moins de hauteur avant d'atteindre le contenu. */
+@media(max-width:580px){
+  .biz-mx{grid-template-columns:1fr;gap:8px}
+  .biz-m{flex-direction:row;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px}
+  .biz-m-hd{min-height:0;flex-direction:row-reverse;align-items:center;justify-content:flex-end;
+    gap:10px;flex:1;min-width:0}
+  .biz-m-val{font-size:22px}
+  .biz-m-sub{margin-top:0;text-align:right;flex-shrink:0;max-width:42%}
+}
+
+/* L'anneau et sa légende ne tiennent plus côte à côte sous 400 px. */
+@media(max-width:400px){
+  .donut-wrap{flex-direction:column;gap:12px}
+}
+
 </style>

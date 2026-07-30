@@ -109,5 +109,10 @@ include __DIR__ . '/../templates/dash_style.php';
 
 </div>
 
-<?php include __DIR__ . '/../templates/dash_anim.php'; ?>
-<?php include __DIR__ . '/../templates/footer.php'; ?>
+<?php
+// L'ordre compte : dash_charts.php définit render(), que dash_anim.php
+// appelle à chaque image pour redessiner les graphes pendant l'animation.
+include __DIR__ . '/../templates/dash_charts.php';
+include __DIR__ . '/../templates/dash_anim.php';
+include __DIR__ . '/../templates/footer.php';
+?>

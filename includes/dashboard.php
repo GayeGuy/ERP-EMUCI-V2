@@ -188,36 +188,48 @@ function dash_profils(): array {
     return [
         // Terrain : ce qui se passe sur mon site aujourd'hui.
         'coordinateur' => [
-            'points_recents', 'corrections_attente', 'receptions_site',
-            'stock_conso_site', 'equipements', 'rivets',
+            'synthese_terrain',
+            'points_recents', 'corrections_attente', 'evolution_engins',
+            'receptions_site', 'stock_conso_site', 'equipements', 'rivets',
         ],
 
         // Stock bobines : la file d'attente de service.
         'gsb' => [
-            'commandes_bobines', 'validations_matin', 'corrections_attente',
-            'stock_bas', 'bobines_sites', 'rivets',
+            'synthese_stock',
+            'commandes_bobines', 'validations_matin', 'bobines_sites',
+            'stock_bas', 'corrections_attente', 'rivets',
         ],
 
         // Supervision des opérations : ce qui attend une validation.
         'superviseur_op' => [
-            'points_attente', 'corrections_attente', 'validations_matin',
-            'points_recents', 'receptions_site', 'interventions',
-            'bobines_sites', 'activites',
+            'synthese_supervision',
+            'points_attente', 'corrections_attente',
+            'evolution_engins', 'repartition_parc',
+            'perf_sites',
+            'validations_matin', 'points_recents', 'receptions_site',
+            'bobines_sites', 'interventions', 'activites',
         ],
 
         // Gestion opérationnelle : peu de droits, donc peu de blocs et des
         // raccourcis vers ce que ce profil a réellement le droit de faire.
         'gestionnaire_op' => [
-            'raccourcis', 'points_recents', 'commandes_bobines',
+            'synthese_supervision',
+            'raccourcis', 'points_recents', 'evolution_engins',
+            'commandes_bobines',
         ],
 
         // Informatique : le parc, ses pannes et ses fins de cycle.
         'informatique' => [
-            'equipements', 'fin_cycle', 'interventions', 'activites',
+            'synthese_parc',
+            'repartition_parc', 'fin_cycle',
+            'equipements', 'interventions', 'activites',
         ],
 
         // Vue d'ensemble, par défaut.
         'general' => [
+            'synthese_supervision',
+            'evolution_engins', 'repartition_parc',
+            'perf_sites',
             'equipements', 'sites', 'stock_bas', 'fin_cycle',
             'conso_sites', 'bobines_sites', 'rivets', 'interventions',
             'activites',
@@ -309,17 +321,20 @@ function dash_blocs_visibles(?array $user = null): array {
 function dash_carte_debut(array $bloc): void {
     $lien = $bloc['lien'] ?? null;
     echo '<div class="card">';
-    echo '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">';
+    echo '<div class="dash-tete">';
     echo '<div><div class="card-ttl">' . h($bloc['titre']) . '</div>';
     if (!empty($bloc['soustitre'])) {
         echo '<div class="card-sub" style="margin-bottom:0">' . h($bloc['soustitre']) . '</div>';
     }
     echo '</div>';
     if ($lien) {
-        echo '<a href="' . APP_URL . h($lien[0]) . '" style="font-size:12px;font-weight:700;color:#15568B;'
-           . 'text-decoration:none;white-space:nowrap">' . h($lien[1]) . ' →</a>';
+        echo '<a class="dash-lien" href="' . APP_URL . h($lien[0]) . '">' . h($lien[1]) . ' →</a>';
     }
-    echo '</div><div style="margin-top:16px">';
+    // dash-corps porte le défilement horizontal : la carte est en
+    // overflow:hidden (feuille globale du site), donc un tableau plus large
+    // qu'elle était coupé sans recours — sur téléphone, deux colonnes de
+    // quatre disparaissaient purement et simplement.
+    echo '</div><div class="dash-corps">';
 }
 
 function dash_carte_fin(): void {
@@ -335,6 +350,198 @@ function dash_vide(string $message, bool $bonne_nouvelle = false): void {
     $couleur = $bonne_nouvelle ? '#166534' : '#5a6678';
     echo '<div style="text-align:center;padding:26px 16px;font-size:13px;color:' . $couleur . '">'
        . h($message) . '</div>';
+}
+
+/**
+ * Le mois que la synthèse doit montrer.
+ *
+ * Le mois civil est l'unité dans laquelle l'activité se raconte, donc c'est
+ * lui qu'on affiche — tant qu'il porte quelque chose. Le premier du mois, et
+ * pendant toute une période creuse, il ne porte rien : le chiffre de tête
+ * serait alors un grand zéro exact et inutile, qui est le pire accueil
+ * possible pour une page dont le rôle est de situer.
+ *
+ * On retombe donc sur le dernier mois ayant des relevés validés, et le
+ * libellé le nomme. Mieux vaut un chiffre daté qu'un zéro ambigu.
+ *
+ * @return array{mois:string, libelle:string, courant:bool}
+ */
+function dash_periode(array $portee): array {
+    [$w, $args] = dash_filtre_site($portee, 'pj.site_id');
+    $courant = date('Y-m');
+
+    $dernier = (string)db_fetch_value(
+        "SELECT TO_CHAR(MAX(pj.date_point),'YYYY-MM') FROM op_points_journaliers pj
+         WHERE pj.statut = 'valide' $w", $args);
+
+    $mois = ($dernier !== '' && $dernier < $courant) ? $dernier : $courant;
+
+    $noms = ['', 'janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet',
+             'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+    $t = strtotime($mois . '-01');
+
+    return [
+        'mois'    => $mois,
+        'libelle' => $noms[(int)date('n', $t)] . ' ' . date('Y', $t),
+        'courant' => $mois === $courant,
+    ];
+}
+
+/**
+ * Bandeau de synthèse : le chiffre qui situe, sa répartition, quatre appuis.
+ *
+ * C'est la structure de tête de pages/pdg_overview.php, rendue réutilisable.
+ * Elle répond à « où j'en suis » avant que la page ne descende dans le
+ * détail — sans elle, on ouvrait directement sur un tableau de lignes, sans
+ * repère pour les juger.
+ *
+ * La barre segmentée n'est pas décorative : elle porte toujours un partage
+ * fait / reste à faire, c'est-à-dire la seule chose qu'on veut voir sans
+ * lire. Les parts sont réparties au plus fort reste, sinon quatre arrondis
+ * séparés donnent des totaux à 101 %.
+ *
+ * @param array $hero      ['lbl','val','unite','note']
+ * @param array $segments  [['lbl','val','ton' => 'ok'|'ko'], …]
+ * @param array $metriques [['lbl','val','unite','sub'], …] — quatre au plus
+ */
+function dash_bandeau(array $hero, array $segments, array $metriques): void {
+    echo '<div class="biz"><div class="biz-lead">';
+
+    // ── Le chiffre de tête
+    echo '<div class="biz-hero">';
+    echo '<div class="biz-hero-lbl">' . h($hero['lbl']) . '</div>';
+    echo '<div class="biz-hero-val">' . $hero['val'];
+    if (!empty($hero['unite'])) echo '<span class="biz-hero-u">' . h($hero['unite']) . '</span>';
+    echo '</div>';
+    if (!empty($hero['note'])) echo '<div class="biz-hero-note">' . $hero['note'] . '</div>';
+
+    $total = 0;
+    foreach ($segments as $s) $total += max(0, (int)$s['val']);
+
+    if ($total > 0) {
+        $parts = pct_entiers(array_map(fn($s) => max(0, (int)$s['val']), $segments), $total);
+        echo '<div class="biz-dem">';
+        foreach ($segments as $i => $s) {
+            if ($parts[$i] <= 0) continue;
+            $ton = ($s['ton'] ?? 'ok') === 'ko' ? 'biz-dem-ko' : 'biz-dem-ok';
+            // Le libellé n'est écrit dans le segment que s'il a la place. Le
+            // seuil en pourcentage ne suffit pas : 20 % d'une barre de 180 px
+            // ne fait que 36 px, où « En attente » se coupe au milieu d'un
+            // mot. La classe biz-dem-lbl le fait disparaître sous 700 px,
+            // où la légende juste dessous porte déjà le sens.
+            $texte = $parts[$i] >= 18 ? '<span class="biz-dem-lbl">' . h($s['lbl']) . '</span>' : '';
+            echo '<div class="biz-dem-s ' . $ton . '" style="width:' . $parts[$i] . '%">' . $texte . '</div>';
+        }
+        echo '</div>';
+
+        // La légende répète les chiffres : la barre donne la proportion, elle
+        // donne la valeur. Elle porte aussi le sens quand la couleur ne suffit
+        // pas à distinguer deux segments voisins.
+        echo '<div class="biz-dem-key">';
+        foreach ($segments as $i => $s) {
+            $pt = ($s['ton'] ?? 'ok') === 'ko' ? '#fca5a5' : '#86efac';
+            echo '<span><span class="biz-dot" style="background:' . $pt . '"></span>'
+               . h($s['lbl']) . ' <b>' . ent((float)$s['val']) . '</b></span>';
+        }
+        echo '</div>';
+    }
+    echo '</div>';   // .biz-hero
+
+    // ── Les quatre appuis
+    echo '<div class="biz-mx">';
+    foreach (array_slice($metriques, 0, 4) as $m) {
+        echo '<div class="biz-m"><div class="biz-m-hd"><div>';
+        echo '<div class="biz-m-lbl">' . h($m['lbl']) . '</div>';
+        echo '<div class="biz-m-val">' . $m['val'];
+        if (!empty($m['unite'])) echo '<span class="biz-m-u">' . h($m['unite']) . '</span>';
+        echo '</div></div></div>';
+        if (!empty($m['sub'])) echo '<div class="biz-m-sub">' . h($m['sub']) . '</div>';
+        echo '</div>';
+    }
+    echo '</div></div></div>';
+}
+
+/**
+ * Canvas de graphe. Les séries voyagent en attributs plutôt qu'en variables
+ * JavaScript : le contenu échangé par templates/dash_anim.php arrive alors
+ * avec ses propres chiffres, sans script à réexécuter.
+ */
+function dash_graphe(string $type, array $valeurs, array $options = []): void {
+    // Un canvas est un rectangle vide pour un lecteur d'écran : sans
+    // équivalent textuel, l'information n'existe tout simplement pas. Le
+    // résumé est construit à partir des mêmes chiffres que le tracé, donc il
+    // ne peut pas diverger de ce qui est dessiné.
+    $resume = $options['alt'] ?? dash_resume_graphe($type, $valeurs, $options['libelles'] ?? []);
+
+    $attrs = 'data-graphe="' . h($type) . '"'
+           . ' role="img" aria-label="' . h($resume) . '"'
+           . " data-valeurs='" . h(json_encode(array_values($valeurs))) . "'";
+    if (!empty($options['libelles'])) {
+        $attrs .= " data-libelles='" . h(json_encode(array_values($options['libelles']))) . "'";
+    }
+    if (!empty($options['couleurs'])) {
+        $attrs .= " data-couleurs='" . h(json_encode(array_values($options['couleurs']))) . "'";
+    }
+    if (!empty($options['couleur'])) $attrs .= ' data-couleur="' . h($options['couleur']) . '"';
+    if (!empty($options['taille']))  $attrs .= ' width="' . (int)$options['taille'] . '"';
+    if (!empty($options['hauteur'])) $attrs .= ' height="' . (int)$options['hauteur'] . '"';
+    echo '<canvas ' . $attrs . '></canvas>';
+}
+
+/**
+ * Résumé parlé d'un graphe. Il ne récite pas toute la série — une courbe de
+ * douze mois lue point par point est inexploitable à l'oreille — mais donne
+ * ce qu'on retient en regardant : le total, les extrêmes, la tendance.
+ */
+function dash_resume_graphe(string $type, array $valeurs, array $libelles): string {
+    if (!$valeurs) return 'Graphique sans donnée.';
+
+    $total = array_sum($valeurs);
+    $iMax  = array_search(max($valeurs), $valeurs, true);
+    $nomMax = $libelles[$iMax] ?? null;
+
+    if ($type === 'courbe') {
+        // La tendance se lit sur les périodes qui portent quelque chose. La
+        // calculer sur le premier et le dernier point annonçait « stable »
+        // dès que la série commençait et finissait à zéro, ce qui est exact
+        // et ne dit rien.
+        $portantes = array_values(array_filter($valeurs, fn($v) => $v > 0));
+        $sens = '';
+        if (count($portantes) >= 2) {
+            $a = (float)$portantes[count($portantes) - 2];
+            $b = (float)$portantes[count($portantes) - 1];
+            $sens = $b > $a ? ', en hausse sur la fin' : ($b < $a ? ', en baisse sur la fin' : '');
+        }
+        return sprintf(
+            'Courbe sur %d périodes, total %s%s. Maximum de %s%s.',
+            count($valeurs), ent((float)$total), $sens, ent((float)max($valeurs)),
+            $nomMax ? ' en ' . $nomMax : '');
+    }
+
+    if ($type === 'anneau') {
+        return sprintf('Répartition de %s au total, en %d parts. Part la plus grande : %s.',
+            ent((float)$total), count($valeurs), ent((float)max($valeurs)));
+    }
+
+    // Barres : le classement est ce qui compte, donc on nomme la tête.
+    $tete = [];
+    $ordre = $valeurs;
+    arsort($ordre);
+    foreach (array_slice($ordre, 0, 3, true) as $i => $v) {
+        $tete[] = ($libelles[$i] ?? 'sans nom') . ' ' . ent((float)$v);
+    }
+    return sprintf('Classement de %d entrées, total %s. En tête : %s.',
+        count($valeurs), ent((float)$total), implode(', ', $tete));
+}
+
+/** Légende d'un anneau : pastille, libellé, valeur. */
+function dash_legende(array $entrees): void {
+    echo '<div class="leg-list">';
+    foreach ($entrees as $e) {
+        echo '<div class="leg-item"><span class="leg-dot" style="background:' . h($e['couleur']) . '"></span>'
+           . h($e['lbl']) . '<span class="leg-val">' . ent((float)$e['val']) . '</span></div>';
+    }
+    echo '</div>';
 }
 
 /** Libellé lisible d'un type de point journalier. */
@@ -369,7 +576,403 @@ function dash_type_point(string $t): string {
  * qu'un bloc écrit une fois sert plusieurs profils.
  */
 function dash_registre(): array {
+    $mois = date('Y-m');
+
     return [
+
+    // ══════════════════════════════════════════════════════════════════
+    //  BANDEAUX DE SYNTHÈSE
+    //
+    //  Un par métier, et c'est volontaire : le bandeau répond à « où j'en
+    //  suis », ce qui n'a pas le même sens pour un coordinateur et pour un
+    //  gestionnaire de stock. Ils restent nommés par ce qu'ils montrent, pas
+    //  par qui les voit ; c'est la liste du profil qui fait le routage, comme
+    //  pour tous les autres blocs.
+    // ══════════════════════════════════════════════════════════════════
+
+    // ── Supervision : ce qui attend une validation ────────────────────
+    'synthese_supervision' => [
+        'titre'   => 'Synthèse',
+        'largeur' => 'plein',
+        'nu'      => true,
+        'module'  => 'point_emuci',
+        'donnees' => function (array $p) {
+            $per = dash_periode($p);
+            [$w, $args] = dash_filtre_site($p, 'pj.site_id');
+            $pts = db_fetch_one(
+                "SELECT COALESCE(SUM(CASE WHEN pj.statut='valide' THEN pj.total_engins END),0)  AS engins,
+                        COALESCE(SUM(CASE WHEN pj.statut='valide' THEN pj.total_plaques END),0) AS plaques,
+                        COUNT(*) FILTER (WHERE pj.statut='valide')    AS nb_valides,
+                        COUNT(*) FILTER (WHERE pj.statut='brouillon') AS nb_attente
+                 FROM op_points_journaliers pj
+                 WHERE TO_CHAR(pj.date_point,'YYYY-MM') = ? $w",
+                array_merge([$per['mois']], $args)) ?: [];
+
+            [$wc, $ac] = dash_filtre_site($p, 'pj.site_id');
+            $corr = (int)db_fetch_value(
+                "SELECT COUNT(*) FROM demandes_correction_saisie dc
+                 JOIN op_points_journaliers pj ON pj.id = dc.point_id
+                 WHERE dc.statut = 'en_attente' $wc", $ac);
+
+            [$wv, $av] = dash_filtre_site($p, 'v.site_id');
+            $valid = (int)db_fetch_value(
+                "SELECT COUNT(DISTINCT v.site_id) FROM validations_stock_matin v
+                 WHERE v.date_validation = CURRENT_DATE $wv", $av);
+
+            $sites = (int)db_fetch_value(
+                $p['site_id'] ? "SELECT 1" : "SELECT COUNT(*) FROM sites WHERE actif=1");
+
+            return ['pts' => $pts, 'corrections' => $corr, 'valides_matin' => $valid,
+                    'sites' => $sites, 'periode' => $per];
+        },
+        'rendu' => function (array $d, array $p) {
+            $pts = $d['pts'];
+            $per = $d['periode'];
+            $att = (int)($pts['nb_attente'] ?? 0);
+
+            if (!$per['courant']) {
+                $note = 'Aucun relevé validé ce mois-ci. Ces chiffres sont ceux de <b>'
+                      . h($per['libelle']) . '</b>, le dernier mois avec de l\'activité.';
+            } elseif ($att > 0) {
+                $note = 'Il reste <b>' . $att . '</b> point' . ($att > 1 ? 's' : '')
+                      . ' à valider. Tant qu\'ils sont en brouillon, leurs chiffres ne comptent pas ici.';
+            } else {
+                $note = 'Tous les points du mois sont validés.';
+            }
+
+            dash_bandeau(
+                [
+                    'lbl'  => 'Engins posés · ' . h($per['libelle'])
+                              . ($p['site_id'] ? ' · ' . h($p['site_nom']) : ''),
+                    'val'  => ent((float)($pts['engins'] ?? 0)),
+                    'note' => $note,
+                ],
+                [
+                    ['lbl' => 'Validés',    'val' => (int)($pts['nb_valides'] ?? 0), 'ton' => 'ok'],
+                    ['lbl' => 'En attente', 'val' => $att,                           'ton' => 'ko'],
+                ],
+                [
+                    ['lbl' => 'Plaques posées', 'val' => ent((float)($pts['plaques'] ?? 0)),
+                     'sub' => 'Cumul sur ' . $per['libelle']],
+                    ['lbl' => 'Corrections',    'val' => ent((float)$d['corrections']),
+                     'sub' => $d['corrections'] > 0 ? 'Demandes à traiter' : 'Rien à traiter'],
+                    ['lbl' => 'Stock validé',   'val' => ent((float)$d['valides_matin']),
+                     'unite' => '/' . $d['sites'], 'sub' => 'Sites ayant validé ce matin'],
+                    ['lbl' => 'Relevés saisis', 'val' => ent((float)(($pts['nb_valides'] ?? 0) + $att)),
+                     'sub' => 'Tous statuts, sur ' . $per['libelle']],
+                ]
+            );
+        },
+    ],
+
+    // ── Terrain : mon site aujourd'hui ────────────────────────────────
+    'synthese_terrain' => [
+        'titre'   => 'Synthèse',
+        'largeur' => 'plein',
+        'nu'      => true,
+        'module'  => 'point_emuci',
+        'donnees' => function (array $p) {
+            $per = dash_periode($p);
+            [$w, $args] = dash_filtre_site($p, 'pj.site_id');
+            $pts = db_fetch_one(
+                "SELECT COALESCE(SUM(CASE WHEN pj.statut='valide' THEN pj.total_engins END),0) AS engins,
+                        COALESCE(SUM(pj.rivets_utilises),0)          AS rivets,
+                        COUNT(*) FILTER (WHERE pj.statut='valide')    AS nb_valides,
+                        COUNT(*) FILTER (WHERE pj.statut='brouillon') AS nb_attente
+                 FROM op_points_journaliers pj
+                 WHERE TO_CHAR(pj.date_point,'YYYY-MM') = ? $w",
+                array_merge([$per['mois']], $args)) ?: [];
+
+            [$wb, $ab] = dash_filtre_site($p, 'b.site_id');
+            $films = (int)db_fetch_value(
+                "SELECT COALESCE(SUM(b.films_restants),0) FROM op_bobines b
+                 WHERE b.statut = 'en_cours' $wb", $ab);
+
+            [$wr, $ar] = dash_filtre_site($p, 'sr.site_id');
+            $riv = (int)db_fetch_value(
+                "SELECT COALESCE(SUM(sr.quantite),0) FROM op_stock_rivets sr WHERE 1=1 $wr", $ar);
+
+            [$wrc, $arc] = dash_filtre_site($p, 'rs.site_id');
+            $rec = (int)db_fetch_value(
+                "SELECT COUNT(*) FROM receptions_site rs
+                 WHERE TO_CHAR(rs.created_at,'YYYY-MM') = ? $wrc",
+                array_merge([$per['mois']], $arc));
+
+            return ['pts' => $pts, 'films' => $films, 'rivets' => $riv,
+                    'receptions' => $rec, 'periode' => $per];
+        },
+        'rendu' => function (array $d, array $p) {
+            $pts = $d['pts'];
+            $per = $d['periode'];
+            $att = (int)($pts['nb_attente'] ?? 0);
+
+            if (!$per['courant']) {
+                $note = 'Aucun relevé validé ce mois-ci. Ces chiffres sont ceux de <b>'
+                      . h($per['libelle']) . '</b>, votre dernier mois d\'activité.';
+            } elseif ($att > 0) {
+                $note = 'Vous avez <b>' . $att . '</b> relevé' . ($att > 1 ? 's' : '')
+                      . ' encore en brouillon. Un brouillon n\'est pas transmis au superviseur.';
+            } else {
+                $note = 'Tous vos relevés du mois sont transmis.';
+            }
+
+            dash_bandeau(
+                [
+                    'lbl'  => 'Engins posés · ' . h($per['libelle']),
+                    'val'  => ent((float)($pts['engins'] ?? 0)),
+                    'note' => $note,
+                ],
+                [
+                    ['lbl' => 'Transmis',  'val' => (int)($pts['nb_valides'] ?? 0), 'ton' => 'ok'],
+                    ['lbl' => 'Brouillon', 'val' => $att,                           'ton' => 'ko'],
+                ],
+                [
+                    ['lbl' => 'Films restants', 'val' => ent((float)$d['films']),
+                     'sub' => 'Bobines en cours sur le site'],
+                    ['lbl' => 'Rivets en stock', 'val' => ent((float)$d['rivets']),
+                     'sub' => $d['rivets'] < 200 ? 'Sous le seuil de 200' : 'Au-dessus du seuil'],
+                    ['lbl' => 'Rivets posés',   'val' => ent((float)($pts['rivets'] ?? 0)),
+                     'sub' => 'Cumul sur ' . $per['libelle']],
+                    ['lbl' => 'Réceptions',     'val' => ent((float)$d['receptions']),
+                     'sub' => 'Enregistrées sur ' . $per['libelle']],
+                ]
+            );
+        },
+    ],
+
+    // ── Stock bobines : la file d'attente de service ──────────────────
+    'synthese_stock' => [
+        'titre'   => 'Synthèse',
+        'largeur' => 'plein',
+        'nu'      => true,
+        'module'  => 'bobines',
+        'donnees' => function (array $p) use ($mois) {
+            [$wb, $ab] = dash_filtre_site($p, 'b.site_id');
+            $bob = db_fetch_one(
+                "SELECT COALESCE(SUM(CASE WHEN b.statut='en_cours' THEN b.films_restants END),0) AS restants,
+                        COALESCE(SUM(b.films_utilises),0)          AS utilises,
+                        COUNT(*) FILTER (WHERE b.statut='en_cours') AS en_cours
+                 FROM op_bobines b WHERE 1=1 $wb", $ab) ?: [];
+
+            [$wc, $ac] = dash_filtre_site($p, 'c.site_id');
+            $cmd = db_fetch_one(
+                "SELECT COUNT(*) FILTER (WHERE c.statut IN ('en_attente','valide'))       AS a_servir,
+                        COUNT(*) FILTER (WHERE c.statut IN ('livre','recu','servie'))     AS servies
+                 FROM commandes_bobines c WHERE 1=1 $wc", $ac) ?: [];
+
+            [$wr, $ar] = dash_filtre_site($p, 'sr.site_id');
+            $bas = (int)db_fetch_value(
+                "SELECT COUNT(DISTINCT sr.site_id) FROM op_stock_rivets sr
+                 WHERE sr.quantite < 200 $wr", $ar);
+
+            return ['bob' => $bob, 'cmd' => $cmd, 'sites_bas' => $bas];
+        },
+        'rendu' => function (array $d) {
+            $srv = (int)($d['cmd']['a_servir'] ?? 0);
+            dash_bandeau(
+                [
+                    'lbl'  => 'Films restants',
+                    'val'  => ent((float)($d['bob']['restants'] ?? 0)),
+                    'note' => $srv > 0
+                        ? 'Il y a <b>' . $srv . '</b> commande' . ($srv > 1 ? 's' : '')
+                          . ' en attente de service.'
+                        : 'Aucune commande en attente.',
+                ],
+                [
+                    ['lbl' => 'Servies',    'val' => (int)($d['cmd']['servies'] ?? 0), 'ton' => 'ok'],
+                    ['lbl' => 'À servir',   'val' => $srv,                             'ton' => 'ko'],
+                ],
+                [
+                    ['lbl' => 'Bobines en cours', 'val' => ent((float)($d['bob']['en_cours'] ?? 0)),
+                     'sub' => 'Ouvertes sur le terrain'],
+                    ['lbl' => 'Films utilisés',   'val' => ent((float)($d['bob']['utilises'] ?? 0)),
+                     'sub' => 'Depuis l\'ouverture des bobines'],
+                    ['lbl' => 'Sites sous seuil', 'val' => ent((float)$d['sites_bas']),
+                     'sub' => 'Moins de 200 rivets'],
+                    ['lbl' => 'À servir',         'val' => ent((float)$srv),
+                     'sub' => $srv > 0 ? 'Commandes en attente' : 'File vide'],
+                ]
+            );
+        },
+    ],
+
+    // ── Parc informatique : l'état du matériel ────────────────────────
+    'synthese_parc' => [
+        'titre'   => 'Synthèse',
+        'largeur' => 'plein',
+        'nu'      => true,
+        'module'  => 'equipements',
+        'donnees' => function (array $p) use ($mois) {
+            [$ws, $as] = dash_filtre_site($p, 'e.site_id');
+            [$wc, $ac] = dash_filtre_categorie($p, 'e.categorie');
+            $eq = db_fetch_one(
+                "SELECT COUNT(*)                                          AS total,
+                        COUNT(*) FILTER (WHERE e.etat IN ('neuf','bon'))  AS sains,
+                        COUNT(*) FILTER (WHERE e.etat IN ('usage','reforme')) AS a_traiter,
+                        COUNT(*) FILTER (WHERE e.date_fin_cycle IS NOT NULL
+                                           AND e.date_fin_cycle <= CURRENT_DATE + 60) AS fin_cycle
+                 FROM equipements e WHERE e.actif = 1 $ws $wc",
+                array_merge($as, $ac)) ?: [];
+
+            [$wi, $ai] = dash_filtre_site($p, 'i.site_id');
+            $inter = (int)db_fetch_value(
+                "SELECT COUNT(*) FROM interventions_maintenance i
+                 WHERE TO_CHAR(i.date_intervention,'YYYY-MM') = ? $wi",
+                array_merge([$mois], $ai));
+
+            return ['eq' => $eq, 'interventions' => $inter];
+        },
+        'rendu' => function (array $d) {
+            $aTraiter = (int)($d['eq']['a_traiter'] ?? 0);
+            $fin      = (int)($d['eq']['fin_cycle'] ?? 0);
+            dash_bandeau(
+                [
+                    'lbl'  => 'Équipements actifs',
+                    'val'  => ent((float)($d['eq']['total'] ?? 0)),
+                    'note' => $fin > 0
+                        ? '<b>' . $fin . '</b> arrive' . ($fin > 1 ? 'nt' : '')
+                          . ' en fin de cycle dans les soixante jours.'
+                        : 'Aucune fin de cycle dans les soixante jours.',
+                ],
+                [
+                    ['lbl' => 'Neuf ou bon', 'val' => (int)($d['eq']['sains'] ?? 0), 'ton' => 'ok'],
+                    ['lbl' => 'À traiter',   'val' => $aTraiter,                     'ton' => 'ko'],
+                ],
+                [
+                    ['lbl' => 'Interventions', 'val' => ent((float)$d['interventions']),
+                     'sub' => 'Enregistrées ce mois'],
+                    ['lbl' => 'Fin de cycle',  'val' => ent((float)$fin),
+                     'sub' => 'Dans les soixante jours'],
+                    ['lbl' => 'À traiter',     'val' => ent((float)$aTraiter),
+                     'sub' => 'Usagés ou réformés'],
+                    ['lbl' => 'En service',    'val' => ent((float)($d['eq']['sains'] ?? 0)),
+                     'sub' => 'État neuf ou bon'],
+                ]
+            );
+        },
+    ],
+
+    // ══════════════════════════════════════════════════════════════════
+    //  GRAPHES
+    // ══════════════════════════════════════════════════════════════════
+
+    // ── Évolution des engins posés ────────────────────────────────────
+    'evolution_engins' => [
+        'titre'     => 'Évolution des engins posés',
+        'soustitre' => 'Douze derniers mois',
+        'module'    => 'point_emuci',
+        'donnees'   => function (array $p) {
+            [$w, $args] = dash_filtre_site($p, 'pj.site_id');
+            $lignes = db_fetch_all(
+                "SELECT TO_CHAR(pj.date_point,'YYYY-MM') AS m,
+                        COALESCE(SUM(pj.total_engins),0) AS v
+                 FROM op_points_journaliers pj
+                 WHERE pj.statut = 'valide'
+                   AND pj.date_point >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '11 months' $w
+                 GROUP BY 1 ORDER BY 1", $args);
+
+            // Les mois sans relevé doivent apparaître à zéro : une série
+            // trouée décale les points et fait mentir la pente.
+            $par_mois = [];
+            foreach ($lignes as $l) $par_mois[$l['m']] = (float)$l['v'];
+
+            $noms = ['', 'janv', 'févr', 'mars', 'avr', 'mai', 'juin',
+                     'juil', 'août', 'sept', 'oct', 'nov', 'déc'];
+            $valeurs = $libelles = [];
+            for ($i = 11; $i >= 0; $i--) {
+                $t = strtotime("-$i months", strtotime(date('Y-m-01')));
+                $cle = date('Y-m', $t);
+                $valeurs[]  = $par_mois[$cle] ?? 0;
+                $libelles[] = $noms[(int)date('n', $t)];
+            }
+            return ['valeurs' => $valeurs, 'libelles' => $libelles];
+        },
+        'rendu' => function (array $d) {
+            if (array_sum($d['valeurs']) <= 0) {
+                dash_vide('Aucun point validé sur les douze derniers mois.');
+                return;
+            }
+            dash_graphe('courbe', $d['valeurs'], ['libelles' => $d['libelles'], 'hauteur' => 180]);
+        },
+    ],
+
+    // ── Répartition du parc ───────────────────────────────────────────
+    'repartition_parc' => [
+        'titre'     => 'État du parc',
+        'soustitre' => 'Équipements actifs par état',
+        'module'    => 'equipements',
+        'lien'      => ['/pages/equipements.php', 'Le parc'],
+        'donnees'   => function (array $p) {
+            [$ws, $as] = dash_filtre_site($p, 'e.site_id');
+            [$wc, $ac] = dash_filtre_categorie($p, 'e.categorie');
+            return db_fetch_all(
+                "SELECT e.etat, COUNT(*) AS n FROM equipements e
+                 WHERE e.actif = 1 $ws $wc GROUP BY e.etat ORDER BY n DESC",
+                array_merge($as, $ac));
+        },
+        'rendu' => function (array $d) {
+            if (!$d) { dash_vide('Aucun équipement actif sur ce périmètre.'); return; }
+            $teintes = ['neuf' => '#1B75BC', 'bon' => '#16a34a',
+                        'usage' => '#d97706', 'reforme' => '#dc2626'];
+            $noms    = ['neuf' => 'Neuf', 'bon' => 'Bon',
+                        'usage' => 'Usagé', 'reforme' => 'Réformé'];
+            $val = $coul = []; $leg = [];
+            foreach ($d as $r) {
+                $c = $teintes[$r['etat']] ?? '#6d28d9';
+                $val[]  = (int)$r['n'];
+                $coul[] = $c;
+                $leg[]  = ['lbl' => $noms[$r['etat']] ?? ucfirst($r['etat']),
+                           'val' => (int)$r['n'], 'couleur' => $c];
+            }
+            $parle = [];
+            foreach ($leg as $e) $parle[] = $e['lbl'] . ' ' . (int)$e['val'];
+
+            echo '<div class="donut-wrap">';
+            dash_graphe('anneau', $val, [
+                'couleurs' => $coul,
+                'taille'   => 120,
+                'alt'      => 'État du parc, ' . array_sum($val) . ' équipements actifs : '
+                              . implode(', ', $parle) . '.',
+            ]);
+            dash_legende($leg);
+            echo '</div>';
+        },
+    ],
+
+    // ── Engins posés par site ─────────────────────────────────────────
+    'perf_sites' => [
+        'titre'     => 'Engins posés par site',
+        'soustitre' => 'Points validés',
+        'module'    => 'point_emuci',
+        'largeur'   => 'plein',
+        'donnees'   => function (array $p) {
+            // Même période que le bandeau, pour que les deux racontent le
+            // même mois : un classement par site sur un mois vide, juste
+            // sous une synthèse qui en montre un autre, se contredirait.
+            $per = dash_periode($p);
+            [$w, $args] = dash_filtre_site($p, 'pj.site_id');
+            return [
+                'periode' => $per,
+                'lignes'  => db_fetch_all(
+                    "SELECT s.nom, COALESCE(SUM(pj.total_engins),0) AS v
+                     FROM op_points_journaliers pj
+                     JOIN sites s ON s.id = pj.site_id
+                     WHERE pj.statut = 'valide'
+                       AND TO_CHAR(pj.date_point,'YYYY-MM') = ? $w
+                     GROUP BY s.nom HAVING SUM(pj.total_engins) > 0
+                     ORDER BY 2 DESC LIMIT 12",
+                    array_merge([$per['mois']], $args)),
+            ];
+        },
+        'rendu' => function (array $d) {
+            if (!$d['lignes']) { dash_vide('Aucun engin posé sur ce périmètre.'); return; }
+            echo '<div class="card-sub" style="margin:-8px 0 14px">'
+               . h(ucfirst($d['periode']['libelle'])) . '</div>';
+            dash_graphe('barres',
+                array_map(fn($r) => (float)$r['v'], $d['lignes']),
+                ['libelles' => array_map(fn($r) => $r['nom'], $d['lignes'])]);
+        },
+    ],
 
     // ── Points journaliers récents ────────────────────────────────────
     'points_recents' => [
@@ -1006,6 +1609,12 @@ function dash_registre(): array {
  * amputé d'un bloc reste utilisable, une page blanche non.
  */
 function dash_afficher_bloc(array $bloc, array $portee): void {
+    // Un bloc « nu » porte sa propre structure — le bandeau de synthèse est
+    // fait de plusieurs cartes, l'envelopper dans une carte de plus donnerait
+    // des cartes imbriquées. En cas d'erreur il retombe malgré tout dans une
+    // carte, seul contenant qui sait afficher un message d'indisponibilité.
+    $nu = !empty($bloc['nu']);
+
     try {
         $donnees = ($bloc['donnees'])($portee);
     } catch (Throwable $e) {
@@ -1016,12 +1625,14 @@ function dash_afficher_bloc(array $bloc, array $portee): void {
         return;
     }
 
-    dash_carte_debut($bloc);
+    if (!$nu) dash_carte_debut($bloc);
     try {
         ($bloc['rendu'])($donnees, $portee);
     } catch (Throwable $e) {
         error_log('dashboard : rendu du bloc ' . $bloc['id'] . ' — ' . $e->getMessage());
+        if ($nu) dash_carte_debut($bloc);
         dash_vide('Affichage indisponible pour ce bloc.');
+        if ($nu) dash_carte_fin();
     }
-    dash_carte_fin();
+    if (!$nu) dash_carte_fin();
 }
