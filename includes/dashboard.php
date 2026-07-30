@@ -188,38 +188,36 @@ function dash_profils(): array {
     return [
         // Terrain : ce qui se passe sur mon site aujourd'hui.
         'coordinateur' => [
-            'synthese_coord', 'points_recents', 'corrections_attente', 'receptions_site',
+            'synthese_kpi', 'points_recents', 'corrections_attente', 'receptions_site',
             'stock_conso_site', 'bobines_sites', 'equipements', 'rivets',
         ],
 
         // Stock bobines : la file d'attente de service.
         'gsb' => [
-            'commandes_bobines', 'validations_matin', 'corrections_attente',
+            'synthese_kpi', 'commandes_bobines', 'validations_matin', 'corrections_attente',
             'stock_bas', 'bobines_sites', 'rivets',
         ],
 
         // Supervision des opérations : vue complète pour le patron des opérations.
-        // Ordre : action immédiate → KPIs du jour → vigilance → bilan mensuel → logistique → audit.
         'superviseur_op' => [
-            'synthese_jour', 'points_attente', 'corrections_attente',
+            'synthese_kpi', 'points_attente', 'corrections_attente',
             'validations_matin', 'points_rejetes', 'bobines_sites',
             'performance_mois', 'receptions_site', 'activites',
         ],
 
-        // Gestion opérationnelle : peu de droits, donc peu de blocs et des
-        // raccourcis vers ce que ce profil a réellement le droit de faire.
+        // Gestion opérationnelle : peu de droits.
         'gestionnaire_op' => [
-            'raccourcis', 'points_recents', 'commandes_bobines',
+            'synthese_kpi', 'raccourcis', 'points_recents', 'commandes_bobines',
         ],
 
         // Informatique : le parc, ses pannes et ses fins de cycle.
         'informatique' => [
-            'equipements', 'fin_cycle', 'interventions', 'activites',
+            'synthese_kpi', 'equipements', 'fin_cycle', 'interventions', 'activites',
         ],
 
         // Vue d'ensemble, par défaut.
         'general' => [
-            'equipements', 'sites', 'stock_bas', 'fin_cycle',
+            'synthese_kpi', 'equipements', 'sites', 'stock_bas', 'fin_cycle',
             'conso_sites', 'bobines_sites', 'rivets', 'interventions',
             'activites',
         ],
@@ -961,6 +959,114 @@ function dash_registre(): array {
                    . round((float)$r['montant'] / $max * 100) . '%"></div></div>'
                    . '<div class="biz-cov-d"><span class="biz-cov-num">' . ent((float)$r['montant'])
                    . '</span></div></div>';
+            }
+            echo '</div>';
+        },
+    ],
+
+    // ── Synthèse KPI — bloc adaptatif selon les permissions ─────────
+    'synthese_kpi' => [
+        'titre'    => 'Synthèse',
+        'soustitre'=> 'Indicateurs clés — aujourd\'hui',
+        'module'   => null,
+        'largeur'  => 'plein',
+        'lien'     => ['/pages/resume_superviseur.php', 'Vue complète'],
+        'lien_module' => 'rapports',
+        'lien_droit'  => 'can_read',
+        'donnees'  => function (array $p) {
+            $today = date('Y-m-d');
+            [$ws, $as] = dash_filtre_site($p, 'site_id');
+            $d = [];
+            if (can('operations', 'can_read')) {
+                $d['plaques']     = (int)db_fetch_value("SELECT COALESCE(SUM(total_plaques),0)   FROM op_points_journaliers WHERE date_point=? $ws", array_merge([$today], $as));
+                $d['engins']      = (int)db_fetch_value("SELECT COALESCE(SUM(total_engins),0)    FROM op_points_journaliers WHERE date_point=? $ws", array_merge([$today], $as));
+                $d['rivets_j']    = (int)db_fetch_value("SELECT COALESCE(SUM(rivets_utilises),0) FROM op_points_journaliers WHERE date_point=? $ws", array_merge([$today], $as));
+                $d['pts_valides'] = (int)db_fetch_value("SELECT COUNT(*) FROM op_points_journaliers WHERE date_point=? AND statut='valide' $ws",                   array_merge([$today], $as));
+                $d['pts_total']   = (int)db_fetch_value("SELECT COUNT(*) FROM op_points_journaliers WHERE date_point=? AND statut IN ('valide','en_attente_validation') $ws", array_merge([$today], $as));
+                $d['pts_attente'] = (int)db_fetch_value("SELECT COUNT(*) FROM op_points_journaliers WHERE date_point=? AND statut='en_attente_validation' $ws",    array_merge([$today], $as));
+            }
+            if (can('import_emuci', 'can_read')) {
+                $in_use = (int)db_fetch_value("SELECT COUNT(*) FROM import_optoplate WHERE date_import=? AND statut_plaque='in_use' $ws", array_merge([$today], $as));
+                $d['in_use'] = $in_use;
+                $d['ecart']  = $in_use - ($d['plaques'] ?? 0);
+            }
+            if (can('bobines', 'can_read')) {
+                [$wb, $ab] = dash_filtre_site($p, 'site_id');
+                $d['bobines']       = (int)db_fetch_value("SELECT COUNT(*) FROM op_bobines WHERE statut IN ('en_cours','en_stock') $wb", $ab);
+                $d['films']         = (int)db_fetch_value("SELECT COALESCE(SUM(films_restants),0) FROM op_bobines WHERE statut IN ('en_cours','en_stock') $wb", $ab);
+                $d['bob_critiques'] = (int)db_fetch_value("SELECT COUNT(*) FROM op_bobines WHERE statut='en_cours' AND films_restants < 50 $wb", $ab);
+            }
+            if (can('validation_stock', 'can_read') || can('inventaire_bobines', 'can_read')) {
+                $d['corrections'] = (int)db_fetch_value("SELECT COUNT(*) FROM corrections_bobines WHERE statut='en_attente' $ws", $as);
+            }
+            if (can('commandes_bobines', 'can_read')) {
+                $d['commandes'] = (int)db_fetch_value("SELECT COUNT(*) FROM commandes_bobines WHERE statut IN ('en_attente','valide') $ws", $as);
+            }
+            if (can('rivets', 'can_read')) {
+                [$wr, $ar] = dash_filtre_site($p, 'sr.site_id');
+                $d['rivets_stock'] = (int)db_fetch_value("SELECT COALESCE(SUM(sr.quantite),0) FROM op_stock_rivets sr JOIN sites s ON s.id=sr.site_id WHERE s.actif=1 $wr", $ar);
+            }
+            if (can('equipements', 'can_read')) {
+                [$we, $ae] = dash_filtre_site($p, 'site_id');
+                [$wc, $ac] = dash_filtre_categorie($p, 'categorie');
+                $d['equip']     = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 $we $wc", array_merge($ae, $ac));
+                $d['equip_fin'] = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle IS NOT NULL AND date_fin_cycle <= (CURRENT_DATE + INTERVAL '30 days') $we $wc", array_merge($ae, $ac));
+            }
+            return $d;
+        },
+        'rendu' => function (array $d) {
+            if (!$d) { dash_vide('Aucun indicateur disponible.'); return; }
+            $kpis = [];
+            if (isset($d['plaques']))
+                $kpis[] = ['val' => fmt_number($d['plaques'], 0), 'lbl' => 'Plaques posées',    'col' => '#1B75BC', 'bg' => '#dbeafe'];
+            if (isset($d['engins']))
+                $kpis[] = ['val' => fmt_number($d['engins'], 0),  'lbl' => 'Engins traités',    'col' => '#06033A', 'bg' => '#f0f4ff'];
+            if (isset($d['rivets_j']))
+                $kpis[] = ['val' => fmt_number($d['rivets_j'], 0),'lbl' => 'Rivets utilisés',   'col' => '#6d28d9', 'bg' => '#f3e8ff'];
+            if (isset($d['in_use']))
+                $kpis[] = ['val' => fmt_number($d['in_use'], 0),  'lbl' => 'In Use EMUCI',      'col' => '#92400e', 'bg' => '#fef3c7'];
+            if (isset($d['ecart'])) {
+                $e = $d['ecart'];
+                $kpis[] = ['val' => ($e > 0 ? '+' : '') . $e,    'lbl' => 'Écart EMUCI / PJ',  'col' => ($e === 0 ? '#166534' : '#dc2626'), 'bg' => ($e === 0 ? '#dcfce7' : '#fee2e2')];
+            }
+            if (isset($d['pts_valides'])) {
+                $tot = $d['pts_total'] ?? $d['pts_valides'];
+                $ok  = $tot > 0 && $d['pts_valides'] >= $tot;
+                $kpis[] = ['val' => $d['pts_valides'] . ' / ' . $tot, 'lbl' => 'Points validés', 'col' => ($ok ? '#166534' : '#92400e'), 'bg' => ($ok ? '#dcfce7' : '#fef3c7')];
+            }
+            if (isset($d['pts_attente'])) {
+                $pa = $d['pts_attente'];
+                $kpis[] = ['val' => fmt_number($pa, 0), 'lbl' => 'En attente valid.', 'col' => ($pa > 0 ? '#92400e' : '#166534'), 'bg' => ($pa > 0 ? '#fef3c7' : '#dcfce7')];
+            }
+            if (isset($d['bobines']))
+                $kpis[] = ['val' => fmt_number($d['bobines'], 0),      'lbl' => 'Bobines actives',  'col' => '#0369a1', 'bg' => '#e0f2fe'];
+            if (isset($d['films']))
+                $kpis[] = ['val' => fmt_number($d['films'], 0),        'lbl' => 'Films restants',   'col' => '#0369a1', 'bg' => '#f0f9ff'];
+            if (isset($d['bob_critiques']) && $d['bob_critiques'] > 0)
+                $kpis[] = ['val' => fmt_number($d['bob_critiques'], 0),'lbl' => 'Bobines critiques','col' => '#dc2626', 'bg' => '#fee2e2'];
+            if (isset($d['corrections'])) {
+                $c = $d['corrections'];
+                $kpis[] = ['val' => fmt_number($c, 0), 'lbl' => 'Corrections att.', 'col' => ($c > 0 ? '#92400e' : '#166534'), 'bg' => ($c > 0 ? '#fef3c7' : '#dcfce7')];
+            }
+            if (isset($d['commandes'])) {
+                $ca = $d['commandes'];
+                $kpis[] = ['val' => fmt_number($ca, 0), 'lbl' => 'Commandes à servir', 'col' => ($ca > 0 ? '#1B75BC' : '#166534'), 'bg' => ($ca > 0 ? '#dbeafe' : '#dcfce7')];
+            }
+            if (isset($d['rivets_stock'])) {
+                $sr = $d['rivets_stock'];
+                $kpis[] = ['val' => fmt_number($sr, 0), 'lbl' => 'Stock rivets', 'col' => ($sr < 100 ? '#dc2626' : ($sr < 500 ? '#92400e' : '#166534')), 'bg' => ($sr < 100 ? '#fee2e2' : ($sr < 500 ? '#fef3c7' : '#dcfce7'))];
+            }
+            if (isset($d['equip']))
+                $kpis[] = ['val' => fmt_number($d['equip'], 0),     'lbl' => 'Équipements actifs', 'col' => '#374151', 'bg' => '#f3f4f6'];
+            if (isset($d['equip_fin']) && $d['equip_fin'] > 0)
+                $kpis[] = ['val' => fmt_number($d['equip_fin'], 0), 'lbl' => 'Fin cycle ≤ 30j',    'col' => '#dc2626', 'bg' => '#fee2e2'];
+            if (!$kpis) { dash_vide('Aucun indicateur disponible pour ce profil.'); return; }
+            echo '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px">';
+            foreach ($kpis as $k) {
+                echo '<div style="background:' . $k['bg'] . ';border-radius:12px;padding:14px 16px;min-width:0">'
+                   . '<div style="font-size:26px;font-weight:900;color:' . $k['col'] . ';line-height:1;font-variant-numeric:tabular-nums">' . h($k['val']) . '</div>'
+                   . '<div style="font-size:11px;font-weight:700;color:' . $k['col'] . ';opacity:.75;text-transform:uppercase;letter-spacing:.4px;margin-top:6px;line-height:1.3">' . h($k['lbl']) . '</div>'
+                   . '</div>';
             }
             echo '</div>';
         },
