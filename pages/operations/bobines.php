@@ -631,9 +631,9 @@ endif;
   <?php
   $types_bobines_list = db_fetch_all("SELECT DISTINCT type_code FROM op_bobines WHERE type_code IS NOT NULL ORDER BY type_code");
   ?>
-  <form method="GET" class="filter-bar">
+  <form method="GET" class="filter-bar" id="bobFiltreForm">
     <?php if(!$site_force): ?>
-    <select name="site" class="fsel" onchange="this.form.submit()">
+    <select name="site" class="fsel" onchange="bobFiltrer(this.form)">
       <option value="">Tous les sites</option>
       <?php foreach($sites_list as $s): ?>
       <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
@@ -641,7 +641,7 @@ endif;
     </select>
     <?php endif; ?>
 
-    <select name="statut" class="fsel" onchange="this.form.submit()">
+    <select name="statut" class="fsel" onchange="bobFiltrer(this.form)">
       <option value="">Tous statuts</option>
       <option value="en_stock" <?= $f_statut==='en_stock'?'selected':'' ?>>📦 En stock</option>
       <option value="en_cours" <?= $f_statut==='en_cours'?'selected':'' ?>>🎞️ En cours</option>
@@ -650,7 +650,7 @@ endif;
       <option value="perdue"   <?= $f_statut==='perdue'?'selected':'' ?>>⚠️ Perdues</option>
     </select>
 
-    <select name="type" class="fsel" onchange="this.form.submit()">
+    <select name="type" class="fsel" onchange="bobFiltrer(this.form)">
       <option value="">Tous les types</option>
       <?php foreach($types_bobines_list as $t): ?>
       <option value="<?= h($t['type_code']) ?>" <?= $f_type===$t['type_code']?'selected':'' ?>><?= h($t['type_code']) ?></option>
@@ -660,20 +660,19 @@ endif;
     <div style="position:relative">
       <i class="ph-duotone ph-magnifying-glass" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none"></i>
       <input type="text" name="q" value="<?= h($f_search) ?>"
-             placeholder="N° bobine…" onchange="this.form.submit()"
+             placeholder="N° bobine…" onchange="bobFiltrer(this.form)"
              style="padding:7px 12px 7px 32px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;width:160px">
     </div>
 
-    <?php if($f_site||$f_statut||$f_serie||$f_type||$f_search): ?>
-    <a href="bobines.php" class="btn btn-secondary btn-sm">✕ Effacer</a>
-    <?php endif; ?>
+    <a href="bobines.php" class="btn btn-secondary btn-sm" onclick="return bobEffacer(event)"
+       style="<?= ($f_site||$f_statut||$f_serie||$f_type||$f_search) ? '' : 'display:none' ?>" id="bobEffacerBtn">✕ Effacer</a>
 
     <?php if(can('inventaire_bobines','can_read')): ?>
     <a href="<?= APP_URL ?>/pages/inventaire_bobines.php" class="btn btn-primary btn-sm" style="margin-left:auto">📊 Inventaire</a>
     <?php endif; ?>
   </form>
 
-  <div class="card" style="padding:0;overflow:hidden">
+  <div class="card" id="bobinesResultCard" style="padding:0;overflow:hidden">
     <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
       <h3 style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;color:var(--navy)">🎞️ Bobines (<?= count($bobines) ?>)</h3>
       <span style="font-size:12px;color:var(--muted)">Stock total système : <strong><?= number_format($total_stock) ?> films</strong></span>
@@ -1171,6 +1170,51 @@ function showTab(name,btn){
   if(btn) btn.classList.add('active');
   if(name==='ecarts') chargerEcarts();
 }
+
+// ── Filtres de la liste (site/statut/type/recherche) sans rechargement visible :
+// on recupere le tableau filtre en arriere-plan et on l'echange sur place.
+var bobEnVol = null;
+function bobCharger(url){
+  if(!window.fetch || !window.DOMParser){ location.href = url; return; }
+  if(bobEnVol) try{ bobEnVol.abort(); }catch(e){}
+  const ctrl = window.AbortController ? new AbortController() : null;
+  bobEnVol = ctrl;
+  fetch(url, {credentials:'same-origin', signal: ctrl?ctrl.signal:undefined, headers:{'X-Requested-With':'fetch'}})
+    .then(r => { if(!r.ok) throw new Error(r.status); return r.text(); })
+    .then(html => {
+      if(bobEnVol !== ctrl) return;
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const neuf = doc.getElementById('bobinesResultCard');
+      const ancien = document.getElementById('bobinesResultCard');
+      if(!neuf || !ancien) throw new Error('structure');
+      ancien.replaceWith(neuf);
+      history.pushState({bob:1}, '', url);
+      bobEnVol = null;
+    })
+    .catch(e => {
+      if(e && e.name==='AbortError') return;
+      bobEnVol = null;
+      location.href = url;
+    });
+}
+function bobMajEffacer(form){
+  const actif = ['site','statut','type','q'].some(n => form.elements[n] && form.elements[n].value);
+  const btn = document.getElementById('bobEffacerBtn');
+  if(btn) btn.style.display = actif ? '' : 'none';
+}
+function bobFiltrer(form){
+  bobMajEffacer(form);
+  bobCharger(location.pathname + '?' + new URLSearchParams(new FormData(form)).toString());
+}
+function bobEffacer(ev){
+  ev.preventDefault();
+  const form = document.getElementById('bobFiltreForm');
+  ['site','statut','type','q'].forEach(n => { if(form.elements[n]) form.elements[n].value = ''; });
+  document.getElementById('bobEffacerBtn').style.display = 'none';
+  bobCharger(location.pathname);
+  return false;
+}
+window.addEventListener('popstate', function(ev){ if(ev.state && ev.state.bob) location.reload(); });
 
 function changerStatut(id, nouveauStatut) {
   const label = nouveauStatut==='en_cours' ? 'mettre cette bobine en utilisation' : 'remettre cette bobine en stock';
