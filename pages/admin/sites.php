@@ -411,8 +411,8 @@ $type_colors = [
 /* !important nécessaire : header.php impose th{background:var(--tertiary)!important;color:var(--muted)!important} */
 .sites-table th{font-size:11.5px;font-weight:700;color:#475569!important;text-transform:uppercase;letter-spacing:.4px;padding:10px 14px;border-bottom:2px solid var(--border)}
 .sites-table td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
-/* Scroll interne au-delà de 5 lignes : hauteur = header + 5 lignes (~62px/ligne) */
-.sites-table-wrap{max-height:346px;overflow-y:auto}
+/* Scroll interne au-delà de 4 lignes : hauteur = header + 4 lignes (~62px/ligne) */
+.sites-table-wrap{max-height:284px;overflow-y:auto}
 .sites-table thead th{position:sticky;top:0;z-index:1}
 .sites-table tr:hover td{background:#f8fafc}
 .sites-table tr.inactive td{opacity:.55}
