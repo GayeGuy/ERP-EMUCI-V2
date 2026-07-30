@@ -600,7 +600,7 @@ $type_colors = [
             <?php if ($s['responsable_nom']): ?>
             <div style="display:flex;align-items:center;gap:8px">
               <div class="resp-avatar">
-                <?= strtoupper(implode('',array_map(fn($w)=>$w[0],array_slice(explode(' ',$s['responsable_nom']),0,2)))) ?>
+                <?= strtoupper(implode('',array_map(fn($w)=>$w[0],array_slice(array_filter(explode(' ',$s['responsable_nom'])),0,2)))) ?>
               </div>
               <span style="font-size:13px;font-weight:600;color:var(--text)"><?= h($s['responsable_nom']) ?></span>
             </div>
