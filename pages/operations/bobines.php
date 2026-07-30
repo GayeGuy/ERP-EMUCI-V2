@@ -578,6 +578,9 @@ endif;
 .tab-bar{display:flex;gap:2px;background:var(--lighter);border-radius:10px;padding:4px;margin-bottom:20px;width:fit-content}
 .tab-btn{padding:8px 20px;border:none;background:transparent;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;color:var(--muted);transition:all .15s;font-family:'DM Sans',sans-serif}
 .tab-btn.active{background:white;color:var(--navy);font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+/* Scroll interne au-delà de 9 lignes : hauteur = header (~40px) + 9 lignes (~54px/ligne) */
+#bobinesTableWrap{max-height:526px;overflow-y:auto}
+#bobinesTableWrap thead th{position:sticky;top:0;z-index:1}
 </style>
 
 <!-- KPIs -->
@@ -675,13 +678,13 @@ endif;
       <h3 style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;color:var(--navy)">🎞️ Bobines (<?= count($bobines) ?>)</h3>
       <span style="font-size:12px;color:var(--muted)">Stock total système : <strong><?= number_format($total_stock) ?> films</strong></span>
     </div>
-    <div class="table-wrap">
+    <div class="table-wrap" id="bobinesTableWrap">
       <table>
         <thead><tr>
           <th>Numéro</th><th>Type</th><th>Format</th><th>Site</th>
           <th style="text-align:center">Qté livrée</th>
-          <th style="text-align:center">Restants</th>
           <th style="text-align:center">Consommé</th>
+          <th style="text-align:center">Restants</th>
           <th style="width:90px">Niveau</th>
           <th>Statut</th>
           <th style="text-align:center">Actions</th>
@@ -703,11 +706,11 @@ endif;
             <td style="font-size:12px;color:var(--muted)"><?= h($b['format']??'—') ?></td>
             <td style="font-size:12.5px"><?= h($b['site_nom']??'') ?:('<span style="color:var(--muted)">Non affectée</span>') ?></td>
             <td style="text-align:center;font-size:12px;color:var(--muted);font-weight:600"><?= number_format($qte_init) ?></td>
-            <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;color:<?= $bar_color ?>"><?= number_format($restants) ?></td>
             <td style="text-align:center">
               <span style="font-weight:700;color:#1D4ED8"><?= number_format($consomme) ?></span>
               <div style="font-size:10px;color:var(--muted)"><?= $pct_conso ?>%</div>
             </td>
+            <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;color:<?= $bar_color ?>"><?= number_format($restants) ?></td>
             <td>
               <div class="stock-bar"><div class="stock-fill" style="width:<?= min(100,$pct) ?>%;background:<?= $bar_color ?>"></div></div>
               <div style="font-size:10px;color:var(--muted);text-align:right"><?= $pct ?>% restant</div>
