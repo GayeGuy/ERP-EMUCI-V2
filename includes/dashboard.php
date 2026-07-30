@@ -971,7 +971,7 @@ function dash_registre(): array {
         'module'   => null,
         'largeur'  => 'plein',
         'lien'     => ['/pages/resume_superviseur.php', 'Vue complète'],
-        'lien_module' => 'rapports',
+        'lien_module' => 'import_emuci',
         'lien_droit'  => 'can_read',
         'donnees'  => function (array $p) {
             $today = date('Y-m-d');
