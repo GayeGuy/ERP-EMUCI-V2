@@ -10,6 +10,16 @@
  */
 ?>
 <style>
+/* ── Couleur des textes secondaires
+   var(--muted) vaut #64748B, soit 4,33:1 sur le fond des cartes comme sur
+   celui de la page : sous le seuil AA de 4,5 pour du texte de 10 à 13 px, et
+   c'est précisément la taille de tous les libellés secondaires d'ici. Ils
+   passent donc à #475569 (7,2:1).
+
+   Les en-têtes de tableau portent !important : templates/header.php impose
+   th{color:var(--muted)!important}, qui écrase silencieusement toute couleur
+   déclarée dans une page. */
+
 /* ── RESET */
 .pdg{max-width:1200px;margin:0 auto;font-size:14px}
 .pdg *{box-sizing:border-box}
@@ -29,7 +39,7 @@
   box-shadow:0 6px 14px -10px rgba(6,3,58,.35)}
 @media(max-width:700px){.pdg-topbar{position:static;margin:0 0 20px;padding:0}}
 .pdg-title{font-size:24px;font-weight:900;color:var(--navy,#06033A);letter-spacing:-.5px}
-.pdg-sub{font-size:13px;color:var(--muted,#94a3b8);margin-top:2px}
+.pdg-sub{font-size:13px;color:#475569;margin-top:2px}
 .pdg-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .alrt-pill{display:inline-flex;align-items:center;gap:5px;padding:5px 11px;border-radius:20px;font-size:12px;font-weight:700}
 .alrt-warn{background:#fff7ed;color:#c2410c;border:1px solid #fed7aa}
@@ -49,7 +59,7 @@
 @media(max-width:820px){.perf-wrap{grid-template-columns:1fr}}
 .card{background:#fff;border:1.5px solid var(--border,#e2e8f0);border-radius:18px;padding:20px 22px}
 .card-ttl{font-size:13px;font-weight:800;color:var(--navy,#06033A);margin:0 0 4px}
-.card-sub{font-size:12px;color:var(--muted,#94a3b8);margin-bottom:18px}
+.card-sub{font-size:12px;color:#475569;margin-bottom:18px}
 
 /* Sites distribution bar */
 .dist-bar{height:8px;border-radius:4px;overflow:hidden;display:flex;margin-bottom:18px}
@@ -60,14 +70,14 @@
 .site-row:last-child{border-bottom:none}
 .site-av{width:34px;height:34px;border-radius:50%;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;letter-spacing:0}
 .site-name{font-size:13px;font-weight:700;color:var(--navy,#06033A)}
-.site-sub{font-size:11px;color:var(--muted,#94a3b8)}
+.site-sub{font-size:11px;color:#475569}
 .site-mini-bar{flex:1;min-width:60px}
 .site-mini-fill{height:4px;border-radius:2px;background:currentColor}
 .site-pct{font-size:12px;font-weight:800;color:var(--navy,#06033A);min-width:38px;text-align:right}
 
 /* Performance table */
 .ptbl{width:100%;border-collapse:collapse}
-.ptbl th{font-size:10px;font-weight:700;color:var(--muted,#94a3b8);text-transform:uppercase;letter-spacing:.4px;
+.ptbl th{font-size:10px;font-weight:700;color:#475569!important;text-transform:uppercase;letter-spacing:.4px;
   padding:9px 10px;border-bottom:2px solid var(--border,#e2e8f0);text-align:right;white-space:nowrap}
 .ptbl th:first-child{text-align:left}
 .ptbl td{padding:11px 10px;border-bottom:1px solid var(--border,#f1f5f9);font-size:13px;text-align:right;vertical-align:middle}
@@ -97,12 +107,20 @@
 .ch-box canvas{display:block;max-width:100%}
 .pfw-right canvas{display:block;max-width:100%}
 .ch-ttl{font-size:13px;font-weight:800;color:var(--navy,#06033A);margin-bottom:4px}
-.ch-sub{font-size:11px;color:var(--muted,#94a3b8);margin-bottom:14px}
+.ch-sub{font-size:11px;color:#475569;margin-bottom:14px}
 .donut-wrap{display:flex;align-items:center;justify-content:center;gap:16px;padding:8px 0}
 .leg-list{display:flex;flex-direction:column;gap:7px}
-.leg-item{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--muted,#94a3b8)}
+.leg-item{display:flex;align-items:center;gap:7px;font-size:11px;color:#475569}
 .leg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
 .leg-val{margin-left:auto;font-weight:700;color:var(--navy,#06033A);font-size:12px}
+
+/* ── Grille générique de blocs (tableaux de bord par profil)
+   Deux colonnes de largeur égale, minmax(0,1fr) pour qu'un tableau large
+   n'élargisse pas sa piste. Un bloc « plein » occupe la ligne entière. */
+.pdg-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
+.pdg-grid > .plein{grid-column:1/-1}
+.pdg-grid > *{min-width:0}
+@media(max-width:820px){.pdg-grid{grid-template-columns:1fr}}
 
 /* ── BOTTOM ROW */
 .bottom-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
@@ -110,7 +128,7 @@
 
 /* ── Demandes table */
 .dtbl{width:100%;border-collapse:collapse;font-size:12px}
-.dtbl th{font-size:10px;font-weight:700;color:var(--muted,#94a3b8);text-transform:uppercase;padding:7px 8px;
+.dtbl th{font-size:10px;font-weight:700;color:#475569!important;text-transform:uppercase;padding:7px 8px;
   border-bottom:2px solid var(--border,#e2e8f0);text-align:left;letter-spacing:.3px}
 .dtbl td{padding:9px 8px;border-bottom:1px solid #f1f5f9}
 .dtbl tr:last-child td{border-bottom:none}
@@ -120,11 +138,11 @@
 .kpi-mini{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
 .kpi-m{background:#f8fafc;border-radius:12px;padding:14px 16px}
 .kpi-m-val{font-size:24px;font-weight:900;font-family:'Montserrat',sans-serif;line-height:1}
-.kpi-m-lbl{font-size:10px;color:var(--muted,#94a3b8);font-weight:700;text-transform:uppercase;margin-top:4px;letter-spacing:.3px}
+.kpi-m-lbl{font-size:10px;color:#475569;font-weight:700;text-transform:uppercase;margin-top:4px;letter-spacing:.3px}
 
 /* ── Alertes */
 .atbl{width:100%;border-collapse:collapse;font-size:12px}
-.atbl th{font-size:10px;font-weight:700;color:var(--muted,#94a3b8);text-transform:uppercase;padding:7px 8px;
+.atbl th{font-size:10px;font-weight:700;color:#475569!important;text-transform:uppercase;padding:7px 8px;
   border-bottom:2px solid var(--border,#e2e8f0);text-align:left;letter-spacing:.3px}
 .atbl td{padding:9px 8px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
 .atbl tr:last-child td{border-bottom:none}
@@ -138,12 +156,12 @@
 /* ── Widget Performance par site */
 .pfw-card{background:#fff;border:1.5px solid var(--border,#e2e8f0);border-radius:20px;overflow:hidden;margin-bottom:20px}
 .pfw-top{display:flex;justify-content:space-between;align-items:center;padding:16px 22px;border-bottom:1px solid #f1f5f9;flex-wrap:wrap;gap:10px}
-.pfw-site-lbl{font-size:11px;color:#94a3b8;letter-spacing:.3px;margin-bottom:3px;text-transform:uppercase;font-weight:700}
+.pfw-site-lbl{font-size:11px;color:#5a6678;letter-spacing:.3px;margin-bottom:3px;text-transform:uppercase;font-weight:700}
 .pfw-site-sel{display:flex;align-items:center;gap:6px;cursor:pointer}
 .pfw-site-sel select{font-size:16px;font-weight:900;color:#06033A;background:transparent;border:none;outline:none;cursor:pointer;font-family:inherit;appearance:none;-webkit-appearance:none;padding-right:4px}
-.pfw-site-arr{font-size:11px;color:#94a3b8}
+.pfw-site-arr{font-size:11px;color:#5a6678}
 .pfw-quarters{display:flex;gap:5px;align-items:center}
-.pfw-q{padding:4px 11px;border-radius:16px;border:1.5px solid #e2e8f0;background:#f8fafc;font-size:11px;font-weight:700;color:#94a3b8;cursor:pointer;font-family:inherit;transition:.15s;white-space:nowrap}
+.pfw-q{padding:4px 11px;border-radius:16px;border:1.5px solid #e2e8f0;background:#f8fafc;font-size:11px;font-weight:700;color:#5a6678;cursor:pointer;font-family:inherit;transition:.15s;white-space:nowrap}
 .pfw-q:hover{border-color:#06033A;color:#06033A}
 .pfw-q.active{background:#06033A;color:#fff;border-color:#06033A}
 .pfw-legend{display:flex;align-items:center;gap:14px;padding:10px 20px 0;font-size:11px;color:#64748b}
@@ -157,7 +175,7 @@
 .pfw-stat-lbl{font-size:11px;color:rgba(255,255,255,.65);margin-bottom:3px;font-weight:600}
 .pfw-stat-val{font-size:21px;font-weight:900;color:#fff;font-family:'Montserrat',sans-serif;line-height:1}
 .pfw-right{padding:18px 20px 10px;position:relative;overflow:hidden}
-.pfw-empty{display:flex;align-items:center;justify-content:center;height:100%;color:#94a3b8;font-size:13px}
+.pfw-empty{display:flex;align-items:center;justify-content:center;height:100%;color:#5a6678;font-size:13px}
 
 /* ══════════ BANDEAU PERFORMANCE BUSINESS ══════════ */
 .biz{--biz-muted:#5a6678;display:flex;flex-direction:column;gap:14px;margin-bottom:20px}
@@ -229,7 +247,7 @@
    à répartir » plutôt que de laisser croire à un bloc manquant. */
 .biz-mix-vide{background:repeating-linear-gradient(-45deg,#f1f5f9 0 6px,#e8edf3 6px 12px)}
 .biz-dot-off{background:#cbd5e1 !important}
-.biz-mix-k-off{color:#94a3b8}
+.biz-mix-k-off{color:#5a6678}
 
 /* Couverture + fiabilité */
 .biz-split{display:grid;grid-template-columns:1.15fr 1fr;gap:14px}
