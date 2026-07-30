@@ -429,7 +429,11 @@ function toggleRow(roleId, module){
 
 function allOff(roleId){
   if(!confirm('Désactiver TOUTES les permissions de ce rôle ?'))return;
-  const modules=['equipements','nomenclatures','sites','affectations','consommables','receptions','bobines','inventaire_bobines','interventions','commandes','pmma','rapports','users','audit'];
+  const modules=['equipements','nomenclatures','sites','affectations','consommables','receptions',
+    'bobines','inventaire_bobines','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
+    'operations','rivets','pmma','point_emuci','import_emuci',
+    'interventions','rapport_journalier','affectations_it',
+    'commandes','demandes','delegations','departements','users','audit','rapports'];
   const actions=['can_read','can_create','can_update','can_delete','can_export'];
   modules.forEach(m=>actions.forEach(a=>{
     const b=document.getElementById(`perm_${roleId}_${m}_${a}`);
@@ -438,7 +442,11 @@ function allOff(roleId){
 }
 
 function savePerms(roleId){
-  const modules=['equipements','nomenclatures','sites','affectations','consommables','receptions','bobines','inventaire_bobines','interventions','commandes','pmma','rapports','users','audit'];
+  const modules=['equipements','nomenclatures','sites','affectations','consommables','receptions',
+    'bobines','inventaire_bobines','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
+    'operations','rivets','pmma','point_emuci','import_emuci',
+    'interventions','rapport_journalier','affectations_it',
+    'commandes','demandes','delegations','departements','users','audit','rapports'];
   const actions=['can_read','can_create','can_update','can_delete','can_export'];
   const fd=new FormData();
   fd.append('action','save_permissions');
@@ -449,7 +457,8 @@ function savePerms(roleId){
   }));
   fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd})
     .then(r=>r.json())
-    .then(d=>toast(d.message,d.success?'success':'danger'));
+    .then(d=>toast(d.message,d.success?'success':'danger'))
+    .catch(()=>toast('Erreur réseau lors de la sauvegarde.','danger'));
 }
 
 function saveRole(){
