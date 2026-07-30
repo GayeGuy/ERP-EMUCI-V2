@@ -428,19 +428,17 @@ function dash_registre(): array {
                  FROM op_points_journaliers pj
                  JOIN sites s ON s.id = pj.site_id
                  LEFT JOIN users u ON u.id = pj.created_by
-                 WHERE pj.statut = 'brouillon' $w
+                 WHERE pj.statut = 'en_attente_validation' $w
                  ORDER BY pj.date_point ASC
                  LIMIT 8", $args);
         },
         'rendu' => function (array $d) {
-            if (!$d) { dash_vide('Aucun point en attente. Tout est validé.', true); return; }
+            if (!$d) { dash_vide('Aucun point en attente de validation.', true); return; }
             echo '<table class="dtbl"><thead><tr><th>Date</th><th>Site</th><th>Auteur</th>'
-               . '<th style="text-align:right">Attente</th></tr></thead><tbody>';
+               . '<th style="text-align:right">Soumis</th></tr></thead><tbody>';
             foreach ($d as $r) {
-                $j = (int)$r['anciennete'];
-                // Un brouillon de la veille est normal ; au-delà de trois
-                // jours il est probablement oublié.
-                $cls = $j >= 3 ? 'mvh-r' : ($j >= 1 ? 'mvh-o' : 'mvh-g');
+                $j   = (int)$r['anciennete'];
+                $cls = $j >= 2 ? 'mvh-r' : ($j >= 1 ? 'mvh-o' : 'mvh-g');
                 echo '<tr><td>' . h(fmt_date($r['date_point'], 'd/m'))
                    . ' <span style="color:#5a6678">' . h(dash_type_point($r['type_point'])) . '</span></td>'
                    . '<td style="font-weight:600">' . h($r['site_nom']) . '</td>'
