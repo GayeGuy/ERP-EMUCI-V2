@@ -25,6 +25,14 @@ $unread = count($notifs);
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
   <style>
+    /* Un changement de filtre (site, statut…) recharge la page en GET classique :
+       sans ceci, le navigateur affiche un blanc le temps du aller-retour serveur.
+       Avec, il fait un fondu entre l'ancienne et la nouvelle page — la navigation
+       reste une vraie navigation, seul le rendu change. Ignoré sans effet de bord
+       par les navigateurs qui ne le connaissent pas encore. */
+    @view-transition {
+      navigation: auto;
+    }
     /* ===== DESIGN SYSTEM v4 — Palette Soft UI ===== */
     :root {
       /* Brand */
