@@ -14,9 +14,7 @@ $role_slug = $user['role_slug'] ?? '';
 $page_title  = 'Délégations';
 $active_page = 'delegations';
 
-if (!in_array($role_slug, ['superviseur_operation','admin','superadmin'])) {
-    http_response_code(403); include __DIR__ . '/../../templates/403.php'; exit;
-}
+require_permission('delegations', 'can_read');
 
 // ── TÂCHES DÉLÉGABLES
 $modules_disponibles = [

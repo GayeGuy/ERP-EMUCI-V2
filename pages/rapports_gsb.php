@@ -18,12 +18,7 @@ require_auth();
 
 $user        = current_user();
 $role_slug   = $user['role_slug'] ?? '';
-$gsb_roles   = ['admin','superadmin','gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation'];
-if (!in_array($role_slug, $gsb_roles)) {
-    http_response_code(403);
-    include __DIR__ . '/../templates/403.php';
-    exit;
-}
+require_permission('rapports_gsb', 'can_read');
 
 $page_title  = 'Rapports & Exports';
 $active_page = 'rapports_gsb';

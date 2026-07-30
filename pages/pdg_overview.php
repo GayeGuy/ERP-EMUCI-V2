@@ -200,7 +200,7 @@ $di_tx      = $di_mois > 0 ? round($di_approuv / $di_mois * 100) : 0;
 $di_recents = [];
 try {
     $di_recents = db_fetch_all(
-        "SELECT d.id, d.numero, dt.label AS type_lbl, d.statut, d.demandeur_id,
+        "SELECT d.id, d.numero, dt.label AS type_lbl, d.statut, d.demandeur_id, d.n1_user_id,
                 d.etape_actuelle, d.workflow_snapshot,
                 e.label AS etape_lbl, e.role_code AS etape_role
          FROM di_demandes d
@@ -229,16 +229,25 @@ foreach ($di_recents as &$_dr) {
     }
 
     // "En attente chez" doit afficher le département, pas le libellé de l'étape :
-    // le N+1 est un rôle dynamique (résolu via le département du demandeur lui-même),
-    // les autres rôles (RAF/DAF/DG/IT/Administration) ont un département fixe
+    // le N+1 est un rôle dynamique — n1_user_id est déjà résolu à la soumission
+    // (includes/demandes.php), on affiche donc le département où CE N+1 est
+    // marqué is_n1=1, plutôt que celui du demandeur (à défaut, on retombe dessus).
+    // Les autres rôles (RAF/DAF/DG/IT/Administration) ont un département fixe
     // configurable dans Admin → Rôles demandes (di_roles.departement_id).
     $_dept_lbl = null;
     try {
         if (($_dr['etape_role'] ?? null) === 'n1') {
+            $_n1_id = !empty($_dr['n1_user_id']) ? (int)$_dr['n1_user_id'] : (int)$_dr['demandeur_id'];
             $_dept_lbl = db_fetch_value(
                 "SELECT d.label FROM user_departements ud JOIN departements d ON d.id = ud.departement_id
-                 WHERE ud.user_id = ? LIMIT 1", [(int)$_dr['demandeur_id']]
+                 WHERE ud.user_id = ? AND ud.is_n1 = 1 LIMIT 1", [$_n1_id]
             );
+            if (!$_dept_lbl) {
+                $_dept_lbl = db_fetch_value(
+                    "SELECT d.label FROM user_departements ud JOIN departements d ON d.id = ud.departement_id
+                     WHERE ud.user_id = ? LIMIT 1", [(int)$_dr['demandeur_id']]
+                );
+            }
         } elseif (!empty($_dr['etape_role'])) {
             $_dept_lbl = db_fetch_value(
                 "SELECT d.label FROM di_roles r JOIN departements d ON d.id = r.departement_id

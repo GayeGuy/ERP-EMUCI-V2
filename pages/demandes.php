@@ -310,6 +310,14 @@ include __DIR__ . '/../templates/header.php';
   .di-btn-primary{background:linear-gradient(135deg,#3B4FBE,#7C92FF);color:#fff}
   .di-btn-ghost{background:var(--input,#f0f4f8);color:var(--text,#2c3e50)}
   .di-btn-danger{background:#fdf0ef;color:#e74c3c}
+  .di-btn-back{background:var(--card,#fff);color:var(--text,#2c3e50);border:1.5px solid var(--border,#e2e8f0)}
+  .di-btn-back:hover{border-color:#7C92FF;color:#3B4FBE}
+  .di-btn-back i{font-size:15px;transition:transform .15s}
+  .di-btn-back:hover i{transform:translateX(-3px)}
+  .di-btn-pdf{background:#FEF2F2;color:#DC2626}
+  .di-btn-pdf:hover{background:#DC2626;color:#fff;box-shadow:0 6px 16px rgba(220,38,38,.28);transform:translateY(-1px)}
+  [data-theme="dark"] .di-btn-pdf{background:#4A1D1D;color:#FCA5A5}
+  [data-theme="dark"] .di-btn-pdf:hover{background:#DC2626;color:#fff}
   .di-tbl{width:100%;border-collapse:collapse;background:var(--card,#fff);border:1.5px solid var(--border,#e2e8f0);border-radius:14px;overflow:hidden}
   .di-tbl th{text-align:left;padding:12px 16px;font-size:12px;color:var(--muted,#7f8c8d);background:var(--input,#f8fafc)}
   .di-tbl td{padding:13px 16px;border-top:1px solid var(--border,#eef2f7);font-size:14px}
@@ -342,8 +350,8 @@ include __DIR__ . '/../templates/header.php';
     $demandeur = db_fetch_one("SELECT prenom, nom FROM users WHERE id=?", [$detail['demandeur_id']]);
 ?>
   <div class="di-topbar">
-    <a href="<?= APP_URL ?>/pages/demandes.php" class="di-btn di-btn-ghost">← Mes demandes</a>
-    <a href="<?= APP_URL ?>/pages/demandes.php?export=pdf&id=<?= (int)$detail['id'] ?>" target="_blank" class="di-btn di-btn-ghost"><i class="ph-duotone ph-file-pdf"></i> PDF</a>
+    <a href="<?= APP_URL ?>/pages/demandes.php" class="di-btn di-btn-back"><i class="ph-duotone ph-arrow-left"></i> Retour</a>
+    <a href="<?= APP_URL ?>/pages/demandes.php?export=pdf&id=<?= (int)$detail['id'] ?>" target="_blank" class="di-btn di-btn-pdf"><i class="ph-duotone ph-file-pdf"></i> PDF</a>
   </div>
 
   <div class="di-card">

@@ -34,7 +34,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         if ($role && $role['slug'] === 'superadmin')
             json_response(false, 'Les permissions du Super Administrateur ne peuvent pas être modifiées.');
 
-        $modules  = ['equipements','sites','consommables','users','rapports','nomenclatures','affectations','audit','receptions','bobines','inventaire_bobines','interventions','commandes','pmma'];
+        $modules  = ['equipements','sites','consommables','nomenclatures','affectations','receptions',
+                       'bobines','inventaire_bobines','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
+                       'operations','rivets','pmma','point_emuci','import_emuci',
+                       'interventions','rapport_journalier','affectations_it',
+                       'commandes','demandes','delegations','departements','users','audit','rapports'];
         $actions  = ['can_create','can_read','can_update','can_delete','can_export'];
 
         db_begin();
@@ -80,7 +84,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         db_query("INSERT INTO roles (nom,slug,description) VALUES (?,?,?)", [$nom, $slug, $desc]);
         $id = (int)db_last_id();
         // Initialiser avec aucune permission
-        $modules = ['equipements','sites','consommables','users','rapports','nomenclatures','affectations','audit','receptions','bobines','inventaire_bobines','interventions','commandes','pmma'];
+        $modules = ['equipements','sites','consommables','nomenclatures','affectations','receptions',
+                    'bobines','inventaire_bobines','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
+                    'operations','rivets','pmma','point_emuci','import_emuci',
+                    'interventions','rapport_journalier','affectations_it',
+                    'commandes','demandes','delegations','departements','users','audit','rapports'];
         foreach ($modules as $m) {
             db_query("INSERT INTO permissions (role_id,module,can_read) VALUES (?,?,0)", [$id, $m]);
         }
@@ -96,20 +104,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 // ============================================================
 $roles   = db_fetch_all("SELECT * FROM roles ORDER BY id");
 $modules = [
-    'equipements'   => ['💻', 'Équipements'],
-    'nomenclatures' => ['🏷️', 'Nomenclatures'],
-    'sites'         => ['🏢', 'Sites'],
-    'affectations'  => ['🔗', 'Affectations'],
-    'consommables'  => ['🧴', 'Consommables'],
+    // ── Stock & équipements
+    'equipements'        => ['💻', 'Équipements'],
+    'nomenclatures'      => ['🏷️', 'Nomenclatures'],
+    'sites'              => ['🏢', 'Sites'],
+    'affectations'       => ['🔗', 'Affectations'],
+    'consommables'       => ['🧴', 'Consommables'],
     'receptions'         => ['📦', 'Réceptions site'],
-    'bobines'            => ['🎞️', 'Bobines & Opérations'],
+    // ── Bobines
+    'bobines'            => ['🎞️', 'Bobines'],
     'inventaire_bobines' => ['📊', 'Inventaire bobines'],
-    'interventions'      => ['🛠️', 'Interventions maintenance'],
-    'commandes'          => ['📦', 'Commandes'],
+    'stock_bobines'      => ['📈', 'Vue stock bobines'],
+    'validation_stock'   => ['✅', 'Validation stock matin'],
+    'commandes_bobines'  => ['🛒', 'Commandes bobines'],
+    'rapports_gsb'       => ['📋', 'Rapports GSB'],
+    // ── Opérations terrain
+    'operations'         => ['🚛', 'Points journaliers'],
+    'rivets'             => ['🔩', 'Rivets'],
     'pmma'               => ['🖨️', 'PMMA'],
-    'rapports'      => ['📊', 'Rapports'],
-    'users'         => ['👥', 'Utilisateurs'],
-    'audit'         => ['📋', 'Journal d\'audit'],
+    'point_emuci'        => ['🔍', 'Point EMUCI'],
+    'import_emuci'       => ['📥', 'Import EMUCI'],
+    // ── Maintenance / IT
+    'interventions'      => ['🛠️', 'Interventions maintenance'],
+    'rapport_journalier' => ['📄', 'Rapport journalier IT'],
+    'affectations_it'    => ['👨‍💻', 'Affectations support IT'],
+    // ── Administration
+    'commandes'          => ['🏪', 'Commandes'],
+    'demandes'           => ['📝', 'Demandes internes'],
+    'delegations'        => ['🤝', 'Délégations'],
+    'departements'       => ['🏗️', 'Départements'],
+    'users'              => ['👥', 'Utilisateurs'],
+    'audit'              => ['📋', 'Journal d\'audit'],
+    'rapports'           => ['📊', 'Rapports & Analyses'],
 ];
 $actions = [
     'can_read'   => ['👁', 'Lire'],
@@ -403,7 +429,11 @@ function toggleRow(roleId, module){
 
 function allOff(roleId){
   if(!confirm('Désactiver TOUTES les permissions de ce rôle ?'))return;
-  const modules=['equipements','nomenclatures','sites','affectations','consommables','receptions','bobines','inventaire_bobines','interventions','commandes','pmma','rapports','users','audit'];
+  const modules=['equipements','nomenclatures','sites','affectations','consommables','receptions',
+    'bobines','inventaire_bobines','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
+    'operations','rivets','pmma','point_emuci','import_emuci',
+    'interventions','rapport_journalier','affectations_it',
+    'commandes','demandes','delegations','departements','users','audit','rapports'];
   const actions=['can_read','can_create','can_update','can_delete','can_export'];
   modules.forEach(m=>actions.forEach(a=>{
     const b=document.getElementById(`perm_${roleId}_${m}_${a}`);
@@ -412,7 +442,11 @@ function allOff(roleId){
 }
 
 function savePerms(roleId){
-  const modules=['equipements','nomenclatures','sites','affectations','consommables','receptions','bobines','inventaire_bobines','interventions','commandes','pmma','rapports','users','audit'];
+  const modules=['equipements','nomenclatures','sites','affectations','consommables','receptions',
+    'bobines','inventaire_bobines','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
+    'operations','rivets','pmma','point_emuci','import_emuci',
+    'interventions','rapport_journalier','affectations_it',
+    'commandes','demandes','delegations','departements','users','audit','rapports'];
   const actions=['can_read','can_create','can_update','can_delete','can_export'];
   const fd=new FormData();
   fd.append('action','save_permissions');
@@ -423,7 +457,8 @@ function savePerms(roleId){
   }));
   fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd})
     .then(r=>r.json())
-    .then(d=>toast(d.message,d.success?'success':'danger'));
+    .then(d=>toast(d.message,d.success?'success':'danger'))
+    .catch(()=>toast('Erreur réseau lors de la sauvegarde.','danger'));
 }
 
 function saveRole(){

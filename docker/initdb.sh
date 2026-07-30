@@ -42,6 +42,8 @@ migration_di_roles_dept.sql
 migration_raf_daf.sql
 migration_roles_validation_erp.sql
 migration_permissions_point_emuci.sql
+migration_permissions_27modules.sql
+migration_fix_permissions_regressions.sql
 "
 
 for f in $FICHIERS; do

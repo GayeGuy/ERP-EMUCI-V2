@@ -15,8 +15,8 @@ require_auth();
 $user      = current_user();
 $role_slug = $user['role_slug'] ?? '';
 $is_coord  = ($role_slug === 'coordinateur_site');
-$is_sup    = in_array($role_slug, ['superviseur_operation','admin','superadmin']);
-$is_gsb    = in_array($role_slug, ['gestionnaire_stock_bobines','admin','superadmin']);
+$is_sup    = can('commandes_bobines', 'can_update');
+$is_gsb    = can('commandes_bobines', 'can_create');
 $site_force= ($is_coord && $user['site_id']) ? (int)$user['site_id'] : 0;
 
 // ID site ENTREPOT (stock central)
@@ -25,9 +25,7 @@ $entrepot_id = (int)(db_fetch_value("SELECT id FROM sites WHERE type='entrepot' 
 $page_title  = 'Commandes Bobines';
 $active_page = 'commandes_bobines';
 
-if (!$is_coord && !$is_sup && !$is_gsb) {
-    http_response_code(403); include __DIR__ . '/../templates/403.php'; exit;
-}
+require_permission('commandes_bobines', 'can_read');
 
 // ============================================================
 //  AJAX

@@ -24,7 +24,8 @@ $active_page= 'pmma';
 $is_coord   = $role_slug === 'coordinateur_site';
 $site_force = ($is_coord && $user['site_id']) ? (int)$user['site_id'] : 0;
 $sites_list = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom");
-$can_saisie = in_array($role_slug, ['admin','superadmin','gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation']);
+require_permission('pmma', 'can_read');
+$can_saisie = can('pmma', 'can_create');
 
 // ── AJAX (Entrée/Sortie manuelle — GSB/admin uniquement)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
