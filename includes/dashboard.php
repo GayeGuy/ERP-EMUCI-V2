@@ -189,7 +189,7 @@ function dash_profils(): array {
         // Terrain : ce qui se passe sur mon site aujourd'hui.
         'coordinateur' => [
             'points_recents', 'corrections_attente', 'receptions_site',
-            'stock_conso_site', 'equipements', 'rivets',
+            'stock_conso_site', 'bobines_sites', 'equipements', 'rivets',
         ],
 
         // Stock bobines : la file d'attente de service.
@@ -233,15 +233,10 @@ function dash_profils(): array {
  * Un bloc s'affiche-t-il pour cet utilisateur ?
  *
  * La liste du profil dit ce que le métier regarde ; les permissions
- * restreignent. Mais elles ne restreignent QUE si elles ont été renseignées
- * pour ce rôle : au 2026-07-30, six rôles sur dix-sept n'ont aucune ligne
- * dans la table permissions (dont lecteur et gestionnaire_stock_bobines).
- * Ce n'est pas une politique, c'est un écran d'administration jamais
- * rempli. Traiter cette absence comme un refus afficherait une page vide à
- * ces profils — donc on ne le fait pas, et on le signale plutôt.
- *
- * Dès que les permissions d'un rôle sont renseignées, elles reprennent la
- * main sans qu'il y ait à toucher à ce code.
+ * restreignent. Après la migration du 2026-07-30 (27 modules × 14 rôles),
+ * tous les rôles ont au moins une ligne dans la table permissions :
+ * dash_role_a_des_permissions() retourne true pour tous, et can()
+ * s'applique systématiquement à chaque bloc.
  */
 function dash_bloc_visible(array $bloc, ?array $user = null): bool {
     $user = $user ?? current_user();
@@ -375,7 +370,7 @@ function dash_registre(): array {
     'points_recents' => [
         'titre'     => 'Points journaliers récents',
         'soustitre' => 'Cinq derniers relevés',
-        'module'    => 'point_emuci',
+        'module'    => 'operations',
         'lien'      => ['/pages/operations/point_journalier.php', 'Tous les points'],
         'donnees'   => function (array $p) {
             [$w, $args] = dash_filtre_site($p, 'pj.site_id');
@@ -413,7 +408,7 @@ function dash_registre(): array {
     'points_attente' => [
         'titre'     => 'Points en attente de validation',
         'soustitre' => 'Relevés encore en brouillon',
-        'module'    => 'point_emuci',
+        'module'    => 'operations',
         'lien'      => ['/pages/operations/point_journalier.php', 'Valider'],
         'donnees'   => function (array $p) {
             [$w, $args] = dash_filtre_site($p, 'pj.site_id');
@@ -453,7 +448,7 @@ function dash_registre(): array {
     'corrections_attente' => [
         'titre'     => 'Corrections en attente',
         'soustitre' => 'Demandes de correction de saisie',
-        'module'    => 'point_emuci',
+        'module'    => 'validation_stock',
         'lien'      => ['/pages/validation_stock_matin.php', 'Traiter'],
         'donnees'   => function (array $p) {
             [$w, $args] = dash_filtre_site($p, 'pj.site_id');
@@ -520,7 +515,7 @@ function dash_registre(): array {
     'commandes_bobines' => [
         'titre'     => 'Commandes de bobines',
         'soustitre' => 'À servir ou en cours',
-        'module'    => 'commandes',
+        'module'    => 'commandes_bobines',
         'lien'      => ['/pages/commandes_bobines.php', 'Toutes les commandes'],
         'donnees'   => function (array $p) {
             [$w, $args] = dash_filtre_site($p, 'c.site_id');
