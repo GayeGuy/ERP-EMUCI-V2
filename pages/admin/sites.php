@@ -411,7 +411,10 @@ $type_colors = [
    Les pastilles bleu pâle précédentes plafonnaient à 4.25:1 (sous le seuil AA). */
 .count-cell{font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700;color:var(--navy);padding:6px 8px;background:white;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;min-width:40px}
 .count-cell.zero{color:var(--muted);font-weight:600}
-.resp-avatar{width:40px;height:40px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:700;flex-shrink:0;letter-spacing:.3px}
+.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block}
+.status-dot.on{background:#22c55e}
+.status-dot.off{background:var(--muted)}
+.resp-avatar{width:38px;height:38px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:700;flex-shrink:0;letter-spacing:.3px}
 /* #15568B et non #1B75BC : sur le fond #EFF6FF ce dernier ne donnait que
    4,47:1, sous le seuil AA de 4,5. Le nouveau donne 7,05:1. */
 .action-btn{width:32px;height:32px;border-radius:8px;border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;transition:all .15s;background:#EFF6FF;color:#15568B}
@@ -610,9 +613,13 @@ $type_colors = [
           </td>
           <td style="text-align:center">
             <?php if ($s['actif']): ?>
-            <span style="background:#d1fae5;color:#065f46;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700">Actif</span>
+            <div style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--navy)">
+              <span class="status-dot on"></span>Actif
+            </div>
             <?php else: ?>
-            <span style="background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700">Inactif</span>
+            <div style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--muted)">
+              <span class="status-dot off"></span>Inactif
+            </div>
             <?php endif; ?>
           </td>
           <td style="text-align:center">
