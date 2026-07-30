@@ -42,16 +42,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     if ($action === 'update') {
         require_permission('users', 'can_update');
         $id      = (int)($_POST['id']          ?? 0);
-        $nom     = trim($_POST['nom']           ?? '');
-        $prenom  = trim($_POST['prenom']        ?? '');
+        $nom     = format_nom_prenom($_POST['nom']    ?? '');
+        $prenom  = format_nom_prenom($_POST['prenom'] ?? '');
         $email   = strtolower(trim($_POST['email'] ?? ''));
         $role_id = (int)($_POST['role_id']      ?? 0);
         $site_id = (int)($_POST['site_id']      ?? 0) ?: null;
         $tel     = trim($_POST['telephone']     ?? '');
         $actif   = (int)($_POST['actif']        ?? 1);
 
-        if (!$nom || !$prenom || !$email) json_response(false, 'Nom, prénom et email obligatoires.');
+        if (!$nom || !$prenom || !$email) json_response(false, 'Nom, prénom et email obligatoires (lettres uniquement pour nom/prénom).');
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) json_response(false, 'Email invalide.');
+        if ($tel !== '' && !is_valid_telephone($tel)) json_response(false, 'Téléphone invalide (10 chiffres exactement).');
 
         // Empêcher de se rétrograder soi-même
         if ($id === $user['id'] && $role_id !== (int)$user['role_id'])
@@ -81,7 +82,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         require_permission('users', 'can_update');
         $id  = (int)($_POST['id']  ?? 0);
         $pwd = trim($_POST['pwd']  ?? '');
-        if (strlen($pwd) < 8) json_response(false, 'Mot de passe trop court (min 8 caractères).');
         $result = auth_change_password($id, '', $pwd, true);
         json_response($result['success'], $result['message']);
     }
@@ -326,14 +326,14 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
       <input type="hidden" id="uId">
       <div class="form-row cols-2">
         <div class="form-group"><label>Prénom *</label>
-          <input type="text" class="form-control" id="uPrenom">
+          <input type="text" class="form-control" id="uPrenom" oninput="uFormatNom(this)">
         </div>
         <div class="form-group"><label>Nom *</label>
-          <input type="text" class="form-control" id="uNom">
+          <input type="text" class="form-control" id="uNom" oninput="uFormatNom(this)">
         </div>
       </div>
       <div class="form-group"><label>Email *</label>
-        <input type="email" class="form-control" id="uEmail" placeholder="prenom.nom@entreprise.ci">
+        <input type="email" class="form-control" id="uEmail" placeholder="prenom.nom@entreprise.ci" oninput="this.value=this.value.toLowerCase().replace(/\s/g,'')">
       </div>
       <div class="form-row cols-2">
         <div class="form-group"><label>Rôle *</label>
@@ -354,10 +354,10 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
         </div>
       </div>
       <div class="form-group"><label>Téléphone</label>
-        <input type="text" class="form-control" id="uTel" placeholder="+225 00 00 00 00">
+        <input type="text" class="form-control" id="uTel" placeholder="0700000000" maxlength="10" inputmode="numeric" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)">
       </div>
       <div id="uPwdWrap">
-        <div class="form-group"><label>Mot de passe * <span style="font-size:11px;color:var(--muted)">(min. 8 caractères)</span></label>
+        <div class="form-group"><label>Mot de passe * <span style="font-size:11px;color:var(--muted)">(min. 8 car., 1 majuscule, 1 chiffre, 1 caractère spécial)</span></label>
           <input type="password" class="form-control" id="uPwd" placeholder="••••••••">
         </div>
       </div>
@@ -390,8 +390,8 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
       <input type="hidden" id="pwdUId">
       <div class="alert alert-warning" style="margin-bottom:16px">Vous allez réinitialiser le mot de passe de <strong id="pwdUNom"></strong>.</div>
       <div id="pwdAlert"></div>
-      <div class="form-group"><label>Nouveau mot de passe *</label>
-        <input type="password" class="form-control" id="pwdNew" placeholder="Min. 8 caractères">
+      <div class="form-group"><label>Nouveau mot de passe * <span style="font-size:11px;color:var(--muted)">(min. 8 car., 1 majuscule, 1 chiffre, 1 caractère spécial)</span></label>
+        <input type="password" class="form-control" id="pwdNew" placeholder="••••••••">
       </div>
       <div class="form-group"><label>Confirmer</label>
         <input type="password" class="form-control" id="pwdConfirm" placeholder="••••••••">
@@ -405,6 +405,8 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
 </div>
 
 <script>
+function uFormatNom(el){ el.value=el.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ '-]/g,''); }
+const PWD_RULE = /^(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$/;
 function openMU(){ resetUF(); document.getElementById('mU').classList.add('open'); }
 function closeMU(){ document.getElementById('mU').classList.remove('open'); }
 function resetUF(){
@@ -434,17 +436,24 @@ function editU(id){
 
 function saveU(){
   const id=document.getElementById('uId').value, btn=document.getElementById('bSU');
+  const alertBox=document.getElementById('mUAlert');
+  const prenom=document.getElementById('uPrenom').value.trim(), nom=document.getElementById('uNom').value.trim();
+  const email=document.getElementById('uEmail').value.trim(), tel=document.getElementById('uTel').value.trim();
+  const pwd=document.getElementById('uPwd').value;
+  const err=m=>{alertBox.innerHTML=`<div class="alert alert-danger">${m}</div>`;};
+  if(!prenom||!nom){err('Prénom et nom sont obligatoires (lettres uniquement).');return;}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){err('Email invalide.');return;}
+  if(tel && !/^[0-9]{10}$/.test(tel)){err('Téléphone invalide : 10 chiffres exactement.');return;}
+  if(!id && !PWD_RULE.test(pwd)){err('Mot de passe invalide : min. 8 caractères, au moins une majuscule, un chiffre et un caractère spécial.');return;}
+  alertBox.innerHTML='';
   btn.disabled=true; btn.textContent='Enregistrement…';
-  ap({action:id?'update':'create',id,
-    prenom:document.getElementById('uPrenom').value, nom:document.getElementById('uNom').value,
-    email:document.getElementById('uEmail').value, role_id:document.getElementById('uRole').value,
-    site_id:document.getElementById('uSite').value, telephone:document.getElementById('uTel').value,
-    password:document.getElementById('uPwd').value,
+  ap({action:id?'update':'create',id, prenom, nom, email, telephone:tel, password:pwd,
+    role_id:document.getElementById('uRole').value, site_id:document.getElementById('uSite').value,
     actif:document.getElementById('uActif').checked?1:0,
   }).then(d=>{
     btn.disabled=false; btn.textContent='💾 Enregistrer';
     if(d.success){toast(d.message,'success');closeMU();setTimeout(()=>location.reload(),800);}
-    else document.getElementById('mUAlert').innerHTML=`<div class="alert alert-danger">${d.message}</div>`;
+    else err(d.message);
   });
 }
 
@@ -484,7 +493,10 @@ function resetPwd(id,nom){
 }
 function savePwd(){
   const p1=document.getElementById('pwdNew').value, p2=document.getElementById('pwdConfirm').value;
-  if(p1!==p2){document.getElementById('pwdAlert').innerHTML='<div class="alert alert-danger">Les mots de passe ne correspondent pas.</div>';return;}
+  const alertBox=document.getElementById('pwdAlert');
+  if(p1!==p2){alertBox.innerHTML='<div class="alert alert-danger">Les mots de passe ne correspondent pas.</div>';return;}
+  if(!PWD_RULE.test(p1)){alertBox.innerHTML='<div class="alert alert-danger">Mot de passe invalide : min. 8 caractères, au moins une majuscule, un chiffre et un caractère spécial.</div>';return;}
+  alertBox.innerHTML='';
   ap({action:'reset_pwd',id:document.getElementById('pwdUId').value,pwd:p1}).then(d=>{
     if(d.success){toast(d.message,'success');document.getElementById('mPwd').classList.remove('open');}
     else document.getElementById('pwdAlert').innerHTML=`<div class="alert alert-danger">${d.message}</div>`;
