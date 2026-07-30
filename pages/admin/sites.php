@@ -398,9 +398,16 @@ $type_colors = [
 .filter-bar label{font-size:11px;font-weight:700;color:var(--navy);display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.4px}
 .filter-bar input,.filter-bar select{padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:white;outline:none;min-width:140px}
 .filter-bar input:focus,.filter-bar select:focus{border-color:var(--blue)}
-.kpi-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
-.kpi-chip{display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:22px;font-size:12.5px;font-weight:600;border:1px solid transparent;cursor:default}
-.kpi-chip .cn{font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:900;line-height:1}
+.stats-dash{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:18px}
+.stat-tile{position:relative;overflow:hidden;background:white;border:1px solid var(--border);border-radius:12px;padding:11px 14px 11px 18px;cursor:default}
+.stat-tile::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent,var(--muted))}
+.stat-tile-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.stat-tile-value{font-family:'Plus Jakarta Sans',sans-serif;font-size:22px;font-weight:700;color:var(--navy)}
+.stat-tile-empty{opacity:.5}
+.stat-tile-total{background:var(--navy);border-color:var(--navy)}
+.stat-tile-total::before{display:none}
+.stat-tile-total .stat-tile-label{color:rgba(255,255,255,.65)}
+.stat-tile-total .stat-tile-value{color:white}
 /* !important nécessaire : header.php impose th{background:var(--tertiary)!important;color:var(--muted)!important} */
 .sites-table th{font-size:11.5px;font-weight:700;color:#475569!important;text-transform:uppercase;letter-spacing:.4px;padding:10px 14px;border-bottom:2px solid var(--border)}
 .sites-table td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
@@ -483,32 +490,26 @@ $type_colors = [
 </div>
 
 <!-- ── KPI PAR TYPE ─────────────────────────────── -->
-<div class="kpi-chips">
-  <?php
-  $type_icons = ['saisie'=>'💻','pose'=>'🛠️','mixte'=>'🔀','entrepot'=>'🏭','siege'=>'🏛️'];
-  foreach ($stats_type as $st):
-    $tc = $type_colors[$st['type']] ?? ['bg'=>'#f0f4f8','color'=>'#475569'];
+<div class="stats-dash">
+  <div class="stat-tile stat-tile-total">
+    <div class="stat-tile-label">Total actifs</div>
+    <div class="stat-tile-value"><?= $total_actifs ?></div>
+  </div>
+  <?php foreach ($stats_type as $st):
+    $tc = $type_colors[$st['type']] ?? ['color'=>'#475569'];
+    $empty = (int)$st['actifs'] === 0;
   ?>
-  <div class="kpi-chip" style="background:<?= $tc['bg'] ?>;color:<?= $tc['color'] ?>;border-color:<?= $tc['bg'] ?>">
-    <span><?= $type_icons[$st['type']] ?? '🏢' ?></span>
-    <div>
-      <div class="cn"><?= (int)$st['actifs'] ?></div>
-      <div style="font-size:11px;opacity:.8"><?= $types_labels[$st['type']] ?? $st['type'] ?><?= $st['total'] > $st['actifs'] ? ' <span style="font-size:10px;opacity:.65">(+'.(int)($st['total']-$st['actifs']).' inactif)</span>' : '' ?></div>
-    </div>
+  <div class="stat-tile<?= $empty ? ' stat-tile-empty' : '' ?>" style="--accent:<?= $tc['color'] ?>">
+    <div class="stat-tile-label"><?= $types_labels[$st['type']] ?? $st['type'] ?></div>
+    <div class="stat-tile-value"><?= (int)$st['actifs'] ?></div>
   </div>
   <?php endforeach; ?>
-  <?php if (!empty($stats_ville)): ?>
-  <div style="width:1px;background:var(--border);margin:0 4px;align-self:stretch"></div>
   <?php foreach ($stats_ville as $sv): ?>
-  <div class="kpi-chip" style="background:#f0f4f8;color:#475569;border-color:#e2e8f0">
-    <i class="ph-duotone ph-map-pin" style="font-size:14px"></i>
-    <div>
-      <div class="cn" style="font-size:16px"><?= (int)$sv['n'] ?></div>
-      <div style="font-size:11px"><?= h($sv['ville']) ?></div>
-    </div>
+  <div class="stat-tile" style="--accent:#64748b">
+    <div class="stat-tile-label"><?= h($sv['ville']) ?></div>
+    <div class="stat-tile-value"><?= (int)$sv['n'] ?></div>
   </div>
   <?php endforeach; ?>
-  <?php endif; ?>
 </div>
 
 <!-- ── FILTER BAR ───────────────────────────────── -->
