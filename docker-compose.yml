@@ -1,0 +1,74 @@
+# ============================================================
+#  Environnement de développement local — ERP EMUCI / StockApp
+# ============================================================
+#
+#  Render n'utilise QUE le Dockerfile : ce fichier ne change rien au
+#  déploiement. Il sert à faire tourner l'application sur la machine, avec
+#  sa propre base PostgreSQL, pour pouvoir exécuter le code au lieu de le
+#  relire.
+#
+#    docker compose up -d --build     démarrer
+#    docker compose logs -f app       suivre les erreurs PHP
+#    docker compose down              arrêter (la base est conservée)
+#    docker compose down -v           arrêter et repartir d'une base vierge
+#
+#  L'application écoute sur http://localhost:8080
+#  La base est joignable depuis la machine sur le port 55432.
+#
+#  Les identifiants ci-dessous sont ceux d'une base locale jetable. Les
+#  vrais identifiants Neon ne doivent jamais figurer ici : pour viser Neon,
+#  passer par un fichier .env (non versionné) et `env_file:`.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: stockapp
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      # 55432 côté machine pour ne pas heurter un PostgreSQL déjà installé.
+      - "55432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./sql:/sql:ro
+      # Ne s'exécute qu'à la création de la base, jamais aux démarrages
+      # suivants : c'est le comportement de l'image postgres.
+      - ./docker/initdb.sh:/docker-entrypoint-initdb.d/10-charger.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d stockapp"]
+      interval: 3s
+      timeout: 3s
+      retries: 40
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+      DB_NAME: stockapp
+      DB_USER: postgres
+      DB_PASS: postgres
+      # Neon impose require ; en local il n'y a pas de TLS.
+      DB_SSLMODE: disable
+      APP_URL: http://localhost:8080
+      APP_TIMEZONE: Africa/Abidjan
+      PORT: "8080"
+    ports:
+      - "8080:8080"
+    volumes:
+      # Le code est monté depuis la machine : un fichier enregistré dans
+      # l'éditeur est pris en compte au rechargement de la page, sans
+      # reconstruire l'image.
+      - .:/var/www/html
+      # vendor/ n'existe pas sur la machine (il est dans .gitignore) et le
+      # montage ci-dessus le masquerait. Ce volume nommé conserve celui que
+      # composer a installé dans l'image.
+      - vendor:/var/www/html/vendor
+
+volumes:
+  db-data:
+  vendor:
