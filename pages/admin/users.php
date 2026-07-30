@@ -202,6 +202,7 @@ include __DIR__ . '/../../templates/header.php';
 .stat-tile-total::before{display:none}
 .stat-tile-total .stat-tile-label{color:rgba(255,255,255,.65)}
 .stat-tile-total .stat-tile-value{color:white}
+.form-control.field-invalid{border-color:#DC2626!important;box-shadow:0 0 0 3px rgba(220,38,38,.12)}
 </style>
 
 <!-- TOOLBAR -->
@@ -333,7 +334,8 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
         </div>
       </div>
       <div class="form-group"><label>Email *</label>
-        <input type="email" class="form-control" id="uEmail" placeholder="prenom.nom@entreprise.ci" oninput="this.value=this.value.toLowerCase().replace(/\s/g,'')">
+        <input type="email" class="form-control" id="uEmail" placeholder="prenom.nom@entreprise.ci"
+               oninput="this.value=this.value.toLowerCase().replace(/\s/g,'')" onblur="uCheckEmail(this)" onfocus="this.classList.remove('field-invalid')">
       </div>
       <div class="form-row cols-2">
         <div class="form-group"><label>Rôle *</label>
@@ -354,7 +356,8 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
         </div>
       </div>
       <div class="form-group"><label>Téléphone</label>
-        <input type="text" class="form-control" id="uTel" placeholder="0700000000" maxlength="10" inputmode="numeric" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)">
+        <input type="text" class="form-control" id="uTel" placeholder="0700000000" maxlength="10" inputmode="numeric"
+               oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)" onblur="uCheckTel(this)" onfocus="this.classList.remove('field-invalid')">
       </div>
       <div id="uPwdWrap">
         <div class="form-group"><label>Mot de passe * <span style="font-size:11px;color:var(--muted)">(min. 8 car., 1 majuscule, 1 chiffre, 1 caractère spécial)</span></label>
@@ -407,10 +410,14 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
 <script>
 function uFormatNom(el){ el.value=el.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ '-]/g,''); }
 const PWD_RULE = /^(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$/;
+function uCheckEmail(el){ el.classList.toggle('field-invalid', !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(el.value.trim())); }
+function uCheckTel(el){ const v=el.value.trim(); el.classList.toggle('field-invalid', v!=='' && !/^[0-9]{10}$/.test(v)); }
 function openMU(){ resetUF(); document.getElementById('mU').classList.add('open'); }
 function closeMU(){ document.getElementById('mU').classList.remove('open'); }
 function resetUF(){
   ['uId','uPrenom','uNom','uEmail','uTel','uPwd'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('uEmail').classList.remove('field-invalid');
+  document.getElementById('uTel').classList.remove('field-invalid');
   document.getElementById('uRole').selectedIndex=1; document.getElementById('uSite').value='';
   document.getElementById('mUAlert').innerHTML=''; document.getElementById('mUT').textContent='Nouvel utilisateur';
   document.getElementById('uPwdWrap').style.display='block';
@@ -427,6 +434,8 @@ function editU(id){
     document.getElementById('uNom').value=r.nom; document.getElementById('uEmail').value=r.email;
     document.getElementById('uRole').value=r.role_id; document.getElementById('uSite').value=r.site_id||'';
     document.getElementById('uTel').value=r.telephone||'';
+    document.getElementById('uEmail').classList.remove('field-invalid');
+    document.getElementById('uTel').classList.remove('field-invalid');
     document.getElementById('uPwdWrap').style.display='none';
     document.getElementById('uActifWrap').style.display='block';
     document.getElementById('uActif').checked=r.actif==1;
@@ -441,6 +450,7 @@ function saveU(){
   const email=document.getElementById('uEmail').value.trim(), tel=document.getElementById('uTel').value.trim();
   const pwd=document.getElementById('uPwd').value;
   const err=m=>{alertBox.innerHTML=`<div class="alert alert-danger">${m}</div>`;};
+  uCheckEmail(document.getElementById('uEmail')); uCheckTel(document.getElementById('uTel'));
   if(!prenom||!nom){err('Prénom et nom sont obligatoires (lettres uniquement).');return;}
   if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){err('Email invalide.');return;}
   if(tel && !/^[0-9]{10}$/.test(tel)){err('Téléphone invalide : 10 chiffres exactement.');return;}
