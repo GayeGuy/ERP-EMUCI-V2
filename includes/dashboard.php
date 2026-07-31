@@ -232,7 +232,7 @@ function dash_profils(): array {
             'evolution_engins', 'repartition_parc',
             'perf_sites',
             'equipements', 'sites', 'stock_bas', 'fin_cycle',
-            'conso_sites', 'bobines_sites', 'rivets', 'interventions',
+            'conso_sites', 'bobines_sites', 'rivets',
             'activites',
         ],
     ];
@@ -1343,7 +1343,9 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucune bobine active sur ce périmètre.'); return; }
-            $max = max(array_map(fn($r) => (float)$r['nb'], $d)) ?: 1;
+            $max   = max(array_map(fn($r) => (float)$r['nb'], $d)) ?: 1;
+            $scroll = count($d) > 4;
+            if ($scroll) echo '<div style="max-height:224px;overflow-y:auto;padding-right:2px">';
             foreach ($d as $r) {
                 echo '<div class="biz-cov-r">'
                    . '<div><div class="biz-cov-n">' . h($r['site_nom']) . '</div>'
@@ -1353,6 +1355,7 @@ function dash_registre(): array {
                    . '<div class="biz-cov-d"><span class="biz-cov-num">' . ent((float)$r['nb'])
                    . '</span><span class="biz-cov-u">bobines</span></div></div>';
             }
+            if ($scroll) echo '</div>';
         },
     ],
 
