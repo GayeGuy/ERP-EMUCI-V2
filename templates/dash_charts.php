@@ -278,7 +278,47 @@
     ctx.closePath();
   }
 
-  var TRACEURS = { anneau: anneau, courbe: courbe, barres: barres };
+  // ── Jauge en arc segmenté (maquette v2)
+  //
+  // L'arc est découpé en graduations plutôt que tracé plein : à 68 %, un arc
+  // continu se lit « environ deux tiers », des graduations se comptent. La
+  // part atteinte est colorée, le reste reste gris — la position du dernier
+  // segment coloré porte l'information, pas seulement sa teinte.
+  function jauge(el) {
+    var v      = lire(el, 'valeurs', [0])[0] || 0;   // 0 à 100
+    var cible  = parseFloat(el.getAttribute('data-cible') || '0');
+    var teinte = el.getAttribute('data-couleur') || '#0F8A47';
+    var c = cadre(el, 150), ctx = c.ctx, w = c.w, h = c.h;
+
+    var cx = w / 2, cy = h * 0.92, r = Math.min(w / 2, h) * 0.86;
+    var N = 44, DEB = Math.PI, FIN = 2 * Math.PI;     // demi-cercle supérieur
+    var atteint = Math.round(N * Math.max(0, Math.min(100, v)) / 100 * prog());
+    var iCible  = cible > 0 ? Math.round(N * Math.min(100, cible) / 100) : -1;
+
+    for (var i = 0; i < N; i++) {
+      var a = DEB + (FIN - DEB) * (i + 0.5) / N;
+      var x1 = cx + Math.cos(a) * (r * 0.78), y1 = cy + Math.sin(a) * (r * 0.78);
+      var x2 = cx + Math.cos(a) * r,          y2 = cy + Math.sin(a) * r;
+      ctx.beginPath();
+      ctx.lineWidth = Math.max(2, r * 0.055);
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = i < atteint ? teinte : '#E7EBF0';
+      ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    }
+
+    // Repère d'objectif : un trait plus long, en dehors de l'arc.
+    if (iCible >= 0 && iCible <= N) {
+      var ac = DEB + (FIN - DEB) * (iCible + 0.5) / N;
+      ctx.beginPath();
+      ctx.lineWidth = Math.max(1.5, r * 0.03);
+      ctx.strokeStyle = '#0F172A';
+      ctx.moveTo(cx + Math.cos(ac) * (r * 0.70), cy + Math.sin(ac) * (r * 0.70));
+      ctx.lineTo(cx + Math.cos(ac) * (r * 1.08), cy + Math.sin(ac) * (r * 1.08));
+      ctx.stroke();
+    }
+  }
+
+  var TRACEURS = { anneau: anneau, courbe: courbe, barres: barres, jauge: jauge };
 
   // ── Parcours ──────────────────────────────────────────────────────
   // Découvre les graphes plutôt que de les tenir dans une liste : un bloc du

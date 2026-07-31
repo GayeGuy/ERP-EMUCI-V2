@@ -633,6 +633,8 @@ function dash_graphe(string $type, array $valeurs, array $options = []): void {
         $attrs .= " data-couleurs='" . h(json_encode(array_values($options['couleurs']))) . "'";
     }
     if (!empty($options['couleur'])) $attrs .= ' data-couleur="' . h($options['couleur']) . '"';
+    // Repère d'objectif de la jauge, en pourcentage.
+    if (isset($options['cible']))    $attrs .= ' data-cible="' . (float)$options['cible'] . '"';
     if (!empty($options['taille']))  $attrs .= ' width="' . (int)$options['taille'] . '"';
     if (!empty($options['hauteur'])) $attrs .= ' height="' . (int)$options['hauteur'] . '"';
     echo '<canvas ' . $attrs . '></canvas>';
@@ -1785,6 +1787,174 @@ function dash_registre(): array {
     ],
 
     // ── Dernières activités ───────────────────────────────────────────
+    // ── Blocs de la maquette v2 ────────────────────────────────────
+    //
+    //  Trois formes reprises de la maquette : la carte de tête (métrique
+    //  large + courbe + bande de répartition), la jauge à objectif, et le
+    //  tableau à pastilles d'icône. Ils ne sont routés que vers les profils
+    //  v2 ; le rôle « lecteur » ne les voit jamais.
+
+    'v2_hero' => [
+        'titre'     => 'Production du mois',
+        'soustitre' => 'Engins posés — mois en cours',
+        'module'    => 'operations',
+        'largeur'   => 'plein',
+        'lien'      => ['/pages/operations/point_journalier.php', 'Points journaliers'],
+        'donnees'   => function (array $p) {
+            [$ws, $as] = dash_filtre_site($p, 'site_id');
+            $debut = date('Y-m-01');
+            $prev  = date('Y-m-01', strtotime('-1 month'));
+
+            $mois = (float)db_fetch_value(
+                "SELECT COALESCE(SUM(total_engins),0) FROM op_points_journaliers
+                 WHERE date_point >= ? $ws", array_merge([$debut], $as));
+            $moisPrec = (float)db_fetch_value(
+                "SELECT COALESCE(SUM(total_engins),0) FROM op_points_journaliers
+                 WHERE date_point >= ? AND date_point < ? $ws", array_merge([$prev, $debut], $as));
+
+            // Courbe des trente derniers jours, trous compris : un jour sans
+            // saisie vaut zéro, pas une absence de point — sinon la courbe
+            // raccourcit au lieu de creuser.
+            $rows = db_fetch_all(
+                "SELECT date_point, COALESCE(SUM(total_engins),0) AS v
+                 FROM op_points_journaliers
+                 WHERE date_point > CURRENT_DATE - 30 $ws
+                 GROUP BY date_point ORDER BY date_point", $as);
+            $par = [];
+            foreach ($rows as $r) $par[(string)$r['date_point']] = (float)$r['v'];
+            $serie = $lbl = [];
+            for ($i = 29; $i >= 0; $i--) {
+                $j = date('Y-m-d', strtotime("-$i day"));
+                $serie[] = $par[$j] ?? 0;
+                $lbl[]   = date('j/n', strtotime($j));
+            }
+
+            $mix = db_fetch_one(
+                "SELECT COALESCE(SUM(nb_vp),0) AS vp, COALESCE(SUM(nb_camion),0)+COALESCE(SUM(nb_semi),0) AS pl,
+                        COALESCE(SUM(nb_moto),0) AS mo
+                 FROM op_points_journaliers WHERE date_point >= ? $ws", array_merge([$debut], $as));
+
+            return ['mois'=>$mois,'prec'=>$moisPrec,'serie'=>$serie,'lbl'=>$lbl,'mix'=>$mix ?: []];
+        },
+        'rendu' => function (array $d) {
+            if (!array_sum($d['serie']) && !$d['mois']) {
+                dash_vide('Aucun engin posé ce mois-ci.'); return;
+            }
+            $delta = dash_delta($d['mois'], $d['prec'] ?: null);
+            echo '<div class="dv2-hero-row">';
+            echo   '<div class="dv2-hero-l">';
+            echo     '<div class="dv2-hero-v">' . h(fmt_number($d['mois'])) . '</div>';
+            echo     '<div class="dv2-k-ft">';
+            if ($delta) echo '<span class="dv2-d ' . $delta['classe'] . '">' . $delta['fleche'] . ' ' . h($delta['texte']) . '</span>';
+            echo       '<span class="dv2-k-vs">vs. ' . h(fmt_number($d['prec'])) . ' le mois dernier</span>';
+            echo     '</div>';
+            echo   '</div>';
+            echo   '<div class="dv2-hero-ch">';
+            dash_graphe('courbe', $d['serie'], ['libelles'=>$d['lbl'],'couleur'=>'#2563EB','hauteur'=>150]);
+            echo   '</div>';
+            echo '</div>';
+
+            $m = $d['mix']; $tot = (float)(($m['vp'] ?? 0) + ($m['pl'] ?? 0) + ($m['mo'] ?? 0));
+            if ($tot > 0) {
+                $parts = [
+                    ['Véhicules légers', (float)$m['vp'], '#2563EB'],
+                    ['Camions & semis',  (float)$m['pl'], '#0F8A47'],
+                    ['Deux-roues',       (float)$m['mo'], '#B45309'],
+                ];
+                echo '<div class="dv2-split">';
+                foreach ($parts as [$lb, $v, $col]) {
+                    $pct = $tot > 0 ? $v / $tot * 100 : 0;
+                    echo '<div>';
+                    echo   '<div class="dv2-sp-v" style="color:' . $col . '">' . h(fmt_number($v))
+                       .   '<span class="dv2-sp-i">' . number_format($pct, 0) . ' %</span></div>';
+                    echo   '<div class="dv2-sp-l">' . h($lb) . '</div>';
+                    echo   '<div class="dv2-sp-bar"><div class="dv2-sp-fill" style="width:'
+                       .     number_format($pct, 1, '.', '') . '%;background:' . $col . '"></div></div>';
+                    echo '</div>';
+                }
+                echo '</div>';
+            }
+        },
+    ],
+
+    'v2_jauge' => [
+        'titre'     => 'Taux de validation',
+        'soustitre' => 'Points validés sur points saisis — ce mois',
+        'module'    => 'operations',
+        'largeur'   => 'demi',
+        'donnees'   => function (array $p) {
+            [$ws, $as] = dash_filtre_site($p, 'site_id');
+            $debut = date('Y-m-01');
+            $r = db_fetch_one(
+                "SELECT COUNT(*) FILTER (WHERE statut='valide') AS ok,
+                        COUNT(*) FILTER (WHERE statut IN ('valide','en_attente_validation')) AS tot
+                 FROM op_points_journaliers WHERE date_point >= ? $ws", array_merge([$debut], $as));
+            return ['ok'=>(int)($r['ok'] ?? 0), 'tot'=>(int)($r['tot'] ?? 0)];
+        },
+        'rendu' => function (array $d) {
+            if ($d['tot'] === 0) {
+                dash_vide('Aucun point saisi ce mois-ci : rien à valider.', true); return;
+            }
+            $pct    = $d['ok'] / $d['tot'] * 100;
+            $cible  = 95;
+            $teinte = $pct >= $cible ? '#0F8A47' : ($pct >= 75 ? '#B45309' : '#D32F35');
+            echo '<div class="dv2-gauge">';
+            dash_graphe('jauge', [$pct], ['couleur'=>$teinte,'cible'=>$cible,'hauteur'=>140,
+                'alt'=>'Taux de validation : ' . number_format($pct,0) . ' %, objectif ' . $cible . ' %']);
+            echo   '<div class="dv2-g-v" style="color:' . $teinte . '">' . number_format($pct, 0) . ' %</div>';
+            echo   '<div class="dv2-g-s">' . h(fmt_number($d['ok'])) . ' point(s) validé(s) sur '
+                 .   h(fmt_number($d['tot'])) . ' · objectif ' . $cible . ' %</div>';
+            echo '</div>';
+        },
+    ],
+
+    'v2_top_sites' => [
+        'titre'     => 'Sites les plus actifs',
+        'soustitre' => 'Mois en cours, engins posés',
+        'module'    => 'operations',
+        'largeur'   => 'plein',
+        'lien'      => ['/pages/rapports.php', 'Rapports'],
+        'donnees'   => function (array $p) {
+            [$ws, $as] = dash_filtre_site($p, 'p.site_id');
+            return db_fetch_all(
+                "SELECT s.id, s.nom, s.type,
+                        COALESCE(SUM(p.total_engins),0)  AS engins,
+                        COALESCE(SUM(p.total_plaques),0) AS plaques,
+                        COUNT(*) FILTER (WHERE p.statut='valide') AS ok,
+                        COUNT(*) AS pts
+                 FROM op_points_journaliers p
+                 JOIN sites s ON s.id = p.site_id
+                 WHERE p.date_point >= ? $ws
+                 GROUP BY s.id, s.nom, s.type
+                 ORDER BY engins DESC LIMIT 8",
+                array_merge([date('Y-m-01')], $as));
+        },
+        'rendu' => function (array $rows) {
+            if (!$rows) { dash_vide('Aucune activité enregistrée ce mois-ci.'); return; }
+            $icones = ['guichet'=>'ph-storefront','entrepot'=>'ph-warehouse','siege'=>'ph-buildings'];
+            $max = max(array_map(fn($r) => (int)$r['engins'], $rows)) ?: 1;
+            echo '<table class="dv2-t"><thead><tr>'
+               . '<th>Site</th><th>Engins</th><th>Plaques</th><th>Validés</th><th>Part</th>'
+               . '</tr></thead><tbody>';
+            foreach ($rows as $r) {
+                $ic  = $icones[$r['type']] ?? 'ph-map-pin';
+                $pct = (int)$r['engins'] / $max * 100;
+                $ok  = (int)$r['pts'] > 0 && (int)$r['ok'] >= (int)$r['pts'];
+                echo '<tr>';
+                echo   '<td><div class="dv2-t-n">'
+                   .     '<span class="dv2-t-ic"><i class="ph-duotone ' . $ic . '"></i></span>'
+                   .     '<span class="dv2-t-lbl">' . h($r['nom']) . '</span></div></td>';
+                echo   '<td class="dv2-t-num">' . h(fmt_number((float)$r['engins'])) . '</td>';
+                echo   '<td class="dv2-t-num">' . h(fmt_number((float)$r['plaques'])) . '</td>';
+                echo   '<td><span class="dv2-p ' . ($ok ? 'dv2-p-g' : 'dv2-p-o') . '">'
+                   .     (int)$r['ok'] . ' / ' . (int)$r['pts'] . '</span></td>';
+                echo   '<td><span class="dv2-t-sig up">' . number_format($pct, 0) . ' %</span></td>';
+                echo '</tr>';
+            }
+            echo '</tbody></table>';
+        },
+    ],
+
     'activites' => [
         'titre'     => 'Dernières activités',
         'soustitre' => 'Journal des opérations',

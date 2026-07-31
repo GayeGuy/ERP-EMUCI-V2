@@ -44,6 +44,20 @@ dash_v2($v2);
 // garder afficherait deux fois les mêmes chiffres à trente pixels d'écart.
 if ($v2) {
     $blocs = array_values(array_filter($blocs, fn($b) => ($b['id'] ?? '') !== 'synthese_kpi'));
+
+    // Les trois formes de la maquette sont propres au rendu v2 : elles ne
+    // figurent pas dans dash_profils(), qui sert aussi le rôle « lecteur ».
+    // On les insère ici, en tête, et seulement si les permissions suivent.
+    $registre = dash_registre();
+    $tete = [];
+    foreach (['v2_hero', 'v2_jauge', 'v2_top_sites'] as $id) {
+        if (!isset($registre[$id])) continue;
+        $bloc = $registre[$id] + ['id' => $id];
+        if (dash_bloc_visible($bloc, $user)) $tete[] = $bloc;
+    }
+    // v2_hero ouvre la page, la jauge l'accompagne, le classement suit les
+    // blocs d'action : on ne repousse pas ce qui demande un geste.
+    $blocs = array_merge(array_slice($tete, 0, 2), $blocs, array_slice($tete, 2));
 }
 
 include __DIR__ . '/../templates/header.php';
