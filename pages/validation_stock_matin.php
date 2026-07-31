@@ -103,9 +103,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 );
             }
 
-            // ── Dernier import OptoPlate pour ce site
+            // ── Dernier import OPTOTRACE pour ce site+date
             $dernier_import = db_fetch_value(
-                "SELECT MAX(date_import) FROM import_optoplate WHERE site_id=?", [$site_id]
+                "SELECT MAX(date_import) FROM import_optotrace WHERE site_id=? AND date_import=?",
+                [$site_id, $date]
             );
 
             $ecarts        = [];
@@ -440,7 +441,8 @@ function _calculer_ecarts_site(int $site_id, string $date): array {
         );
     }
     $dernier_import = db_fetch_value(
-        "SELECT MAX(date_import) FROM import_optoplate WHERE site_id=?", [$site_id]
+        "SELECT MAX(date_import) FROM import_optotrace WHERE site_id=? AND date_import=?",
+        [$site_id, $date]
     );
     $ecarts = []; $bobines_detail = []; $nb_ecarts = 0;
     foreach ($pj_entries as $b) {
