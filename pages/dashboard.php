@@ -134,10 +134,9 @@ if ($v2) include __DIR__ . '/../templates/dash_v2_style.php';
       // La maquette alterne des blocs deux tiers et un tiers. `largeur`
       // dit déjà « plein » ou « demi » ; on le traduit sur douze colonnes,
       // et on alterne 8/4 pour les demis afin d'éviter la grille uniforme.
-      $i = 0;
       foreach ($blocs as $bloc):
           $plein = ($bloc['largeur'] ?? 'demi') === 'plein';
-          $cls   = $plein ? 'dv2-w-12' : ($i++ % 2 === 0 ? 'dv2-w-8' : 'dv2-w-4');
+          $cls   = $plein ? 'dv2-w-12' : 'dv2-w-6';
       ?>
         <div class="<?= $cls ?>"><?php dash_afficher_bloc($bloc, $portee); ?></div>
       <?php endforeach; ?>
