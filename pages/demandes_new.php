@@ -231,7 +231,8 @@ function diSubmit(action){
         if(!el) return;
         var val = match ? (match.dataset[attr] || '') : '';
         el.value = val;
-        if(val){
+        // data-editable="1" : le champ reste saisissable même après autofill
+        if(val && !el.dataset.editable){
           el.classList.add('di-auto');
           el.readOnly = true;
         } else {
