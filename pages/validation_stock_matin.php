@@ -257,8 +257,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                             $site_id,
                             $user['id'],
                             $date,
-                            (int)$e['films_pj'],
-                            (int)$e['films_optoplate'],
+                            (int)$e['films_restants'],  // DigiStock restant calculé
+                            (int)$e['stock_systeme'],   // EMUCI/OPTOTRACE restant
                             (int)$e['ecart'],
                             $commentaire,
                         ]
@@ -868,10 +868,6 @@ $statut_colors = [
                   onclick="verifierSite(<?= $s['id'] ?>,'<?= h($s['nom']) ?>')">
             <i class="ph-duotone ph-magnifying-glass"></i> Traiter
           </button>
-          <button class="btn-vsm-detail"
-                  onclick="voirDetails(<?= $s['id'] ?>,'<?= h($s['nom']) ?>',<?= $s['nb_ecarts'] ?>,'[]','en_attente','','','','<?= h($f_date) ?>')">
-            <i class="ph-duotone ph-eye"></i> Détails
-          </button>
         </div>
       </td>
     </tr>
@@ -1265,9 +1261,8 @@ async function verifierSite(siteId, siteNom) {
         <thead><tr style="background:#06033A">
           <th style="padding:9px 12px;color:white;font-size:11px;text-align:left">N° Bobine</th>
           <th style="padding:9px 12px;color:white;font-size:11px;text-align:left">Type</th>
-          <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">PJ Coord.</th>
-          ${d.dernier_import?`<th style="padding:9px 12px;color:white;font-size:11px;text-align:center">EMUCI</th>`:''}
-          <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Stock sys.</th>
+          <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Stock Physique (DigiStock)</th>
+          ${d.dernier_import?`<th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Stock EMUCI (Système)</th><th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Écart</th>`:''}
           <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Statut</th>
         </tr></thead>
         <tbody>`;
@@ -1281,14 +1276,15 @@ async function verifierSite(siteId, siteNom) {
       html += `<tr style="background:${bg}">
         <td style="padding:9px 12px;font-family:monospace;font-weight:800;color:#06033A">${b.numero}</td>
         <td style="padding:9px 12px;font-size:12px;color:var(--muted)">${b.type_code||b.format||'—'}</td>
-        <td style="padding:9px 12px;text-align:center;font-weight:600">${b.films_utilises??'—'}</td>
-        ${d.dernier_import ? `<td style="padding:9px 12px;text-align:center;font-weight:600">${b.films_optoplate!==null?b.films_optoplate:'—'}</td>` : ''}
-        <td style="padding:9px 12px;text-align:center;font-size:12px;color:var(--muted)">${b.stock_systeme}</td>
+        <td style="padding:9px 12px;text-align:center;font-weight:700;color:${b.films_restants<=0?'#DC2626':b.films_restants<50?'#D97706':'#065F46'}">${b.films_restants??'—'}</td>
+        ${d.dernier_import ? `
+        <td style="padding:9px 12px;text-align:center;font-weight:600;color:#1B75BC">${b.stock_systeme??'—'}</td>
+        <td style="padding:9px 12px;text-align:center;font-weight:800;color:${b.has_ecart?(b.ecart>0?'#DC2626':'#D97706'):'#065F46'}">
+          ${b.has_ecart ? (b.ecart>0?'+':'')+b.ecart : '✓'}
+        </td>` : ''}
         <td style="padding:9px 12px;text-align:center">
           ${b.has_ecart
-            ? `<span style="background:#FEE2E2;color:#991B1B;padding:3px 9px;border-radius:8px;font-size:11px;font-weight:700">
-                ⚠️ Écart ${b.ecart>0?'+':''}${b.ecart}
-               </span>`
+            ? `<span style="background:#FEE2E2;color:#991B1B;padding:3px 9px;border-radius:8px;font-size:11px;font-weight:700">⚠️ Écart</span>`
             : `<span style="background:#D1FAE5;color:#065F46;padding:3px 9px;border-radius:8px;font-size:11px;font-weight:700">✅ OK</span>`}
         </td>
       </tr>`;
@@ -1523,7 +1519,6 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
       const rowBg = hasEcart ? '#FFF7ED' : (i%2===0 ? 'white' : '#F8FAFC');
       const ecartColor = b.ecart > 0 ? '#DC2626' : '#D97706';
 
-      const stockEmuci = (hasImport && b.films_optoplate !== null) ? (b.stock_debut - b.films_optoplate) : null;
       html += `<tr style="background:${rowBg}">
         <td style="padding:9px 12px;font-family:monospace;font-weight:800;color:#06033A">${b.numero}</td>
         <td style="padding:9px 12px;font-size:11.5px;color:var(--muted)">${b.type_code||b.format||'—'}</td>
