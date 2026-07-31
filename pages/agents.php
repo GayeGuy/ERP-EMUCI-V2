@@ -20,6 +20,7 @@ require_permission('agents', 'can_read');
 
 $user        = current_user();
 $can_import  = can('agents', 'can_create');
+$can_update  = can('agents', 'can_update');
 $can_delete  = can('agents', 'can_delete');
 $page_title  = 'Annuaire des agents';
 $active_page = 'agents';
@@ -41,6 +42,34 @@ if (isset($_GET['modele'])) {
     header('Cache-Control: max-age=0');
     (new XlsxWriter($sp))->save('php://output');
     exit;
+}
+
+// ── MODIFICATION (POST action=update)
+$update_error = null;
+if ($can_update && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update') {
+    $aid = (int)($_POST['agent_id'] ?? 0);
+    $nom = trim($_POST['nom'] ?? '');
+    $mat = trim($_POST['matricule'] ?? '') ?: null;
+    $statut = ($_POST['statut'] ?? 'actif') === 'inactif' ? 'inactif' : 'actif';
+
+    if ($aid <= 0 || $nom === '') {
+        $update_error = 'Le nom est obligatoire.';
+    } elseif ($mat !== null && db_fetch_value("SELECT id FROM agents WHERE matricule = ? AND id <> ?", [$mat, $aid])) {
+        $update_error = "Le matricule « $mat » est déjà utilisé par un autre agent.";
+    } else {
+        db_query(
+            "UPDATE agents SET matricule=?,nom=?,prenom=?,email=?,telephone=?,fonction=?,departement=?,direction=?,site=?,grade=?,statut=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            [
+                $mat, $nom, trim($_POST['prenom'] ?? ''),
+                trim($_POST['email'] ?? '') ?: null, trim($_POST['telephone'] ?? '') ?: null,
+                trim($_POST['fonction'] ?? '') ?: null, trim($_POST['departement'] ?? '') ?: null,
+                trim($_POST['direction'] ?? '') ?: null, trim($_POST['site'] ?? '') ?: null,
+                trim($_POST['grade'] ?? '') ?: null, $statut, $aid,
+            ]
+        );
+        header('Location: ' . APP_URL . '/pages/agents.php?updated=1');
+        exit;
+    }
 }
 
 // ── SUPPRESSION (POST action=delete)
@@ -301,6 +330,14 @@ include __DIR__ . '/../templates/header.php';
     <div class="ag-flash ag-ok"><i class="ph ph-check-circle"></i> Agent supprimé.</div>
   <?php endif; ?>
 
+  <?php if (isset($_GET['updated'])): ?>
+    <div class="ag-flash ag-ok"><i class="ph ph-check-circle"></i> Agent mis à jour.</div>
+  <?php endif; ?>
+
+  <?php if ($update_error): ?>
+    <div class="ag-flash ag-err"><i class="ph ph-warning"></i> <?= h($update_error) ?></div>
+  <?php endif; ?>
+
   <!-- En-tête -->
   <div class="ag-head">
     <div class="ag-head-l">
@@ -408,7 +445,7 @@ include __DIR__ . '/../templates/header.php';
               <th>Site</th>
               <th>Grade</th>
               <th>Statut</th>
-              <?php if ($can_delete): ?><th></th><?php endif; ?>
+              <?php if ($can_update || $can_delete): ?><th style="text-align:right">Actions</th><?php endif; ?>
             </tr>
           </thead>
           <tbody>
@@ -428,15 +465,22 @@ include __DIR__ . '/../templates/header.php';
                   <?= $a['statut'] === 'actif' ? 'Actif' : 'Inactif' ?>
                 </span>
               </td>
-              <?php if ($can_delete): ?>
-              <td>
-                <form method="post" onsubmit="return confirm('Supprimer cet agent ?')">
+              <?php if ($can_update || $can_delete): ?>
+              <td style="text-align:right;white-space:nowrap">
+                <?php if ($can_update): ?>
+                <button type="button" onclick="openEditAgent(<?= (int)$a['id'] ?>)" style="background:none;border:none;cursor:pointer;color:#1B75BC;font-size:16px" title="Modifier">
+                  <i class="ph ph-pencil-simple"></i>
+                </button>
+                <?php endif; ?>
+                <?php if ($can_delete): ?>
+                <form method="post" style="display:inline" onsubmit="return confirm('Supprimer cet agent ?')">
                   <input type="hidden" name="action" value="delete">
                   <input type="hidden" name="agent_id" value="<?= (int)$a['id'] ?>">
                   <button type="submit" style="background:none;border:none;cursor:pointer;color:#DC2626;font-size:16px" title="Supprimer">
                     <i class="ph ph-trash"></i>
                   </button>
                 </form>
+                <?php endif; ?>
               </td>
               <?php endif; ?>
             </tr>
@@ -493,6 +537,92 @@ include __DIR__ . '/../templates/header.php';
   // Import vient d'avoir lieu — pas besoin de rouvrir la modal
   <?php endif; ?>
 })();
+</script>
+<?php endif; ?>
+
+<!-- Modal modification -->
+<?php if ($can_update): ?>
+<div class="ag-modal-bg" id="ag-edit-modal" onclick="if(event.target===this)this.classList.remove('open')">
+  <div class="ag-modal" style="max-width:640px">
+    <h3><i class="ph ph-pencil-simple" style="margin-right:6px"></i>Modifier l'agent</h3>
+    <form method="post" id="ag-edit-form">
+      <input type="hidden" name="action" value="update">
+      <input type="hidden" name="agent_id" id="ed-id">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;margin-bottom:14px">
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Matricule</label>
+          <input type="text" name="matricule" id="ed-matricule" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Statut</label>
+          <select name="statut" id="ed-statut" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+            <option value="actif">Actif</option>
+            <option value="inactif">Inactif</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Nom *</label>
+          <input type="text" name="nom" id="ed-nom" required style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Prénom</label>
+          <input type="text" name="prenom" id="ed-prenom" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Email</label>
+          <input type="email" name="email" id="ed-email" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Téléphone</label>
+          <input type="text" name="telephone" id="ed-telephone" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Fonction</label>
+          <input type="text" name="fonction" id="ed-fonction" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Département</label>
+          <input type="text" name="departement" id="ed-departement" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Direction</label>
+          <input type="text" name="direction" id="ed-direction" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Site</label>
+          <input type="text" name="site" id="ed-site" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+        </div>
+        <div>
+          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Grade</label>
+          <input type="text" name="grade" id="ed-grade" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+        </div>
+      </div>
+      <div class="ag-modal-actions">
+        <button type="button" class="ag-btn ag-btn-sec" onclick="document.getElementById('ag-edit-modal').classList.remove('open')">Annuler</button>
+        <button type="submit" class="ag-btn ag-btn-pri"><i class="ph ph-check"></i> Enregistrer</button>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+const AGENTS_DATA = <?= json_encode(array_column($agents, null, 'id'), JSON_UNESCAPED_UNICODE) ?>;
+function openEditAgent(id) {
+  const a = AGENTS_DATA[id];
+  if (!a) return;
+  document.getElementById('ed-id').value          = a.id;
+  document.getElementById('ed-matricule').value   = a.matricule || '';
+  document.getElementById('ed-nom').value         = a.nom || '';
+  document.getElementById('ed-prenom').value      = a.prenom || '';
+  document.getElementById('ed-email').value       = a.email || '';
+  document.getElementById('ed-telephone').value   = a.telephone || '';
+  document.getElementById('ed-fonction').value    = a.fonction || '';
+  document.getElementById('ed-departement').value = a.departement || '';
+  document.getElementById('ed-direction').value   = a.direction || '';
+  document.getElementById('ed-site').value        = a.site || '';
+  document.getElementById('ed-grade').value       = a.grade || '';
+  document.getElementById('ed-statut').value      = a.statut === 'inactif' ? 'inactif' : 'actif';
+  document.getElementById('ag-edit-modal').classList.add('open');
+}
 </script>
 <?php endif; ?>
 
