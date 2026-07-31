@@ -641,6 +641,19 @@ function dash_graphe(string $type, array $valeurs, array $options = []): void {
 }
 
 /**
+ * Canvas multi-séries (courbe_multi). $series = [['label'=>…,'couleur'=>…,'valeurs'=>[…]],…]
+ */
+function dash_graphe_multi(array $series, array $libelles, int $hauteur = 160): void {
+    $resume = implode(', ', array_map(fn($s) => $s['label'] . ' : ' . array_sum($s['valeurs']), $series));
+    $attrs  = 'data-graphe="courbe_multi"'
+            . ' role="img" aria-label="' . h($resume) . '"'
+            . " data-series='" . h(json_encode($series)) . "'"
+            . " data-libelles='" . h(json_encode(array_values($libelles))) . "'"
+            . ' height="' . $hauteur . '"';
+    echo '<canvas ' . $attrs . '></canvas>';
+}
+
+/**
  * Résumé parlé d'un graphe. Il ne récite pas toute la série — une courbe de
  * douze mois lue point par point est inexploitable à l'oreille — mais donne
  * ce qu'on retient en regardant : le total, les extrêmes, la tendance.
@@ -1812,32 +1825,45 @@ function dash_registre(): array {
                 "SELECT COALESCE(SUM(total_engins),0) FROM op_points_journaliers
                  WHERE date_point >= ? AND date_point < ? $ws", array_merge([$prev, $debut], $as));
 
-            // Courbe des trente derniers jours, trous compris : un jour sans
-            // saisie vaut zéro, pas une absence de point — sinon la courbe
-            // raccourcit au lieu de creuser.
+            // 4 courbes par type de véhicule — trente derniers jours
             $rows = db_fetch_all(
-                "SELECT date_point, COALESCE(SUM(total_engins),0) AS v
+                "SELECT date_point,
+                        COALESCE(SUM(nb_vp),0)      AS vp,
+                        COALESCE(SUM(nb_camion),0)  AS cam,
+                        COALESCE(SUM(nb_semi),0)    AS semi,
+                        COALESCE(SUM(nb_moto),0)    AS mo
                  FROM op_points_journaliers
                  WHERE date_point > CURRENT_DATE - 30 $ws
                  GROUP BY date_point ORDER BY date_point", $as);
             $par = [];
-            foreach ($rows as $r) $par[(string)$r['date_point']] = (float)$r['v'];
-            $serie = $lbl = [];
+            foreach ($rows as $r) $par[(string)$r['date_point']] = $r;
+            $s_vp = $s_cam = $s_semi = $s_mo = $lbl = [];
             for ($i = 29; $i >= 0; $i--) {
                 $j = date('Y-m-d', strtotime("-$i day"));
-                $serie[] = $par[$j] ?? 0;
-                $lbl[]   = date('j', strtotime($j));
+                $r = $par[$j] ?? [];
+                $s_vp[]   = (float)($r['vp']   ?? 0);
+                $s_cam[]  = (float)($r['cam']   ?? 0);
+                $s_semi[] = (float)($r['semi']  ?? 0);
+                $s_mo[]   = (float)($r['mo']    ?? 0);
+                $lbl[]    = date('j', strtotime($j));
             }
+            $series = [
+                ['label'=>'VP',             'couleur'=>'#2563EB', 'valeurs'=>$s_vp],
+                ['label'=>'Camions',        'couleur'=>'#0F8A47', 'valeurs'=>$s_cam],
+                ['label'=>'Semi-remorques', 'couleur'=>'#7C3AED', 'valeurs'=>$s_semi],
+                ['label'=>'Motos',          'couleur'=>'#B45309', 'valeurs'=>$s_mo],
+            ];
 
             $mix = db_fetch_one(
                 "SELECT COALESCE(SUM(nb_vp),0) AS vp, COALESCE(SUM(nb_camion),0) AS cam,
                         COALESCE(SUM(nb_semi),0) AS semi, COALESCE(SUM(nb_moto),0) AS mo
                  FROM op_points_journaliers WHERE date_point >= ? $ws", array_merge([$debut], $as));
 
-            return ['mois'=>$mois,'prec'=>$moisPrec,'serie'=>$serie,'lbl'=>$lbl,'mix'=>$mix ?: []];
+            return ['mois'=>$mois,'prec'=>$moisPrec,'series'=>$series,'lbl'=>$lbl,'mix'=>$mix ?: []];
         },
         'rendu' => function (array $d) {
-            if (!array_sum($d['serie']) && !$d['mois']) {
+            $tot_mois = array_sum(array_column($d['series'], 'valeurs') ? array_merge(...array_column($d['series'], 'valeurs')) : []);
+            if (!$tot_mois && !$d['mois']) {
                 dash_vide('Aucun engin posé ce mois-ci.'); return;
             }
             $delta = dash_delta($d['mois'], $d['prec'] ?: null);
@@ -1850,7 +1876,7 @@ function dash_registre(): array {
             echo     '</div>';
             echo   '</div>';
             echo   '<div class="dv2-hero-ch">';
-            dash_graphe('courbe', $d['serie'], ['libelles'=>$d['lbl'],'couleur'=>'#2563EB','hauteur'=>150]);
+            dash_graphe_multi($d['series'], $d['lbl'], 150);
             echo   '</div>';
             echo '</div>';
 

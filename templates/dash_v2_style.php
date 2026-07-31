@@ -172,7 +172,7 @@
 /* Bande de répartition sous la métrique de tête. Le filet coloré sous
    chaque chiffre est celui de la maquette : il code la catégorie, et sa
    longueur code la part. */
-.dv2-split{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--d-4);
+.dv2-split{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--d-4);
   margin-top:var(--d-5);padding-top:var(--d-5);border-top:1px solid var(--d-line)}
 @media(max-width:600px){.dv2-split{grid-template-columns:1fr;gap:var(--d-3)}}
 .dv2-sp-v{display:flex;align-items:baseline;gap:6px;font-family:'Plus Jakarta Sans',sans-serif;

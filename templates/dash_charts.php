@@ -318,7 +318,71 @@
     }
   }
 
-  var TRACEURS = { anneau: anneau, courbe: courbe, barres: barres, jauge: jauge };
+  // ── Courbe multi-séries ───────────────────────────────────────────
+  // Chaque série porte son label, sa couleur et ses valeurs.
+  // Pas d'aire remplie (superposition illisible), juste les lignes + points.
+  function courbeMulti(el) {
+    var c = cadre(el, 170);
+    var ctx = c.ctx, w = c.w, h = c.h;
+    var series   = lire(el, 'series', []);
+    var libelles = lire(el, 'libelles', []);
+
+    if (!series.length) { vide(ctx, w, h); return; }
+
+    var pad = { t: 20, r: 12, b: 32, l: 40 };
+    var cW = w - pad.l - pad.r, cH = h - pad.t - pad.b;
+    var n = series[0] ? series[0].valeurs.length : 0;
+    if (!n) { vide(ctx, w, h); return; }
+
+    var allVals = [];
+    series.forEach(function(s) { allVals = allVals.concat(s.valeurs || []); });
+    var max = Math.max.apply(null, allVals.concat([1]));
+
+    var pas = cW / Math.max(n - 1, 1);
+    var P   = prog();
+    var yf  = function(v) { return pad.t + cH * (1 - (v * P) / max); };
+    var xf  = function(i) { return pad.l + i * pas; };
+
+    // Lignes de grille + graduation Y
+    ctx.strokeStyle = '#f1f5f9'; ctx.lineWidth = 1;
+    for (var g = 0; g <= 4; g++) {
+      var yy = pad.t + cH * (1 - g / 4);
+      ctx.beginPath(); ctx.moveTo(pad.l, yy); ctx.lineTo(w - pad.r, yy); ctx.stroke();
+      ctx.fillStyle = '#5a6678'; ctx.font = '10px DM Sans,sans-serif';
+      ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+      ctx.fillText(Math.round(max * g / 4), pad.l - 5, yy);
+    }
+
+    // Tracé des séries
+    series.forEach(function(s) {
+      var vals = s.valeurs || [];
+      var col  = s.couleur || '#1B75BC';
+      ctx.beginPath();
+      ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.lineJoin = 'round';
+      vals.forEach(function(v, i) { i === 0 ? ctx.moveTo(xf(i), yf(v)) : ctx.lineTo(xf(i), yf(v)); });
+      ctx.stroke();
+      // Points sur les valeurs non nulles
+      vals.forEach(function(v, i) {
+        if (v > 0) {
+          ctx.beginPath(); ctx.arc(xf(i), yf(v), 3, 0, Math.PI * 2);
+          ctx.fillStyle = '#fff'; ctx.fill();
+          ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke();
+        }
+      });
+    });
+
+    // Étiquettes X — une sur cinq pour éviter le chevauchement
+    var step = Math.ceil(n / 10);
+    libelles.forEach(function(lb, i) {
+      if (i % step === 0 || i === n - 1) {
+        ctx.fillStyle = '#5a6678'; ctx.font = '10px DM Sans,sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText(lb, xf(i), pad.t + cH + 6);
+      }
+    });
+  }
+
+  var TRACEURS = { anneau: anneau, courbe: courbe, courbe_multi: courbeMulti, barres: barres, jauge: jauge };
 
   // ── Parcours ──────────────────────────────────────────────────────
   // Découvre les graphes plutôt que de les tenir dans une liste : un bloc du
