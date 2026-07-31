@@ -13,6 +13,7 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/audit.php';
+require_once __DIR__ . '/../includes/notifications.php';
 
 require_auth();
 require_permission('agents', 'can_read');
