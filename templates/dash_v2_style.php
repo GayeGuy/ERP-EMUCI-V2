@@ -147,7 +147,7 @@
    ici : les blocs sont autonomes et titrés, aucun ne se lit par rapport au
    précédent. */
 .dv2-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));
-  gap:var(--d-4);align-items:start;grid-auto-flow:row dense}
+  gap:var(--d-4);align-items:stretch;grid-auto-flow:row dense}
 .dv2-grid > *{min-width:0}
 .dv2-w-8{grid-column:span 8}
 .dv2-w-4{grid-column:span 4}

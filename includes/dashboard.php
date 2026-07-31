@@ -231,8 +231,8 @@ function dash_profils(): array {
             'synthese_kpi',
             'evolution_engins', 'repartition_parc',
             'perf_sites',
-            'equipements', 'sites', 'stock_bas', 'fin_cycle',
-            'conso_sites', 'bobines_sites', 'rivets',
+            'equipements', 'conso_sites', 'sites', 'bobines_sites',
+            'stock_bas', 'fin_cycle', 'rivets',
             'activites',
         ],
     ];
