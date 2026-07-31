@@ -936,6 +936,8 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucun point en attente de validation.', true); return; }
+            $sc = count($d) > 5;
+            if ($sc) echo '<div style="max-height:256px;overflow-y:auto">';
             echo '<table class="dtbl"><thead><tr><th>Date</th><th>Site</th><th>Auteur</th>'
                . '<th style="text-align:right">Soumis</th></tr></thead><tbody>';
             foreach ($d as $r) {
@@ -949,6 +951,7 @@ function dash_registre(): array {
                    . ($j <= 0 ? "Aujourd'hui" : ent((float)$j) . ' j') . '</span></td></tr>';
             }
             echo '</tbody></table>';
+            if ($sc) echo '</div>';
         },
     ],
 
@@ -974,6 +977,8 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucune correction demandée.', true); return; }
+            $sc = count($d) > 3;
+            if ($sc) echo '<div style="max-height:220px;overflow-y:auto;padding-right:2px">';
             foreach ($d as $r) {
                 echo '<div class="biz-risk-r" style="margin-bottom:9px">'
                    . '<div class="biz-risk-i"><i class="ph-duotone ph-pencil-simple"></i></div>'
@@ -985,6 +990,7 @@ function dash_registre(): array {
                    . h($r['demandeur'] ?? '—') . ' le ' . h(fmt_date($r['created_at'])) . '</div>'
                    . '</div></div>';
             }
+            if ($sc) echo '</div>';
         },
     ],
 
@@ -1008,6 +1014,8 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucune validation enregistrée cette semaine.'); return; }
+            $sc = count($d) > 5;
+            if ($sc) echo '<div style="max-height:260px;overflow-y:auto;padding-right:2px">';
             foreach ($d as $r) {
                 $ec  = (int)$r['nb_ecarts'];
                 $cls = $ec === 0 ? 'hc-green' : ($ec <= 2 ? 'hc-orange' : 'hc-red');
@@ -1019,6 +1027,7 @@ function dash_registre(): array {
                    . ($ec === 0 ? 'Aucun écart' : ent((float)$ec) . ' écart' . ($ec > 1 ? 's' : ''))
                    . '</span></div>';
             }
+            if ($sc) echo '</div>';
         },
     ],
 
@@ -1042,6 +1051,8 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucune commande en cours.', true); return; }
+            $sc = count($d) > 5;
+            if ($sc) echo '<div style="max-height:256px;overflow-y:auto">';
             echo '<table class="dtbl"><thead><tr><th>N°</th><th>Site</th><th>Type</th>'
                . '<th style="text-align:right">État</th></tr></thead><tbody>';
             foreach ($d as $r) {
@@ -1053,6 +1064,7 @@ function dash_registre(): array {
                    . ($att ? 'À valider' : 'À servir') . '</span></td></tr>';
             }
             echo '</tbody></table>';
+            if ($sc) echo '</div>';
         },
     ],
 
@@ -1204,6 +1216,8 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucun consommable suivi sur ce site.'); return; }
+            $sc = count($d) > 4;
+            if ($sc) echo '<div style="max-height:224px;overflow-y:auto;padding-right:2px">';
             foreach ($d as $r) {
                 $seuil = (float)$r['seuil_alerte'];
                 $bas   = $seuil > 0 && (float)$r['quantite'] <= $seuil;
@@ -1216,6 +1230,7 @@ function dash_registre(): array {
                    . '<div class="biz-cov-d"><span class="biz-cov-num">' . ent((float)$r['quantite'])
                    . '</span><span class="biz-cov-u">' . h($r['unite']) . '</span></div></div>';
             }
+            if ($sc) echo '</div>';
         },
     ],
 
@@ -1385,10 +1400,10 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucun stock de rivets enregistré.'); return; }
+            $sc = count($d) > 5;
+            if ($sc) echo '<div style="max-height:260px;overflow-y:auto;padding-right:2px">';
             foreach ($d as $r) {
-                $q = (float)$r['stock'];
-                // Seuils repris de la page Rivets : sous 100 il faut
-                // commander, sous 500 il faut y penser.
+                $q   = (float)$r['stock'];
                 $cls = $q < 100 ? 'hc-red' : ($q < 500 ? 'hc-orange' : 'hc-green');
                 echo '<div class="stock-stat-row">'
                    . '<div style="font-weight:700;color:#06033A">' . h($r['site_nom']) . '</div>'
@@ -1398,6 +1413,7 @@ function dash_registre(): array {
                    . ($q < 100 ? 'À commander' : ($q < 500 ? 'À surveiller' : 'Suffisant'))
                    . '</span></div></div>';
             }
+            if ($sc) echo '</div>';
         },
     ],
 
@@ -1459,7 +1475,9 @@ function dash_registre(): array {
             $total = array_sum(array_map(fn($r) => (float)$r['montant'], $d));
             echo '<div class="eq-big-l">Total sur douze mois</div>';
             echo '<div class="biz-m-val" style="font-size:30px">' . ent($total)
-               . '<span class="biz-m-u">FCFA</span></div><div style="margin-top:14px">';
+               . '<span class="biz-m-u">FCFA</span></div>';
+            $sc = count($d) > 4;
+            echo '<div style="margin-top:14px' . ($sc ? ';max-height:224px;overflow-y:auto;padding-right:2px' : '') . '">';
             foreach ($d as $r) {
                 echo '<div class="biz-cov-r">'
                    . '<div class="biz-cov-n">' . h($r['site_nom']) . '</div>'
@@ -1796,6 +1814,8 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucun point rejeté cette semaine.', true); return; }
+            $sc = count($d) > 3;
+            if ($sc) echo '<div style="max-height:220px;overflow-y:auto;padding-right:2px">';
             foreach ($d as $r) {
                 echo '<div class="biz-risk-r" style="margin-bottom:9px">'
                    . '<div class="biz-risk-i" style="background:#fee2e2;color:#991b1b"><i class="ph-duotone ph-x-circle"></i></div>'
@@ -1806,6 +1826,7 @@ function dash_registre(): array {
                    . '<div class="biz-risk-s" style="margin-top:2px">Par ' . h($r['auteur'] ?? '—') . '</div>'
                    . '</div></div>';
             }
+            if ($sc) echo '</div>';
         },
     ],
 
