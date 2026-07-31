@@ -131,13 +131,18 @@ if ($v2) include __DIR__ . '/../templates/dash_v2_style.php';
   <?php else: ?>
     <div class="dv2-grid">
       <?php
-      // La maquette alterne des blocs deux tiers et un tiers. `largeur`
-      // dit déjà « plein » ou « demi » ; on le traduit sur douze colonnes,
-      // et on alterne 8/4 pour les demis afin d'éviter la grille uniforme.
-      $i = 0;
-      foreach ($blocs as $bloc):
-          $plein = ($bloc['largeur'] ?? 'demi') === 'plein';
-          $cls   = $plein ? 'dv2-w-12' : ($i++ % 2 === 0 ? 'dv2-w-8' : 'dv2-w-4');
+      // Un seul bloc traverse les colonnes : la carte de tête, qui ouvre la
+      // page. Chaque `column-span:all` coupe le flux en deux tronçons
+      // équilibrés séparément, et un tronçon court se remplit mal — c'est
+      // exactement ce qui creusait les vides. Les autres blocs larges, dont
+      // les grands tableaux, tiennent dans une colonne : leur corps porte
+      // déjà `overflow-x:auto` et défile au lieu d'être tronqué.
+      // Le dernier bloc traverse lui aussi : deux colonnes de hauteurs
+      // inégales laissent un bas irrégulier, et un bloc pleine largeur en
+      // pied referme la page sur une ligne droite.
+      $dernier = count($blocs) - 1;
+      foreach ($blocs as $rang => $bloc):
+          $cls = (($bloc['id'] ?? '') === 'v2_hero' || $rang === $dernier) ? 'dv2-w-all' : '';
       ?>
         <div class="<?= $cls ?>"><?php dash_afficher_bloc($bloc, $portee); ?></div>
       <?php endforeach; ?>

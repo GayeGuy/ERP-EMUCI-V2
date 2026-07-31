@@ -140,25 +140,37 @@
 /* ══════════════════ GRILLE DE BLOCS ══════════════════
    Douze colonnes : la maquette alterne des blocs deux tiers et un tiers,
    ce qu'une grille en deux colonnes égales ne sait pas faire. */
-/* `dense` comble les trous : sans lui, un bloc court placé à côté d'un bloc
-   haut laisse sous lui une colonne de vide jusqu'à la rangée suivante. Le
-   remplissage dense remonte le bloc suivant qui tient dans la place libre.
-   L'ordre de lecture s'en trouve légèrement réordonné, ce qui est acceptable
-   ici : les blocs sont autonomes et titrés, aucun ne se lit par rapport au
-   précédent. */
-.dv2-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));
-  gap:var(--d-4);align-items:start;grid-auto-flow:row dense}
-.dv2-grid > *{min-width:0}
-.dv2-w-8{grid-column:span 8}
-.dv2-w-4{grid-column:span 4}
-.dv2-w-6{grid-column:span 6}
-.dv2-w-12{grid-column:span 12}
-@media(max-width:1000px){
-  .dv2-w-8,.dv2-w-4,.dv2-w-6{grid-column:span 6}
-}
-@media(max-width:720px){
-  .dv2-w-8,.dv2-w-4,.dv2-w-6,.dv2-w-12{grid-column:span 12}
-}
+/* Pavage par colonnes, pas grille en rangées.
+ *
+ * Une grille aligne les rangées : un bloc court posé à côté d'un bloc haut
+ * laisse forcément le vide de la différence, et `dense` n'y change rien
+ * puisqu'il ne déplace que ce qui tient dans un trou de même hauteur de
+ * rangée. Or ici les hauteurs sont dictées par les données — un tableau de
+ * huit lignes contre un état vide d'une ligne — donc l'écart est la règle,
+ * pas l'exception.
+ *
+ * Le multi-colonnes empile chaque bloc directement sous le précédent dans sa
+ * colonne. Il ne reste aucun espace mort, quelles que soient les hauteurs.
+ * Le prix est l'ordre de lecture, qui devient colonne par colonne au lieu de
+ * rangée par rangée : acceptable ici, où chaque bloc est titré et autonome,
+ * aucun ne se lisant par rapport à son voisin.
+ */
+/* Deux colonnes, pas trois. Le nombre de colonnes doit rester petit devant
+   le nombre de blocs : l'équilibrage répartit par hauteur, et sur un tronçon
+   de quatre blocs dont deux sont hauts, trois colonnes donnent 2 / 2 / 0 —
+   une colonne entièrement vide. Deux colonnes se remplissent toujours. */
+.dv2-grid{column-count:2;column-gap:var(--d-4)}
+@media(max-width:860px){.dv2-grid{column-count:1}}
+
+/* `break-inside` empêche une carte d'être coupée en deux par un saut de
+   colonne. `inline-block` en largeur pleine est la parade au bogue de
+   Chromium qui ignore break-inside sur les enfants en flux. */
+.dv2-grid > *{break-inside:avoid;-webkit-column-break-inside:avoid;page-break-inside:avoid;
+  display:inline-block;width:100%;margin-bottom:var(--d-4)}
+
+/* Un bloc « plein » traverse toutes les colonnes : la carte de tête et les
+   grands tableaux gardent la pleine largeur. */
+.dv2-grid > .dv2-w-all{column-span:all;display:block}
 
 /* ══════════════════ BLOC DE TÊTE (métrique + courbe) ══════════════════ */
 .dv2-hero-v{font-family:'Plus Jakarta Sans',sans-serif;font-size:34px;font-weight:800;
@@ -242,9 +254,12 @@
 
 /* ══════════════════ ÉTAT VIDE ══════════════════
    Une phrase qui dit ce que l'absence signifie, jamais un cadre nu. */
-.dv2-empty{text-align:center;padding:26px 16px}
-.dv2-empty i{font-size:26px;color:#CBD5E1}
-.dv2-empty-t{font-size:13px;font-weight:600;margin-top:8px}
+/* Sur une ligne, pas centré sur trois. Un bloc qui n'a rien à montrer doit
+   le dire brièvement et rendre la place : réservé en hauteur, il creusait
+   un trou dans sa colonne. */
+.dv2-empty{display:flex;align-items:center;gap:9px;padding:2px 0 4px;text-align:left}
+.dv2-empty i{font-size:18px;color:#CBD5E1;flex-shrink:0}
+.dv2-empty-t{font-size:12.5px;font-weight:500;color:var(--d-mut);margin:0}
 .dv2-empty-s{font-size:12px;color:var(--d-mut);margin-top:4px;line-height:1.5;
   max-width:44ch;margin-inline:auto}
 .dv2-empty.ok .dv2-empty-t{color:var(--d-green)}
