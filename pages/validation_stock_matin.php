@@ -272,6 +272,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 }
             }
 
+            // ── Enregistrement dans ecarts_bobines
+            $statut_ecart = match($decision) {
+                'reajuste'       => 'resolu',
+                'autorise_ecart' => 'ignore',
+                default          => 'ouvert',
+            };
+            foreach ($ecarts as $e) {
+                if ($statut_ecart === 'ouvert') {
+                    db_query(
+                        "INSERT INTO ecarts_bobines
+                         (bobine_id, date_constat, stock_systeme, stock_physique, ecart, motif, source, statut, created_by)
+                         VALUES (?, ?, ?, ?, ?, ?, 'validation_stock', 'ouvert', ?)",
+                        [$e['bobine_id'], $date, (int)$e['stock_systeme'],
+                         (int)($e['films_restants'] ?? 0), (int)$e['ecart'], $commentaire, $user['id']]
+                    );
+                } else {
+                    $notes_res = $statut_ecart === 'resolu'
+                        ? 'Réajusté : DigiStock ' . (int)($e['films_restants'] ?? 0) . ' → EMUCI ' . (int)$e['stock_systeme']
+                        : 'Écart autorisé : ' . $commentaire;
+                    db_query(
+                        "INSERT INTO ecarts_bobines
+                         (bobine_id, date_constat, stock_systeme, stock_physique, ecart, motif, source, statut, resolu_at, resolu_par, resolution_notes, created_by)
+                         VALUES (?, ?, ?, ?, ?, ?, 'validation_stock', ?, NOW(), ?, ?, ?)",
+                        [$e['bobine_id'], $date, (int)$e['stock_systeme'],
+                         (int)($e['films_restants'] ?? 0), (int)$e['ecart'], $commentaire,
+                         $statut_ecart, $user['id'], $notes_res, $user['id']]
+                    );
+                }
+            }
+
             db_query(
                 "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,details_ecarts,bobines_snapshot,gsb_user_id,gsb_at,commentaire)
                  VALUES (?,?,?,?,?,?,?,NOW(),?)

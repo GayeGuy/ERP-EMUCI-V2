@@ -85,6 +85,9 @@ function _groupes_def(): array {
                 ['label'=>'Vue stock par site',   'icon'=>'ph-table',
                  'url'=>'pages/stock_bobines_vue.php','active_keys'=>['stock_bobines_vue'],
                  'roles_exclude'=>['coordinateur_site']],
+                ['label'=>'Écarts bobines',       'icon'=>'ph-warning-diamond',
+                 'url'=>'pages/ecarts_bobines.php','active_keys'=>['ecarts_bobines'],
+                 'perm'=>['ecarts_bobines','can_read']],
             ],
         ],
 
