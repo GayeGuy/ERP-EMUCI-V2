@@ -117,10 +117,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 $films_endommages= (int)($b['films_endommages'] ?? 0);
                 $films_total_pj  = $films_utilises + $films_endommages;
 
-                // Pour un PJ en attente, stock_systeme = stock début de journée (pas encore décrémenté)
+                // films_restants = stock physique réel (non écrasé par import EMUCI)
+                // stock_systeme  = valeur EMUCI (mise à jour par import, comparaison uniquement)
                 $stock_debut = isset($b['stock_avant'])
                     ? (int)$b['stock_avant']
-                    : (int)$b['stock_systeme'];
+                    : (int)($b['films_restants'] ?? $b['stock_systeme']);
 
                 $films_restants  = $stock_debut - $films_total_pj;
 
@@ -441,7 +442,7 @@ function _calculer_ecarts_site(int $site_id, string $date): array {
         $films_utilises   = (int)$b['films_utilises'];
         $films_endommages = (int)($b['films_endommages'] ?? 0);
         $films_total_pj   = $films_utilises + $films_endommages;
-        $stock_debut      = isset($b['stock_avant']) ? (int)$b['stock_avant'] : (int)$b['stock_systeme'];
+        $stock_debut      = isset($b['stock_avant']) ? (int)$b['stock_avant'] : (int)($b['films_restants'] ?? $b['stock_systeme']);
         $films_restants   = $stock_debut - $films_total_pj;
         $films_optoplate  = $dernier_import
             ? (int)db_fetch_value("SELECT COUNT(*) FROM import_optoplate WHERE num_bobine=? AND statut_plaque='in_use' AND date_import=?", [$b['numero'], $dernier_import])
@@ -1511,8 +1512,8 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
           <tr style="background:#06033A">
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:left">N° Bobine</th>
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:left">Type</th>
-            <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Stock PJ (calculé)</th>
-            <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Stock Système (DB)</th>
+            <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Stock avant PJ</th>
+            <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Stock prévu</th>
             ${hasImport ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">EMUCI</th><th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Écart</th>' : ''}
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Statut</th>
             ${<?= $can_valider ? 'true' : 'false' ?> ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Action</th>' : ''}
@@ -1529,10 +1530,10 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
       html += `<tr style="background:${rowBg}">
         <td style="padding:9px 12px;font-family:monospace;font-weight:800;color:#06033A">${b.numero}</td>
         <td style="padding:9px 12px;font-size:11.5px;color:var(--muted)">${b.type_code||b.format||'—'}</td>
+        <td style="padding:9px 12px;text-align:center;font-weight:600;color:#374151;font-size:13px">${b.stock_debut}</td>
         <td style="padding:9px 12px;text-align:center;font-weight:700;color:${b.films_restants<=0?'#DC2626':b.films_restants<50?'#D97706':'#065F46'};font-size:14px">${b.films_restants}</td>
-        <td style="padding:9px 12px;text-align:center;font-weight:600;color:#374151;font-size:13px">${b.stock_systeme}</td>
         ${hasImport ? `
-        <td style="padding:9px 12px;text-align:center;font-weight:600;color:#06033A">${stockEmuci !== null ? stockEmuci : '<span style="color:var(--muted)">—</span>'}</td>
+        <td style="padding:9px 12px;text-align:center;font-weight:600;color:#1B75BC">${b.stock_systeme !== null ? b.stock_systeme : '<span style="color:var(--muted)">—</span>'}</td>
         <td style="padding:9px 12px;text-align:center;font-weight:800;color:${hasEcart?ecartColor:'var(--success)'}">
           ${hasEcart ? (b.ecart>0?'+':'')+b.ecart : '✓'}
         </td>` : ''}
