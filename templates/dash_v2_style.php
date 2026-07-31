@@ -109,6 +109,11 @@
   .dv2-btn,.dv2-sel{height:44px}
 }
 .dv2-c-body{min-width:0;overflow-x:auto;-webkit-overflow-scrolling:touch}
+/* Une carte qui n'a rien a montrer remplit desormais sa rangee comme les
+   autres : sans cela son message restait colle en haut, le blanc s'accumulant
+   dessous. Centre, le meme blanc se repartit et se lit comme une carte vide
+   plutot que comme une carte tronquee. */
+.dv2-c-body:has(> .dv2-empty){display:flex;align-items:center;justify-content:center}
 
 /* ══════════════════ RANGÉE D'INDICATEURS ══════════════════
    Quatre cartes de même forme, comme la maquette : la comparaison entre
@@ -148,7 +153,19 @@
    précédent. */
 .dv2-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));
   gap:var(--d-4);align-items:stretch;grid-auto-flow:row dense}
-.dv2-grid > *{min-width:0}
+/* La grille est en `align-items: stretch` : la cellule d'un bloc court prend
+   bien la hauteur de sa rangée. Mais la carte qu'elle contient garde sa
+   hauteur naturelle et flotte en haut, laissant sous elle le fond de page —
+   mesuré à 381 px sur le profil coordinateur, repartis sur quatre cartes
+   (« Taux de validation », « Corrections en attente », « Bobines actives »,
+   « Rivets en stock »). Etirer la cellule ne suffit donc pas : il faut que la
+   carte remplisse la cellule.
+
+   Flex plutot que height:100% : la carte porte un padding et une bordure, et
+   `height:100%` sur une boite en border-box calee sur un parent grid etire
+   depasse d'un pixel selon les navigateurs. */
+.dv2-grid > *{min-width:0;display:flex;flex-direction:column}
+.dv2-grid > * > .dv2-c{flex:1}
 .dv2-w-8{grid-column:span 8}
 .dv2-w-4{grid-column:span 4}
 .dv2-w-6{grid-column:span 6}
