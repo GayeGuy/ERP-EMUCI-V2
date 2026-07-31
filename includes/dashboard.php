@@ -186,54 +186,59 @@ function dash_profil(?array $user = null): string {
  */
 function dash_profils(): array {
     return [
-        // Terrain : ce qui se passe sur mon site aujourd'hui.
+        // Terrain : actions en premier, lecture ensuite.
         'coordinateur' => [
-            'synthese_kpi', 'points_recents', 'corrections_attente',
-            'evolution_engins',
-            'receptions_site', 'stock_conso_site', 'bobines_sites',
-            'equipements', 'rivets',
+            'synthese_kpi',
+            'points_recents', 'corrections_attente',
+            'evolution_engins', 'stock_conso_site',
+            'receptions_site',
+            'bobines_sites', 'equipements',
+            'rivets',
         ],
 
-        // Stock bobines : la file d'attente de service.
+        // Stock bobines : actions, suivi, alertes.
         'gsb' => [
-            'synthese_kpi', 'commandes_bobines', 'validations_matin', 'corrections_attente',
-            'stock_bas', 'bobines_sites', 'rivets',
+            'synthese_kpi',
+            'commandes_bobines', 'corrections_attente',
+            'validations_matin', 'bobines_sites',
+            'rivets', 'stock_bas',
         ],
 
-        // Supervision des opérations : vue complète pour le patron des opérations.
-        //
-        // Les deux graphes viennent juste après ce qui demande une action :
-        // on traite d'abord, on prend du recul ensuite. perf_sites est en
-        // pleine largeur, il coupe la page en deux et sépare nettement les
-        // blocs d'action du suivi.
+        // Supervision : actions → graphes → suivi mensuel.
         'superviseur_op' => [
-            'synthese_kpi', 'points_attente', 'corrections_attente',
+            'synthese_kpi',
+            'points_attente', 'corrections_attente',
             'evolution_engins', 'repartition_parc',
             'perf_sites',
-            'validations_matin', 'points_rejetes', 'bobines_sites',
-            'performance_mois', 'receptions_site', 'activites',
+            'validations_matin', 'points_rejetes',
+            'bobines_sites', 'performance_mois',
+            'receptions_site', 'activites',
         ],
 
         // Gestion opérationnelle : peu de droits.
         'gestionnaire_op' => [
-            'synthese_kpi', 'raccourcis', 'points_recents',
+            'synthese_kpi',
+            'raccourcis', 'points_recents',
             'evolution_engins', 'commandes_bobines',
         ],
 
-        // Informatique : le parc, ses pannes et ses fins de cycle.
+        // Informatique : parc, consommation, fin de cycle.
         'informatique' => [
-            'synthese_kpi', 'repartition_parc', 'fin_cycle',
-            'equipements', 'interventions', 'activites',
+            'synthese_kpi',
+            'repartition_parc', 'equipements',
+            'conso_sites', 'fin_cycle',
+            'activites',
         ],
 
-        // Vue d'ensemble, par défaut.
+        // Vue d'ensemble.
         'general' => [
             'synthese_kpi',
             'evolution_engins', 'repartition_parc',
+            'equipements', 'conso_sites',
             'perf_sites',
-            'equipements', 'conso_sites', 'sites', 'bobines_sites',
-            'stock_bas', 'fin_cycle', 'rivets',
-            'activites',
+            'bobines_sites', 'sites',
+            'rivets', 'stock_bas',
+            'fin_cycle', 'activites',
         ],
     ];
 }
@@ -1056,6 +1061,7 @@ function dash_registre(): array {
         'titre'     => 'Stock consommables bas',
         'soustitre' => 'Sous le seuil d\'alerte',
         'module'    => 'consommables',
+        'largeur'   => 'plein',
         'lien'      => ['/pages/consommables.php', 'Gérer'],
         'donnees'   => function (array $p) {
             // Le coordinateur raisonne sur le stock de son site, les autres
@@ -1262,6 +1268,7 @@ function dash_registre(): array {
         'titre'     => 'Fin de cycle',
         'soustitre' => 'Soixante prochains jours',
         'module'    => 'equipements',
+        'largeur'   => 'plein',
         'lien'      => ['/pages/equipements.php', 'Le parc'],
         'donnees'   => function (array $p) {
             [$ws, $as] = dash_filtre_site($p, 'e.site_id');
