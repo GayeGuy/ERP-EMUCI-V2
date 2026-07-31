@@ -1935,53 +1935,6 @@ function dash_registre(): array {
         },
     ],
 
-    'v2_top_sites' => [
-        'titre'     => 'Sites les plus actifs',
-        'soustitre' => 'Mois en cours, engins posés',
-        'module'    => 'operations',
-        'largeur'   => 'plein',
-        'lien'      => ['/pages/rapports.php', 'Rapports'],
-        'donnees'   => function (array $p) {
-            [$ws, $as] = dash_filtre_site($p, 'p.site_id');
-            return db_fetch_all(
-                "SELECT s.id, s.nom, s.type,
-                        COALESCE(SUM(p.total_engins),0)  AS engins,
-                        COALESCE(SUM(p.total_plaques),0) AS plaques,
-                        COUNT(*) FILTER (WHERE p.statut='valide') AS ok,
-                        COUNT(*) AS pts
-                 FROM op_points_journaliers p
-                 JOIN sites s ON s.id = p.site_id
-                 WHERE p.date_point >= ? $ws
-                 GROUP BY s.id, s.nom, s.type
-                 ORDER BY engins DESC LIMIT 8",
-                array_merge([date('Y-m-01')], $as));
-        },
-        'rendu' => function (array $rows) {
-            if (!$rows) { dash_vide('Aucune activité enregistrée ce mois-ci.'); return; }
-            $icones = ['guichet'=>'ph-storefront','entrepot'=>'ph-warehouse','siege'=>'ph-buildings'];
-            $max = max(array_map(fn($r) => (int)$r['engins'], $rows)) ?: 1;
-            echo '<table class="dv2-t"><thead><tr>'
-               . '<th>Site</th><th>Engins</th><th>Plaques</th><th>Validés</th><th>Part</th>'
-               . '</tr></thead><tbody>';
-            foreach ($rows as $r) {
-                $ic  = $icones[$r['type']] ?? 'ph-map-pin';
-                $pct = (int)$r['engins'] / $max * 100;
-                $ok  = (int)$r['pts'] > 0 && (int)$r['ok'] >= (int)$r['pts'];
-                echo '<tr>';
-                echo   '<td><div class="dv2-t-n">'
-                   .     '<span class="dv2-t-ic"><i class="ph-duotone ' . $ic . '"></i></span>'
-                   .     '<span class="dv2-t-lbl">' . h($r['nom']) . '</span></div></td>';
-                echo   '<td class="dv2-t-num">' . h(fmt_number((float)$r['engins'])) . '</td>';
-                echo   '<td class="dv2-t-num">' . h(fmt_number((float)$r['plaques'])) . '</td>';
-                echo   '<td><span class="dv2-p ' . ($ok ? 'dv2-p-g' : 'dv2-p-o') . '">'
-                   .     (int)$r['ok'] . ' / ' . (int)$r['pts'] . '</span></td>';
-                echo   '<td><span class="dv2-t-sig up">' . number_format($pct, 0) . ' %</span></td>';
-                echo '</tr>';
-            }
-            echo '</tbody></table>';
-        },
-    ],
-
     'activites' => [
         'titre'     => 'Dernières activités',
         'soustitre' => 'Journal des opérations',

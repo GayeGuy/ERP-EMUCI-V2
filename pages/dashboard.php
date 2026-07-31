@@ -50,7 +50,7 @@ if ($v2) {
     // On les insère ici, en tête, et seulement si les permissions suivent.
     $registre = dash_registre();
     $tete = [];
-    foreach (['v2_hero', 'v2_jauge', 'v2_top_sites'] as $id) {
+    foreach (['v2_hero', 'v2_jauge'] as $id) {
         if (!isset($registre[$id])) continue;
         $bloc = $registre[$id] + ['id' => $id];
         if (dash_bloc_visible($bloc, $user)) $tete[] = $bloc;
