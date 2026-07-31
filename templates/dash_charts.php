@@ -284,7 +284,10 @@
   // Découvre les graphes plutôt que de les tenir dans une liste : un bloc du
   // registre pose un canvas avec ses données, et il est pris en charge.
   function dessinerTout() {
-    var cibles = document.querySelectorAll('.pdg canvas[data-graphe]');
+    // `.pdg` est la racine de la vue PDG, `.dv2` celle du tableau de bord v2.
+    // Les deux coquilles coexistent : chercher dans une seule laisserait les
+    // graphes de l'autre définitivement vides, sans erreur ni trace.
+    var cibles = document.querySelectorAll('.pdg canvas[data-graphe], .dv2 canvas[data-graphe]');
     for (var i = 0; i < cibles.length; i++) {
       var el = cibles[i];
       var f = TRACEURS[el.getAttribute('data-graphe')];

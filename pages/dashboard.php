@@ -34,9 +34,104 @@ $page_title = 'Tableau de bord';
 $page_subtitle = 'Votre activité du jour';
 $active_page   = 'dashboard';
 
+// Le rôle « lecteur » reste sur l'ancien tableau de bord ; tous les autres
+// passent au rendu v2. L'interrupteur est lu par dash_carte_debut() et
+// dash_vide(), qui servent la coquille correspondante.
+$v2 = !dash_role_v1($user);
+dash_v2($v2);
+
+// En v2 la rangée d'indicateurs de tête remplace le bloc « Synthèse » : le
+// garder afficherait deux fois les mêmes chiffres à trente pixels d'écart.
+if ($v2) {
+    $blocs = array_values(array_filter($blocs, fn($b) => ($b['id'] ?? '') !== 'synthese_kpi'));
+}
+
 include __DIR__ . '/../templates/header.php';
+// dash_style.php reste chargé même en v2 : le contenu interne des blocs
+// (tableaux .dtbl, listes, graphes) s'appuie dessus. dash_v2_style.php ne
+// remplace que la coquille, la rangée d'indicateurs et la grille, et
+// réaligne le reste depuis `.dv2`.
 include __DIR__ . '/../templates/dash_style.php';
+if ($v2) include __DIR__ . '/../templates/dash_v2_style.php';
 ?>
+
+<?php if ($v2): ?>
+<div class="dv2">
+  <div class="dv2-bar"></div>
+
+  <div class="dv2-hd">
+    <div>
+      <div class="dv2-h1">Bonjour, <?= h($user['prenom']) ?></div>
+      <div class="dv2-h1-sub">
+        <?php
+        $jours = ['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+        $mois  = ['','janvier','février','mars','avril','mai','juin',
+                  'juillet','août','septembre','octobre','novembre','décembre'];
+        echo h($jours[(int)date('w')] . ' ' . date('j') . ' ' . $mois[(int)date('n')] . ' ' . date('Y'));
+        ?>
+        <?= $user['role_nom'] ? ' · ' . h($user['role_nom']) : '' ?>
+        <?= $portee['site_nom'] !== '' ? ' · ' . h($portee['site_nom']) : '' ?>
+      </div>
+    </div>
+    <div class="dv2-tools">
+      <?php $sites_filtre = dash_sites_filtrables($portee); ?>
+      <?php if ($sites_filtre): ?>
+      <form method="get" id="pdg-filter-form" style="display:flex;align-items:center;gap:8px">
+        <select name="site_id" class="dv2-btn dv2-sel" aria-label="Filtrer par site"
+                onchange="this.form.submit()">
+          <option value="0">Tous les sites</option>
+          <?php foreach ($sites_filtre as $s): ?>
+          <option value="<?= (int)$s['id'] ?>" <?= $portee['site_id'] === (int)$s['id'] ? 'selected' : '' ?>>
+            <?= h($s['nom']) ?>
+          </option>
+          <?php endforeach; ?>
+        </select>
+      </form>
+      <?php elseif ($portee['site_nom'] !== ''): ?>
+        <span class="dv2-p dv2-p-b"><i class="ph-duotone ph-map-pin"></i> <?= h($portee['site_nom']) ?></span>
+      <?php endif; ?>
+      <?php if (can('rapports', 'can_read')): ?>
+      <a class="dv2-btn dv2-btn-pri" href="<?= APP_URL ?>/pages/rapports.php">
+        <i class="ph-duotone ph-download-simple"></i> Exporter
+      </a>
+      <?php endif; ?>
+    </div>
+  </div>
+
+  <?php $kpis = dash_v2_kpis($portee); ?>
+  <?php if ($kpis): ?>
+  <div class="dv2-kpis">
+    <?php foreach ($kpis as $k) dash_v2_kpi($k); ?>
+  </div>
+  <?php endif; ?>
+
+  <?php if (count($blocs) === 0): ?>
+    <div class="dv2-c">
+      <div class="dv2-c-t">Rien à afficher pour le moment</div>
+      <div class="dv2-c-s" style="margin-top:6px">
+        Votre profil ne donne accès à aucun bloc de ce tableau de bord.
+        Signalez-le à un administrateur : c'est très probablement une
+        configuration de permissions à compléter.
+      </div>
+    </div>
+  <?php else: ?>
+    <div class="dv2-grid">
+      <?php
+      // La maquette alterne des blocs deux tiers et un tiers. `largeur`
+      // dit déjà « plein » ou « demi » ; on le traduit sur douze colonnes,
+      // et on alterne 8/4 pour les demis afin d'éviter la grille uniforme.
+      $i = 0;
+      foreach ($blocs as $bloc):
+          $plein = ($bloc['largeur'] ?? 'demi') === 'plein';
+          $cls   = $plein ? 'dv2-w-12' : ($i++ % 2 === 0 ? 'dv2-w-8' : 'dv2-w-4');
+      ?>
+        <div class="<?= $cls ?>"><?php dash_afficher_bloc($bloc, $portee); ?></div>
+      <?php endforeach; ?>
+    </div>
+  <?php endif; ?>
+
+</div>
+<?php else: ?>
 
 <div class="pdg">
 
@@ -108,6 +203,7 @@ include __DIR__ . '/../templates/dash_style.php';
   <?php endif; ?>
 
 </div>
+<?php endif; /* fin de la branche v1 (rôle lecteur) */ ?>
 
 <?php
 // L'ordre compte : dash_charts.php définit render(), que dash_anim.php

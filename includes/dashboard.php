@@ -326,6 +326,30 @@ function dash_blocs_visibles(?array $user = null): array {
 /** Ouvre une carte : titre, sous-titre, lien d'action optionnel. */
 function dash_carte_debut(array $bloc): void {
     $lien = $bloc['lien'] ?? null;
+
+    if (dash_v2()) {
+        echo '<div class="dv2-c">';
+        echo   '<div class="dv2-c-hd"><div style="min-width:0">';
+        echo     '<div class="dv2-c-t">' . h($bloc['titre']) . '</div>';
+        if (!empty($bloc['soustitre'])) {
+            echo '<div class="dv2-c-s">' . h($bloc['soustitre']) . '</div>';
+        }
+        echo   '</div>';
+        // Le « ••• » de la maquette mène à la page du bloc. Il n'apparaît que
+        // si l'utilisateur a le droit d'y aller : un raccourci vers un 403
+        // vaut moins que pas de raccourci.
+        if ($lien) {
+            $lm = $bloc['lien_module'] ?? ($bloc['module'] ?? null);
+            $ld = $bloc['lien_droit']  ?? 'can_read';
+            if ($lm === null || can($lm, $ld)) {
+                echo '<a class="dv2-more" href="' . APP_URL . h($lien[0]) . '"'
+                   . ' title="' . h($lien[1]) . '" aria-label="' . h($lien[1]) . '">•••</a>';
+            }
+        }
+        echo   '</div><div class="dv2-c-body">';
+        return;
+    }
+
     echo '<div class="card">';
     echo '<div class="dash-tete">';
     echo '<div><div class="card-ttl">' . h($bloc['titre']) . '</div>';
@@ -360,9 +384,195 @@ function dash_carte_fin(): void {
  * la même chose pour qui consulte.
  */
 function dash_vide(string $message, bool $bonne_nouvelle = false): void {
+    // En v2 l'état vide porte une icône et deux niveaux de texte ; ailleurs
+    // il garde sa forme d'origine, pour ne rien changer à la vue PDG.
+    if (dash_v2()) {
+        echo '<div class="dv2-empty' . ($bonne_nouvelle ? ' ok' : '') . '">'
+           . '<i class="ph-duotone ' . ($bonne_nouvelle ? 'ph-check-circle' : 'ph-tray') . '"></i>'
+           . '<div class="dv2-empty-t">' . h($message) . '</div>'
+           . '</div>';
+        return;
+    }
     $couleur = $bonne_nouvelle ? '#166534' : '#5a6678';
     echo '<div style="text-align:center;padding:26px 16px;font-size:13px;color:' . $couleur . '">'
        . h($message) . '</div>';
+}
+
+// ============================================================
+//  RENDU v2 — maquette de référence
+//
+//  Le tableau de bord par profil passe à un nouveau vocabulaire visuel.
+//  Deux surfaces ne suivent pas :
+//
+//   - pages/pdg_overview.php, qui garde templates/dash_style.php ;
+//   - le rôle « lecteur », qui reste sur l'ancien rendu.
+//
+//  D'où l'interrupteur ci-dessous plutôt qu'un remplacement pur et simple :
+//  les deux coquilles doivent coexister tant que ces deux surfaces vivent.
+// ============================================================
+
+/** Le rendu v2 est-il actif pour cette requête ? Posé par pages/dashboard.php. */
+function dash_v2(?bool $activer = null): bool {
+    static $actif = false;
+    if ($activer !== null) $actif = $activer;
+    return $actif;
+}
+
+/** Rôles qui restent sur l'ancien tableau de bord. */
+function dash_role_v1(?array $user = null): bool {
+    $user = $user ?? current_user();
+    return ($user['role_slug'] ?? '') === 'lecteur';
+}
+
+/**
+ * Variation entre deux valeurs, prête à afficher.
+ *
+ * Renvoie null quand il n'y a rien d'honnête à dire : sans valeur de
+ * référence, un « +100 % » calculé depuis zéro est un artefact, pas une
+ * information. Le bloc affiche alors sa ligne de contexte à la place.
+ */
+function dash_delta(?float $actuel, ?float $precedent): ?array {
+    if ($precedent === null || $actuel === null) return null;
+    if ($precedent == 0.0) return null;
+    $pct = (($actuel - $precedent) / abs($precedent)) * 100;
+    $sens = $pct > 0.05 ? 'up' : ($pct < -0.05 ? 'dn' : 'flat');
+    return [
+        'classe' => 'dv2-d-' . $sens,
+        // La flèche double la couleur : l'information ne repose jamais sur
+        // la teinte seule.
+        'fleche' => $sens === 'up' ? '↑' : ($sens === 'dn' ? '↓' : '='),
+        'texte'  => ($pct > 0 ? '+' : '') . number_format($pct, 1, ',', ' ') . ' %',
+    ];
+}
+
+/** Une carte d'indicateur de la rangée de tête. */
+function dash_v2_kpi(array $k): void {
+    $ic = $k['icone'] ?? 'ph-chart-line';
+    $tn = $k['ton']   ?? 'b';
+    $tons = [
+        'b' => ['var(--d-blue-l)',  'var(--d-blue)'],
+        'g' => ['var(--d-green-l)', 'var(--d-green)'],
+        'o' => ['var(--d-amber-l)', 'var(--d-amber)'],
+        'r' => ['var(--d-red-l)',   'var(--d-red)'],
+    ];
+    [$bg, $fg] = $tons[$tn] ?? $tons['b'];
+
+    echo '<div class="dv2-k">';
+    echo   '<div class="dv2-k-hd">';
+    echo     '<span class="dv2-k-l">' . h($k['libelle']) . '</span>';
+    echo     '<span class="dv2-k-i" style="background:' . $bg . ';color:' . $fg . '">'
+           .   '<i class="ph-duotone ' . h($ic) . '"></i></span>';
+    echo   '</div>';
+    echo   '<div class="dv2-k-v">' . h($k['valeur']) . '</div>';
+    echo   '<div class="dv2-k-ft">';
+    if (!empty($k['delta'])) {
+        $d = $k['delta'];
+        echo '<span class="dv2-d ' . $d['classe'] . '">' . $d['fleche'] . ' ' . h($d['texte']) . '</span>';
+    }
+    if (!empty($k['note'])) {
+        echo '<span class="dv2-k-vs">' . h($k['note']) . '</span>';
+    }
+    echo   '</div>';
+    echo '</div>';
+}
+
+/**
+ * Les quatre indicateurs de tête, choisis selon le profil.
+ *
+ * La maquette met quatre cartes en haut de page ; encore faut-il qu'elles
+ * portent ce qui compte pour qui regarde. Le coordinateur ouvre sur sa
+ * production du jour, le gestionnaire de bobines sur sa file d'attente,
+ * l'informatique sur l'état du parc.
+ *
+ * La comparaison est celle de la veille pour tout ce qui se compte par jour.
+ * Les stocks n'ont pas d'historique quotidien en base : ils portent une ligne
+ * de contexte au lieu d'une variation inventée.
+ */
+function dash_v2_kpis(array $portee): array {
+    $today = date('Y-m-d');
+    $hier  = date('Y-m-d', strtotime('-1 day'));
+    [$ws, $as] = dash_filtre_site($portee, 'site_id');
+
+    // Un seul aller-retour par métrique journalière, les deux jours à la fois.
+    $jour = function (string $colonne) use ($ws, $as, $today, $hier): array {
+        $sql = "SELECT date_point, COALESCE(SUM($colonne),0) AS v
+                FROM op_points_journaliers
+                WHERE date_point IN (?, ?) $ws
+                GROUP BY date_point";
+        $rows = db_fetch_all($sql, array_merge([$today, $hier], $as));
+        $m = [];
+        foreach ($rows as $r) $m[(string)$r['date_point']] = (float)$r['v'];
+        return [$m[$today] ?? 0.0, $m[$hier] ?? null];
+    };
+
+    $profil = dash_profil();
+    $k = [];
+
+    if (can('operations', 'can_read')
+        && in_array($profil, ['coordinateur','superviseur_op','gestionnaire_op','general'], true)) {
+        [$eng, $engP] = $jour('total_engins');
+        [$pla, $plaP] = $jour('total_plaques');
+        $k[] = ['libelle'=>'Engins traités','valeur'=>fmt_number($eng),'icone'=>'ph-truck','ton'=>'b',
+                'delta'=>dash_delta($eng,$engP),'note'=>'vs. '.fmt_number($engP ?? 0).' hier'];
+        $k[] = ['libelle'=>'Plaques posées','valeur'=>fmt_number($pla),'icone'=>'ph-rectangle','ton'=>'g',
+                'delta'=>dash_delta($pla,$plaP),'note'=>'vs. '.fmt_number($plaP ?? 0).' hier'];
+    }
+
+    if (can('bobines', 'can_read')) {
+        [$wb, $ab] = dash_filtre_site($portee, 'site_id');
+        $bob  = (int)db_fetch_value("SELECT COUNT(*) FROM op_bobines WHERE statut IN ('en_cours','en_stock') $wb", $ab);
+        $crit = (int)db_fetch_value("SELECT COUNT(*) FROM op_bobines WHERE statut='en_cours' AND films_restants < 50 $wb", $ab);
+        $k[] = ['libelle'=>'Bobines actives','valeur'=>fmt_number($bob),'icone'=>'ph-disc',
+                'ton'=>$crit > 0 ? 'o' : 'b',
+                'note'=>$crit > 0 ? $crit.' sous le seuil critique' : 'aucune sous le seuil'];
+    }
+
+    if ($profil === 'gsb' && can('commandes_bobines', 'can_read')) {
+        $cmd = (int)db_fetch_value("SELECT COUNT(*) FROM commandes_bobines WHERE statut IN ('en_attente','valide') $ws", $as);
+        array_unshift($k, ['libelle'=>'Commandes à servir','valeur'=>fmt_number($cmd),
+            'icone'=>'ph-clipboard-text','ton'=>$cmd > 0 ? 'o' : 'g',
+            'note'=>$cmd > 0 ? 'en file d\'attente' : 'file vide']);
+    }
+
+    if ($profil === 'informatique' && can('equipements', 'can_read')) {
+        [$we, $ae] = dash_filtre_site($portee, 'site_id');
+        [$wc, $ac] = dash_filtre_categorie($portee, 'categorie');
+        $arg = array_merge($ae, $ac);
+        $tot = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 $we $wc", $arg);
+        $hs  = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND etat='hs' $we $wc", $arg);
+        $mt  = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND etat='maintenance' $we $wc", $arg);
+        $fc  = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle IS NOT NULL AND date_fin_cycle <= (CURRENT_DATE + INTERVAL '30 days') $we $wc", $arg);
+        $k = [
+            ['libelle'=>'Parc actif','valeur'=>fmt_number($tot),'icone'=>'ph-desktop','ton'=>'b',
+             'note'=>'équipements en service'],
+            ['libelle'=>'Hors service','valeur'=>fmt_number($hs),'icone'=>'ph-warning-octagon',
+             'ton'=>$hs > 0 ? 'r' : 'g','note'=>$tot > 0 ? number_format($hs / $tot * 100, 1, ',', ' ').' % du parc' : '—'],
+            ['libelle'=>'En maintenance','valeur'=>fmt_number($mt),'icone'=>'ph-wrench',
+             'ton'=>$mt > 0 ? 'o' : 'g','note'=>$mt > 0 ? 'immobilisés' : 'aucun immobilisé'],
+            ['libelle'=>'Fin de cycle ≤ 30 j','valeur'=>fmt_number($fc),'icone'=>'ph-hourglass',
+             'ton'=>$fc > 0 ? 'o' : 'g','note'=>$fc > 0 ? 'à renouveler' : 'rien à renouveler'],
+        ];
+    }
+
+    if (can('validation_stock', 'can_read') || can('inventaire_bobines', 'can_read')) {
+        $corr = (int)db_fetch_value("SELECT COUNT(*) FROM corrections_bobines WHERE statut='en_attente' $ws", $as);
+        $k[] = ['libelle'=>'Corrections en attente','valeur'=>fmt_number($corr),
+            'icone'=>'ph-arrows-clockwise','ton'=>$corr > 0 ? 'o' : 'g',
+            'note'=>$corr > 0 ? 'à traiter' : 'rien à traiter'];
+    }
+
+    if (can('rivets', 'can_read') && count($k) < 4) {
+        [$wr, $ar] = dash_filtre_site($portee, 'sr.site_id');
+        $riv = (int)db_fetch_value("SELECT COALESCE(SUM(sr.quantite),0) FROM op_stock_rivets sr
+                                    JOIN sites s ON s.id=sr.site_id WHERE s.actif=1 $wr", $ar);
+        $k[] = ['libelle'=>'Rivets en stock','valeur'=>fmt_number($riv),'icone'=>'ph-nut',
+            'ton'=>$riv < 100 ? 'r' : ($riv < 500 ? 'o' : 'g'),
+            'note'=>$riv < 500 ? 'sous le seuil de confort' : 'au-dessus du seuil'];
+    }
+
+    // La rangée en compte quatre : au-delà elle déborde, en deçà elle sonne
+    // creux. On tronque, et la grille en dessous porte le reste.
+    return array_slice($k, 0, 4);
 }
 
 
