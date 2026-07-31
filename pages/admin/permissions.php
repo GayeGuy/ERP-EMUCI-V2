@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                        'bobines','inventaire_bobines','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
                        'operations','rivets','pmma','point_emuci','import_emuci',
                        'interventions','rapport_journalier','affectations_it',
-                       'commandes','demandes','delegations','departements','users','audit','rapports'];
+                       'commandes','demandes','agents','delegations','departements','users','audit','rapports'];
         $actions  = ['can_create','can_read','can_update','can_delete','can_export'];
 
         db_begin();
@@ -88,7 +88,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     'bobines','inventaire_bobines','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
                     'operations','rivets','pmma','point_emuci','import_emuci',
                     'interventions','rapport_journalier','affectations_it',
-                    'commandes','demandes','delegations','departements','users','audit','rapports'];
+                    'commandes','demandes','agents','delegations','departements','users','audit','rapports'];
         foreach ($modules as $m) {
             db_query("INSERT INTO permissions (role_id,module,can_read) VALUES (?,?,0)", [$id, $m]);
         }
@@ -131,6 +131,7 @@ $modules = [
     // ── Administration
     'commandes'          => ['🏪', 'Commandes'],
     'demandes'           => ['📝', 'Demandes internes'],
+    'agents'             => ['👥', 'Annuaire agents'],
     'delegations'        => ['🤝', 'Délégations'],
     'departements'       => ['🏗️', 'Départements'],
     'users'              => ['👥', 'Utilisateurs'],
@@ -193,7 +194,8 @@ include __DIR__ . '/../../templates/header.php';
 .perm-pane.active{display:block}
 
 .perm-table{width:100%;border-collapse:separate;border-spacing:0}
-.perm-table th{padding:10px 14px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:left;background:var(--lighter);border-bottom:1px solid var(--border)}
+.perm-table thead{position:sticky;top:0;z-index:5}
+.perm-table th{padding:10px 14px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:left;background:var(--lighter,#f0f4f8);border-bottom:1px solid var(--border)}
 .perm-table th.center{text-align:center}
 .perm-table td{padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
 .perm-table tr:last-child td{border-bottom:none}
@@ -433,7 +435,7 @@ function allOff(roleId){
     'bobines','inventaire_bobines','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
     'operations','rivets','pmma','point_emuci','import_emuci',
     'interventions','rapport_journalier','affectations_it',
-    'commandes','demandes','delegations','departements','users','audit','rapports'];
+    'commandes','demandes','agents','delegations','departements','users','audit','rapports'];
   const actions=['can_read','can_create','can_update','can_delete','can_export'];
   modules.forEach(m=>actions.forEach(a=>{
     const b=document.getElementById(`perm_${roleId}_${m}_${a}`);
@@ -446,7 +448,7 @@ function savePerms(roleId){
     'bobines','inventaire_bobines','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
     'operations','rivets','pmma','point_emuci','import_emuci',
     'interventions','rapport_journalier','affectations_it',
-    'commandes','demandes','delegations','departements','users','audit','rapports'];
+    'commandes','demandes','agents','delegations','departements','users','audit','rapports'];
   const actions=['can_read','can_create','can_update','can_delete','can_export'];
   const fd=new FormData();
   fd.append('action','save_permissions');
