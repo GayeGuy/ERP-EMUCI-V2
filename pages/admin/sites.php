@@ -139,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             db_query("UPDATE emuci_sites_inconnus SET statut='lie',site_id_lie=?,traite_par=?,traite_at=NOW() WHERE nom_emuci=?", [$site_id,$user['id'],$nom_emuci]);
             db_query("UPDATE import_optoplate SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$site_id,$nom_emuci]);
             db_query("UPDATE import_optotrace  SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$site_id,$nom_emuci]);
-            db_query("UPDATE op_bobines b JOIN import_optotrace ot ON ot.keyname=b.numero AND ot.site_nom_emuci=? SET b.site_id=? WHERE b.site_id IS NULL", [$nom_emuci,$site_id]);
+            db_query("UPDATE op_bobines SET site_id=? FROM import_optotrace ot WHERE ot.keyname=op_bobines.numero AND ot.site_nom_emuci=? AND op_bobines.site_id IS NULL", [$site_id,$nom_emuci]);
             $nom = db_fetch_value("SELECT nom FROM sites WHERE id=?",[$site_id]);
             audit_log($user['id'],'UPDATE','sites',$site_id,"Mapping EMUCI '$nom_emuci' → '$nom'");
             json_response(true,"Site lié. Tous les imports mis à jour.");
@@ -157,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             db_query("UPDATE emuci_sites_inconnus SET statut='cree',site_id_lie=?,traite_par=?,traite_at=NOW() WHERE nom_emuci=?", [$new_id,$user['id'],$nom_emuci]);
             db_query("UPDATE import_optoplate SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$new_id,$nom_emuci]);
             db_query("UPDATE import_optotrace  SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$new_id,$nom_emuci]);
-            db_query("UPDATE op_bobines b JOIN import_optotrace ot ON ot.keyname=b.numero AND ot.site_nom_emuci=? SET b.site_id=? WHERE b.site_id IS NULL", [$nom_emuci,$new_id]);
+            db_query("UPDATE op_bobines SET site_id=? FROM import_optotrace ot WHERE ot.keyname=op_bobines.numero AND ot.site_nom_emuci=? AND op_bobines.site_id IS NULL", [$new_id,$nom_emuci]);
             audit_log($user['id'],'CREATE','sites',$new_id,"Création depuis EMUCI '$nom_emuci'");
             json_response(true,"Site '$nom_nouveau' créé.");
         }
