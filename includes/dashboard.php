@@ -1826,12 +1826,12 @@ function dash_registre(): array {
             for ($i = 29; $i >= 0; $i--) {
                 $j = date('Y-m-d', strtotime("-$i day"));
                 $serie[] = $par[$j] ?? 0;
-                $lbl[]   = date('j/n', strtotime($j));
+                $lbl[]   = date('j', strtotime($j));
             }
 
             $mix = db_fetch_one(
-                "SELECT COALESCE(SUM(nb_vp),0) AS vp, COALESCE(SUM(nb_camion),0)+COALESCE(SUM(nb_semi),0) AS pl,
-                        COALESCE(SUM(nb_moto),0) AS mo
+                "SELECT COALESCE(SUM(nb_vp),0) AS vp, COALESCE(SUM(nb_camion),0) AS cam,
+                        COALESCE(SUM(nb_semi),0) AS semi, COALESCE(SUM(nb_moto),0) AS mo
                  FROM op_points_journaliers WHERE date_point >= ? $ws", array_merge([$debut], $as));
 
             return ['mois'=>$mois,'prec'=>$moisPrec,'serie'=>$serie,'lbl'=>$lbl,'mix'=>$mix ?: []];
@@ -1854,12 +1854,13 @@ function dash_registre(): array {
             echo   '</div>';
             echo '</div>';
 
-            $m = $d['mix']; $tot = (float)(($m['vp'] ?? 0) + ($m['pl'] ?? 0) + ($m['mo'] ?? 0));
+            $m = $d['mix']; $tot = (float)(($m['vp'] ?? 0) + ($m['cam'] ?? 0) + ($m['semi'] ?? 0) + ($m['mo'] ?? 0));
             if ($tot > 0) {
                 $parts = [
-                    ['Véhicules légers', (float)$m['vp'], '#2563EB'],
-                    ['Camions & semis',  (float)$m['pl'], '#0F8A47'],
-                    ['Deux-roues',       (float)$m['mo'], '#B45309'],
+                    ['Véhicules particuliers', (float)$m['vp'],   '#2563EB'],
+                    ['Camions',                (float)$m['cam'],  '#0F8A47'],
+                    ['Semi-remorques',         (float)$m['semi'], '#7C3AED'],
+                    ['Motos',                  (float)$m['mo'],   '#B45309'],
                 ];
                 echo '<div class="dv2-split">';
                 foreach ($parts as [$lb, $v, $col]) {
