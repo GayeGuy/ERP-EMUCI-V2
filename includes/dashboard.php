@@ -1289,57 +1289,84 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucun indicateur disponible.'); return; }
-            $kpis = [];
+
+            // Deux familles plutôt qu'une suite. À gauche ce qui a été produit
+            // aujourd'hui et ce qu'il reste à valider dessus ; à droite ce avec
+            // quoi on produit. Les corrections en attente vont à la production :
+            // c'est une demande portant sur un point du jour, au même titre
+            // qu'une validation en attente, pas un état du stock.
+            //
+            // Chaque indicateur déclare sa famille au lieu d'être posé dans une
+            // liste unique. Le bloc suit donc les permissions du profil sans
+            // avoir à les connaître : une famille que personne n'a le droit de
+            // voir se vide, et disparaît d'elle-même.
+            $prod = [];
+            $stock = [];
+            // #1B75BC sur #dbeafe ne donne que 3,99:1 : sous le seuil AA de 4,5
+            // qui s'applique au libellé de 11 px. #15568B, le bleu de lien déjà
+            // employé par la feuille (.dash-lien), monte à 6,29:1 sans ajouter
+            // une teinte de plus à la palette.
             if (isset($d['plaques']))
-                $kpis[] = ['val' => fmt_number($d['plaques'], 0), 'lbl' => 'Plaques posées',    'col' => '#1B75BC', 'bg' => '#dbeafe'];
+                $prod[] = ['val' => fmt_number($d['plaques'], 0), 'lbl' => 'Plaques posées',    'col' => '#15568B', 'bg' => '#dbeafe'];
             if (isset($d['engins']))
-                $kpis[] = ['val' => fmt_number($d['engins'], 0),  'lbl' => 'Engins traités',    'col' => '#06033A', 'bg' => '#f0f4ff'];
+                $prod[] = ['val' => fmt_number($d['engins'], 0),  'lbl' => 'Engins traités',    'col' => '#06033A', 'bg' => '#f0f4ff'];
             if (isset($d['rivets_j']))
-                $kpis[] = ['val' => fmt_number($d['rivets_j'], 0),'lbl' => 'Rivets utilisés',   'col' => '#6d28d9', 'bg' => '#f3e8ff'];
+                $prod[] = ['val' => fmt_number($d['rivets_j'], 0),'lbl' => 'Rivets utilisés',   'col' => '#6d28d9', 'bg' => '#f3e8ff'];
             if (isset($d['in_use']))
-                $kpis[] = ['val' => fmt_number($d['in_use'], 0),  'lbl' => 'In Use EMUCI',      'col' => '#92400e', 'bg' => '#fef3c7'];
+                $prod[] = ['val' => fmt_number($d['in_use'], 0),  'lbl' => 'In Use EMUCI',      'col' => '#92400e', 'bg' => '#fef3c7'];
             if (isset($d['ecart'])) {
                 $e = $d['ecart'];
-                $kpis[] = ['val' => ($e > 0 ? '+' : '') . $e,    'lbl' => 'Écart EMUCI / PJ',  'col' => ($e === 0 ? '#166534' : '#991b1b'), 'bg' => ($e === 0 ? '#dcfce7' : '#fee2e2')];
+                $prod[] = ['val' => ($e > 0 ? '+' : '') . $e,    'lbl' => 'Écart EMUCI / PJ',  'col' => ($e === 0 ? '#166534' : '#991b1b'), 'bg' => ($e === 0 ? '#dcfce7' : '#fee2e2')];
             }
             if (isset($d['pts_valides'])) {
                 $tot = $d['pts_total'] ?? $d['pts_valides'];
                 $ok  = $tot > 0 && $d['pts_valides'] >= $tot;
-                $kpis[] = ['val' => $d['pts_valides'] . ' / ' . $tot, 'lbl' => 'Points validés', 'col' => ($ok ? '#166534' : '#92400e'), 'bg' => ($ok ? '#dcfce7' : '#fef3c7')];
+                $prod[] = ['val' => $d['pts_valides'] . ' / ' . $tot, 'lbl' => 'Points validés', 'col' => ($ok ? '#166534' : '#92400e'), 'bg' => ($ok ? '#dcfce7' : '#fef3c7')];
             }
             if (isset($d['pts_attente'])) {
                 $pa = $d['pts_attente'];
-                $kpis[] = ['val' => fmt_number($pa, 0), 'lbl' => 'En attente valid.', 'col' => ($pa > 0 ? '#92400e' : '#166534'), 'bg' => ($pa > 0 ? '#fef3c7' : '#dcfce7')];
+                $prod[] = ['val' => fmt_number($pa, 0), 'lbl' => 'En attente valid.', 'col' => ($pa > 0 ? '#92400e' : '#166534'), 'bg' => ($pa > 0 ? '#fef3c7' : '#dcfce7')];
             }
-            if (isset($d['bobines']))
-                $kpis[] = ['val' => fmt_number($d['bobines'], 0),      'lbl' => 'Bobines actives',  'col' => '#0369a1', 'bg' => '#e0f2fe'];
-            if (isset($d['films']))
-                $kpis[] = ['val' => fmt_number($d['films'], 0),        'lbl' => 'Films restants',   'col' => '#0369a1', 'bg' => '#f0f9ff'];
-            if (isset($d['bob_critiques']) && $d['bob_critiques'] > 0)
-                $kpis[] = ['val' => fmt_number($d['bob_critiques'], 0),'lbl' => 'Bobines critiques','col' => '#991b1b', 'bg' => '#fee2e2'];
             if (isset($d['corrections'])) {
                 $c = $d['corrections'];
-                $kpis[] = ['val' => fmt_number($c, 0), 'lbl' => 'Corrections att.', 'col' => ($c > 0 ? '#92400e' : '#166534'), 'bg' => ($c > 0 ? '#fef3c7' : '#dcfce7')];
+                $prod[] = ['val' => fmt_number($c, 0), 'lbl' => 'Corrections att.', 'col' => ($c > 0 ? '#92400e' : '#166534'), 'bg' => ($c > 0 ? '#fef3c7' : '#dcfce7')];
+            }
+            if (isset($d['bobines']))
+                $stock[] = ['val' => fmt_number($d['bobines'], 0),      'lbl' => 'Bobines actives',  'col' => '#0369a1', 'bg' => '#e0f2fe'];
+            if (isset($d['films']))
+                $stock[] = ['val' => fmt_number($d['films'], 0),        'lbl' => 'Films restants',   'col' => '#0369a1', 'bg' => '#f0f9ff'];
+            if (isset($d['bob_critiques']) && $d['bob_critiques'] > 0)
+                $stock[] = ['val' => fmt_number($d['bob_critiques'], 0),'lbl' => 'Bobines critiques','col' => '#991b1b', 'bg' => '#fee2e2'];
+            if (isset($d['rivets_stock'])) {
+                $sr = $d['rivets_stock'];
+                $stock[] = ['val' => fmt_number($sr, 0), 'lbl' => 'Stock rivets', 'col' => ($sr < 100 ? '#991b1b' : ($sr < 500 ? '#92400e' : '#166534')), 'bg' => ($sr < 100 ? '#fee2e2' : ($sr < 500 ? '#fef3c7' : '#dcfce7'))];
             }
             if (isset($d['commandes'])) {
                 $ca = $d['commandes'];
-                $kpis[] = ['val' => fmt_number($ca, 0), 'lbl' => 'Commandes à servir', 'col' => ($ca > 0 ? '#1B75BC' : '#166534'), 'bg' => ($ca > 0 ? '#dbeafe' : '#dcfce7')];
-            }
-            if (isset($d['rivets_stock'])) {
-                $sr = $d['rivets_stock'];
-                $kpis[] = ['val' => fmt_number($sr, 0), 'lbl' => 'Stock rivets', 'col' => ($sr < 100 ? '#991b1b' : ($sr < 500 ? '#92400e' : '#166534')), 'bg' => ($sr < 100 ? '#fee2e2' : ($sr < 500 ? '#fef3c7' : '#dcfce7'))];
+                $stock[] = ['val' => fmt_number($ca, 0), 'lbl' => 'Commandes à servir', 'col' => ($ca > 0 ? '#15568B' : '#166534'), 'bg' => ($ca > 0 ? '#dbeafe' : '#dcfce7')];
             }
             if (isset($d['equip']))
-                $kpis[] = ['val' => fmt_number($d['equip'], 0),     'lbl' => 'Équipements actifs', 'col' => '#374151', 'bg' => '#f3f4f6'];
+                $stock[] = ['val' => fmt_number($d['equip'], 0),     'lbl' => 'Équipements actifs', 'col' => '#374151', 'bg' => '#f3f4f6'];
             if (isset($d['equip_fin']) && $d['equip_fin'] > 0)
-                $kpis[] = ['val' => fmt_number($d['equip_fin'], 0), 'lbl' => 'Fin cycle ≤ 30j',    'col' => '#991b1b', 'bg' => '#fee2e2'];
-            if (!$kpis) { dash_vide('Aucun indicateur disponible pour ce profil.'); return; }
-            echo '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px">';
-            foreach ($kpis as $k) {
-                echo '<div style="background:' . $k['bg'] . ';border-radius:12px;padding:14px 16px;min-width:0">'
-                   . '<div style="font-size:26px;font-weight:900;color:' . $k['col'] . ';line-height:1;font-variant-numeric:tabular-nums">' . h($k['val']) . '</div>'
-                   . '<div style="font-size:11px;font-weight:700;color:' . $k['col'] . ';opacity:.75;text-transform:uppercase;letter-spacing:.4px;margin-top:6px;line-height:1.3">' . h($k['lbl']) . '</div>'
-                   . '</div>';
+                $stock[] = ['val' => fmt_number($d['equip_fin'], 0), 'lbl' => 'Fin cycle ≤ 30j',    'col' => '#991b1b', 'bg' => '#fee2e2'];
+
+            $familles = [];
+            if ($prod)  $familles[] = ['Production du jour', $prod];
+            if ($stock) $familles[] = ['Stock & moyens',     $stock];
+            if (!$familles) { dash_vide('Aucun indicateur disponible pour ce profil.'); return; }
+
+            echo '<div class="syn">';
+            foreach ($familles as [$titre, $liste]) {
+                echo '<div>';
+                echo '<div class="syn-hd"><span class="syn-t">' . h($titre) . '</span></div>';
+                echo '<div class="syn-grid">';
+                foreach ($liste as $k) {
+                    echo '<div class="syn-k" style="background:' . $k['bg'] . '">'
+                       . '<div class="syn-v" style="color:' . $k['col'] . '">' . h($k['val']) . '</div>'
+                       . '<div class="syn-l" style="color:' . $k['col'] . '">' . h($k['lbl']) . '</div>'
+                       . '</div>';
+                }
+                echo '</div></div>';
             }
             echo '</div>';
         },
