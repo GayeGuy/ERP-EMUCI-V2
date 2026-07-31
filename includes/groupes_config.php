@@ -183,6 +183,9 @@ function _groupes_def(): array {
                 ['label'=>'Circuits avancés','icon'=>'ph-buildings',
                  'url'=>'pages/demandes_roles.php','active_keys'=>['demandes_roles'],
                  'roles_include'=>['admin','superadmin']],
+                ['label'=>'Annuaire agents', 'icon'=>'ph-address-book',
+                 'url'=>'pages/agents.php','active_keys'=>['agents'],
+                 'perm'=>['agents','can_read']],
             ],
         ],
 

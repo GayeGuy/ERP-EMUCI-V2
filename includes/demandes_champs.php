@@ -35,7 +35,7 @@ function di_champs_config(): array {
             ['key'=>'date_reprise',  'label'=>'Date de reprise du service','type'=>'date',   'required'=>true],
         ],
         'creation_acces' => [
-            ['key'=>'agent_nom',      'label'=>"Nom & Prénoms de l'agent", 'type'=>'text',  'required'=>true],
+            ['key'=>'agent_nom',      'label'=>"Nom & Prénoms de l'agent", 'type'=>'agent', 'required'=>true],
             ['key'=>'agent_email',    'label'=>"Email de l'agent",         'type'=>'email'],
             ['key'=>'agent_fonction', 'label'=>"Fonction de l'agent",      'type'=>'text',  'required'=>true],
             ['key'=>'periode_acces',  'label'=>"Période d'accès",          'type'=>'daterange', 'span'=>true],
@@ -196,12 +196,21 @@ function di_render_field(array $f, $value = ''): string {
         }
         echo '</div>';
     } elseif ($type === 'agent') {
-        // Liste déroulante recherchable des agents (users actifs) ; alimente email + fonction (rôle ERP)
+        // Autocomplete sur la table agents (importée via Excel) — alimente email, téléphone,
+        // fonction, matricule, departement, direction, site via data-* + JS dans demandes_new.php
         echo "<input type=\"text\" id=\"f_$key\" name=\"champs[$key]\" value=\"$v\" list=\"dl_$key\" autocomplete=\"off\" data-agentfill=\"1\"$reqA>";
         echo "<datalist id=\"dl_$key\">";
-        foreach (db_fetch_all("SELECT u.prenom, u.nom, u.email, r.nom AS fonction FROM users u JOIN roles r ON r.id=u.role_id WHERE u.actif=1 ORDER BY u.nom, u.prenom") as $u) {
-            $full = h(trim(($u['prenom'] ?? '').' '.($u['nom'] ?? '')));
-            echo '<option value="'.$full.'" data-email="'.h((string)($u['email'] ?? '')).'" data-fonction="'.h((string)($u['fonction'] ?? '')).'"></option>';
+        foreach (db_fetch_all("SELECT id, nom, prenom, email, telephone, fonction, departement, direction, site, matricule FROM agents WHERE statut='actif' ORDER BY nom, prenom") as $a) {
+            $full = h(trim(($a['prenom'] ?? '') . ' ' . ($a['nom'] ?? '')));
+            echo '<option value="' . $full . '"'
+               . ' data-email="'       . h((string)($a['email']       ?? '')) . '"'
+               . ' data-telephone="'   . h((string)($a['telephone']   ?? '')) . '"'
+               . ' data-fonction="'    . h((string)($a['fonction']    ?? '')) . '"'
+               . ' data-matricule="'   . h((string)($a['matricule']   ?? '')) . '"'
+               . ' data-departement="' . h((string)($a['departement'] ?? '')) . '"'
+               . ' data-direction="'   . h((string)($a['direction']   ?? '')) . '"'
+               . ' data-site="'        . h((string)($a['site']        ?? '')) . '"'
+               . '></option>';
         }
         echo "</datalist>";
     } elseif ($type === 'site') {

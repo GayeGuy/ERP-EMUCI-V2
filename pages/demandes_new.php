@@ -199,22 +199,57 @@ function diSubmit(action){
     .catch(()=>{ err.classList.add('err'); err.textContent='Erreur réseau.'; });
 }
 
-// Auto-remplissage agent : un champ [data-agentfill] alimente #f_agent_email et #f_agent_fonction
+// Auto-remplissage agent : quand le demandeur sélectionne un agent dans la datalist,
+// tous les champs correspondants présents dans le formulaire se remplissent automatiquement.
 (function(){
+  // Correspondance data-attribute → id du champ cible dans le formulaire
+  var AGENT_FIELDS = {
+    'email':       'f_agent_email',
+    'telephone':   'f_agent_telephone',
+    'fonction':    'f_agent_fonction',
+    'matricule':   'f_agent_matricule',
+    'departement': 'f_departement',
+    'direction':   'f_direction',
+    'site':        'f_site'
+  };
+
   document.querySelectorAll('input[data-agentfill]').forEach(function(inp){
     var dl = document.getElementById(inp.getAttribute('list'));
     if(!dl) return;
-    function fill(){
-      var val = inp.value.trim(), opts = dl.options, match = null;
-      for(var i=0; i<opts.length; i++){ if(opts[i].value === val){ match = opts[i]; break; } }
-      if(!match) return;
-      var em = document.getElementById('f_agent_email');
-      var fo = document.getElementById('f_agent_fonction');
-      if(em && match.dataset.email)    em.value = match.dataset.email;
-      if(fo && match.dataset.fonction) fo.value = match.dataset.fonction;
+
+    function findMatch(val){
+      var opts = dl.options;
+      for(var i = 0; i < opts.length; i++){
+        if(opts[i].value === val) return opts[i];
+      }
+      return null;
     }
-    inp.addEventListener('input', fill);
-    inp.addEventListener('change', fill);
+
+    function fillFromMatch(match){
+      Object.keys(AGENT_FIELDS).forEach(function(attr){
+        var el = document.getElementById(AGENT_FIELDS[attr]);
+        if(!el) return;
+        var val = match ? (match.dataset[attr] || '') : '';
+        el.value = val;
+        if(val){
+          el.classList.add('di-auto');
+          el.readOnly = true;
+        } else {
+          el.classList.remove('di-auto');
+          el.readOnly = false;
+        }
+      });
+    }
+
+    inp.addEventListener('change', function(){
+      var match = findMatch(inp.value.trim());
+      fillFromMatch(match);
+    });
+
+    // Réinitialiser si l'utilisateur efface le champ
+    inp.addEventListener('input', function(){
+      if(!inp.value.trim()) fillFromMatch(null);
+    });
   });
 })();
 </script>
