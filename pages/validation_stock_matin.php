@@ -181,6 +181,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $site_id = (int)($_POST['site_id'] ?? 0);
         $date    = trim($_POST['date'] ?? date('Y-m-d'));
         $snap    = _calculer_ecarts_site($site_id, $date);
+        if (!$snap['dernier_import']) {
+            json_response(false,
+                'Validation impossible : aucun import OPTOTRACE trouvé pour le ' . $date . '. '
+                . 'Effectuez l\'import EMUCI avant de valider le stock.');
+        }
         if ($snap['nb_ecarts'] > 0) {
             json_response(false,
                 $snap['nb_ecarts'] . ' bobine(s) ont un écart DigiStock / EMUCI. '
