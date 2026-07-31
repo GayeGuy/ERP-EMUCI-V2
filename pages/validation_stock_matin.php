@@ -1268,8 +1268,9 @@ async function verifierSite(siteId, siteNom) {
         <thead><tr style="background:#06033A">
           <th style="padding:9px 12px;color:white;font-size:11px;text-align:left">N° Bobine</th>
           <th style="padding:9px 12px;color:white;font-size:11px;text-align:left">Type</th>
+          ${d.dernier_import?`<th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Stock EMUCI (Système)</th>`:''}
           <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Stock Physique (DigiStock)</th>
-          ${d.dernier_import?`<th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Stock EMUCI (Système)</th><th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Écart</th>`:''}
+          ${d.dernier_import?`<th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Écart</th>`:''}
           <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Statut</th>
         </tr></thead>
         <tbody>`;
@@ -1283,9 +1284,10 @@ async function verifierSite(siteId, siteNom) {
       html += `<tr style="background:${bg}">
         <td style="padding:9px 12px;font-family:monospace;font-weight:800;color:#06033A">${b.numero}</td>
         <td style="padding:9px 12px;font-size:12px;color:var(--muted)">${b.type_code||b.format||'—'}</td>
+        ${d.dernier_import ? `
+        <td style="padding:9px 12px;text-align:center;font-weight:600;color:#1B75BC">${b.stock_systeme??'—'}</td>` : ''}
         <td style="padding:9px 12px;text-align:center;font-weight:700;color:${b.films_restants<=0?'#DC2626':b.films_restants<50?'#D97706':'#065F46'}">${b.films_restants??'—'}</td>
         ${d.dernier_import ? `
-        <td style="padding:9px 12px;text-align:center;font-weight:600;color:#1B75BC">${b.stock_systeme??'—'}</td>
         <td style="padding:9px 12px;text-align:center;font-weight:800;color:${b.has_ecart?(b.ecart>0?'#DC2626':'#D97706'):'#065F46'}">
           ${b.has_ecart ? (b.ecart>0?'+':'')+b.ecart : '✓'}
         </td>` : ''}
@@ -1513,8 +1515,9 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
           <tr style="background:#06033A">
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:left">N° Bobine</th>
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:left">Type</th>
+            ${hasImport ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Stock EMUCI (Système)</th>' : ''}
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Stock Physique (DigiStock)</th>
-            ${hasImport ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Stock EMUCI (Système)</th><th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Écart</th>' : ''}
+            ${hasImport ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Écart</th>' : ''}
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Statut</th>
             ${<?= $can_valider ? 'true' : 'false' ?> ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Action</th>' : ''}
           </tr>
@@ -1529,9 +1532,10 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
       html += `<tr style="background:${rowBg}">
         <td style="padding:9px 12px;font-family:monospace;font-weight:800;color:#06033A">${b.numero}</td>
         <td style="padding:9px 12px;font-size:11.5px;color:var(--muted)">${b.type_code||b.format||'—'}</td>
+        ${hasImport ? `
+        <td style="padding:9px 12px;text-align:center;font-weight:600;color:#1B75BC">${b.stock_systeme}</td>` : ''}
         <td style="padding:9px 12px;text-align:center;font-weight:700;color:${b.films_restants<=0?'#DC2626':b.films_restants<50?'#D97706':'#065F46'};font-size:14px">${b.films_restants}</td>
         ${hasImport ? `
-        <td style="padding:9px 12px;text-align:center;font-weight:600;color:#1B75BC">${b.stock_systeme}</td>
         <td style="padding:9px 12px;text-align:center;font-weight:800;color:${hasEcart?ecartColor:'var(--success)'}">
           ${hasEcart ? (b.ecart>0?'+':'')+b.ecart : '✓'}
         </td>` : ''}
