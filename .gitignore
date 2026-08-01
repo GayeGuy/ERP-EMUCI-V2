@@ -35,3 +35,7 @@ Thumbs.db
 
 # Config locale Claude Code (ne pas versionner)
 .claude/settings.local.json
+
+# Fichiers de travail temporaires
+.mien_*.tmp
+.di_css.tmp
