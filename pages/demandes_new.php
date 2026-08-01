@@ -75,9 +75,12 @@ include __DIR__ . '/../templates/header.php';
     background:#3B4FBE;color:#fff;font-size:21px}
   .di-type-card h4{margin:6px 0 0;font-size:15px;font-weight:700}
   .di-type-card p{margin:0;font-size:12.5px;color:#475569;line-height:1.5}
-  .di-back{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#475569;text-decoration:none;
-    font-weight:600;margin:0 0 8px -10px;padding:0 10px;min-height:44px;border-radius:8px;transition:background-color .15s,color .15s}
-  .di-back:hover{color:#3B4FBE;background:#eef2f9}
+  .di-back{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:#31405e;text-decoration:none;
+    font-weight:700;margin:0 0 16px;padding:0 16px;min-height:38px;border-radius:9px;
+    background:#fff;border:1px solid #b9c3d6;box-shadow:0 1px 2px rgba(20,30,80,.04);
+    transition:background-color .15s,border-color .15s,color .15s}
+  .di-back i{font-size:15px}
+  .di-back:hover{color:#3B4FBE;background:#eef2f9;border-color:#7d8aa5}
   .di-back:focus-visible{outline:2px solid #3B4FBE;outline-offset:2px}
   .di-head{display:flex;align-items:flex-start;gap:14px;margin-bottom:18px}
   .di-head .ic{width:48px;height:48px;flex-shrink:0;border-radius:14px;display:flex;align-items:center;justify-content:center;
