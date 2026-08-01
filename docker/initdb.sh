@@ -41,9 +41,13 @@ migration_departements.sql
 migration_di_roles_dept.sql
 migration_raf_daf.sql
 migration_roles_validation_erp.sql
+agents_pg.sql
+add_bus_post_platform.sql
 migration_permissions_point_emuci.sql
 migration_permissions_27modules.sql
+migration_fix_action_flags.sql
 migration_fix_permissions_regressions.sql
+migration_ecarts_permissions.sql
 "
 
 for f in $FICHIERS; do
@@ -52,13 +56,19 @@ for f in $FICHIERS; do
     continue
   fi
   echo "initdb : chargement de $f"
-  # psql préfixe ses erreurs par « psql:/sql/fichier.sql:12: ERROR: … ».
-  # Un grep ancré sur '^ERROR' ne les voit donc jamais : c'est ce qui a fait
-  # annoncer « 0 erreur » alors qu'il y en avait 78. On cherche « ERROR: »
-  # n'importe où dans la ligne.
+  # Deux pièges successifs sur ce comptage, d'où la forme actuelle :
+  #
+  #  1. psql préfixe ses erreurs SQL par « psql:/sql/fichier.sql:12: ERROR: ».
+  #     Un grep ancré sur '^ERROR' ne les voit jamais — c'est ce qui a fait
+  #     annoncer « 0 erreur » alors qu'il y en avait 78.
+  #  2. Les erreurs de psql lui-même, dont « fichier introuvable », s'écrivent
+  #     « psql: error: » en minuscules. Un grep sur « ERROR: » les manque, et
+  #     un fichier jamais chargé passe alors pour un succès.
+  #
+  # On cherche donc « error » n'importe où, sans tenir compte de la casse.
   $PSQL -f "/sql/$f" > /tmp/sortie 2>&1 || true
   cat /tmp/sortie >> "$JOURNAL"
-  echo "initdb :   $(grep -c 'ERROR:' /tmp/sortie || true) erreur(s)"
+  echo "initdb :   $(grep -ci 'error' /tmp/sortie || true) erreur(s)"
 done
 
 echo "───────────────────────────────────────────────"
@@ -67,9 +77,9 @@ echo "  tables créées      : $($PSQL -tAc "SELECT count(*) FROM information_sc
 echo "  utilisateurs       : $($PSQL -tAc "SELECT count(*) FROM users" 2>/dev/null || echo 'table absente')"
 echo "  rôles              : $($PSQL -tAc "SELECT count(*) FROM roles" 2>/dev/null || echo 'table absente')"
 echo "  sites              : $($PSQL -tAc "SELECT count(*) FROM sites" 2>/dev/null || echo 'table absente')"
-echo "  erreurs au total   : $(grep -c 'ERROR:' "$JOURNAL" || true)"
+echo "  erreurs au total   : $(grep -ci 'error' "$JOURNAL" || true)"
 echo "───────────────────────────────────────────────"
 echo "initdb : détail des erreurs distinctes"
-grep 'ERROR:' "$JOURNAL" | sed 's/^psql:[^:]*:[0-9]*: //; s/LINE [0-9]*.*//' \
+grep -i 'error' "$JOURNAL" | sed 's/^psql:[^:]*:[0-9]*: //; s/LINE [0-9]*.*//' \
   | sort | uniq -c | sort -rn | head -25
 echo "───────────────────────────────────────────────"

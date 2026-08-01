@@ -103,9 +103,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 );
             }
 
-            // ── Dernier import OptoPlate pour ce site
+            // ── Dernier import OPTOTRACE pour ce site+date
             $dernier_import = db_fetch_value(
-                "SELECT MAX(date_import) FROM import_optoplate WHERE site_id=?", [$site_id]
+                "SELECT MAX(date_import) FROM import_optotrace WHERE site_id=? AND date_import=?",
+                [$site_id, $date]
             );
 
             $ecarts        = [];
@@ -117,25 +118,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 $films_endommages= (int)($b['films_endommages'] ?? 0);
                 $films_total_pj  = $films_utilises + $films_endommages;
 
-                // Stock début de journée = stock actuel + films consommés aujourd'hui
+                // films_restants = stock physique réel (non écrasé par import EMUCI)
+                // stock_systeme  = valeur EMUCI (mise à jour par import, comparaison uniquement)
                 $stock_debut = isset($b['stock_avant'])
                     ? (int)$b['stock_avant']
-                    : (int)$b['stock_systeme'] + $films_utilises;
+                    : (int)($b['films_restants'] ?? $b['stock_systeme']);
 
                 $films_restants  = $stock_debut - $films_total_pj;
 
-                // Films selon OptoPlate
-                $films_optoplate = $dernier_import
-                    ? (int)db_fetch_value(
-                        "SELECT COUNT(*) FROM import_optoplate
-                         WHERE num_bobine=? AND statut_plaque='in_use' AND date_import=?",
-                        [$b['numero'], $dernier_import])
-                    : null;
-
-                $ecart_val = $films_optoplate !== null
-                    ? ($films_optoplate - $films_total_pj)
-                    : 0;
-                $has_ecart = $films_optoplate !== null && $ecart_val !== 0;
+                // Écart : DigiStock restant vs EMUCI restant (stock_systeme mis par l'import)
+                $stock_emuci = (int)($b['stock_systeme'] ?? 0);
+                $ecart_val   = $dernier_import ? ($films_restants - $stock_emuci) : 0;
+                $has_ecart   = $dernier_import !== null && $ecart_val !== 0;
 
                 $ligne = [
                     'bobine_id'        => $b['bobine_id'],
@@ -146,8 +140,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     'films_utilises'   => $films_utilises,
                     'films_endommages' => $films_endommages,
                     'films_restants'   => $films_restants,
-                    'films_optoplate'  => $films_optoplate,
-                    'stock_systeme'    => (int)($b['stock_systeme'] ?? 0),
+                    'stock_systeme'    => $stock_emuci,
                     'ecart'            => $ecart_val,
                     'has_ecart'        => $has_ecart,
                 ];
@@ -189,6 +182,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $site_id = (int)($_POST['site_id'] ?? 0);
         $date    = trim($_POST['date'] ?? date('Y-m-d'));
         $snap    = _calculer_ecarts_site($site_id, $date);
+        if (!$snap['dernier_import']) {
+            json_response(false,
+                'Validation impossible : aucun import OPTOTRACE trouvé pour le ' . $date . '. '
+                . 'Effectuez l\'import EMUCI avant de valider le stock.');
+        }
+        if ($snap['nb_ecarts'] > 0) {
+            json_response(false,
+                $snap['nb_ecarts'] . ' bobine(s) ont un écart DigiStock / EMUCI. '
+                . 'Traitez les écarts avant de valider.');
+        }
         $snapshot= json_encode($snap['bobines_detail'] ?: []);
         db_query(
             "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,bobines_snapshot,gsb_user_id,gsb_at)
@@ -226,15 +229,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
         db_begin();
         try {
-            // Si réajustement : corriger les stocks
+            // Si réajustement : aligner films_restants sur la valeur EMUCI (stock_systeme)
             if ($decision === 'reajuste') {
                 foreach ($ecarts as $e) {
-                    $nouveau = max(0, (int)$e['stock_systeme'] - (int)$e['ecart']);
-                    db_query("UPDATE op_bobines SET stock_systeme=?,films_restants=? WHERE id=?",
-                        [$nouveau,$nouveau,$e['bobine_id']]);
+                    $stock_av = max(0, (int)$e['films_restants']); // DigiStock avant ajust.
+                    $nouveau  = max(0, (int)$e['stock_systeme']);   // cible = valeur EMUCI
+                    $diff     = $nouveau - $stock_av;
+                    db_query("UPDATE op_bobines SET films_restants=? WHERE id=?",
+                        [$nouveau, $e['bobine_id']]);
                     db_query("INSERT INTO mouvements_bobines (bobine_id,type,quantite,stock_avant,stock_apres,motif,created_by)
                               VALUES (?,?,?,?,?,?,?)",
-                        [$e['bobine_id'],'ajustement_gsb',-$e['ecart'],$e['stock_systeme'],$nouveau,"Réajustement GSB matin $date : $commentaire",$user['id']]);
+                        [$e['bobine_id'],'ajustement_gsb',$diff,$stock_av,$nouveau,
+                         "Réajustement GSB matin $date (DigiStock $stock_av → EMUCI $nouveau) : $commentaire",
+                         $user['id']]);
                 }
             }
 
@@ -256,11 +263,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                             $site_id,
                             $user['id'],
                             $date,
-                            (int)$e['films_pj'],
-                            (int)$e['films_optoplate'],
+                            (int)$e['films_restants'],  // DigiStock restant calculé
+                            (int)$e['stock_systeme'],   // EMUCI/OPTOTRACE restant
                             (int)$e['ecart'],
                             $commentaire,
                         ]
+                    );
+                }
+            }
+
+            // ── Enregistrement dans ecarts_bobines
+            $statut_ecart = match($decision) {
+                'reajuste'       => 'resolu',
+                'autorise_ecart' => 'ignore',
+                default          => 'ouvert',
+            };
+            foreach ($ecarts as $e) {
+                if ($statut_ecart === 'ouvert') {
+                    db_query(
+                        "INSERT INTO ecarts_bobines
+                         (bobine_id, date_constat, stock_systeme, stock_physique, ecart, motif, source, statut, created_by)
+                         VALUES (?, ?, ?, ?, ?, ?, 'validation_stock', 'ouvert', ?)",
+                        [$e['bobine_id'], $date, (int)$e['stock_systeme'],
+                         (int)($e['films_restants'] ?? 0), (int)$e['ecart'], $commentaire, $user['id']]
+                    );
+                } else {
+                    $notes_res = $statut_ecart === 'resolu'
+                        ? 'Réajusté : DigiStock ' . (int)($e['films_restants'] ?? 0) . ' → EMUCI ' . (int)$e['stock_systeme']
+                        : 'Écart autorisé : ' . $commentaire;
+                    db_query(
+                        "INSERT INTO ecarts_bobines
+                         (bobine_id, date_constat, stock_systeme, stock_physique, ecart, motif, source, statut, resolu_at, resolu_par, resolution_notes, created_by)
+                         VALUES (?, ?, ?, ?, ?, ?, 'validation_stock', ?, NOW(), ?, ?, ?)",
+                        [$e['bobine_id'], $date, (int)$e['stock_systeme'],
+                         (int)($e['films_restants'] ?? 0), (int)$e['ecart'], $commentaire,
+                         $statut_ecart, $user['id'], $notes_res, $user['id']]
                     );
                 }
             }
@@ -434,26 +471,25 @@ function _calculer_ecarts_site(int $site_id, string $date): array {
         );
     }
     $dernier_import = db_fetch_value(
-        "SELECT MAX(date_import) FROM import_optoplate WHERE site_id=?", [$site_id]
+        "SELECT MAX(date_import) FROM import_optotrace WHERE site_id=? AND date_import=?",
+        [$site_id, $date]
     );
     $ecarts = []; $bobines_detail = []; $nb_ecarts = 0;
     foreach ($pj_entries as $b) {
         $films_utilises   = (int)$b['films_utilises'];
         $films_endommages = (int)($b['films_endommages'] ?? 0);
         $films_total_pj   = $films_utilises + $films_endommages;
-        $stock_debut      = isset($b['stock_avant']) ? (int)$b['stock_avant'] : (int)$b['stock_systeme'] + $films_utilises;
+        $stock_debut      = isset($b['stock_avant']) ? (int)$b['stock_avant'] : (int)($b['films_restants'] ?? $b['stock_systeme']);
         $films_restants   = $stock_debut - $films_total_pj;
-        $films_optoplate  = $dernier_import
-            ? (int)db_fetch_value("SELECT COUNT(*) FROM import_optoplate WHERE num_bobine=? AND statut_plaque='in_use' AND date_import=?", [$b['numero'], $dernier_import])
-            : null;
-        $ecart_val = $films_optoplate !== null ? ($films_optoplate - $films_utilises) : 0;
-        $has_ecart = $films_optoplate !== null && $ecart_val !== 0;
+        $stock_emuci = (int)($b['stock_systeme'] ?? 0);
+        $ecart_val   = $dernier_import ? ($films_restants - $stock_emuci) : 0;
+        $has_ecart   = $dernier_import !== null && $ecart_val !== 0;
         $ligne = [
             'bobine_id' => $b['bobine_id'], 'numero' => $b['numero'],
             'type_code' => $b['type_code'] ?? '', 'format' => $b['format'] ?? '',
             'stock_debut' => $stock_debut, 'films_utilises' => $films_utilises,
             'films_endommages' => $films_endommages, 'films_restants' => $films_restants,
-            'films_optoplate' => $films_optoplate, 'stock_systeme' => (int)($b['stock_systeme'] ?? 0),
+            'stock_systeme' => $stock_emuci,
             'ecart' => $ecart_val, 'has_ecart' => $has_ecart,
         ];
         $bobines_detail[] = $ligne;
@@ -869,10 +905,6 @@ $statut_colors = [
                   onclick="verifierSite(<?= $s['id'] ?>,'<?= h($s['nom']) ?>')">
             <i class="ph-duotone ph-magnifying-glass"></i> Traiter
           </button>
-          <button class="btn-vsm-detail"
-                  onclick="voirDetails(<?= $s['id'] ?>,'<?= h($s['nom']) ?>',<?= $s['nb_ecarts'] ?>,'[]','en_attente','','','','<?= h($f_date) ?>')">
-            <i class="ph-duotone ph-eye"></i> Détails
-          </button>
         </div>
       </td>
     </tr>
@@ -1266,9 +1298,9 @@ async function verifierSite(siteId, siteNom) {
         <thead><tr style="background:#06033A">
           <th style="padding:9px 12px;color:white;font-size:11px;text-align:left">N° Bobine</th>
           <th style="padding:9px 12px;color:white;font-size:11px;text-align:left">Type</th>
-          <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">PJ Coord.</th>
-          ${d.dernier_import?`<th style="padding:9px 12px;color:white;font-size:11px;text-align:center">EMUCI</th>`:''}
-          <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Stock sys.</th>
+          ${d.dernier_import?`<th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Stock EMUCI (Système)</th>`:''}
+          <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Stock Physique (DigiStock)</th>
+          ${d.dernier_import?`<th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Écart</th>`:''}
           <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Statut</th>
         </tr></thead>
         <tbody>`;
@@ -1282,14 +1314,16 @@ async function verifierSite(siteId, siteNom) {
       html += `<tr style="background:${bg}">
         <td style="padding:9px 12px;font-family:monospace;font-weight:800;color:#06033A">${b.numero}</td>
         <td style="padding:9px 12px;font-size:12px;color:var(--muted)">${b.type_code||b.format||'—'}</td>
-        <td style="padding:9px 12px;text-align:center;font-weight:600">${b.films_utilises??'—'}</td>
-        ${d.dernier_import ? `<td style="padding:9px 12px;text-align:center;font-weight:600">${b.films_optoplate!==null?b.films_optoplate:'—'}</td>` : ''}
-        <td style="padding:9px 12px;text-align:center;font-size:12px;color:var(--muted)">${b.stock_systeme}</td>
+        ${d.dernier_import ? `
+        <td style="padding:9px 12px;text-align:center;font-weight:600;color:#1B75BC">${b.stock_systeme??'—'}</td>` : ''}
+        <td style="padding:9px 12px;text-align:center;font-weight:700;color:${b.films_restants<=0?'#DC2626':b.films_restants<50?'#D97706':'#065F46'}">${b.films_restants??'—'}</td>
+        ${d.dernier_import ? `
+        <td style="padding:9px 12px;text-align:center;font-weight:800;color:${b.has_ecart?(b.ecart>0?'#DC2626':'#D97706'):'#065F46'}">
+          ${b.has_ecart ? (b.ecart>0?'+':'')+b.ecart : '✓'}
+        </td>` : ''}
         <td style="padding:9px 12px;text-align:center">
           ${b.has_ecart
-            ? `<span style="background:#FEE2E2;color:#991B1B;padding:3px 9px;border-radius:8px;font-size:11px;font-weight:700">
-                ⚠️ Écart ${b.ecart>0?'+':''}${b.ecart}
-               </span>`
+            ? `<span style="background:#FEE2E2;color:#991B1B;padding:3px 9px;border-radius:8px;font-size:11px;font-weight:700">⚠️ Écart</span>`
             : `<span style="background:#D1FAE5;color:#065F46;padding:3px 9px;border-radius:8px;font-size:11px;font-weight:700">✅ OK</span>`}
         </td>
       </tr>`;
@@ -1511,8 +1545,9 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
           <tr style="background:#06033A">
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:left">N° Bobine</th>
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:left">Type</th>
-            <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Stock physique (PJ)</th>
-            ${hasImport ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Stock système (EMUCI)</th><th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Écart</th>' : ''}
+            ${hasImport ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Stock EMUCI (Système)</th>' : ''}
+            <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Stock Physique (DigiStock)</th>
+            ${hasImport ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Écart</th>' : ''}
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Statut</th>
             ${<?= $can_valider ? 'true' : 'false' ?> ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Action</th>' : ''}
           </tr>
@@ -1524,13 +1559,13 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
       const rowBg = hasEcart ? '#FFF7ED' : (i%2===0 ? 'white' : '#F8FAFC');
       const ecartColor = b.ecart > 0 ? '#DC2626' : '#D97706';
 
-      const stockEmuci = (hasImport && b.films_optoplate !== null) ? (b.stock_debut - b.films_optoplate) : null;
       html += `<tr style="background:${rowBg}">
         <td style="padding:9px 12px;font-family:monospace;font-weight:800;color:#06033A">${b.numero}</td>
         <td style="padding:9px 12px;font-size:11.5px;color:var(--muted)">${b.type_code||b.format||'—'}</td>
+        ${hasImport ? `
+        <td style="padding:9px 12px;text-align:center;font-weight:600;color:#1B75BC">${b.stock_systeme}</td>` : ''}
         <td style="padding:9px 12px;text-align:center;font-weight:700;color:${b.films_restants<=0?'#DC2626':b.films_restants<50?'#D97706':'#065F46'};font-size:14px">${b.films_restants}</td>
         ${hasImport ? `
-        <td style="padding:9px 12px;text-align:center;font-weight:600;color:#06033A">${stockEmuci !== null ? stockEmuci : '<span style="color:var(--muted)">—</span>'}</td>
         <td style="padding:9px 12px;text-align:center;font-weight:800;color:${hasEcart?ecartColor:'var(--success)'}">
           ${hasEcart ? (b.ecart>0?'+':'')+b.ecart : '✓'}
         </td>` : ''}
@@ -1540,12 +1575,13 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
             : '<span style="background:#D1FAE5;color:#065F46;padding:3px 9px;border-radius:8px;font-size:10.5px;font-weight:700">✅ OK</span>'}
         </td>
         ${<?= $can_valider ? 'true' : 'false' ?> ? `<td style="padding:7px 12px;text-align:center">
-          <button onclick="demanderModifBobine(${b.bobine_id},'${b.numero}',${siteId},'<?= h($f_date) ?>',${b.films_utilises||0},${b.films_optoplate!==null?b.films_optoplate:0},${b.ecart||0})"
+          <button onclick="demanderModifBobine(${b.bobine_id},'${b.numero}',${siteId},'<?= h($f_date) ?>',${b.films_restants||0},${b.stock_systeme||0},${b.ecart||0})"
             style="background:#fff7ed;color:#c2410c;border:1.5px solid #fed7aa;padding:4px 9px;border-radius:7px;font-size:10.5px;font-weight:700;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:4px">
             ✏️ Demander modif
           </button>
         </td>` : '<td></td>'}
       </tr>`;
+
     });
 
     html += `</tbody></table></div>`;

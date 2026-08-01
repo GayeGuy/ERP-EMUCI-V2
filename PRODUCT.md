@@ -55,16 +55,34 @@ du produit s'aligne dessus.
 
 ## Anti-references
 
-- **Le dégradé et le liseré.** Le bandeau d'accueil en dégradé et les cartes
-  KPI à liseré coloré ont été essayés puis abandonnés : ils faisaient
-  décoratif sans rien apprendre. Ne pas y revenir.
-- **L'emoji comme icône de section.** Retiré des titres. Un titre est un mot,
-  pas un pictogramme.
-- **La grille de cartes identiques.** Huit cartes de même forme et même
-  hauteur empilées : c'est l'état dont cette page sort, et le défaut à ne pas
-  reproduire. Si tout a le même poids visuel, rien n'est prioritaire.
-- Le tableau de bord d'outil SaaS générique : grande métrique isolée en haut,
-  trois statistiques de soutien, accent en dégradé.
+> Révisé le 2026-07-31. Le tableau de bord par profil suit désormais une
+> maquette de référence de type tableau de bord analytique : rangée
+> d'indicateurs en tête, cartes blanches sur fond neutre, graphes au trait.
+> Trois interdits précédents tombent donc, et sont conservés ci-dessous
+> barrés plutôt que supprimés — pour qu'on sache qu'ils ont été levés
+> volontairement, et non oubliés.
+
+- ~~**Le dégradé et le liseré.**~~ Levé. Le liseré coloré revient sous forme
+  de filet de répartition, où sa longueur code une part. Le dégradé, lui,
+  reste écarté : il n'a jamais rien appris à personne.
+- **L'emoji comme icône de section.** Toujours valable. Les icônes de la
+  nouvelle rangée d'indicateurs sont des pictogrammes Phosphor dans une
+  pastille, pas des emoji dans un titre. Un titre reste un mot.
+- ~~**La grille de cartes identiques.**~~ Levé pour la rangée de tête : la
+  maquette pose quatre cartes de même forme, et c'est justement ce qui rend
+  leurs chiffres comparables. Reste valable pour le corps de page, où la
+  grille alterne des blocs deux tiers et un tiers.
+- ~~**Le tableau de bord d'outil SaaS générique.**~~ Levé. C'est la direction
+  retenue : métrique large, variation par rapport à la période précédente,
+  graphes de soutien.
+
+Ce qui reste interdit, sans réserve :
+
+- **Le chiffre décoratif.** Une variation calculée depuis une base nulle, une
+  tendance tracée sur deux points, un pourcentage qui n'a pas de
+  dénominateur. `dash_delta()` renvoie `null` plutôt que d'inventer.
+- **La couleur seule porteuse de sens.** Une variation porte sa flèche, un
+  état porte son mot.
 
 ## Design Principles
 

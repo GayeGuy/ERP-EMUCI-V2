@@ -30,7 +30,9 @@
   // Racine échangée à chaque changement de filtre, et formulaires qui
   // déclenchent l'échange. Deux crochets, pour que ce module serve
   // n'importe quel tableau de bord construit sur dash_style.php.
-  var RACINE     = '.pdg';
+  // `.pdg` couvre la vue PDG, `.dv2` le tableau de bord v2. Une page ne
+  // porte jamais les deux : le premier sélecteur qui répond gagne.
+  var RACINE     = document.querySelector('.dv2') ? '.dv2' : '.pdg';
   var SEL_FILTRE = '#pdg-filter-form, [data-dash-filtre]';
 
   var SOBRE  = window.matchMedia('(prefers-reduced-motion: reduce)').matches;

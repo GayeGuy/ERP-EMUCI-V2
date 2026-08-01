@@ -35,8 +35,8 @@ function di_champs_config(): array {
             ['key'=>'date_reprise',  'label'=>'Date de reprise du service','type'=>'date',   'required'=>true],
         ],
         'creation_acces' => [
-            ['key'=>'agent_nom',      'label'=>"Nom & Prénoms de l'agent", 'type'=>'agent', 'required'=>true, 'section'=>"Identité de l'agent"],
-            ['key'=>'agent_email',    'label'=>"Email de l'agent",         'type'=>'email', 'editable_after_autofill'=>true],
+            ['key'=>'agent_nom',      'label'=>"Nom & Prénoms de l'agent", 'type'=>'text',  'required'=>true, 'section'=>"Identité de l'agent"],
+            ['key'=>'agent_email',    'label'=>"Email de l'agent",         'type'=>'email'],
             ['key'=>'agent_fonction', 'label'=>"Fonction de l'agent",      'type'=>'text',  'required'=>true],
             ['key'=>'periode_acces',  'label'=>"Période d'accès",          'type'=>'daterange', 'span'=>true, 'section'=>"Accès demandé"],
             ['key'=>'departement',    'label'=>'Département',               'type'=>'text'],
@@ -61,16 +61,18 @@ function di_champs_config(): array {
             ['key'=>'agent_nom',      'label'=>"Nom & Prénoms de l'agent", 'type'=>'agent', 'required'=>true, 'section'=>"Identité de l'agent"],
             ['key'=>'agent_email',    'label'=>"Email de l'agent",         'type'=>'email'],
             ['key'=>'agent_fonction', 'label'=>"Fonction de l'agent",      'type'=>'text'],
-            ['key'=>'agent_matricule','label'=>"Matricule de l'agent",     'type'=>'text'],
-            ['key'=>'site',           'label'=>'Site',                     'type'=>'text', 'required'=>true, 'section'=>"Poste et accès"],
-            ['key'=>'ancien_poste',   'label'=>'Ancien poste',             'type'=>'text', 'required'=>true],
-            ['key'=>'nouveau_poste',  'label'=>'Nouveau poste',            'type'=>'text', 'required'=>true],
+            ['key'=>'agent_matricule','label'=>"Matricule de l'agent",    'type'=>'text'],
+            ['key'=>'site',           'label'=>'Site',                    'type'=>'text', 'required'=>true, 'section'=>"Poste et accès"],
+            ['key'=>'ancien_poste',   'label'=>'Ancien poste',            'type'=>'text', 'required'=>true],
+            ['key'=>'nouveau_poste',  'label'=>'Nouveau poste',           'type'=>'text', 'required'=>true],
             ['key'=>'login',          'label'=>"Nom d'utilisateur / Login",'type'=>'text'],
             ['key'=>'email_pro',      'label'=>'Adresse email professionnelle','type'=>'email'],
-            ['key'=>'motif',          'label'=>'Motif du basculement',     'type'=>'select', 'required'=>true, 'span'=>true,
+            ['key'=>'applications',   'label'=>'Application(s) concernée(s)','type'=>'text', 'span'=>true],
+            ['key'=>'profil',         'label'=>'Profil',                  'type'=>'text'],
+            ['key'=>'date_demande',   'label'=>'Date de la demande',      'type'=>'date'],
+            ['key'=>'motif',          'label'=>'Motif du basculement',    'type'=>'select', 'required'=>true, 'span'=>true,
              'options'=>['' =>'— Choisir —', 'Mutation interne'=>'Mutation interne', 'Renfort temporaire'=>'Renfort temporaire',
                 'Réorganisation des équipes'=>'Réorganisation des équipes', 'Autre'=>'Autre']],
-            ['key'=>'applications',   'label'=>'Application(s) concernée(s)', 'type'=>'plateformes', 'span'=>true],
         ],
         'transfert_agent' => [
             ['key'=>'agent_nom',     'label'=>"Nom & Prénoms de l'agent", 'type'=>'agent', 'required'=>true, 'section'=>"Identité de l'agent"],
@@ -94,6 +96,7 @@ function di_champs_config(): array {
             ['key'=>'timeout',     'label'=>'Timeout',       'type'=>'text'],
             ['key'=>'longitude',   'label'=>'Longitude',     'type'=>'text'],
             ['key'=>'latitude',    'label'=>'Latitude',      'type'=>'text'],
+            ['key'=>'date_demande','label'=>'Date de la demande','type'=>'date'],
         ],
         'imputation_courrier' => [
             ['key'=>'reference',      'label'=>'Référence du courrier', 'type'=>'text', 'section'=>"Courrier reçu"],
@@ -101,7 +104,7 @@ function di_champs_config(): array {
             ['key'=>'expediteur',     'label'=>'Expéditeur',            'type'=>'text', 'required'=>true],
             ['key'=>'objet',          'label'=>'Objet du courrier',     'type'=>'text', 'required'=>true, 'span'=>true],
             ['key'=>'resume',         'label'=>'Résumé du contenu',     'type'=>'textarea', 'span'=>true],
-            ['key'=>'service_impute', 'label'=>'Département / Service imputé', 'type'=>'select_dept', 'required'=>true, 'span'=>true, 'section'=>"Imputation"],
+            ['key'=>'service_impute', 'label'=>'Service / Personne imputé(e)', 'type'=>'text', 'required'=>true, 'span'=>true, 'section'=>"Imputation"],
             ['key'=>'motif_imputation','label'=>"Motif de l'imputation",'type'=>'text', 'span'=>true],
             ['key'=>'priorite',       'label'=>'Niveau de priorité',    'type'=>'select',
              'options'=>['' =>'— Choisir —', 'Urgent'=>'Urgent', 'Normal'=>'Normal', 'Faible'=>'Faible']],
@@ -110,22 +113,16 @@ function di_champs_config(): array {
             ['key'=>'echeance',       'label'=>'Échéance de traitement', 'type'=>'date'],
         ],
         'exceptionnel' => [
-            ['key'=>'agent_nom',     'label'=>"Nom & Prénoms de l'agent",   'type'=>'agent',    'required'=>true, 'section'=>"Identité de l'agent"],
-            ['key'=>'agent_email',   'label'=>"Email de l'agent",           'type'=>'email'],
-            ['key'=>'agent_fonction','label'=>"Fonction de l'agent",        'type'=>'text'],
-            ['key'=>'categorie',     'label'=>'Catégorie',                   'type'=>'select',   'required'=>true, 'section'=>"Objet de la demande",
-             'options'=>['' =>'— Choisir —', 'Administratif'=>'Administratif', 'Matériel'=>'Matériel',
-                         'RH'=>'RH', 'Financier'=>'Financier', 'Autre'=>'Autre']],
-            ['key'=>'urgence',       'label'=>"Niveau d'urgence",           'type'=>'select',
-             'options'=>['' =>'— Choisir —', 'Normal'=>'Normal', 'Urgent'=>'Urgent', 'Très urgent'=>'Très urgent']],
-            ['key'=>'objet',         'label'=>'Objet de la demande',        'type'=>'text',     'required'=>true, 'span'=>true],
-            ['key'=>'description',   'label'=>'Description / Justification','type'=>'textarea', 'required'=>true, 'span'=>true],
-            ['key'=>'date_souhaitee','label'=>'Date souhaitée',             'type'=>'date'],
+            ['key'=>'agent_nom',     'label'=>"Nom & Prénoms de l'agent", 'type'=>'agent', 'required'=>true, 'section'=>"Identité de l'agent"],
+            ['key'=>'agent_email',   'label'=>"Email de l'agent",         'type'=>'email'],
+            ['key'=>'agent_fonction','label'=>"Fonction de l'agent",      'type'=>'text'],
+            ['key'=>'date_souhaitee','label'=>'Date souhaitée',       'type'=>'date', 'section'=>"Objet de la demande"],
+            ['key'=>'objet',         'label'=>'Objet de la demande',  'type'=>'text', 'required'=>true],
+            ['key'=>'motif',         'label'=>'Motif (obligatoire)',  'type'=>'textarea', 'required'=>true, 'span'=>true],
         ],
         'changement_geolocalisation' => [
-            // Un seul bandeau ici : les champs alternent l'actuel et le
-            // nouveau, une coupure en deux parties les décrirait mal.
-            ['key'=>'ancien_nom_site',      'label'=>'Site actuel',        'type'=>'select_site', 'required'=>true, 'section'=>"Coordonnées du site"],
+            ['key'=>'ancien_nom_site',      'label'=>'Site actuel',        'type'=>'select_site', 'required'=>true, 'section'=>"Situation actuelle"],
+            ['key'=>'nouveau_nom_site',     'label'=>'Nouveau site',       'type'=>'select_site', 'section'=>"Nouvelle situation"],
             ['key'=>'ancienne_localisation','label'=>'Adresse actuelle',   'type'=>'text'],
             ['key'=>'nouvelle_localisation','label'=>'Nouvelle adresse',   'type'=>'text'],
             ['key'=>'ancienne_longitude',   'label'=>'Longitude actuelle', 'type'=>'text'],
@@ -191,9 +188,8 @@ function di_render_field(array $f, $value = ''): string {
     $req   = !empty($f['required'])
            ? ' <abbr class="di-req" title="Champ obligatoire">*</abbr>' : '';
     $reqA  = !empty($f['required']) ? ' required' : '';
-    $type     = $f['type'] ?? 'text';
-    $v        = h((string)$value);
-    $editable = !empty($f['editable_after_autofill']) ? ' data-editable="1"' : '';
+    $type  = $f['type'] ?? 'text';
+    $v     = h((string)$value);
 
     // Seul le contenu réellement haut pose son libellé au-dessus : sinon la
     // colonne de libellé resterait vide sur toute la hauteur du bloc.
@@ -247,31 +243,14 @@ function di_render_field(array $f, $value = ''): string {
         }
         echo '</div>';
     } elseif ($type === 'agent') {
-        // Autocomplete sur la table agents (importée via Excel) — alimente email, téléphone,
-        // fonction, matricule, departement, direction, site via data-* + JS dans demandes_new.php
+        // Liste déroulante recherchable des agents (users actifs) ; alimente email + fonction (rôle ERP)
         echo "<input type=\"text\" id=\"f_$key\" name=\"champs[$key]\" value=\"$v\" list=\"dl_$key\" autocomplete=\"off\" data-agentfill=\"1\"$reqA>";
         echo "<datalist id=\"dl_$key\">";
-        foreach (db_fetch_all("SELECT id, nom, prenom, email, telephone, fonction, departement, direction, site, matricule FROM agents WHERE statut='actif' ORDER BY nom, prenom") as $a) {
-            $full = h(trim(($a['prenom'] ?? '') . ' ' . ($a['nom'] ?? '')));
-            echo '<option value="' . $full . '"'
-               . ' data-email="'       . h((string)($a['email']       ?? '')) . '"'
-               . ' data-telephone="'   . h((string)($a['telephone']   ?? '')) . '"'
-               . ' data-fonction="'    . h((string)($a['fonction']    ?? '')) . '"'
-               . ' data-matricule="'   . h((string)($a['matricule']   ?? '')) . '"'
-               . ' data-departement="' . h((string)($a['departement'] ?? '')) . '"'
-               . ' data-direction="'   . h((string)($a['direction']   ?? '')) . '"'
-               . ' data-site="'        . h((string)($a['site']        ?? '')) . '"'
-               . '></option>';
+        foreach (db_fetch_all("SELECT u.prenom, u.nom, u.email, r.nom AS fonction FROM users u JOIN roles r ON r.id=u.role_id WHERE u.actif=1 ORDER BY u.nom, u.prenom") as $u) {
+            $full = h(trim(($u['prenom'] ?? '').' '.($u['nom'] ?? '')));
+            echo '<option value="'.$full.'" data-email="'.h((string)($u['email'] ?? '')).'" data-fonction="'.h((string)($u['fonction'] ?? '')).'"></option>';
         }
         echo "</datalist>";
-    } elseif ($type === 'select_dept') {
-        echo "<select id=\"f_$key\" name=\"champs[$key]\"$reqA>";
-        echo "<option value=\"\">— Choisir un département —</option>";
-        foreach (db_fetch_all("SELECT label FROM departements ORDER BY label") as $d) {
-            $sel = ((string)$value === $d['label']) ? ' selected' : '';
-            echo '<option value="'.h($d['label']).'"'.$sel.'>'.h($d['label']).'</option>';
-        }
-        echo "</select>";
     } elseif ($type === 'site') {
         // Liste déroulante recherchable des sites actifs (saisie libre autorisée)
         echo "<input type=\"text\" id=\"f_$key\" name=\"champs[$key]\" value=\"$v\" list=\"dl_$key\" autocomplete=\"off\"$reqA>";
@@ -286,7 +265,7 @@ function di_render_field(array $f, $value = ''): string {
         // dans une boîte de 430 px annonce qu'on attend un paragraphe.
         $court = in_array($t, ['number', 'date'], true) ? ' class="di-court"' : '';
         $min   = ($t === 'number') ? ' min="1" step="1" inputmode="numeric"' : '';
-        echo "<input type=\"$t\" id=\"f_$key\" name=\"champs[$key]\" value=\"$v\"$court$min$reqA$editable>";
+        echo "<input type=\"$t\" id=\"f_$key\" name=\"champs[$key]\" value=\"$v\"$court$min$reqA>";
         if (!empty($f['suffixe'])) {
             echo '<span class="di-suffixe">' . h($f['suffixe']) . '</span>';
         }

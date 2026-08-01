@@ -436,4 +436,40 @@
   .donut-wrap{flex-direction:column;gap:12px}
 }
 
+/* ══════════ SYNTHÈSE — deux familles d'indicateurs ══════════
+   Les indicateurs tenaient sur une seule grille en remplissage
+   automatique : douze pastilles de même poids, qui retombaient en 5 + 5 + 2
+   et laissaient une dernière ligne orpheline. Surtout, rien ne distinguait
+   ce qui a été produit aujourd'hui de ce avec quoi on le produit.
+
+   Ils sont désormais rangés en deux familles, chacune sur sa propre ligne
+   de six. Six colonnes fixes plutôt qu'un auto-fill : une famille se lit
+   d'un seul balayage, et le nombre de colonnes ne dépend plus du nombre
+   d'indicateurs que les permissions ont laissé passer. */
+.syn{display:flex;flex-direction:column;gap:24px}
+
+/* Titre de famille en casse normale, quand les libellés des pastilles sont
+   en capitales : la différence de casse porte la hiérarchie à elle seule,
+   sans ajouter un troisième niveau de graisse ou de taille. Le filet prend
+   la largeur restante — il rattache le titre à sa grille sans l'encadrer. */
+.syn-hd{display:flex;align-items:center;gap:12px;margin-bottom:11px}
+.syn-t{font-size:12.5px;font-weight:800;color:var(--navy,#06033A);white-space:nowrap;letter-spacing:-.1px}
+.syn-hd::after{content:'';flex:1;height:1px;background:var(--border,#e2e8f0)}
+
+.syn-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}
+/* Paliers structurels : 6 → 3 → 2. Trois divise six sans laisser d'orphelin,
+   deux reste lisible sur la largeur utile d'un téléphone (251 px). */
+@media(max-width:1080px){.syn-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:560px){.syn-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.syn-k{border-radius:12px;padding:14px 16px;min-width:0}
+.syn-v{font-size:26px;font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
+/* Le libellé portait opacity:.75. À 11 px, #0369a1 à 75 % sur #f0f9ff donne
+   3,45:1 — sous le seuil AA de 4,5 qui s'applique à cette taille. En pleine
+   valeur, la même paire donne 5,56:1. L'opacité est donc retirée : le
+   contraste entre le chiffre et son libellé passe par la taille et la
+   graisse, qui ne coûtent rien en lisibilité. */
+.syn-l{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+  margin-top:6px;line-height:1.3}
+
 </style>

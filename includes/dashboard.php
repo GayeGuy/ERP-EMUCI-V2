@@ -186,54 +186,59 @@ function dash_profil(?array $user = null): string {
  */
 function dash_profils(): array {
     return [
-        // Terrain : ce qui se passe sur mon site aujourd'hui.
+        // Terrain : actions en premier, lecture ensuite.
         'coordinateur' => [
-            'synthese_kpi', 'points_recents', 'corrections_attente',
-            'evolution_engins',
-            'receptions_site', 'stock_conso_site', 'bobines_sites',
-            'equipements', 'rivets',
+            'synthese_kpi',
+            'points_recents', 'corrections_attente',
+            'evolution_engins', 'stock_conso_site',
+            'receptions_site',
+            'bobines_sites', 'equipements',
+            'rivets',
         ],
 
-        // Stock bobines : la file d'attente de service.
+        // Stock bobines : actions, suivi, alertes.
         'gsb' => [
-            'synthese_kpi', 'commandes_bobines', 'validations_matin', 'corrections_attente',
-            'stock_bas', 'bobines_sites', 'rivets',
+            'synthese_kpi',
+            'commandes_bobines', 'corrections_attente',
+            'validations_matin', 'bobines_sites',
+            'rivets', 'stock_bas',
         ],
 
-        // Supervision des opérations : vue complète pour le patron des opérations.
-        //
-        // Les deux graphes viennent juste après ce qui demande une action :
-        // on traite d'abord, on prend du recul ensuite. perf_sites est en
-        // pleine largeur, il coupe la page en deux et sépare nettement les
-        // blocs d'action du suivi.
+        // Supervision : actions → graphes → suivi mensuel.
         'superviseur_op' => [
-            'synthese_kpi', 'points_attente', 'corrections_attente',
+            'synthese_kpi',
+            'points_attente', 'corrections_attente',
             'evolution_engins', 'repartition_parc',
             'perf_sites',
-            'validations_matin', 'points_rejetes', 'bobines_sites',
-            'performance_mois', 'receptions_site', 'activites',
+            'validations_matin', 'points_rejetes',
+            'bobines_sites', 'performance_mois',
+            'receptions_site', 'activites',
         ],
 
         // Gestion opérationnelle : peu de droits.
         'gestionnaire_op' => [
-            'synthese_kpi', 'raccourcis', 'points_recents',
+            'synthese_kpi',
+            'raccourcis', 'points_recents',
             'evolution_engins', 'commandes_bobines',
         ],
 
-        // Informatique : le parc, ses pannes et ses fins de cycle.
+        // Informatique : parc, consommation, fin de cycle.
         'informatique' => [
-            'synthese_kpi', 'repartition_parc', 'fin_cycle',
-            'equipements', 'interventions', 'activites',
+            'synthese_kpi',
+            'repartition_parc', 'equipements',
+            'conso_sites', 'fin_cycle',
+            'activites',
         ],
 
-        // Vue d'ensemble, par défaut.
+        // Vue d'ensemble.
         'general' => [
             'synthese_kpi',
             'evolution_engins', 'repartition_parc',
+            'equipements', 'conso_sites',
             'perf_sites',
-            'equipements', 'sites', 'stock_bas', 'fin_cycle',
-            'conso_sites', 'bobines_sites', 'rivets', 'interventions',
-            'activites',
+            'bobines_sites', 'sites',
+            'rivets', 'stock_bas',
+            'fin_cycle', 'activites',
         ],
     ];
 }
@@ -326,6 +331,30 @@ function dash_blocs_visibles(?array $user = null): array {
 /** Ouvre une carte : titre, sous-titre, lien d'action optionnel. */
 function dash_carte_debut(array $bloc): void {
     $lien = $bloc['lien'] ?? null;
+
+    if (dash_v2()) {
+        echo '<div class="dv2-c">';
+        echo   '<div class="dv2-c-hd"><div style="min-width:0">';
+        echo     '<div class="dv2-c-t">' . h($bloc['titre']) . '</div>';
+        if (!empty($bloc['soustitre'])) {
+            echo '<div class="dv2-c-s">' . h($bloc['soustitre']) . '</div>';
+        }
+        echo   '</div>';
+        // Le « ••• » de la maquette mène à la page du bloc. Il n'apparaît que
+        // si l'utilisateur a le droit d'y aller : un raccourci vers un 403
+        // vaut moins que pas de raccourci.
+        if ($lien) {
+            $lm = $bloc['lien_module'] ?? ($bloc['module'] ?? null);
+            $ld = $bloc['lien_droit']  ?? 'can_read';
+            if ($lm === null || can($lm, $ld)) {
+                echo '<a class="dv2-more" href="' . APP_URL . h($lien[0]) . '"'
+                   . ' title="' . h($lien[1]) . '" aria-label="' . h($lien[1]) . '">•••</a>';
+            }
+        }
+        echo   '</div><div class="dv2-c-body">';
+        return;
+    }
+
     echo '<div class="card">';
     echo '<div class="dash-tete">';
     echo '<div><div class="card-ttl">' . h($bloc['titre']) . '</div>';
@@ -360,9 +389,195 @@ function dash_carte_fin(): void {
  * la même chose pour qui consulte.
  */
 function dash_vide(string $message, bool $bonne_nouvelle = false): void {
+    // En v2 l'état vide porte une icône et deux niveaux de texte ; ailleurs
+    // il garde sa forme d'origine, pour ne rien changer à la vue PDG.
+    if (dash_v2()) {
+        echo '<div class="dv2-empty' . ($bonne_nouvelle ? ' ok' : '') . '">'
+           . '<i class="ph-duotone ' . ($bonne_nouvelle ? 'ph-check-circle' : 'ph-tray') . '"></i>'
+           . '<div class="dv2-empty-t">' . h($message) . '</div>'
+           . '</div>';
+        return;
+    }
     $couleur = $bonne_nouvelle ? '#166534' : '#5a6678';
     echo '<div style="text-align:center;padding:26px 16px;font-size:13px;color:' . $couleur . '">'
        . h($message) . '</div>';
+}
+
+// ============================================================
+//  RENDU v2 — maquette de référence
+//
+//  Le tableau de bord par profil passe à un nouveau vocabulaire visuel.
+//  Deux surfaces ne suivent pas :
+//
+//   - pages/pdg_overview.php, qui garde templates/dash_style.php ;
+//   - le rôle « lecteur », qui reste sur l'ancien rendu.
+//
+//  D'où l'interrupteur ci-dessous plutôt qu'un remplacement pur et simple :
+//  les deux coquilles doivent coexister tant que ces deux surfaces vivent.
+// ============================================================
+
+/** Le rendu v2 est-il actif pour cette requête ? Posé par pages/dashboard.php. */
+function dash_v2(?bool $activer = null): bool {
+    static $actif = false;
+    if ($activer !== null) $actif = $activer;
+    return $actif;
+}
+
+/** Rôles qui restent sur l'ancien tableau de bord. */
+function dash_role_v1(?array $user = null): bool {
+    $user = $user ?? current_user();
+    return ($user['role_slug'] ?? '') === 'lecteur';
+}
+
+/**
+ * Variation entre deux valeurs, prête à afficher.
+ *
+ * Renvoie null quand il n'y a rien d'honnête à dire : sans valeur de
+ * référence, un « +100 % » calculé depuis zéro est un artefact, pas une
+ * information. Le bloc affiche alors sa ligne de contexte à la place.
+ */
+function dash_delta(?float $actuel, ?float $precedent): ?array {
+    if ($precedent === null || $actuel === null) return null;
+    if ($precedent == 0.0) return null;
+    $pct = (($actuel - $precedent) / abs($precedent)) * 100;
+    $sens = $pct > 0.05 ? 'up' : ($pct < -0.05 ? 'dn' : 'flat');
+    return [
+        'classe' => 'dv2-d-' . $sens,
+        // La flèche double la couleur : l'information ne repose jamais sur
+        // la teinte seule.
+        'fleche' => $sens === 'up' ? '↑' : ($sens === 'dn' ? '↓' : '='),
+        'texte'  => ($pct > 0 ? '+' : '') . number_format($pct, 1, ',', ' ') . ' %',
+    ];
+}
+
+/** Une carte d'indicateur de la rangée de tête. */
+function dash_v2_kpi(array $k): void {
+    $ic = $k['icone'] ?? 'ph-chart-line';
+    $tn = $k['ton']   ?? 'b';
+    $tons = [
+        'b' => ['var(--d-blue-l)',  'var(--d-blue)'],
+        'g' => ['var(--d-green-l)', 'var(--d-green)'],
+        'o' => ['var(--d-amber-l)', 'var(--d-amber)'],
+        'r' => ['var(--d-red-l)',   'var(--d-red)'],
+    ];
+    [$bg, $fg] = $tons[$tn] ?? $tons['b'];
+
+    echo '<div class="dv2-k">';
+    echo   '<div class="dv2-k-hd">';
+    echo     '<span class="dv2-k-l">' . h($k['libelle']) . '</span>';
+    echo     '<span class="dv2-k-i" style="background:' . $bg . ';color:' . $fg . '">'
+           .   '<i class="ph-duotone ' . h($ic) . '"></i></span>';
+    echo   '</div>';
+    echo   '<div class="dv2-k-v">' . h($k['valeur']) . '</div>';
+    echo   '<div class="dv2-k-ft">';
+    if (!empty($k['delta'])) {
+        $d = $k['delta'];
+        echo '<span class="dv2-d ' . $d['classe'] . '">' . $d['fleche'] . ' ' . h($d['texte']) . '</span>';
+    }
+    if (!empty($k['note'])) {
+        echo '<span class="dv2-k-vs">' . h($k['note']) . '</span>';
+    }
+    echo   '</div>';
+    echo '</div>';
+}
+
+/**
+ * Les quatre indicateurs de tête, choisis selon le profil.
+ *
+ * La maquette met quatre cartes en haut de page ; encore faut-il qu'elles
+ * portent ce qui compte pour qui regarde. Le coordinateur ouvre sur sa
+ * production du jour, le gestionnaire de bobines sur sa file d'attente,
+ * l'informatique sur l'état du parc.
+ *
+ * La comparaison est celle de la veille pour tout ce qui se compte par jour.
+ * Les stocks n'ont pas d'historique quotidien en base : ils portent une ligne
+ * de contexte au lieu d'une variation inventée.
+ */
+function dash_v2_kpis(array $portee): array {
+    $today = date('Y-m-d');
+    $hier  = date('Y-m-d', strtotime('-1 day'));
+    [$ws, $as] = dash_filtre_site($portee, 'site_id');
+
+    // Un seul aller-retour par métrique journalière, les deux jours à la fois.
+    $jour = function (string $colonne) use ($ws, $as, $today, $hier): array {
+        $sql = "SELECT date_point, COALESCE(SUM($colonne),0) AS v
+                FROM op_points_journaliers
+                WHERE date_point IN (?, ?) $ws
+                GROUP BY date_point";
+        $rows = db_fetch_all($sql, array_merge([$today, $hier], $as));
+        $m = [];
+        foreach ($rows as $r) $m[(string)$r['date_point']] = (float)$r['v'];
+        return [$m[$today] ?? 0.0, $m[$hier] ?? null];
+    };
+
+    $profil = dash_profil();
+    $k = [];
+
+    if (can('operations', 'can_read')
+        && in_array($profil, ['coordinateur','superviseur_op','gestionnaire_op','general'], true)) {
+        [$eng, $engP] = $jour('total_engins');
+        [$pla, $plaP] = $jour('total_plaques');
+        $k[] = ['libelle'=>'Engins traités','valeur'=>fmt_number($eng),'icone'=>'ph-truck','ton'=>'b',
+                'delta'=>dash_delta($eng,$engP),'note'=>'vs. '.fmt_number($engP ?? 0).' hier'];
+        $k[] = ['libelle'=>'Plaques posées','valeur'=>fmt_number($pla),'icone'=>'ph-rectangle','ton'=>'g',
+                'delta'=>dash_delta($pla,$plaP),'note'=>'vs. '.fmt_number($plaP ?? 0).' hier'];
+    }
+
+    if (can('bobines', 'can_read')) {
+        [$wb, $ab] = dash_filtre_site($portee, 'site_id');
+        $bob  = (int)db_fetch_value("SELECT COUNT(*) FROM op_bobines WHERE statut IN ('en_cours','en_stock') $wb", $ab);
+        $crit = (int)db_fetch_value("SELECT COUNT(*) FROM op_bobines WHERE statut='en_cours' AND films_restants < 50 $wb", $ab);
+        $k[] = ['libelle'=>'Bobines actives','valeur'=>fmt_number($bob),'icone'=>'ph-disc',
+                'ton'=>$crit > 0 ? 'o' : 'b',
+                'note'=>$crit > 0 ? $crit.' sous le seuil critique' : 'aucune sous le seuil'];
+    }
+
+    if ($profil === 'gsb' && can('commandes_bobines', 'can_read')) {
+        $cmd = (int)db_fetch_value("SELECT COUNT(*) FROM commandes_bobines WHERE statut IN ('en_attente','valide') $ws", $as);
+        array_unshift($k, ['libelle'=>'Commandes à servir','valeur'=>fmt_number($cmd),
+            'icone'=>'ph-clipboard-text','ton'=>$cmd > 0 ? 'o' : 'g',
+            'note'=>$cmd > 0 ? 'en file d\'attente' : 'file vide']);
+    }
+
+    if ($profil === 'informatique' && can('equipements', 'can_read')) {
+        [$we, $ae] = dash_filtre_site($portee, 'site_id');
+        [$wc, $ac] = dash_filtre_categorie($portee, 'categorie');
+        $arg = array_merge($ae, $ac);
+        $tot = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 $we $wc", $arg);
+        $hs  = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND etat='hs' $we $wc", $arg);
+        $mt  = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND etat='maintenance' $we $wc", $arg);
+        $fc  = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle IS NOT NULL AND date_fin_cycle <= (CURRENT_DATE + INTERVAL '30 days') $we $wc", $arg);
+        $k = [
+            ['libelle'=>'Parc actif','valeur'=>fmt_number($tot),'icone'=>'ph-desktop','ton'=>'b',
+             'note'=>'équipements en service'],
+            ['libelle'=>'Hors service','valeur'=>fmt_number($hs),'icone'=>'ph-warning-octagon',
+             'ton'=>$hs > 0 ? 'r' : 'g','note'=>$tot > 0 ? number_format($hs / $tot * 100, 1, ',', ' ').' % du parc' : '—'],
+            ['libelle'=>'En maintenance','valeur'=>fmt_number($mt),'icone'=>'ph-wrench',
+             'ton'=>$mt > 0 ? 'o' : 'g','note'=>$mt > 0 ? 'immobilisés' : 'aucun immobilisé'],
+            ['libelle'=>'Fin de cycle ≤ 30 j','valeur'=>fmt_number($fc),'icone'=>'ph-hourglass',
+             'ton'=>$fc > 0 ? 'o' : 'g','note'=>$fc > 0 ? 'à renouveler' : 'rien à renouveler'],
+        ];
+    }
+
+    if (can('validation_stock', 'can_read') || can('inventaire_bobines', 'can_read')) {
+        $corr = (int)db_fetch_value("SELECT COUNT(*) FROM corrections_bobines WHERE statut='en_attente' $ws", $as);
+        $k[] = ['libelle'=>'Corrections en attente','valeur'=>fmt_number($corr),
+            'icone'=>'ph-arrows-clockwise','ton'=>$corr > 0 ? 'o' : 'g',
+            'note'=>$corr > 0 ? 'à traiter' : 'rien à traiter'];
+    }
+
+    if (can('rivets', 'can_read') && count($k) < 4) {
+        [$wr, $ar] = dash_filtre_site($portee, 'sr.site_id');
+        $riv = (int)db_fetch_value("SELECT COALESCE(SUM(sr.quantite),0) FROM op_stock_rivets sr
+                                    JOIN sites s ON s.id=sr.site_id WHERE s.actif=1 $wr", $ar);
+        $k[] = ['libelle'=>'Rivets en stock','valeur'=>fmt_number($riv),'icone'=>'ph-nut',
+            'ton'=>$riv < 100 ? 'r' : ($riv < 500 ? 'o' : 'g'),
+            'note'=>$riv < 500 ? 'sous le seuil de confort' : 'au-dessus du seuil'];
+    }
+
+    // La rangée en compte quatre : au-delà elle déborde, en deçà elle sonne
+    // creux. On tronque, et la grille en dessous porte le reste.
+    return array_slice($k, 0, 4);
 }
 
 
@@ -423,8 +638,23 @@ function dash_graphe(string $type, array $valeurs, array $options = []): void {
         $attrs .= " data-couleurs='" . h(json_encode(array_values($options['couleurs']))) . "'";
     }
     if (!empty($options['couleur'])) $attrs .= ' data-couleur="' . h($options['couleur']) . '"';
+    // Repère d'objectif de la jauge, en pourcentage.
+    if (isset($options['cible']))    $attrs .= ' data-cible="' . (float)$options['cible'] . '"';
     if (!empty($options['taille']))  $attrs .= ' width="' . (int)$options['taille'] . '"';
     if (!empty($options['hauteur'])) $attrs .= ' height="' . (int)$options['hauteur'] . '"';
+    echo '<canvas ' . $attrs . '></canvas>';
+}
+
+/**
+ * Canvas multi-séries (courbe_multi). $series = [['label'=>…,'couleur'=>…,'valeurs'=>[…]],…]
+ */
+function dash_graphe_multi(array $series, array $libelles, int $hauteur = 160): void {
+    $resume = implode(', ', array_map(fn($s) => $s['label'] . ' : ' . array_sum($s['valeurs']), $series));
+    $attrs  = 'data-graphe="courbe_multi"'
+            . ' role="img" aria-label="' . h($resume) . '"'
+            . " data-series='" . h(json_encode($series)) . "'"
+            . " data-libelles='" . h(json_encode(array_values($libelles))) . "'"
+            . ' height="' . $hauteur . '"';
     echo '<canvas ' . $attrs . '></canvas>';
 }
 
@@ -706,6 +936,8 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucun point en attente de validation.', true); return; }
+            $sc = count($d) > 5;
+            if ($sc) echo '<div style="max-height:256px;overflow-y:auto">';
             echo '<table class="dtbl"><thead><tr><th>Date</th><th>Site</th><th>Auteur</th>'
                . '<th style="text-align:right">Soumis</th></tr></thead><tbody>';
             foreach ($d as $r) {
@@ -719,6 +951,7 @@ function dash_registre(): array {
                    . ($j <= 0 ? "Aujourd'hui" : ent((float)$j) . ' j') . '</span></td></tr>';
             }
             echo '</tbody></table>';
+            if ($sc) echo '</div>';
         },
     ],
 
@@ -744,6 +977,8 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucune correction demandée.', true); return; }
+            $sc = count($d) > 3;
+            if ($sc) echo '<div style="max-height:220px;overflow-y:auto;padding-right:2px">';
             foreach ($d as $r) {
                 echo '<div class="biz-risk-r" style="margin-bottom:9px">'
                    . '<div class="biz-risk-i"><i class="ph-duotone ph-pencil-simple"></i></div>'
@@ -755,6 +990,7 @@ function dash_registre(): array {
                    . h($r['demandeur'] ?? '—') . ' le ' . h(fmt_date($r['created_at'])) . '</div>'
                    . '</div></div>';
             }
+            if ($sc) echo '</div>';
         },
     ],
 
@@ -778,6 +1014,8 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucune validation enregistrée cette semaine.'); return; }
+            $sc = count($d) > 5;
+            if ($sc) echo '<div style="max-height:260px;overflow-y:auto;padding-right:2px">';
             foreach ($d as $r) {
                 $ec  = (int)$r['nb_ecarts'];
                 $cls = $ec === 0 ? 'hc-green' : ($ec <= 2 ? 'hc-orange' : 'hc-red');
@@ -789,6 +1027,7 @@ function dash_registre(): array {
                    . ($ec === 0 ? 'Aucun écart' : ent((float)$ec) . ' écart' . ($ec > 1 ? 's' : ''))
                    . '</span></div>';
             }
+            if ($sc) echo '</div>';
         },
     ],
 
@@ -812,6 +1051,8 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucune commande en cours.', true); return; }
+            $sc = count($d) > 5;
+            if ($sc) echo '<div style="max-height:256px;overflow-y:auto">';
             echo '<table class="dtbl"><thead><tr><th>N°</th><th>Site</th><th>Type</th>'
                . '<th style="text-align:right">État</th></tr></thead><tbody>';
             foreach ($d as $r) {
@@ -823,6 +1064,7 @@ function dash_registre(): array {
                    . ($att ? 'À valider' : 'À servir') . '</span></td></tr>';
             }
             echo '</tbody></table>';
+            if ($sc) echo '</div>';
         },
     ],
 
@@ -831,6 +1073,7 @@ function dash_registre(): array {
         'titre'     => 'Stock consommables bas',
         'soustitre' => 'Sous le seuil d\'alerte',
         'module'    => 'consommables',
+        'largeur'   => 'plein',
         'lien'      => ['/pages/consommables.php', 'Gérer'],
         'donnees'   => function (array $p) {
             // Le coordinateur raisonne sur le stock de son site, les autres
@@ -973,6 +1216,8 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucun consommable suivi sur ce site.'); return; }
+            $sc = count($d) > 4;
+            if ($sc) echo '<div style="max-height:224px;overflow-y:auto;padding-right:2px">';
             foreach ($d as $r) {
                 $seuil = (float)$r['seuil_alerte'];
                 $bas   = $seuil > 0 && (float)$r['quantite'] <= $seuil;
@@ -985,6 +1230,7 @@ function dash_registre(): array {
                    . '<div class="biz-cov-d"><span class="biz-cov-num">' . ent((float)$r['quantite'])
                    . '</span><span class="biz-cov-u">' . h($r['unite']) . '</span></div></div>';
             }
+            if ($sc) echo '</div>';
         },
     ],
 
@@ -1037,6 +1283,7 @@ function dash_registre(): array {
         'titre'     => 'Fin de cycle',
         'soustitre' => 'Soixante prochains jours',
         'module'    => 'equipements',
+        'largeur'   => 'plein',
         'lien'      => ['/pages/equipements.php', 'Le parc'],
         'donnees'   => function (array $p) {
             [$ws, $as] = dash_filtre_site($p, 'e.site_id');
@@ -1118,7 +1365,9 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucune bobine active sur ce périmètre.'); return; }
-            $max = max(array_map(fn($r) => (float)$r['nb'], $d)) ?: 1;
+            $max   = max(array_map(fn($r) => (float)$r['nb'], $d)) ?: 1;
+            $scroll = count($d) > 4;
+            if ($scroll) echo '<div style="max-height:224px;overflow-y:auto;padding-right:2px">';
             foreach ($d as $r) {
                 echo '<div class="biz-cov-r">'
                    . '<div><div class="biz-cov-n">' . h($r['site_nom']) . '</div>'
@@ -1128,6 +1377,7 @@ function dash_registre(): array {
                    . '<div class="biz-cov-d"><span class="biz-cov-num">' . ent((float)$r['nb'])
                    . '</span><span class="biz-cov-u">bobines</span></div></div>';
             }
+            if ($scroll) echo '</div>';
         },
     ],
 
@@ -1150,10 +1400,10 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucun stock de rivets enregistré.'); return; }
+            $sc = count($d) > 5;
+            if ($sc) echo '<div style="max-height:260px;overflow-y:auto;padding-right:2px">';
             foreach ($d as $r) {
-                $q = (float)$r['stock'];
-                // Seuils repris de la page Rivets : sous 100 il faut
-                // commander, sous 500 il faut y penser.
+                $q   = (float)$r['stock'];
                 $cls = $q < 100 ? 'hc-red' : ($q < 500 ? 'hc-orange' : 'hc-green');
                 echo '<div class="stock-stat-row">'
                    . '<div style="font-weight:700;color:#06033A">' . h($r['site_nom']) . '</div>'
@@ -1163,6 +1413,7 @@ function dash_registre(): array {
                    . ($q < 100 ? 'À commander' : ($q < 500 ? 'À surveiller' : 'Suffisant'))
                    . '</span></div></div>';
             }
+            if ($sc) echo '</div>';
         },
     ],
 
@@ -1224,7 +1475,9 @@ function dash_registre(): array {
             $total = array_sum(array_map(fn($r) => (float)$r['montant'], $d));
             echo '<div class="eq-big-l">Total sur douze mois</div>';
             echo '<div class="biz-m-val" style="font-size:30px">' . ent($total)
-               . '<span class="biz-m-u">FCFA</span></div><div style="margin-top:14px">';
+               . '<span class="biz-m-u">FCFA</span></div>';
+            $sc = count($d) > 4;
+            echo '<div style="margin-top:14px' . ($sc ? ';max-height:224px;overflow-y:auto;padding-right:2px' : '') . '">';
             foreach ($d as $r) {
                 echo '<div class="biz-cov-r">'
                    . '<div class="biz-cov-n">' . h($r['site_nom']) . '</div>'
@@ -1289,57 +1542,84 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucun indicateur disponible.'); return; }
-            $kpis = [];
+
+            // Deux familles plutôt qu'une suite. À gauche ce qui a été produit
+            // aujourd'hui et ce qu'il reste à valider dessus ; à droite ce avec
+            // quoi on produit. Les corrections en attente vont à la production :
+            // c'est une demande portant sur un point du jour, au même titre
+            // qu'une validation en attente, pas un état du stock.
+            //
+            // Chaque indicateur déclare sa famille au lieu d'être posé dans une
+            // liste unique. Le bloc suit donc les permissions du profil sans
+            // avoir à les connaître : une famille que personne n'a le droit de
+            // voir se vide, et disparaît d'elle-même.
+            $prod = [];
+            $stock = [];
+            // #1B75BC sur #dbeafe ne donne que 3,99:1 : sous le seuil AA de 4,5
+            // qui s'applique au libellé de 11 px. #15568B, le bleu de lien déjà
+            // employé par la feuille (.dash-lien), monte à 6,29:1 sans ajouter
+            // une teinte de plus à la palette.
             if (isset($d['plaques']))
-                $kpis[] = ['val' => fmt_number($d['plaques'], 0), 'lbl' => 'Plaques posées',    'col' => '#1B75BC', 'bg' => '#dbeafe'];
+                $prod[] = ['val' => fmt_number($d['plaques'], 0), 'lbl' => 'Plaques posées',    'col' => '#15568B', 'bg' => '#dbeafe'];
             if (isset($d['engins']))
-                $kpis[] = ['val' => fmt_number($d['engins'], 0),  'lbl' => 'Engins traités',    'col' => '#06033A', 'bg' => '#f0f4ff'];
+                $prod[] = ['val' => fmt_number($d['engins'], 0),  'lbl' => 'Engins traités',    'col' => '#06033A', 'bg' => '#f0f4ff'];
             if (isset($d['rivets_j']))
-                $kpis[] = ['val' => fmt_number($d['rivets_j'], 0),'lbl' => 'Rivets utilisés',   'col' => '#6d28d9', 'bg' => '#f3e8ff'];
+                $prod[] = ['val' => fmt_number($d['rivets_j'], 0),'lbl' => 'Rivets utilisés',   'col' => '#6d28d9', 'bg' => '#f3e8ff'];
             if (isset($d['in_use']))
-                $kpis[] = ['val' => fmt_number($d['in_use'], 0),  'lbl' => 'In Use EMUCI',      'col' => '#92400e', 'bg' => '#fef3c7'];
+                $prod[] = ['val' => fmt_number($d['in_use'], 0),  'lbl' => 'In Use EMUCI',      'col' => '#92400e', 'bg' => '#fef3c7'];
             if (isset($d['ecart'])) {
                 $e = $d['ecart'];
-                $kpis[] = ['val' => ($e > 0 ? '+' : '') . $e,    'lbl' => 'Écart EMUCI / PJ',  'col' => ($e === 0 ? '#166534' : '#991b1b'), 'bg' => ($e === 0 ? '#dcfce7' : '#fee2e2')];
+                $prod[] = ['val' => ($e > 0 ? '+' : '') . $e,    'lbl' => 'Écart EMUCI / PJ',  'col' => ($e === 0 ? '#166534' : '#991b1b'), 'bg' => ($e === 0 ? '#dcfce7' : '#fee2e2')];
             }
             if (isset($d['pts_valides'])) {
                 $tot = $d['pts_total'] ?? $d['pts_valides'];
                 $ok  = $tot > 0 && $d['pts_valides'] >= $tot;
-                $kpis[] = ['val' => $d['pts_valides'] . ' / ' . $tot, 'lbl' => 'Points validés', 'col' => ($ok ? '#166534' : '#92400e'), 'bg' => ($ok ? '#dcfce7' : '#fef3c7')];
+                $prod[] = ['val' => $d['pts_valides'] . ' / ' . $tot, 'lbl' => 'Points validés', 'col' => ($ok ? '#166534' : '#92400e'), 'bg' => ($ok ? '#dcfce7' : '#fef3c7')];
             }
             if (isset($d['pts_attente'])) {
                 $pa = $d['pts_attente'];
-                $kpis[] = ['val' => fmt_number($pa, 0), 'lbl' => 'En attente valid.', 'col' => ($pa > 0 ? '#92400e' : '#166534'), 'bg' => ($pa > 0 ? '#fef3c7' : '#dcfce7')];
+                $prod[] = ['val' => fmt_number($pa, 0), 'lbl' => 'En attente valid.', 'col' => ($pa > 0 ? '#92400e' : '#166534'), 'bg' => ($pa > 0 ? '#fef3c7' : '#dcfce7')];
             }
-            if (isset($d['bobines']))
-                $kpis[] = ['val' => fmt_number($d['bobines'], 0),      'lbl' => 'Bobines actives',  'col' => '#0369a1', 'bg' => '#e0f2fe'];
-            if (isset($d['films']))
-                $kpis[] = ['val' => fmt_number($d['films'], 0),        'lbl' => 'Films restants',   'col' => '#0369a1', 'bg' => '#f0f9ff'];
-            if (isset($d['bob_critiques']) && $d['bob_critiques'] > 0)
-                $kpis[] = ['val' => fmt_number($d['bob_critiques'], 0),'lbl' => 'Bobines critiques','col' => '#991b1b', 'bg' => '#fee2e2'];
             if (isset($d['corrections'])) {
                 $c = $d['corrections'];
-                $kpis[] = ['val' => fmt_number($c, 0), 'lbl' => 'Corrections att.', 'col' => ($c > 0 ? '#92400e' : '#166534'), 'bg' => ($c > 0 ? '#fef3c7' : '#dcfce7')];
+                $prod[] = ['val' => fmt_number($c, 0), 'lbl' => 'Corrections att.', 'col' => ($c > 0 ? '#92400e' : '#166534'), 'bg' => ($c > 0 ? '#fef3c7' : '#dcfce7')];
+            }
+            if (isset($d['bobines']))
+                $stock[] = ['val' => fmt_number($d['bobines'], 0),      'lbl' => 'Bobines actives',  'col' => '#0369a1', 'bg' => '#e0f2fe'];
+            if (isset($d['films']))
+                $stock[] = ['val' => fmt_number($d['films'], 0),        'lbl' => 'Films restants',   'col' => '#0369a1', 'bg' => '#f0f9ff'];
+            if (isset($d['bob_critiques']) && $d['bob_critiques'] > 0)
+                $stock[] = ['val' => fmt_number($d['bob_critiques'], 0),'lbl' => 'Bobines critiques','col' => '#991b1b', 'bg' => '#fee2e2'];
+            if (isset($d['rivets_stock'])) {
+                $sr = $d['rivets_stock'];
+                $stock[] = ['val' => fmt_number($sr, 0), 'lbl' => 'Stock rivets', 'col' => ($sr < 100 ? '#991b1b' : ($sr < 500 ? '#92400e' : '#166534')), 'bg' => ($sr < 100 ? '#fee2e2' : ($sr < 500 ? '#fef3c7' : '#dcfce7'))];
             }
             if (isset($d['commandes'])) {
                 $ca = $d['commandes'];
-                $kpis[] = ['val' => fmt_number($ca, 0), 'lbl' => 'Commandes à servir', 'col' => ($ca > 0 ? '#1B75BC' : '#166534'), 'bg' => ($ca > 0 ? '#dbeafe' : '#dcfce7')];
-            }
-            if (isset($d['rivets_stock'])) {
-                $sr = $d['rivets_stock'];
-                $kpis[] = ['val' => fmt_number($sr, 0), 'lbl' => 'Stock rivets', 'col' => ($sr < 100 ? '#991b1b' : ($sr < 500 ? '#92400e' : '#166534')), 'bg' => ($sr < 100 ? '#fee2e2' : ($sr < 500 ? '#fef3c7' : '#dcfce7'))];
+                $stock[] = ['val' => fmt_number($ca, 0), 'lbl' => 'Commandes à servir', 'col' => ($ca > 0 ? '#15568B' : '#166534'), 'bg' => ($ca > 0 ? '#dbeafe' : '#dcfce7')];
             }
             if (isset($d['equip']))
-                $kpis[] = ['val' => fmt_number($d['equip'], 0),     'lbl' => 'Équipements actifs', 'col' => '#374151', 'bg' => '#f3f4f6'];
+                $stock[] = ['val' => fmt_number($d['equip'], 0),     'lbl' => 'Équipements actifs', 'col' => '#374151', 'bg' => '#f3f4f6'];
             if (isset($d['equip_fin']) && $d['equip_fin'] > 0)
-                $kpis[] = ['val' => fmt_number($d['equip_fin'], 0), 'lbl' => 'Fin cycle ≤ 30j',    'col' => '#991b1b', 'bg' => '#fee2e2'];
-            if (!$kpis) { dash_vide('Aucun indicateur disponible pour ce profil.'); return; }
-            echo '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px">';
-            foreach ($kpis as $k) {
-                echo '<div style="background:' . $k['bg'] . ';border-radius:12px;padding:14px 16px;min-width:0">'
-                   . '<div style="font-size:26px;font-weight:900;color:' . $k['col'] . ';line-height:1;font-variant-numeric:tabular-nums">' . h($k['val']) . '</div>'
-                   . '<div style="font-size:11px;font-weight:700;color:' . $k['col'] . ';opacity:.75;text-transform:uppercase;letter-spacing:.4px;margin-top:6px;line-height:1.3">' . h($k['lbl']) . '</div>'
-                   . '</div>';
+                $stock[] = ['val' => fmt_number($d['equip_fin'], 0), 'lbl' => 'Fin cycle ≤ 30j',    'col' => '#991b1b', 'bg' => '#fee2e2'];
+
+            $familles = [];
+            if ($prod)  $familles[] = ['Production du jour', $prod];
+            if ($stock) $familles[] = ['Stock & moyens',     $stock];
+            if (!$familles) { dash_vide('Aucun indicateur disponible pour ce profil.'); return; }
+
+            echo '<div class="syn">';
+            foreach ($familles as [$titre, $liste]) {
+                echo '<div>';
+                echo '<div class="syn-hd"><span class="syn-t">' . h($titre) . '</span></div>';
+                echo '<div class="syn-grid">';
+                foreach ($liste as $k) {
+                    echo '<div class="syn-k" style="background:' . $k['bg'] . '">'
+                       . '<div class="syn-v" style="color:' . $k['col'] . '">' . h($k['val']) . '</div>'
+                       . '<div class="syn-l" style="color:' . $k['col'] . '">' . h($k['lbl']) . '</div>'
+                       . '</div>';
+                }
+                echo '</div></div>';
             }
             echo '</div>';
         },
@@ -1534,6 +1814,8 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucun point rejeté cette semaine.', true); return; }
+            $sc = count($d) > 3;
+            if ($sc) echo '<div style="max-height:220px;overflow-y:auto;padding-right:2px">';
             foreach ($d as $r) {
                 echo '<div class="biz-risk-r" style="margin-bottom:9px">'
                    . '<div class="biz-risk-i" style="background:#fee2e2;color:#991b1b"><i class="ph-duotone ph-x-circle"></i></div>'
@@ -1544,10 +1826,146 @@ function dash_registre(): array {
                    . '<div class="biz-risk-s" style="margin-top:2px">Par ' . h($r['auteur'] ?? '—') . '</div>'
                    . '</div></div>';
             }
+            if ($sc) echo '</div>';
         },
     ],
 
     // ── Dernières activités ───────────────────────────────────────────
+    // ── Blocs de la maquette v2 ────────────────────────────────────
+    //
+    //  Trois formes reprises de la maquette : la carte de tête (métrique
+    //  large + courbe + bande de répartition), la jauge à objectif, et le
+    //  tableau à pastilles d'icône. Ils ne sont routés que vers les profils
+    //  v2 ; le rôle « lecteur » ne les voit jamais.
+
+    'v2_hero' => [
+        'titre'     => 'Production du mois',
+        'soustitre' => 'Engins posés — mois en cours',
+        'module'    => 'operations',
+        'largeur'   => 'plein',
+        'lien'      => ['/pages/operations/point_journalier.php', 'Points journaliers'],
+        'donnees'   => function (array $p) {
+            [$ws, $as] = dash_filtre_site($p, 'site_id');
+            $debut = date('Y-m-01');
+            $prev  = date('Y-m-01', strtotime('-1 month'));
+
+            $mois = (float)db_fetch_value(
+                "SELECT COALESCE(SUM(total_engins),0) FROM op_points_journaliers
+                 WHERE date_point >= ? $ws", array_merge([$debut], $as));
+            $moisPrec = (float)db_fetch_value(
+                "SELECT COALESCE(SUM(total_engins),0) FROM op_points_journaliers
+                 WHERE date_point >= ? AND date_point < ? $ws", array_merge([$prev, $debut], $as));
+
+            // 4 courbes par type de véhicule — trente derniers jours
+            $rows = db_fetch_all(
+                "SELECT date_point,
+                        COALESCE(SUM(nb_vp),0)      AS vp,
+                        COALESCE(SUM(nb_camion),0)  AS cam,
+                        COALESCE(SUM(nb_semi),0)    AS semi,
+                        COALESCE(SUM(nb_moto),0)    AS mo
+                 FROM op_points_journaliers
+                 WHERE date_point > CURRENT_DATE - 30 $ws
+                 GROUP BY date_point ORDER BY date_point", $as);
+            $par = [];
+            foreach ($rows as $r) $par[(string)$r['date_point']] = $r;
+            $s_vp = $s_cam = $s_semi = $s_mo = $lbl = [];
+            for ($i = 29; $i >= 0; $i--) {
+                $j = date('Y-m-d', strtotime("-$i day"));
+                $r = $par[$j] ?? [];
+                $s_vp[]   = (float)($r['vp']   ?? 0);
+                $s_cam[]  = (float)($r['cam']   ?? 0);
+                $s_semi[] = (float)($r['semi']  ?? 0);
+                $s_mo[]   = (float)($r['mo']    ?? 0);
+                $lbl[]    = date('j', strtotime($j));
+            }
+            $series = [
+                ['label'=>'VP',             'couleur'=>'#2563EB', 'valeurs'=>$s_vp],
+                ['label'=>'Camions',        'couleur'=>'#0F8A47', 'valeurs'=>$s_cam],
+                ['label'=>'Semi-remorques', 'couleur'=>'#7C3AED', 'valeurs'=>$s_semi],
+                ['label'=>'Motos',          'couleur'=>'#B45309', 'valeurs'=>$s_mo],
+            ];
+
+            $mix = db_fetch_one(
+                "SELECT COALESCE(SUM(nb_vp),0) AS vp, COALESCE(SUM(nb_camion),0) AS cam,
+                        COALESCE(SUM(nb_semi),0) AS semi, COALESCE(SUM(nb_moto),0) AS mo
+                 FROM op_points_journaliers WHERE date_point >= ? $ws", array_merge([$debut], $as));
+
+            return ['mois'=>$mois,'prec'=>$moisPrec,'series'=>$series,'lbl'=>$lbl,'mix'=>$mix ?: []];
+        },
+        'rendu' => function (array $d) {
+            $tot_mois = array_sum(array_column($d['series'], 'valeurs') ? array_merge(...array_column($d['series'], 'valeurs')) : []);
+            if (!$tot_mois && !$d['mois']) {
+                dash_vide('Aucun engin posé ce mois-ci.'); return;
+            }
+            $delta = dash_delta($d['mois'], $d['prec'] ?: null);
+            echo '<div class="dv2-hero-row">';
+            echo   '<div class="dv2-hero-l">';
+            echo     '<div class="dv2-hero-v">' . h(fmt_number($d['mois'])) . '</div>';
+            echo     '<div class="dv2-k-ft">';
+            if ($delta) echo '<span class="dv2-d ' . $delta['classe'] . '">' . $delta['fleche'] . ' ' . h($delta['texte']) . '</span>';
+            echo       '<span class="dv2-k-vs">vs. ' . h(fmt_number($d['prec'])) . ' le mois dernier</span>';
+            echo     '</div>';
+            echo   '</div>';
+            echo   '<div class="dv2-hero-ch">';
+            dash_graphe_multi($d['series'], $d['lbl'], 150);
+            echo   '</div>';
+            echo '</div>';
+
+            $m = $d['mix']; $tot = (float)(($m['vp'] ?? 0) + ($m['cam'] ?? 0) + ($m['semi'] ?? 0) + ($m['mo'] ?? 0));
+            if ($tot > 0) {
+                $parts = [
+                    ['Véhicules particuliers', (float)$m['vp'],   '#2563EB'],
+                    ['Camions',                (float)$m['cam'],  '#0F8A47'],
+                    ['Semi-remorques',         (float)$m['semi'], '#7C3AED'],
+                    ['Motos',                  (float)$m['mo'],   '#B45309'],
+                ];
+                echo '<div class="dv2-split">';
+                foreach ($parts as [$lb, $v, $col]) {
+                    $pct = $tot > 0 ? $v / $tot * 100 : 0;
+                    echo '<div>';
+                    echo   '<div class="dv2-sp-v" style="color:' . $col . '">' . h(fmt_number($v))
+                       .   '<span class="dv2-sp-i">' . number_format($pct, 0) . ' %</span></div>';
+                    echo   '<div class="dv2-sp-l">' . h($lb) . '</div>';
+                    echo   '<div class="dv2-sp-bar"><div class="dv2-sp-fill" style="width:'
+                       .     number_format($pct, 1, '.', '') . '%;background:' . $col . '"></div></div>';
+                    echo '</div>';
+                }
+                echo '</div>';
+            }
+        },
+    ],
+
+    'v2_jauge' => [
+        'titre'     => 'Taux de validation',
+        'soustitre' => 'Points validés sur points saisis — ce mois',
+        'module'    => 'operations',
+        'largeur'   => 'demi',
+        'donnees'   => function (array $p) {
+            [$ws, $as] = dash_filtre_site($p, 'site_id');
+            $debut = date('Y-m-01');
+            $r = db_fetch_one(
+                "SELECT COUNT(*) FILTER (WHERE statut='valide') AS ok,
+                        COUNT(*) FILTER (WHERE statut IN ('valide','en_attente_validation')) AS tot
+                 FROM op_points_journaliers WHERE date_point >= ? $ws", array_merge([$debut], $as));
+            return ['ok'=>(int)($r['ok'] ?? 0), 'tot'=>(int)($r['tot'] ?? 0)];
+        },
+        'rendu' => function (array $d) {
+            if ($d['tot'] === 0) {
+                dash_vide('Aucun point saisi ce mois-ci : rien à valider.', true); return;
+            }
+            $pct    = $d['ok'] / $d['tot'] * 100;
+            $cible  = 95;
+            $teinte = $pct >= $cible ? '#0F8A47' : ($pct >= 75 ? '#B45309' : '#D32F35');
+            echo '<div class="dv2-gauge">';
+            dash_graphe('jauge', [$pct], ['couleur'=>$teinte,'cible'=>$cible,'hauteur'=>140,
+                'alt'=>'Taux de validation : ' . number_format($pct,0) . ' %, objectif ' . $cible . ' %']);
+            echo   '<div class="dv2-g-v" style="color:' . $teinte . '">' . number_format($pct, 0) . ' %</div>';
+            echo   '<div class="dv2-g-s">' . h(fmt_number($d['ok'])) . ' point(s) validé(s) sur '
+                 .   h(fmt_number($d['tot'])) . ' · objectif ' . $cible . ' %</div>';
+            echo '</div>';
+        },
+    ],
+
     'activites' => [
         'titre'     => 'Dernières activités',
         'soustitre' => 'Journal des opérations',
