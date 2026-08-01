@@ -498,6 +498,36 @@ function _calculer_ecarts_site(int $site_id, string $date): array {
     return compact('nb_ecarts','ecarts','bobines_detail','dernier_import');
 }
 
+// ── Re-vérification des validations auto : un import EMUCI plus récent (après
+//    la validation) écrase op_bobines.stock_systeme sans se soucier des sites
+//    déjà validés. Si le recalcul révèle désormais un écart, la validation
+//    auto n'est plus valable : elle est annulée, le site retombe dans la file
+//    d'attente GSB comme s'il n'avait jamais été validé. Ne touche jamais aux
+//    décisions manuelles (valide_gsb / autorise_ecart / reajuste / refuse) :
+//    celles-ci reflètent un jugement humain, pas une simple absence d'écart.
+if ($can_valider) {
+    $valides_auto_jour = db_fetch_all(
+        "SELECT site_id FROM validations_stock_matin WHERE date_validation=? AND statut='valide_auto'",
+        [$f_date]
+    );
+    foreach ($valides_auto_jour as $sv) {
+        $recheck = _calculer_ecarts_site((int)$sv['site_id'], $f_date);
+        if ($recheck['nb_ecarts'] > 0) {
+            db_query("DELETE FROM validations_stock_matin WHERE site_id=? AND date_validation=?",
+                [(int)$sv['site_id'], $f_date]);
+            audit_log($user['id'], 'UPDATE', 'validations_stock_matin', 0,
+                "Validation auto annulée site:{$sv['site_id']} $f_date — écart détecté suite à un import EMUCI plus récent");
+            $coords = db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1", [(int)$sv['site_id']]);
+            foreach ($coords as $c) {
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                    [$c['id'], 'info', '⚠️ Validation annulée',
+                     "Votre stock bobines du $f_date, validé automatiquement, présente désormais un écart après un nouvel import EMUCI. Il repasse en attente de traitement par le GSB.",
+                     '/pages/validation_stock_matin.php']);
+            }
+        }
+    }
+}
+
 // ── Auto-traitement batch : valider silencieusement tous les sites sans écart
 $sites_non_valides = [];
 if ($can_valider) {
@@ -518,8 +548,10 @@ if ($can_valider) {
         $s['ecarts']        = $result['ecarts'];
         $s['bobines_detail']= $result['bobines_detail'];
         $s['dernier_import']= $result['dernier_import'];
-        if ($result['nb_ecarts'] === 0 && !empty($result['bobines_detail'])) {
-            // Auto-valider avec snapshot
+        if ($result['nb_ecarts'] === 0 && !empty($result['bobines_detail']) && $result['dernier_import']) {
+            // Auto-valider avec snapshot — seulement si un import EMUCI existe pour comparer.
+            // Sans import, has_ecart est forcé à false faute de référence : ce n'est pas
+            // une preuve de conformité, donc pas d'auto-validation dans ce cas.
             $snapshot = json_encode($result['bobines_detail']);
             db_query(
                 "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,bobines_snapshot,gsb_user_id,gsb_at)
@@ -541,6 +573,7 @@ if ($can_valider) {
     // Séparer : sites avec écarts (action GSB) vs sites auto-validés maintenant
     $sites_avec_ecarts  = array_values(array_filter($sites_non_valides, fn($s) => !$s['auto_valide'] && $s['nb_ecarts'] > 0));
     $sites_sans_point   = array_values(array_filter($sites_non_valides, fn($s) => !$s['auto_valide'] && $s['nb_ecarts'] === 0 && empty($s['bobines_detail'])));
+    $sites_sans_import  = array_values(array_filter($sites_non_valides, fn($s) => !$s['auto_valide'] && $s['nb_ecarts'] === 0 && !empty($s['bobines_detail']) && !$s['dernier_import']));
     $sites_non_valides  = $sites_avec_ecarts; // compatibilité JS
 }
 
@@ -866,6 +899,19 @@ $statut_colors = [
   <div style="display:flex;gap:6px;flex-wrap:wrap">
     <?php foreach($sites_sans_point as $s): ?>
     <span style="background:#E0F2FE;color:#0369A1;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600"><?= h($s['nom']) ?></span>
+    <?php endforeach; ?>
+  </div>
+</div>
+<?php endif; ?>
+
+<!-- Sites avec point journalier mais sans import EMUCI (impossible de comparer) -->
+<?php if(!empty($sites_sans_import) && $can_valider): ?>
+<div style="background:#FFFBEB;border:1.5px solid #FDE68A;border-radius:12px;padding:13px 18px;margin-bottom:20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+  <i class="ph-duotone ph-clock-countdown" style="color:#92400E;font-size:20px;flex-shrink:0"></i>
+  <span style="font-weight:700;color:#92400E;font-size:13px"><?= count($sites_sans_import) ?> site(s) en attente d'import EMUCI (non validés — comparaison impossible)</span>
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <?php foreach($sites_sans_import as $s): ?>
+    <span style="background:#FEF3C7;color:#92400E;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600"><?= h($s['nom']) ?></span>
     <?php endforeach; ?>
   </div>
 </div>
@@ -1253,8 +1299,9 @@ async function verifierSite(siteId, siteNom) {
     toast('❌ Erreur réseau. Réessayez.', 'error'); return;
   }
 
-  // ── 0 écart + GSB non encore validé → validation automatique silencieuse
-  if (canValider && !d.validation && d.nb_ecarts === 0) {
+  // ── 0 écart + import EMUCI présent + GSB non encore validé → validation automatique silencieuse
+  // (sans import, aucune comparaison n'a eu lieu : nb_ecarts=0 ne prouve rien, donc pas d'auto-validation)
+  if (canValider && !d.validation && d.nb_ecarts === 0 && d.dernier_import) {
     const v = await ap({action:'valider_auto', site_id:siteId, date:'<?= h($f_date) ?>'});
     if (v.success) {
       toast(`✅ ${siteNom} — Stock conforme, validé automatiquement`, 'success');
