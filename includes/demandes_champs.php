@@ -251,7 +251,7 @@ function di_render_field(array $f, $value = ''): string {
         echo "<input type=\"text\" id=\"f_$key\" name=\"champs[$key]\" value=\"$v\" list=\"dl_$key\" autocomplete=\"off\" data-agentfill=\"1\"$reqA>";
         echo "<datalist id=\"dl_$key\">";
         foreach (db_fetch_all("SELECT id, nom, prenom, email, telephone, fonction, departement, direction, site, matricule FROM agents WHERE statut='actif' ORDER BY nom, prenom") as $a) {
-            $full = h(trim(($a['prenom'] ?? '') . ' ' . ($a['nom'] ?? '')));
+            $full = h(trim(($a['nom'] ?? '') . ' ' . ($a['prenom'] ?? '')));
             echo '<option value="' . $full . '"'
                . ' data-email="'       . h((string)($a['email']       ?? '')) . '"'
                . ' data-telephone="'   . h((string)($a['telephone']   ?? '')) . '"'
