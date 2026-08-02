@@ -96,7 +96,7 @@ INSERT INTO di_plateformes (code, label, ordre) VALUES
 ON CONFLICT (code) DO NOTHING;
 
 INSERT INTO di_types (code, label, description, traitement_it, date_auto_jours, ordre) VALUES
-    ('autorisation_absence','Autorisation d''absence','Demander un conge, une permission ou une absence exceptionnelle',0,NULL,0),
+    ('autorisation_absence','Autorisation d''absence','Demander un conge',0,NULL,0),
     ('creation_acces','Creation d''acces NSIIV','Demander la creation d''acces aux plateformes NSIIV pour un agent',1,0,1),
     ('basculement_acces','Basculement d''acces','Modifier les acces plateformes d''un agent',1,0,2),
     ('basculement_compte','Basculement de compte EMUCI','Demander le changement de poste sur un compte EMUCI existant',1,0,3),
