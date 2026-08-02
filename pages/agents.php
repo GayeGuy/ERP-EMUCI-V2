@@ -501,7 +501,6 @@ include __DIR__ . '/../templates/header.php';
               <th>Téléphone</th>
               <th>Fonction</th>
               <th>Département</th>
-              <th>Direction</th>
               <th>Site</th>
               <th>Grade</th>
               <th>Statut</th>
@@ -517,7 +516,6 @@ include __DIR__ . '/../templates/header.php';
               <td style="font-size:12px;white-space:nowrap"><?= $a['telephone'] ? h($a['telephone']) : '<span style="color:var(--muted)">—</span>' ?></td>
               <td><?= $a['fonction'] ? h($a['fonction']) : '<span style="color:var(--muted)">—</span>' ?></td>
               <td><?= $a['departement'] ? h($a['departement']) : '<span style="color:var(--muted)">—</span>' ?></td>
-              <td style="font-size:12px"><?= $a['direction'] ? h($a['direction']) : '<span style="color:var(--muted)">—</span>' ?></td>
               <td style="font-size:12px"><?= $a['site'] ? h($a['site']) : '<span style="color:var(--muted)">—</span>' ?></td>
               <td style="font-size:12px"><?= $a['grade'] ? h($a['grade']) : '<span style="color:var(--muted)">—</span>' ?></td>
               <td>
