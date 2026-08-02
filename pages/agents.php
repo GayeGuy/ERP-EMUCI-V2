@@ -349,7 +349,9 @@ include __DIR__ . '/../templates/header.php';
 .ag-drop-lbl { font-size: 13px; color: var(--muted); }
 .ag-drop input[type=file] { display: none; }
 .ag-modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
-.ag-flash    { padding: 12px 16px; border-radius: 10px; font-size: 13px; margin-bottom: 16px; }
+.ag-flash    { padding: 12px 16px; border-radius: 10px; font-size: 13px; margin-bottom: 16px;
+               transition: opacity .4s ease, max-height .4s ease, margin .4s ease, padding .4s ease; overflow: hidden; }
+.ag-flash.ag-flash-out { opacity: 0; max-height: 0; margin-bottom: 0; padding-top: 0; padding-bottom: 0; }
 .ag-ok       { background: #D1FAE5; color: #065F46; border-left: 3px solid #0F8A47; }
 .ag-err      { background: #FEE2E2; color: #991B1B; border-left: 3px solid #DC2626; }
 
@@ -378,15 +380,15 @@ include __DIR__ . '/../templates/header.php';
   <?php endif; ?>
 
   <?php if (isset($_GET['deleted'])): ?>
-    <div class="ag-flash ag-ok"><i class="ph ph-check-circle"></i> Agent supprimé.</div>
+    <div class="ag-flash ag-ok ag-flash-auto"><i class="ph ph-check-circle"></i> Agent supprimé.</div>
   <?php endif; ?>
 
   <?php if (isset($_GET['updated'])): ?>
-    <div class="ag-flash ag-ok"><i class="ph ph-check-circle"></i> Agent mis à jour.</div>
+    <div class="ag-flash ag-ok ag-flash-auto"><i class="ph ph-check-circle"></i> Agent mis à jour.</div>
   <?php endif; ?>
 
   <?php if (isset($_GET['created'])): ?>
-    <div class="ag-flash ag-ok"><i class="ph ph-check-circle"></i> Agent ajouté.</div>
+    <div class="ag-flash ag-ok ag-flash-auto"><i class="ph ph-check-circle"></i> Agent ajouté.</div>
   <?php endif; ?>
 
   <?php if ($update_error): ?>
@@ -746,5 +748,24 @@ function openCreateAgent() {
 }
 </script>
 <?php endif; ?>
+
+<script>
+// Message de confirmation (suppression/modif/ajout) : disparaît tout seul
+// et nettoie l'URL pour qu'un rechargement ne le réaffiche pas indéfiniment.
+(function(){
+  var url = new URL(window.location.href);
+  var hadFlashParam = ['deleted','updated','created'].some(k => url.searchParams.has(k));
+  if (hadFlashParam) {
+    ['deleted','updated','created'].forEach(k => url.searchParams.delete(k));
+    window.history.replaceState(null, '', url.pathname + url.search);
+  }
+  document.querySelectorAll('.ag-flash-auto').forEach(function(el){
+    setTimeout(function(){
+      el.classList.add('ag-flash-out');
+      el.addEventListener('transitionend', function(){ el.remove(); }, {once:true});
+    }, 3500);
+  });
+})();
+</script>
 
 <?php include __DIR__ . '/../templates/footer.php'; ?>
