@@ -47,21 +47,27 @@ if (isset($_GET['modele'])) {
 // ── MODIFICATION (POST action=update)
 $update_error = null;
 if ($can_update && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update') {
-    $aid = (int)($_POST['agent_id'] ?? 0);
-    $nom = trim($_POST['nom'] ?? '');
-    $mat = trim($_POST['matricule'] ?? '') ?: null;
+    $aid    = (int)($_POST['agent_id'] ?? 0);
+    $nom    = mb_strtoupper(trim($_POST['nom']    ?? ''), 'UTF-8');
+    $prenom = mb_strtoupper(trim($_POST['prenom'] ?? ''), 'UTF-8');
+    $email  = trim($_POST['email'] ?? '');
+    $tel    = preg_replace('/\D/', '', (string)($_POST['telephone'] ?? ''));
+    $mat    = trim($_POST['matricule'] ?? '') ?: null;
     $statut = ($_POST['statut'] ?? 'actif') === 'inactif' ? 'inactif' : 'actif';
 
-    if ($aid <= 0 || $nom === '') {
-        $update_error = 'Le nom est obligatoire.';
+    if ($aid <= 0 || $nom === '' || $prenom === '') {
+        $update_error = 'Le nom et le prénom sont obligatoires.';
+    } elseif ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $update_error = "L'email est obligatoire et doit être valide.";
+    } elseif ($tel !== '' && strlen($tel) !== 10) {
+        $update_error = 'Le téléphone doit contenir exactement 10 chiffres.';
     } elseif ($mat !== null && db_fetch_value("SELECT id FROM agents WHERE matricule = ? AND id <> ?", [$mat, $aid])) {
         $update_error = "Le matricule « $mat » est déjà utilisé par un autre agent.";
     } else {
         db_query(
             "UPDATE agents SET matricule=?,nom=?,prenom=?,email=?,telephone=?,fonction=?,departement=?,direction=?,site=?,grade=?,statut=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
             [
-                $mat, $nom, trim($_POST['prenom'] ?? ''),
-                trim($_POST['email'] ?? '') ?: null, trim($_POST['telephone'] ?? '') ?: null,
+                $mat, $nom, $prenom, $email, $tel ?: null,
                 trim($_POST['fonction'] ?? '') ?: null, trim($_POST['departement'] ?? '') ?: null,
                 trim($_POST['direction'] ?? '') ?: null, trim($_POST['site'] ?? '') ?: null,
                 trim($_POST['grade'] ?? '') ?: null, $statut, $aid,
@@ -75,20 +81,26 @@ if ($can_update && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ??
 // ── CRÉATION MANUELLE (POST action=create)
 $create_error = null;
 if ($can_import && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'create') {
-    $nom = trim($_POST['nom'] ?? '');
-    $mat = trim($_POST['matricule'] ?? '') ?: null;
+    $nom    = mb_strtoupper(trim($_POST['nom']    ?? ''), 'UTF-8');
+    $prenom = mb_strtoupper(trim($_POST['prenom'] ?? ''), 'UTF-8');
+    $email  = trim($_POST['email'] ?? '');
+    $tel    = preg_replace('/\D/', '', (string)($_POST['telephone'] ?? ''));
+    $mat    = trim($_POST['matricule'] ?? '') ?: null;
     $statut = ($_POST['statut'] ?? 'actif') === 'inactif' ? 'inactif' : 'actif';
 
-    if ($nom === '') {
-        $create_error = 'Le nom est obligatoire.';
+    if ($nom === '' || $prenom === '') {
+        $create_error = 'Le nom et le prénom sont obligatoires.';
+    } elseif ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $create_error = "L'email est obligatoire et doit être valide.";
+    } elseif ($tel !== '' && strlen($tel) !== 10) {
+        $create_error = 'Le téléphone doit contenir exactement 10 chiffres.';
     } elseif ($mat !== null && db_fetch_value("SELECT id FROM agents WHERE matricule = ?", [$mat])) {
         $create_error = "Le matricule « $mat » est déjà utilisé par un autre agent.";
     } else {
         db_query(
             "INSERT INTO agents (matricule,nom,prenom,email,telephone,fonction,departement,direction,site,grade,statut) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             [
-                $mat, $nom, trim($_POST['prenom'] ?? ''),
-                trim($_POST['email'] ?? '') ?: null, trim($_POST['telephone'] ?? '') ?: null,
+                $mat, $nom, $prenom, $email, $tel ?: null,
                 trim($_POST['fonction'] ?? '') ?: null, trim($_POST['departement'] ?? '') ?: null,
                 trim($_POST['direction'] ?? '') ?: null, trim($_POST['site'] ?? '') ?: null,
                 trim($_POST['grade'] ?? '') ?: null, $statut,
@@ -255,6 +267,14 @@ $where_sql = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 $agents = db_fetch_all("SELECT * FROM agents $where_sql ORDER BY nom, prenom", $params);
 $depts  = db_fetch_all("SELECT DISTINCT departement FROM agents WHERE departement IS NOT NULL AND departement <> '' ORDER BY departement");
 $sites  = db_fetch_all("SELECT DISTINCT site FROM agents WHERE site IS NOT NULL AND site <> '' ORDER BY site");
+$dirs   = db_fetch_all("SELECT DISTINCT direction FROM agents WHERE direction IS NOT NULL AND direction <> '' ORDER BY direction");
+
+// Listes de référence pour le formulaire d'agent (datalist) — tables gérées
+// dans l'admin, pas les valeurs déjà présentes dans agents. Il n'existe pas
+// de table dédiée aux directions : ce champ reste une saisie libre suggérée
+// à partir des valeurs déjà utilisées ($dirs ci-dessus).
+$departements_ref = db_fetch_all("SELECT label FROM departements WHERE actif=1 ORDER BY label");
+$sites_ref        = db_fetch_all("SELECT nom FROM sites WHERE actif=1 ORDER BY nom");
 $kpis   = db_fetch_one(
     "SELECT COUNT(*) AS total,
             COUNT(*) FILTER (WHERE statut='actif') AS actifs,
@@ -602,19 +622,26 @@ include __DIR__ . '/../templates/header.php';
         </div>
         <div>
           <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Nom *</label>
-          <input type="text" name="nom" id="ed-nom" required style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+          <input type="text" name="nom" id="ed-nom" required
+                 style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;text-transform:uppercase"
+                 oninput="this.value=this.value.toUpperCase()">
         </div>
         <div>
-          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Prénom</label>
-          <input type="text" name="prenom" id="ed-prenom" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Prénom *</label>
+          <input type="text" name="prenom" id="ed-prenom" required
+                 style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;text-transform:uppercase"
+                 oninput="this.value=this.value.toUpperCase()">
         </div>
         <div>
-          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Email</label>
-          <input type="email" name="email" id="ed-email" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Email *</label>
+          <input type="email" name="email" id="ed-email" required style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
         </div>
         <div>
           <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Téléphone</label>
-          <input type="text" name="telephone" id="ed-telephone" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+          <input type="tel" name="telephone" id="ed-telephone" inputmode="numeric" pattern="[0-9]{10}" maxlength="10"
+                 placeholder="10 chiffres" title="10 chiffres, sans espace ni lettre"
+                 style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit"
+                 oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
         </div>
         <div>
           <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Fonction</label>
@@ -622,19 +649,43 @@ include __DIR__ . '/../templates/header.php';
         </div>
         <div>
           <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Département</label>
-          <input type="text" name="departement" id="ed-departement" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+          <input type="text" name="departement" id="ed-departement" list="dl-departement" autocomplete="off"
+                 style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+          <datalist id="dl-departement">
+            <?php foreach ($departements_ref as $d): ?><option value="<?= h($d['label']) ?>"><?php endforeach; ?>
+          </datalist>
         </div>
         <div>
           <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Direction</label>
-          <input type="text" name="direction" id="ed-direction" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+          <input type="text" name="direction" id="ed-direction" list="dl-direction" autocomplete="off"
+                 style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+          <datalist id="dl-direction">
+            <?php foreach ($dirs as $d): ?><option value="<?= h($d['direction']) ?>"><?php endforeach; ?>
+          </datalist>
         </div>
         <div>
           <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Site</label>
-          <input type="text" name="site" id="ed-site" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+          <input type="text" name="site" id="ed-site" list="dl-site" autocomplete="off"
+                 style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+          <datalist id="dl-site">
+            <?php foreach ($sites_ref as $s): ?><option value="<?= h($s['nom']) ?>"><?php endforeach; ?>
+          </datalist>
         </div>
         <div>
           <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Grade</label>
-          <input type="text" name="grade" id="ed-grade" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+          <select name="grade" id="ed-grade" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
+            <option value="">— Choisir —</option>
+            <option value="CDI">CDI</option>
+            <option value="CDD">CDD</option>
+            <option value="Stage">Stage</option>
+            <option value="Alternance">Alternance</option>
+            <option value="Intérim">Intérim</option>
+            <option value="Consultant">Consultant</option>
+            <option value="Prestataire">Prestataire</option>
+            <option value="Vacataire">Vacataire</option>
+            <option value="Bénévole">Bénévole</option>
+            <option value="Autre">Autre</option>
+          </select>
         </div>
       </div>
       <div class="ag-modal-actions">
@@ -662,9 +713,27 @@ function openEditAgent(id) {
   document.getElementById('ed-departement').value = a.departement || '';
   document.getElementById('ed-direction').value   = a.direction || '';
   document.getElementById('ed-site').value        = a.site || '';
-  document.getElementById('ed-grade').value       = a.grade || '';
+  setGradeValue(a.grade || '');
   document.getElementById('ed-statut').value      = a.statut === 'inactif' ? 'inactif' : 'actif';
   document.getElementById('ag-edit-modal').classList.add('open');
+}
+// Un agent importé avant l'introduction de la liste fermée peut porter une
+// valeur de grade hors liste : on l'ajoute à la volée plutôt que de la
+// faire disparaître silencieusement du formulaire.
+function setGradeValue(val) {
+  var sel = document.getElementById('ed-grade');
+  var found = false;
+  for (var i = 0; i < sel.options.length; i++) {
+    if (sel.options[i].value === val) { found = true; break; }
+  }
+  var extra = sel.querySelector('option[data-extra]');
+  if (extra) extra.remove();
+  if (val && !found) {
+    var opt = document.createElement('option');
+    opt.value = val; opt.textContent = val; opt.setAttribute('data-extra', '1');
+    sel.appendChild(opt);
+  }
+  sel.value = val;
 }
 function openCreateAgent() {
   document.getElementById('ag-edit-form').reset();
@@ -672,6 +741,7 @@ function openCreateAgent() {
   document.getElementById('ed-icon').className    = 'ph ph-user-plus';
   document.getElementById('ed-action').value      = 'create';
   document.getElementById('ed-id').value          = '';
+  setGradeValue('');
   document.getElementById('ag-edit-modal').classList.add('open');
 }
 </script>
