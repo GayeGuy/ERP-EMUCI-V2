@@ -468,7 +468,7 @@ include __DIR__ . '/../templates/header.php';
               <?php if ($can_update || $can_delete): ?>
               <td style="text-align:right;white-space:nowrap">
                 <?php if ($can_update): ?>
-                <button type="button" onclick="openEditAgent(<?= (int)$a['id'] ?>)" style="background:none;border:none;cursor:pointer;color:#1B75BC;font-size:16px" title="Modifier">
+                <button type="button" onclick="openEditAgent(<?= (int)$a['id'] ?>)" style="background:none;border:none;cursor:pointer;color:#1B75BC;font-size:16px;padding:6px" title="Modifier">
                   <i class="ph ph-pencil-simple"></i>
                 </button>
                 <?php endif; ?>
@@ -476,7 +476,7 @@ include __DIR__ . '/../templates/header.php';
                 <form method="post" style="display:inline" onsubmit="return confirm('Supprimer cet agent ?')">
                   <input type="hidden" name="action" value="delete">
                   <input type="hidden" name="agent_id" value="<?= (int)$a['id'] ?>">
-                  <button type="submit" style="background:none;border:none;cursor:pointer;color:#DC2626;font-size:16px" title="Supprimer">
+                  <button type="submit" style="background:none;border:none;cursor:pointer;color:#DC2626;font-size:16px;padding:6px;margin-left:8px" title="Supprimer">
                     <i class="ph ph-trash"></i>
                   </button>
                 </form>
