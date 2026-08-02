@@ -272,10 +272,12 @@ include __DIR__ . '/../templates/header.php';
 .ag-table-wrap { background: white; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
 .ag-table-head { padding: 14px 18px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
 .ag-table-head h2 { font-size: 14px; font-weight: 700; color: var(--navy); margin: 0; }
-.ag-scroll { overflow-x: auto; }
+/* Scroll interne au-delà de 4 lignes : hauteur = header + 4 lignes (~46px/ligne) */
+.ag-scroll { overflow-x: auto; max-height: 268px; overflow-y: auto; }
 .ag-table  { width: 100%; border-collapse: collapse; font-size: 13px; }
 .ag-table thead th { background: var(--navy); color: white; padding: 9px 12px; text-align: left;
-                     font-size: 11px; font-weight: 700; white-space: nowrap; }
+                     font-size: 11px; font-weight: 700; white-space: nowrap;
+                     position: sticky; top: 0; z-index: 1; }
 .ag-table tbody tr:nth-child(even) td { background: #f8fafc; }
 .ag-table tbody tr:hover td { background: #EFF6FF; }
 .ag-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
