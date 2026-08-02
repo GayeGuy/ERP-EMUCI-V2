@@ -679,14 +679,14 @@ include __DIR__ . '/../templates/header.php';
             <option value="">— Choisir —</option>
             <option value="CDI">CDI</option>
             <option value="CDD">CDD</option>
-            <option value="Stage">Stage</option>
-            <option value="Alternance">Alternance</option>
-            <option value="Intérim">Intérim</option>
-            <option value="Consultant">Consultant</option>
-            <option value="Prestataire">Prestataire</option>
-            <option value="Vacataire">Vacataire</option>
-            <option value="Bénévole">Bénévole</option>
-            <option value="Autre">Autre</option>
+            <option value="STAGE">STAGE</option>
+            <option value="ALTERNANCE">ALTERNANCE</option>
+            <option value="INTÉRIM">INTÉRIM</option>
+            <option value="CONSULTANT">CONSULTANT</option>
+            <option value="PRESTATAIRE">PRESTATAIRE</option>
+            <option value="VACATAIRE">VACATAIRE</option>
+            <option value="BÉNÉVOLE">BÉNÉVOLE</option>
+            <option value="AUTRE">AUTRE</option>
           </select>
         </div>
       </div>
