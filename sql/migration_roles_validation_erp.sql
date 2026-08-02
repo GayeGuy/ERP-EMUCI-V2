@@ -2,21 +2,19 @@
 --  Migration : validation des demandes internes pilotée par le rôle ERP
 --  (Administration → Permissions), et non plus par la matrice « Rôles valideurs ».
 --  Ajoute le rôle ERP « Directeur Général » (étape DG des circuits).
---  Compatible PostgreSQL / Neon — idempotent.
+--  Variante MySQL — idempotent (INSERT IGNORE).
 -- ============================================================
 
 -- 1. Rôle ERP Directeur Général (incarne l'étape 'dg' des circuits de demandes)
-INSERT INTO roles (nom, slug, description, created_at)
+INSERT IGNORE INTO roles (nom, slug, description, created_at)
 VALUES ('Directeur General', 'directeur_general',
-        'Direction Generale — validation finale des demandes internes (etape DG du circuit)', NOW())
-ON CONFLICT (slug) DO NOTHING;
+        'Direction Generale — validation finale des demandes internes (etape DG du circuit)', NOW());
 
 -- 2. Permissions de base : lecture + export des rapports
-INSERT INTO permissions (role_id, module, can_read, can_create, can_update, can_delete, can_export)
+INSERT IGNORE INTO permissions (role_id, module, can_read, can_create, can_update, can_delete, can_export)
 SELECT r.id, m.module, 1, 0, 0, 0, 1
-FROM roles r, (VALUES ('rapports')) AS m(module)
-WHERE r.slug = 'directeur_general'
-ON CONFLICT (role_id, module) DO NOTHING;
+FROM roles r, (VALUES ROW('rapports')) AS m(module)
+WHERE r.slug = 'directeur_general';
 
 -- ------------------------------------------------------------
 -- NB : plus aucune autre table à modifier. Le mapping rôle ERP → étape est en code

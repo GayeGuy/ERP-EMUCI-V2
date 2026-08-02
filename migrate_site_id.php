@@ -21,12 +21,14 @@ function run(PDO $db, string $label, string $sql, array &$log): void {
 }
 
 // ── 1. articles — ajouter site_id (nullable, FK sites)
-// MySQL 8 : ADD COLUMN IF NOT EXISTS supporté ; la clé étrangère et l'index
-// s'ajoutent en instructions séparées (pas de REFERENCES inline sur ADD
-// COLUMN). Un rejeu tombe sur une erreur "duplicate" non bloquante, déjà
-// captée par run() ci-dessus.
+// MySQL n'accepte pas IF NOT EXISTS sur ADD COLUMN (erreur de syntaxe,
+// contrairement à MariaDB) ; la clé étrangère et l'index s'ajoutent en
+// instructions séparées (pas de REFERENCES inline sur ADD COLUMN — accepté
+// par le parseur mais silencieusement ignoré, sans créer la contrainte).
+// Un rejeu tombe sur une erreur "duplicate" non bloquante, déjà captée par
+// run() ci-dessus.
 run($db, 'articles: ADD COLUMN site_id',
-    "ALTER TABLE articles ADD COLUMN IF NOT EXISTS site_id INT UNSIGNED NULL",
+    "ALTER TABLE articles ADD COLUMN site_id INT UNSIGNED NULL",
     $log);
 
 run($db, 'articles: FK site_id',
@@ -39,7 +41,7 @@ run($db, 'articles: INDEX site_id',
 
 // ── 2. di_demandes — ajouter site_id (nullable, FK sites)
 run($db, 'di_demandes: ADD COLUMN site_id',
-    "ALTER TABLE di_demandes ADD COLUMN IF NOT EXISTS site_id INT UNSIGNED NULL",
+    "ALTER TABLE di_demandes ADD COLUMN site_id INT UNSIGNED NULL",
     $log);
 
 run($db, 'di_demandes: FK site_id',

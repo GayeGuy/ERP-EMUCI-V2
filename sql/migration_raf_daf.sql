@@ -1,18 +1,16 @@
 -- ============================================================
---  Migration : profils RAF et DAF (compatible PostgreSQL / Neon)
---  Exécuter une seule fois — idempotent
+--  Migration : profils RAF et DAF (variante MySQL)
+--  Exécuter une seule fois — idempotent (INSERT IGNORE).
 -- ============================================================
 
 -- 1. Ajouter les rôles ERP
-INSERT INTO roles (nom, slug, description, created_at)
+INSERT IGNORE INTO roles (nom, slug, description, created_at)
 VALUES
     ('Responsable Administratif et Financier', 'raf', 'Validation administrative et financière des demandes internes — étape RAF du circuit', NOW()),
-    ('Directeur Administratif et Financier',   'daf', 'Validation DG des demandes financières — étape DAF du circuit', NOW())
-ON CONFLICT (slug) DO NOTHING;
+    ('Directeur Administratif et Financier',   'daf', 'Validation DG des demandes financières — étape DAF du circuit', NOW());
 
 -- 2. Permissions de base : lecture rapports + export
-INSERT INTO permissions (role_id, module, can_read, can_create, can_update, can_delete, can_export)
+INSERT IGNORE INTO permissions (role_id, module, can_read, can_create, can_update, can_delete, can_export)
 SELECT r.id, m.module, 1, 0, 0, 0, 1
-FROM roles r, (VALUES ('rapports'),('equipements'),('consommables')) AS m(module)
-WHERE r.slug IN ('raf','daf')
-ON CONFLICT (role_id, module) DO NOTHING;
+FROM roles r, (VALUES ROW('rapports'),ROW('equipements'),ROW('consommables')) AS m(module)
+WHERE r.slug IN ('raf','daf');

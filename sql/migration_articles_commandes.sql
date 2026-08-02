@@ -166,17 +166,20 @@ ALTER TABLE `commandes`
     'annule'
   ) NOT NULL DEFAULT 'en_attente';
 
+-- MySQL n'accepte pas IF NOT EXISTS sur ADD COLUMN (erreur de syntaxe,
+-- contrairement à MariaDB) : rejeu tolérant aux erreurs "colonne déjà
+-- existante" à la place, comme le reste des migrations de ce dépôt.
 ALTER TABLE `commandes`
-  ADD COLUMN IF NOT EXISTS `valide_par`          INT UNSIGNED  DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS `valide_at`           DATETIME      NULL DEFAULT NULL,
-  ADD COLUMN IF NOT EXISTS `motif_rejet_global`  TEXT          DEFAULT NULL;
+  ADD COLUMN `valide_par`          INT UNSIGNED  DEFAULT NULL,
+  ADD COLUMN `valide_at`           DATETIME      NULL DEFAULT NULL,
+  ADD COLUMN `motif_rejet_global`  TEXT          DEFAULT NULL;
 
 -- ─────────────────────────────────────────────────────────────
 --  9. ALTER TABLE commande_lignes — statut par ligne
 -- ─────────────────────────────────────────────────────────────
 ALTER TABLE `commande_lignes`
-  ADD COLUMN IF NOT EXISTS `statut_ligne` ENUM('en_attente','valide','modifie','rejete') NOT NULL DEFAULT 'en_attente',
-  ADD COLUMN IF NOT EXISTS `motif_rejet`  TEXT DEFAULT NULL;
+  ADD COLUMN `statut_ligne` ENUM('en_attente','valide','modifie','rejete') NOT NULL DEFAULT 'en_attente',
+  ADD COLUMN `motif_rejet`  TEXT DEFAULT NULL;
 
 -- Mettre à jour type_article 'consommable' → 'article' pour les lignes existantes
 -- (on modifie d'abord l'ENUM pour accepter 'article')
