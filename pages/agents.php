@@ -72,6 +72,33 @@ if ($can_update && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ??
     }
 }
 
+// ── CRÉATION MANUELLE (POST action=create)
+$create_error = null;
+if ($can_import && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'create') {
+    $nom = trim($_POST['nom'] ?? '');
+    $mat = trim($_POST['matricule'] ?? '') ?: null;
+    $statut = ($_POST['statut'] ?? 'actif') === 'inactif' ? 'inactif' : 'actif';
+
+    if ($nom === '') {
+        $create_error = 'Le nom est obligatoire.';
+    } elseif ($mat !== null && db_fetch_value("SELECT id FROM agents WHERE matricule = ?", [$mat])) {
+        $create_error = "Le matricule « $mat » est déjà utilisé par un autre agent.";
+    } else {
+        db_query(
+            "INSERT INTO agents (matricule,nom,prenom,email,telephone,fonction,departement,direction,site,grade,statut) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+            [
+                $mat, $nom, trim($_POST['prenom'] ?? ''),
+                trim($_POST['email'] ?? '') ?: null, trim($_POST['telephone'] ?? '') ?: null,
+                trim($_POST['fonction'] ?? '') ?: null, trim($_POST['departement'] ?? '') ?: null,
+                trim($_POST['direction'] ?? '') ?: null, trim($_POST['site'] ?? '') ?: null,
+                trim($_POST['grade'] ?? '') ?: null, $statut,
+            ]
+        );
+        header('Location: ' . APP_URL . '/pages/agents.php?created=1');
+        exit;
+    }
+}
+
 // ── SUPPRESSION (POST action=delete)
 if ($can_delete && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete') {
     $aid = (int)($_POST['agent_id'] ?? 0);
@@ -336,8 +363,16 @@ include __DIR__ . '/../templates/header.php';
     <div class="ag-flash ag-ok"><i class="ph ph-check-circle"></i> Agent mis à jour.</div>
   <?php endif; ?>
 
+  <?php if (isset($_GET['created'])): ?>
+    <div class="ag-flash ag-ok"><i class="ph ph-check-circle"></i> Agent ajouté.</div>
+  <?php endif; ?>
+
   <?php if ($update_error): ?>
     <div class="ag-flash ag-err"><i class="ph ph-warning"></i> <?= h($update_error) ?></div>
+  <?php endif; ?>
+
+  <?php if ($create_error): ?>
+    <div class="ag-flash ag-err"><i class="ph ph-warning"></i> <?= h($create_error) ?></div>
   <?php endif; ?>
 
   <!-- En-tête -->
@@ -354,6 +389,9 @@ include __DIR__ . '/../templates/header.php';
         <i class="ph ph-download-simple"></i> Modèle Excel
       </a>
       <?php if ($can_import): ?>
+      <button type="button" class="ag-btn ag-btn-pri" onclick="openCreateAgent()">
+        <i class="ph ph-user-plus"></i> Nouvel agent
+      </button>
       <button type="button" class="ag-btn ag-btn-grn" onclick="document.getElementById('ag-modal').classList.add('open')">
         <i class="ph ph-upload-simple"></i> Importer Excel
       </button>
@@ -427,7 +465,7 @@ include __DIR__ . '/../templates/header.php';
       <div class="ag-empty">
         <i class="ph ph-users-three"></i>
         <?php if ((int)$kpis['total'] === 0): ?>
-          Aucun agent dans l'annuaire. Importez un fichier Excel pour commencer.
+          Aucun agent dans l'annuaire. Importez un fichier Excel ou ajoutez un agent pour commencer.
         <?php else: ?>
           Aucun résultat pour ces filtres.
         <?php endif; ?>
@@ -542,13 +580,13 @@ include __DIR__ . '/../templates/header.php';
 </script>
 <?php endif; ?>
 
-<!-- Modal modification -->
-<?php if ($can_update): ?>
+<!-- Modal création / modification (formulaire partagé) -->
+<?php if ($can_update || $can_import): ?>
 <div class="ag-modal-bg" id="ag-edit-modal" onclick="if(event.target===this)this.classList.remove('open')">
   <div class="ag-modal" style="max-width:640px">
-    <h3><i class="ph ph-pencil-simple" style="margin-right:6px"></i>Modifier l'agent</h3>
+    <h3><i class="ph ph-pencil-simple" id="ed-icon" style="margin-right:6px"></i><span id="ed-title">Modifier l'agent</span></h3>
     <form method="post" id="ag-edit-form">
-      <input type="hidden" name="action" value="update">
+      <input type="hidden" name="action" id="ed-action" value="update">
       <input type="hidden" name="agent_id" id="ed-id">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;margin-bottom:14px">
         <div>
@@ -611,6 +649,9 @@ const AGENTS_DATA = <?= json_encode(array_column($agents, null, 'id'), JSON_UNES
 function openEditAgent(id) {
   const a = AGENTS_DATA[id];
   if (!a) return;
+  document.getElementById('ed-title').textContent = "Modifier l'agent";
+  document.getElementById('ed-icon').className    = 'ph ph-pencil-simple';
+  document.getElementById('ed-action').value      = 'update';
   document.getElementById('ed-id').value          = a.id;
   document.getElementById('ed-matricule').value   = a.matricule || '';
   document.getElementById('ed-nom').value         = a.nom || '';
@@ -623,6 +664,14 @@ function openEditAgent(id) {
   document.getElementById('ed-site').value        = a.site || '';
   document.getElementById('ed-grade').value       = a.grade || '';
   document.getElementById('ed-statut').value      = a.statut === 'inactif' ? 'inactif' : 'actif';
+  document.getElementById('ag-edit-modal').classList.add('open');
+}
+function openCreateAgent() {
+  document.getElementById('ag-edit-form').reset();
+  document.getElementById('ed-title').textContent = 'Ajouter un agent';
+  document.getElementById('ed-icon').className    = 'ph ph-user-plus';
+  document.getElementById('ed-action').value      = 'create';
+  document.getElementById('ed-id').value          = '';
   document.getElementById('ag-edit-modal').classList.add('open');
 }
 </script>
