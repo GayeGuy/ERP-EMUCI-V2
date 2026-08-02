@@ -54,7 +54,6 @@ function di_champs_config(): array {
             ['key'=>'nouveau_site',  'label'=>'Nouveau site',             'type'=>'site',  'required'=>true],
             ['key'=>'ancien_role',   'label'=>'Ancien rôle',              'type'=>'text',  'required'=>true],
             ['key'=>'nouveau_role',  'label'=>'Nouveau rôle',             'type'=>'text',  'required'=>true],
-            ['key'=>'date_demande',  'label'=>'Date de la demande',       'type'=>'date'],
             ['key'=>'plateformes',   'label'=>'Accès aux plateformes',    'type'=>'plateformes', 'span'=>true],
         ],
         'basculement_compte' => [
