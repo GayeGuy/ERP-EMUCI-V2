@@ -112,14 +112,10 @@ function di_champs_config(): array {
             ['key'=>'agent_nom',     'label'=>"Nom & Prénoms de l'agent",   'type'=>'agent',    'required'=>true, 'section'=>"Identité de l'agent"],
             ['key'=>'agent_email',   'label'=>"Email de l'agent",           'type'=>'email'],
             ['key'=>'agent_fonction','label'=>"Fonction de l'agent",        'type'=>'text'],
-            ['key'=>'categorie',     'label'=>'Catégorie',                   'type'=>'select',   'required'=>true, 'section'=>"Objet de la demande",
-             'options'=>['' =>'— Choisir —', 'Administratif'=>'Administratif', 'Matériel'=>'Matériel',
-                         'RH'=>'RH', 'Financier'=>'Financier', 'Autre'=>'Autre']],
-            ['key'=>'urgence',       'label'=>"Niveau d'urgence",           'type'=>'select',
-             'options'=>['' =>'— Choisir —', 'Normal'=>'Normal', 'Urgent'=>'Urgent', 'Très urgent'=>'Très urgent']],
-            ['key'=>'objet',         'label'=>'Objet de la demande',        'type'=>'text',     'required'=>true, 'span'=>true],
-            ['key'=>'description',   'label'=>'Description / Justification','type'=>'textarea', 'required'=>true, 'span'=>true],
+            ['key'=>'description',   'label'=>'Description / Justification','type'=>'textarea', 'required'=>true, 'span'=>true, 'section'=>"Objet de la demande"],
             ['key'=>'date_souhaitee','label'=>'Date souhaitée',             'type'=>'date'],
+            ['key'=>'date_retour',   'label'=>'Date de retour (incluse)',   'type'=>'date'],
+            ['key'=>'heure_retour',  'label'=>'Heure de retour',            'type'=>'time'],
         ],
         'changement_geolocalisation' => [
             // Un seul bandeau ici : les champs alternent l'actuel et le
@@ -280,10 +276,10 @@ function di_render_field(array $f, $value = ''): string {
         }
         echo "</datalist>";
     } else {
-        $t = in_array($type, ['number','date','email']) ? $type : 'text';
+        $t = in_array($type, ['number','date','email','time']) ? $type : 'text';
         // La donnée décide de la largeur, pas la grille. Un nombre de jours
         // dans une boîte de 430 px annonce qu'on attend un paragraphe.
-        $court = in_array($t, ['number', 'date'], true) ? ' class="di-court"' : '';
+        $court = in_array($t, ['number', 'date', 'time'], true) ? ' class="di-court"' : '';
         $min   = ($t === 'number') ? ' min="1" step="1" inputmode="numeric"' : '';
         echo "<input type=\"$t\" id=\"f_$key\" name=\"champs[$key]\" value=\"$v\"$court$min$reqA$editable>";
         if (!empty($f['suffixe'])) {
