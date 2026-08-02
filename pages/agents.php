@@ -513,7 +513,7 @@ include __DIR__ . '/../templates/header.php';
           <?php foreach ($agents as $a): ?>
             <tr>
               <td style="font-family:monospace;font-weight:700;color:var(--navy)"><?= $a['matricule'] ? h($a['matricule']) : '<span style="color:var(--muted)">—</span>' ?></td>
-              <td style="font-weight:600"><?= h(trim($a['prenom'] . ' ' . $a['nom'])) ?></td>
+              <td style="font-weight:600"><?= h(trim($a['nom'] . ' ' . $a['prenom'])) ?></td>
               <td style="font-size:12px"><?= $a['email'] ? h($a['email']) : '<span style="color:var(--muted)">—</span>' ?></td>
               <td style="font-size:12px;white-space:nowrap"><?= $a['telephone'] ? h($a['telephone']) : '<span style="color:var(--muted)">—</span>' ?></td>
               <td><?= $a['fonction'] ? h($a['fonction']) : '<span style="color:var(--muted)">—</span>' ?></td>
