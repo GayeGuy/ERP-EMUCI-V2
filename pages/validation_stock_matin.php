@@ -522,6 +522,99 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         json_response(true,'Demande de correction envoyée au coordinateur.');
     }
 
+    // ── GSB : DÉCISIONS PAR BOBINE sur les corrections du coordinateur
+    if ($action === 'traiter_corrections_coord') {
+        if (!$can_valider) json_response(false, 'Accès refusé.');
+        $site_id       = (int)($_POST['site_id'] ?? 0);
+        $date          = trim($_POST['date'] ?? date('Y-m-d'));
+        $decisions_raw = $_POST['decisions_json'] ?? '[]';
+        $decisions     = json_decode($decisions_raw, true) ?: [];
+        if (!$site_id || empty($decisions)) json_response(false, 'Données manquantes.');
+
+        db_begin();
+        try {
+            $nb_valides  = 0;
+            $nb_refuses  = 0;
+            $bob_refuses = [];
+
+            foreach ($decisions as $d) {
+                $bobine_id  = (int)($d['bobine_id'] ?? 0);
+                $action_bob = $d['action'] ?? '';
+                $comment    = trim($d['commentaire'] ?? '');
+                if (!$bobine_id || !in_array($action_bob, ['valider','refuser'])) continue;
+
+                $corr = db_fetch_one(
+                    "SELECT * FROM corrections_bobines WHERE site_id=? AND date_point=? AND bobine_id=? AND statut='coord_repond'",
+                    [$site_id, $date, $bobine_id]
+                );
+                if (!$corr) continue;
+
+                if ($action_bob === 'valider') {
+                    $stock_av = (int)db_fetch_value("SELECT films_restants FROM op_bobines WHERE id=?", [$bobine_id]);
+                    $nouveau  = (int)$corr['films_final'];
+                    $diff     = $nouveau - $stock_av;
+                    db_query("UPDATE op_bobines SET films_restants=? WHERE id=?", [$nouveau, $bobine_id]);
+                    if ($diff !== 0) {
+                        db_query(
+                            "INSERT INTO mouvements_bobines (bobine_id,type,quantite,stock_avant,stock_apres,motif,created_by)
+                             VALUES (?,?,?,?,?,?,?)",
+                            [$bobine_id,'correction_coord',$diff,$stock_av,$nouveau,
+                             "Correction coordinateur validée ($date) : ".($corr['reponse_coord']??''),$user['id']]
+                        );
+                    }
+                    db_query("UPDATE corrections_bobines SET statut='valide',traite_at=NOW() WHERE id=?", [(int)$corr['id']]);
+                    $nb_valides++;
+                } else {
+                    // refuser → annuler cette correction, le coord devra re-soumettre pour cette bobine
+                    db_query(
+                        "UPDATE corrections_bobines SET statut='annule',traite_at=NOW() WHERE id=?",
+                        [(int)$corr['id']]
+                    );
+                    $bob_num = db_fetch_value("SELECT numero FROM op_bobines WHERE id=?", [$bobine_id]);
+                    $bob_refuses[] = $bob_num ?: "bobine #$bobine_id";
+                    $nb_refuses++;
+                }
+            }
+
+            if ($nb_refuses === 0) {
+                // Tout validé → stock confirmé
+                db_query(
+                    "UPDATE validations_stock_matin SET statut='valide_gsb',commentaire=?,gsb_user_id=?,gsb_at=NOW()
+                     WHERE site_id=? AND date_validation=?",
+                    ["Corrections coordinateur validées ($nb_valides bobine(s))",$user['id'],$site_id,$date]
+                );
+                $msg_coord = "✅ Vos corrections ont été acceptées. Le stock du $date est validé.";
+                $titre_coord = '✅ Stock validé';
+            } else {
+                // Corrections partielles → site reste en réajustement pour les bobines refusées
+                db_query(
+                    "UPDATE validations_stock_matin SET commentaire=?,gsb_at=NOW()
+                     WHERE site_id=? AND date_validation=?",
+                    ["Corrections partielles : $nb_valides validée(s), $nb_refuses refusée(s) — ".implode(', ', $bob_refuses),$site_id,$date]
+                );
+                $msg_coord = "🔄 Certaines corrections ont été refusées (".implode(', ', $bob_refuses)."). Veuillez re-soumettre vos valeurs pour ces bobines.";
+                $titre_coord = '🔄 Corrections partiellement refusées';
+            }
+
+            $coords = db_fetch_all(
+                "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1",
+                [$site_id]
+            );
+            foreach ($coords as $cu) {
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                    [$cu['id'],'info',$titre_coord,$msg_coord,'/pages/validation_stock_matin.php']);
+            }
+            audit_log($user['id'],'UPDATE','validations_stock_matin',0,
+                "traiter_corrections_coord site:$site_id $date — validées:$nb_valides refusées:$nb_refuses");
+            db_commit();
+
+            $msg_retour = $nb_refuses === 0
+                ? "Toutes les corrections validées. Stock confirmé."
+                : "$nb_valides correction(s) validée(s), $nb_refuses refusée(s). Le coordinateur doit re-soumettre les bobines refusées.";
+            json_response(true, $msg_retour);
+        } catch(Exception $e){ db_rollback(); json_response(false,'Erreur: '.$e->getMessage()); }
+    }
+
     // ── CORRECTION COORDINATEUR : réponse à un réajustement GSB
     if ($action === 'coord_repond_reajust') {
         if (!$is_coord) json_response(false, 'Accès refusé.');
@@ -1790,6 +1883,7 @@ function resetFiltresHistorique() {
 }
 
 let currentSiteId=null, currentSiteNom='', currentEcarts=[], currentBobinesDetail=[];
+let ccState = {}; // décisions par bobine pour les corrections coordinateur
 
 // Métadonnées des 3 décisions possibles (libellés, couleurs, effet réel)
 const DEC_META = {
@@ -1807,6 +1901,7 @@ const DEC_META = {
 async function verifierSite(siteId, siteNom) {
   currentSiteId = siteId;
   currentSiteNom = siteNom;
+  ccState = {};
   const canValider = <?= $can_valider ? 'true' : 'false' ?>;
 
   // Spinner discret (pas de modal encore — on attend le résultat)
@@ -1958,14 +2053,32 @@ async function verifierSite(siteId, siteNom) {
     };
     const vBg = {valide_auto:'#D1FAE5',valide_gsb:'#D1FAE5',autorise_ecart:'#FEF3C7',reajuste:'#EFF6FF',refuse:'#FEE2E2'};
 
-    // ── Statut reajuste + corrections coordinateur disponibles → panneau d'action GSB
+    // ── Statut reajuste + corrections coordinateur disponibles → panneau d'action par bobine
     if (canValider && d.validation.statut === 'reajuste' && d.coord_corrections && d.coord_corrections.length > 0) {
-      const rows = d.coord_corrections.map(c => `
-        <tr style="border-bottom:1px solid #E2E8F0">
+      const total = d.coord_corrections.length;
+      const rows = d.coord_corrections.map((c, i) => `
+        <tr id="ccrow-${i}" style="border-bottom:1px solid #E2E8F0;transition:background .2s">
           <td style="padding:9px 12px;font-family:monospace;font-weight:700;color:#06033A">${c.numero}</td>
           <td style="padding:9px 12px;text-align:center;color:#94a3b8">${c.films_gsb ?? '—'}</td>
           <td style="padding:9px 12px;text-align:center;font-weight:800;color:#1D4ED8;font-size:15px">${c.films_final}</td>
           <td style="padding:9px 12px;font-size:12px;color:#475569">${c.reponse_coord || '—'}</td>
+          <td style="padding:9px 12px">
+            <input type="text" id="cc-comment-${i}" placeholder="Motif GSB (requis si refus)"
+                   style="width:100%;box-sizing:border-box;padding:5px 8px;border:1.5px solid #E2E8F0;border-radius:6px;font-size:12px;min-width:130px">
+          </td>
+          <td style="padding:9px 12px;text-align:center;white-space:nowrap">
+            <div style="display:flex;gap:6px;justify-content:center">
+              <button id="cc-btn-ok-${i}" onclick="setCoordDec(${i},${c.bobine_id},'valider',${total})"
+                      style="padding:6px 12px;background:#D1FAE5;color:#065F46;border:1.5px solid #34D399;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s">
+                ✅ Valider
+              </button>
+              <button id="cc-btn-ref-${i}" onclick="setCoordDec(${i},${c.bobine_id},'refuser',${total})"
+                      style="padding:6px 12px;background:#FEE2E2;color:#991B1B;border:1.5px solid #F87171;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s">
+                ❌ Refuser
+              </button>
+            </div>
+            <div id="cc-badge-${i}" style="display:none;font-size:10.5px;font-weight:700;margin-top:4px;text-align:center"></div>
+          </td>
         </tr>`).join('');
 
       html += `
@@ -1974,31 +2087,30 @@ async function verifierSite(siteId, siteNom) {
             📋 Corrections soumises par le coordinateur
           </div>
           <p style="font-size:12.5px;color:#3B82F6;margin-bottom:14px">
-            Acceptez les valeurs proposées ou demandez de nouvelles corrections.
+            Validez (✅) ou refusez (❌) la correction de chaque bobine, puis confirmez.
           </p>
-          <div style="overflow-x:auto;margin-bottom:16px">
+          <div style="overflow-x:auto;margin-bottom:14px">
           <table style="width:100%;border-collapse:collapse;font-size:13px;background:white;border-radius:10px;overflow:hidden">
             <thead>
               <tr style="background:#1D4ED8">
                 <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:left">N° Bobine</th>
                 <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:center">Réajusté GSB</th>
                 <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:center">Valeur coord</th>
-                <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:left">Justification</th>
+                <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:left">Justification coord</th>
+                <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:left">Commentaire GSB</th>
+                <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:center">Décision</th>
               </tr>
             </thead>
             <tbody>${rows}</tbody>
           </table>
           </div>
-          <textarea id="gsb-modif-comment" placeholder="Commentaire GSB (optionnel pour valider, obligatoire pour refuser)"
-                    style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid #BFDBFE;border-radius:8px;font-size:13px;min-height:58px;margin-bottom:12px;resize:vertical"></textarea>
-          <div style="display:flex;gap:10px;flex-wrap:wrap">
-            <button onclick="validerCorrectionsCoord(${siteId})"
-                    style="flex:1;min-width:180px;background:#065F46;color:white;border:none;padding:11px 16px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px">
-              ✅ Valider les corrections du coordinateur
-            </button>
-            <button onclick="demanderNouvellesModifs(${siteId})"
-                    style="flex:1;min-width:180px;background:#DC2626;color:white;border:none;padding:11px 16px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px">
-              🔄 Demander de nouvelles corrections
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+            <span id="cc-progress" style="font-size:12.5px;color:var(--muted);font-weight:600">
+              0 / ${total} bobine(s) décidée(s)
+            </span>
+            <button id="cc-confirm-btn" disabled onclick="confirmerDecisionsCoord(${siteId},${total})"
+                    style="padding:11px 24px;background:#06033A;color:white;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:not-allowed;opacity:.5;transition:all .2s;white-space:nowrap">
+              Confirmer les décisions
             </button>
           </div>
         </div>`;
@@ -2367,48 +2479,58 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
   document.getElementById('detailBody').innerHTML = html;
 }
 
-// ── GSB : valider les corrections soumises par le coordinateur
-async function validerCorrectionsCoord(siteId) {
-  const commentaire = document.getElementById('gsb-modif-comment')?.value.trim() || '';
-  const btn = event?.currentTarget;
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Validation…'; }
-  try {
-    const res = await ap({
-      action:      'valider_corrections_coord',
-      site_id:     siteId,
-      date:        '<?= h($f_date) ?>',
-      commentaire,
-    });
-    if (res.success) {
-      toast('✅ ' + res.message, 'success');
-      fermerVSM();
-      setTimeout(() => location.reload(), 900);
-    } else {
-      toast('❌ ' + res.message, 'error');
-      if (btn) { btn.disabled = false; btn.textContent = '✅ Valider les corrections du coordinateur'; }
-    }
-  } catch(err) {
-    toast('❌ Erreur réseau. Réessayez.', 'error');
-    if (btn) { btn.disabled = false; btn.textContent = '✅ Valider les corrections du coordinateur'; }
+// ── Décision par bobine dans le panneau corrections coordinateur
+function setCoordDec(idx, bobineId, action, total) {
+  ccState[bobineId] = { action, idx };
+
+  const row    = document.getElementById(`ccrow-${idx}`);
+  const okBtn  = document.getElementById(`cc-btn-ok-${idx}`);
+  const refBtn = document.getElementById(`cc-btn-ref-${idx}`);
+  const badge  = document.getElementById(`cc-badge-${idx}`);
+
+  if (row)    row.style.background = action === 'valider' ? '#F0FDF4' : '#FFF1F2';
+  if (okBtn)  { okBtn.style.opacity = action === 'valider' ? '1' : '0.4'; okBtn.style.transform = action === 'valider' ? 'scale(1.06)' : 'scale(1)'; }
+  if (refBtn) { refBtn.style.opacity = action === 'refuser' ? '1' : '0.4'; refBtn.style.transform = action === 'refuser' ? 'scale(1.06)' : 'scale(1)'; }
+  if (badge)  {
+    badge.style.display = 'block';
+    badge.textContent   = action === 'valider' ? '✅ Validé' : '❌ À recorriger';
+    badge.style.color   = action === 'valider' ? '#065F46' : '#991B1B';
+  }
+
+  const decided  = Object.keys(ccState).length;
+  const progress = document.getElementById('cc-progress');
+  const btn      = document.getElementById('cc-confirm-btn');
+  if (progress) progress.textContent = `${decided} / ${total} bobine(s) décidée(s)`;
+  if (btn && decided >= total) {
+    btn.disabled = false;
+    btn.style.opacity = '1';
+    btn.style.cursor  = 'pointer';
   }
 }
 
-// ── GSB : demander de nouvelles corrections au coordinateur
-async function demanderNouvellesModifs(siteId) {
-  const commentaire = document.getElementById('gsb-modif-comment')?.value.trim();
-  if (!commentaire) {
-    toast('Un commentaire est obligatoire pour refuser les corrections.', 'error');
-    document.getElementById('gsb-modif-comment')?.focus();
-    return;
+// ── Confirmer toutes les décisions par bobine
+async function confirmerDecisionsCoord(siteId, total) {
+  const payload = [];
+  for (const [bobineId, dec] of Object.entries(ccState)) {
+    const commentEl = document.getElementById(`cc-comment-${dec.idx}`);
+    const comment   = commentEl?.value.trim() || '';
+    if (dec.action === 'refuser' && !comment) {
+      if (commentEl) { commentEl.style.borderColor = '#F87171'; commentEl.focus(); }
+      toast('Un commentaire est obligatoire pour refuser la correction d\'une bobine.', 'error');
+      return;
+    }
+    payload.push({ bobine_id: parseInt(bobineId), action: dec.action, commentaire: comment });
   }
-  const btn = event?.currentTarget;
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Envoi…'; }
+  if (payload.length < total) { toast('Décidez pour toutes les bobines avant de confirmer.', 'error'); return; }
+
+  const btn = document.getElementById('cc-confirm-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Traitement…'; }
   try {
     const res = await ap({
-      action:      'demander_nouvelles_modifs',
-      site_id:     siteId,
-      date:        '<?= h($f_date) ?>',
-      commentaire,
+      action:          'traiter_corrections_coord',
+      site_id:         siteId,
+      date:            '<?= h($f_date) ?>',
+      decisions_json:  JSON.stringify(payload),
     });
     if (res.success) {
       toast('✅ ' + res.message, 'success');
@@ -2416,11 +2538,11 @@ async function demanderNouvellesModifs(siteId) {
       setTimeout(() => location.reload(), 900);
     } else {
       toast('❌ ' + res.message, 'error');
-      if (btn) { btn.disabled = false; btn.textContent = '🔄 Demander de nouvelles corrections'; }
+      if (btn) { btn.disabled = false; btn.textContent = 'Confirmer les décisions'; }
     }
   } catch(err) {
     toast('❌ Erreur réseau. Réessayez.', 'error');
-    if (btn) { btn.disabled = false; btn.textContent = '🔄 Demander de nouvelles corrections'; }
+    if (btn) { btn.disabled = false; btn.textContent = 'Confirmer les décisions'; }
   }
 }
 
