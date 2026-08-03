@@ -120,11 +120,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
                 // films_restants = stock physique réel (non écrasé par import EMUCI)
                 // stock_systeme  = valeur EMUCI (mise à jour par import, comparaison uniquement)
-                $stock_debut = isset($b['stock_avant'])
-                    ? (int)$b['stock_avant']
-                    : (int)($b['films_restants'] ?? $b['stock_systeme']);
-
-                $films_restants  = $stock_debut - $films_total_pj;
+                // Quand stock_avant est disponible (consommations_bobines), recalcul depuis début journée.
+                // Sinon, op_bobines.films_restants a déjà été mis à jour par la validation du PJ
+                // (point_journalier.php soustrait les films lors de la validation) → utiliser tel quel.
+                if (!empty($b['stock_avant'])) {
+                    $stock_debut    = (int)$b['stock_avant'];
+                    $films_restants = $stock_debut - $films_total_pj;
+                } else {
+                    $films_restants = (int)($b['films_restants'] ?? $b['stock_systeme']);
+                    $stock_debut    = $films_restants + $films_total_pj;
+                }
 
                 // Écart : DigiStock restant vs EMUCI restant (stock_systeme mis par l'import)
                 $stock_emuci = (int)($b['stock_systeme'] ?? 0);
@@ -996,8 +1001,15 @@ function _calculer_ecarts_site(int $site_id, string $date): array {
         $films_utilises   = (int)$b['films_utilises'];
         $films_endommages = (int)($b['films_endommages'] ?? 0);
         $films_total_pj   = $films_utilises + $films_endommages;
-        $stock_debut      = isset($b['stock_avant']) ? (int)$b['stock_avant'] : (int)($b['films_restants'] ?? $b['stock_systeme']);
-        $films_restants   = $stock_debut - $films_total_pj;
+        // Même logique que calculer_ecarts : op_bobines.films_restants est déjà mis à jour
+        // par la validation du PJ → ne pas re-soustraire les films du jour.
+        if (!empty($b['stock_avant'])) {
+            $stock_debut    = (int)$b['stock_avant'];
+            $films_restants = $stock_debut - $films_total_pj;
+        } else {
+            $films_restants = (int)($b['films_restants'] ?? $b['stock_systeme']);
+            $stock_debut    = $films_restants + $films_total_pj;
+        }
         $stock_emuci = (int)($b['stock_systeme'] ?? 0);
         $ecart_val   = $dernier_import ? ($films_restants - $stock_emuci) : 0;
         $has_ecart   = $dernier_import !== null && $ecart_val !== 0;
