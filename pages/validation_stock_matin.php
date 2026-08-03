@@ -1300,7 +1300,7 @@ include __DIR__ . '/../templates/header.php';
 <?php
 $nb_en_attente  = count($sites_non_valides ?? []) + count($sites_en_attente_correction ?? []);
 $nb_valides_jour= count($validations_jour);
-$nb_avec_ecart  = count(array_filter($validations_jour, fn($v) => (int)$v['nb_ecarts'] > 0))
+$nb_avec_ecart  = count(array_filter($validations_jour, fn($v) => $v['statut'] !== 'valide_gsb' && (int)$v['nb_ecarts'] > 0))
                 + count($sites_non_valides ?? [])
                 + count($sites_en_attente_correction ?? []);
 ?>
