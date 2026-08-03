@@ -406,13 +406,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             $coords = db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1",[$site_id]);
             $msg_map = [
                 'autorise_ecart' => "⚠️ Votre stock du $date présente des écarts mais vous êtes autorisé à travailler. Commentaire GSB : $comment_site",
-                'reajuste'       => "🔄 Votre stock du $date a été réajusté par le gestionnaire. Commentaire : $comment_site",
-                'refuse'         => "❌ Votre activité du $date est bloquée par le gestionnaire. Commentaire : $comment_site",
+                'reajuste'       => "🔄 Votre stock du $date a été réajusté (DigiStock corrigé). Veuillez corriger votre saisie et soumettre un nouveau point journalier pour finaliser la validation. Motif : $comment_site",
+                'refuse'         => "❌ Votre activité du $date est bloquée. Corrigez vos données et soumettez un nouveau point journalier. Commentaire : $comment_site",
             ];
             $titre_map = [
                 'autorise_ecart' => '⚠️ Écart autorisé',
-                'reajuste'       => '🔄 Stock réajusté',
-                'refuse'         => '❌ Activité bloquée',
+                'reajuste'       => '🔄 Stock réajusté — nouvelle saisie requise',
+                'refuse'         => '❌ Activité bloquée — correction requise',
             ];
             foreach($coords as $c) {
                 db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
@@ -425,8 +425,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             db_commit();
             json_response(true, match($statut_site){
                 'autorise_ecart'=>'Toutes les bobines sont traitées. Écart autorisé : le coordinateur peut travailler.',
-                'reajuste'      =>'Toutes les bobines sont traitées. Stock réajusté et coordinateur notifié.',
-                'refuse'        =>'Toutes les bobines sont traitées. Coordinateur bloqué et notifié.',
+                'reajuste'      =>'Toutes les bobines sont traitées. Stock réajusté. Le coordinateur doit soumettre un nouveau point journalier pour finaliser la validation.',
+                'refuse'        =>'Toutes les bobines sont traitées. Coordinateur bloqué. En attente de correction.',
             }, ['site_complet' => true, 'nb_restants' => 0]);
         } catch(Exception $e){ db_rollback(); json_response(false,'Erreur: '.$e->getMessage()); }
     }
@@ -718,6 +718,7 @@ if ($can_valider) {
 
 // Vue d'ensemble des validations du jour
 $coord_where = $is_coord && $site_force ? "AND v.site_id=$site_force" : '';
+// Statuts "vraiment validés" : le coordinateur peut travailler
 $validations_jour = db_fetch_all(
     "SELECT v.*, s.nom AS site_nom,
             CONCAT(u.prenom,' ',u.nom) AS gsb_nom,
@@ -726,11 +727,25 @@ $validations_jour = db_fetch_all(
      JOIN sites s ON s.id=v.site_id
      LEFT JOIN users u ON u.id=v.gsb_user_id
      WHERE v.date_validation=? $coord_where
-     ORDER BY v.statut='refuse' DESC, v.created_at DESC",
+       AND v.statut NOT IN ('reajuste','refuse')
+     ORDER BY v.created_at DESC",
     [$f_date]
 );
+// Sites réajustés ou refusés : en attente d'une nouvelle saisie coordinateur
+$sites_en_attente_correction = [];
+if ($can_valider) {
+    $sites_en_attente_correction = db_fetch_all(
+        "SELECT v.*, s.nom AS site_nom, CONCAT(u.prenom,' ',u.nom) AS gsb_nom
+         FROM validations_stock_matin v
+         JOIN sites s ON s.id=v.site_id
+         LEFT JOIN users u ON u.id=v.gsb_user_id
+         WHERE v.date_validation=? AND v.statut IN ('reajuste','refuse')
+         ORDER BY v.statut='refuse' DESC, s.nom",
+        [$f_date]
+    );
+}
 
-// ── Rapport journalier GSB : sites auto-validés + réajustés
+// ── Rapport journalier GSB : sites validés (exclu reajuste/refuse — pas encore finalisés)
 $rapport_journalier = [];
 if ($can_valider) {
     $rapport_journalier = db_fetch_all(
@@ -740,8 +755,8 @@ if ($can_valider) {
          FROM validations_stock_matin v
          JOIN sites s ON s.id=v.site_id
          LEFT JOIN users u ON u.id=v.gsb_user_id
-         WHERE v.date_validation=? AND v.statut IN ('valide_auto','reajuste','autorise_ecart')
-         ORDER BY v.statut='reajuste' DESC, v.statut='autorise_ecart' DESC, s.nom ASC",
+         WHERE v.date_validation=? AND v.statut IN ('valide_auto','autorise_ecart')
+         ORDER BY v.statut='autorise_ecart' DESC, s.nom ASC",
         [$f_date]
     );
 }
@@ -844,9 +859,11 @@ if ($is_coord && $site_force) {
 include __DIR__ . '/../templates/header.php';
 ?>
 <?php
-$nb_en_attente  = count($sites_non_valides ?? []);
+$nb_en_attente  = count($sites_non_valides ?? []) + count($sites_en_attente_correction ?? []);
 $nb_valides_jour= count($validations_jour);
-$nb_avec_ecart  = count(array_filter($validations_jour, fn($v) => (int)$v['nb_ecarts'] > 0)) + $nb_en_attente;
+$nb_avec_ecart  = count(array_filter($validations_jour, fn($v) => (int)$v['nb_ecarts'] > 0))
+                + count($sites_non_valides ?? [])
+                + count($sites_en_attente_correction ?? []);
 ?>
 <style>
 .vsm-banner{background:linear-gradient(135deg,#06033A 0%,#1B75BC 100%);border-radius:16px;padding:22px 28px;margin-bottom:24px;color:white;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px}
@@ -941,8 +958,8 @@ $statut_colors = [
   'valide_auto'   => ['bg'=>'#D1FAE5','border'=>'#34D399','icon'=>'✅','label'=>'Validé automatiquement',    'color'=>'#065F46'],
   'valide_gsb'    => ['bg'=>'#D1FAE5','border'=>'#34D399','icon'=>'✅','label'=>'Validé par le gestionnaire','color'=>'#065F46'],
   'autorise_ecart'=> ['bg'=>'#FEF3C7','border'=>'#F59E0B','icon'=>'⚠️','label'=>'Écart autorisé — vous pouvez travailler','color'=>'#92400E'],
-  'reajuste'      => ['bg'=>'#DBEAFE','border'=>'#3B82F6','icon'=>'🔄','label'=>'Stock réajusté',            'color'=>'#1D4ED8'],
-  'refuse'        => ['bg'=>'#FEE2E2','border'=>'#F87171','icon'=>'❌','label'=>'Activité bloquée',          'color'=>'#991B1B'],
+  'reajuste'      => ['bg'=>'#FFF7ED','border'=>'#F59E0B','icon'=>'🔄','label'=>'Stock réajusté — nouvelle saisie requise','color'=>'#92400E'],
+  'refuse'        => ['bg'=>'#FEE2E2','border'=>'#F87171','icon'=>'❌','label'=>'Activité bloquée — correction requise', 'color'=>'#991B1B'],
 ];
 ?>
 <?php if($coord_validation): ?>
@@ -961,6 +978,17 @@ $statut_colors = [
     <?php if($coord_validation['commentaire']): ?>
     <div style="background:rgba(0,0,0,.06);border-radius:10px;padding:10px 14px;font-size:13px;color:<?= $sv['color'] ?>;margin-bottom:14px">
       💬 <?= h($coord_validation['commentaire']) ?>
+    </div>
+    <?php endif; ?>
+    <?php if($coord_validation['statut'] === 'reajuste'): ?>
+    <div style="background:#FEF3C7;border:1.5px solid #F59E0B;border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:13px;color:#92400E">
+      <strong>Action requise :</strong> Le stock de votre site a été réajusté par le gestionnaire.
+      Veuillez corriger vos données et soumettre un nouveau point journalier pour que le gestionnaire puisse valider à nouveau.
+    </div>
+    <?php elseif($coord_validation['statut'] === 'refuse'): ?>
+    <div style="background:#FEE2E2;border:1.5px solid #F87171;border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:13px;color:#991B1B">
+      <strong>Activité bloquée :</strong> Le gestionnaire a refusé les données transmises.
+      Veuillez corriger votre saisie et soumettre un nouveau point journalier.
     </div>
     <?php endif; ?>
     <div style="display:flex;gap:10px">
@@ -1076,7 +1104,7 @@ $statut_colors = [
       <span class="vsm-cnt"><?= $nb_en_attente ?></span>
     </div>
   </div>
-  <?php if(empty($sites_non_valides)): ?>
+  <?php if(empty($sites_non_valides) && empty($sites_en_attente_correction)): ?>
   <div style="padding:36px;text-align:center;color:var(--muted)">
     <i class="ph-duotone ph-check-circle" style="font-size:36px;color:#34d399;display:block;margin-bottom:10px"></i>
     Tous les sites ont été traités pour le <?= fmt_date($f_date,'d/m/Y') ?>.
@@ -1087,6 +1115,7 @@ $statut_colors = [
       <th>Site</th>
       <th class="tc">Écarts</th>
       <th class="tc">Statut</th>
+      <th>Commentaire GSB</th>
       <th class="tc">Actions</th>
     </tr></thead>
     <tbody>
@@ -1099,7 +1128,8 @@ $statut_colors = [
         <div style="margin-top:4px"><span class="vsm-legend-chip" style="background:#dbeafe;color:#1d4ed8">✔️ <?= (int)$s['nb_traites'] ?> bobine(s) traitée(s)</span></div>
         <?php endif; ?>
       </td>
-      <td class="tc"><span class="vsm-badge en_attente"><?= !empty($s['nb_traites']) ? 'Traitement en cours' : 'En attente' ?></span></td>
+      <td class="tc"><span class="vsm-badge en_attente"><?= !empty($s['nb_traites']) ? 'Traitement en cours' : '⏳ En attente' ?></span></td>
+      <td style="font-size:12px;color:var(--muted)">—</td>
       <td class="tc">
         <div class="vsm-actions">
           <button class="btn-traiter" data-site-id="<?= $s['id'] ?>"
@@ -1110,12 +1140,37 @@ $statut_colors = [
       </td>
     </tr>
     <?php endforeach; ?>
+    <?php foreach($sites_en_attente_correction as $v): ?>
+    <tr style="background:#FFFBEB">
+      <td><div class="vsm-site-name"><?= h($v['site_nom']) ?></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">Traité le <?= date('H:i', strtotime($v['gsb_at'])) ?> par <?= h($v['gsb_nom'] ?: 'GSB') ?></div>
+      </td>
+      <td class="tc"><span class="vsm-ecart-chip">⚠️ <?= (int)$v['nb_ecarts'] ?> écart(s)</span></td>
+      <td class="tc">
+        <?php if($v['statut'] === 'reajuste'): ?>
+        <span class="vsm-badge reajuste">🔄 Réajusté</span>
+        <div style="font-size:10.5px;color:#1d4ed8;margin-top:3px;font-weight:600">Nouvelle saisie requise</div>
+        <?php else: ?>
+        <span class="vsm-badge refuse">❌ Refusé</span>
+        <div style="font-size:10.5px;color:#991b1b;margin-top:3px;font-weight:600">Correction requise</div>
+        <?php endif; ?>
+      </td>
+      <td style="font-size:12px;color:var(--muted);max-width:160px"><?= $v['commentaire'] ? h($v['commentaire']) : '—' ?></td>
+      <td class="tc">
+        <div class="vsm-actions">
+          <button class="btn-vsm-revise" onclick="verifierSite(<?= $v['site_id'] ?>,'<?= h($v['site_nom']) ?>')">
+            <i class="ph-duotone ph-arrow-counter-clockwise"></i> Re-vérifier
+          </button>
+        </div>
+      </td>
+    </tr>
+    <?php endforeach; ?>
     </tbody>
   </table>
   <?php endif; ?>
 </div>
 
-<!-- TABLE 2 : Sites validés du jour -->
+<!-- TABLE 2 : Sites validés du jour (valide_auto, valide_gsb, autorise_ecart uniquement) -->
 <div class="vsm-section">
   <div class="vsm-section-hdr">
     <div class="vsm-section-title">
