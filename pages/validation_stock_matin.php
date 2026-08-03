@@ -159,18 +159,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             if (empty($bobines_detail) && !empty($exist['bobines_snapshot'])) {
                 $bobines_detail = json_decode($exist['bobines_snapshot'], true) ?: [];
                 $nb_ecarts      = 0;
+                $ecarts         = [];
                 foreach ($bobines_detail as $bl) {
-                    if (!empty($bl['has_ecart'])) $nb_ecarts++;
+                    if (!empty($bl['has_ecart'])) { $nb_ecarts++; $ecarts[] = $bl; }
                 }
             }
 
+            // ── Décisions déjà prises bobine par bobine pour ce site/date
+            //    Sur une bobine tranchée, le recalcul live n'a plus de sens
+            //    (un réajustement réaligne le stock de départ) : on réaffiche
+            //    les valeurs constatées au moment de la décision.
+            $decisions = _decisions_bobines_site($site_id, $date);
+            foreach ($bobines_detail as &$_bl) {
+                $_dec = $decisions[(int)$_bl['bobine_id']] ?? null;
+                $_bl['decision'] = $_dec;
+                if ($_dec) {
+                    $_bl['stock_systeme']  = $_dec['stock_systeme'];
+                    $_bl['films_restants'] = $_dec['films_restants'];
+                    $_bl['ecart']          = $_dec['ecart'];
+                    $_bl['has_ecart']      = $_dec['ecart'] !== 0;
+                }
+            }
+            unset($_bl);
+            // Écarts encore à traiter = écarts sans décision enregistrée.
+            // (Après un réajustement, le recalcul fait réapparaître un écart
+            //  purement arithmétique sur la bobine : la décision fait foi.)
+            $ecarts_restants = array_values(array_filter(
+                $ecarts,
+                fn($e) => !isset($decisions[(int)$e['bobine_id']])
+            ));
+
             json_response(true, '', [
-                'ecarts'         => $ecarts,
-                'bobines_detail' => $bobines_detail,
-                'nb_ecarts'      => $nb_ecarts,
-                'nb_bobines'     => count($pj_entries) ?: count($bobines_detail),
-                'dernier_import' => $dernier_import,
-                'validation'     => $exist,
+                'ecarts'            => $ecarts,
+                'ecarts_restants'   => $ecarts_restants,
+                'bobines_detail'    => $bobines_detail,
+                'nb_ecarts'         => $nb_ecarts,
+                'nb_ecarts_restants'=> count($ecarts_restants),
+                'nb_ecarts_traites' => count($decisions),
+                'nb_bobines'        => count($pj_entries) ?: count($bobines_detail),
+                'dernier_import'    => $dernier_import,
+                'validation'        => $exist,
             ]);
         } catch (Exception $ex) {
             json_response(false, 'Erreur serveur : ' . $ex->getMessage());
@@ -211,6 +239,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     }
 
     // ── DÉCISION GSB (autoriser / réajuster / refuser)
+    //    Traite les bobines transmises dans ecarts_json : une seule (décision
+    //    ligne par ligne dans le tableau) ou plusieurs (traitement groupé).
+    //    Le site n'est validé que lorsque plus aucune bobine en écart n'attend
+    //    de décision — c'est à ce moment que le coordinateur est notifié.
     if ($action === 'decision_gsb') {
         if (!$can_valider) json_response(false,'Accès refusé.');
         $site_id    = (int)($_POST['site_id'] ?? 0);
@@ -219,13 +251,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $commentaire= trim($_POST['commentaire'] ?? '');
         $ecarts_json= $_POST['ecarts_json'] ?? '[]';
 
+        if (!$site_id) json_response(false,'Site obligatoire.');
         if (!in_array($decision,['autorise_ecart','reajuste','refuse']))
             json_response(false,'Décision invalide.');
         if (!$commentaire) json_response(false,'Le commentaire est obligatoire.');
 
-        $ecarts      = json_decode($ecarts_json, true) ?: [];
-        $nb_ecarts   = count($ecarts);
-        $bobines_json= $_POST['bobines_json'] ?? '[]';
+        $ecarts = json_decode($ecarts_json, true) ?: [];
+        if (empty($ecarts)) json_response(false,'Aucune bobine sélectionnée pour cette décision.');
+
+        // Sécurité : n'accepter que des bobines réellement rattachées au site
+        $ids_site = array_map(
+            'intval',
+            array_column(db_fetch_all("SELECT id FROM op_bobines WHERE site_id=?", [$site_id]), 'id')
+        );
+        $ecarts = array_values(array_filter(
+            $ecarts,
+            fn($e) => in_array((int)($e['bobine_id'] ?? 0), $ids_site, true)
+        ));
+        if (empty($ecarts)) json_response(false,'Bobine(s) introuvable(s) sur ce site.');
 
         db_begin();
         try {
@@ -245,15 +288,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 }
             }
 
-            // Si refus : créer une demande de correction pour chaque bobine en écart
+            // Si refus : créer une demande de correction pour chaque bobine traitée
             if ($decision === 'refuse') {
-                // Annuler les demandes de correction précédentes encore en attente pour ce site/date
-                db_query(
-                    "UPDATE demandes_correction_saisie SET statut='valide'
-                     WHERE site_id=? AND date_cible=? AND statut='en_attente'",
-                    [$site_id, $date]
-                );
                 foreach ($ecarts as $e) {
+                    // Annuler la demande précédente encore en attente pour CETTE bobine
+                    // (les autres bobines du site gardent la leur)
+                    db_query(
+                        "UPDATE demandes_correction_saisie SET statut='valide'
+                         WHERE bobine_id=? AND site_id=? AND date_cible=? AND statut='en_attente'",
+                        [$e['bobine_id'], $site_id, $date]
+                    );
                     db_query(
                         "INSERT INTO demandes_correction_saisie
                          (bobine_id, site_id, gsb_id, date_cible, films_pj, films_emuci, ecart, notes_gsb)
@@ -273,6 +317,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             }
 
             // ── Enregistrement dans ecarts_bobines
+            //    La ligne la plus récente d'une bobine fait foi : une révision
+            //    ajoute une ligne sans effacer l'historique des décisions.
             $statut_ecart = match($decision) {
                 'reajuste'       => 'resolu',
                 'autorise_ecart' => 'ignore',
@@ -302,21 +348,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 }
             }
 
+            $nb_traite = count($ecarts);
+            audit_log($user['id'],'UPDATE','ecarts_bobines',0,
+                "$decision $nb_traite bobine(s) site:$site_id $date — $commentaire");
+
+            // ── Reste-t-il des bobines en écart sans décision ?
+            $decisions = _decisions_bobines_site($site_id, $date);
+            $snap      = _calculer_ecarts_site($site_id, $date);
+            $restants  = array_values(array_filter(
+                $snap['ecarts'],
+                fn($x) => !isset($decisions[(int)$x['bobine_id']])
+            ));
+
+            if (!empty($restants)) {
+                // Traitement partiel : le site reste en attente, pas de notification
+                db_commit();
+                json_response(true,
+                    "$nb_traite bobine(s) traitée(s). " . count($restants) . ' bobine(s) restante(s) à traiter.',
+                    ['site_complet' => false, 'nb_restants' => count($restants)]
+                );
+            }
+
+            // ── Toutes les bobines en écart ont une décision → validation du site
+            $vals   = array_column($decisions, 'decision');
+            $n_reaj = count(array_keys($vals, 'reajuste'));
+            $n_auto = count(array_keys($vals, 'autorise_ecart'));
+            $n_ref  = count(array_keys($vals, 'refuse'));
+
+            // Statut du site : le plus contraignant l'emporte
+            $statut_site = $n_ref > 0 ? 'refuse' : ($n_auto > 0 ? 'autorise_ecart' : 'reajuste');
+
+            $parts = [];
+            if ($n_reaj) $parts[] = "$n_reaj réajustée(s)";
+            if ($n_auto) $parts[] = "$n_auto écart(s) autorisé(s)";
+            if ($n_ref)  $parts[] = "$n_ref bloquée(s)";
+            $mixte       = count(array_unique($vals)) > 1 || count($decisions) > $nb_traite;
+            $comment_site= $mixte ? implode(' · ', $parts) . " — $commentaire" : $commentaire;
+
+            // Détail des décisions (valeurs constatées au moment de la décision)
+            $details_json = json_encode(array_values($decisions));
+            // Snapshot : ce que le GSB avait sous les yeux, à défaut le recalcul
+            $snap_client  = json_decode($_POST['bobines_json'] ?? '', true);
+            $bobines_json = json_encode(
+                is_array($snap_client) && $snap_client ? $snap_client : ($snap['bobines_detail'] ?: [])
+            );
+
             db_query(
                 "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,details_ecarts,bobines_snapshot,gsb_user_id,gsb_at,commentaire)
                  VALUES (?,?,?,?,?,?,?,NOW(),?)
                  ON CONFLICT (site_id,date_validation) DO UPDATE SET statut=EXCLUDED.statut,nb_ecarts=EXCLUDED.nb_ecarts,
                  details_ecarts=EXCLUDED.details_ecarts,bobines_snapshot=EXCLUDED.bobines_snapshot,
                  gsb_user_id=EXCLUDED.gsb_user_id,gsb_at=NOW(),commentaire=EXCLUDED.commentaire",
-                [$site_id,$date,$decision,$nb_ecarts,$ecarts_json,$bobines_json,$user['id'],$commentaire]
+                [$site_id,$date,$statut_site,count($decisions),$details_json,$bobines_json,$user['id'],$comment_site]
             );
 
             // Notifier coordinateurs
             $coords = db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1",[$site_id]);
             $msg_map = [
-                'autorise_ecart' => "⚠️ Votre stock du $date présente des écarts mais vous êtes autorisé à travailler. Commentaire GSB : $commentaire",
-                'reajuste'       => "🔄 Votre stock du $date a été réajusté par le gestionnaire. Commentaire : $commentaire",
-                'refuse'         => "❌ Votre activité du $date est bloquée par le gestionnaire. Commentaire : $commentaire",
+                'autorise_ecart' => "⚠️ Votre stock du $date présente des écarts mais vous êtes autorisé à travailler. Commentaire GSB : $comment_site",
+                'reajuste'       => "🔄 Votre stock du $date a été réajusté par le gestionnaire. Commentaire : $comment_site",
+                'refuse'         => "❌ Votre activité du $date est bloquée par le gestionnaire. Commentaire : $comment_site",
             ];
             $titre_map = [
                 'autorise_ecart' => '⚠️ Écart autorisé',
@@ -325,17 +416,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             ];
             foreach($coords as $c) {
                 db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
-                    [$c['id'],'stock_validation',$titre_map[$decision],$msg_map[$decision],
+                    [$c['id'],'stock_validation',$titre_map[$statut_site],$msg_map[$statut_site],
                      '/pages/validation_stock_matin.php']);
             }
 
-            audit_log($user['id'],'UPDATE','validations_stock_matin',0,"$decision stock site:$site_id $date — $commentaire");
+            audit_log($user['id'],'UPDATE','validations_stock_matin',0,
+                "$statut_site stock site:$site_id $date — $comment_site");
             db_commit();
-            json_response(true,match($decision){
-                'autorise_ecart'=>'Écart autorisé. Coordinateur peut travailler.',
-                'reajuste'=>'Stock réajusté et coordinateur notifié.',
-                'refuse'=>'Coordinateur bloqué et notifié.',
-            });
+            json_response(true, match($statut_site){
+                'autorise_ecart'=>'Toutes les bobines sont traitées. Écart autorisé : le coordinateur peut travailler.',
+                'reajuste'      =>'Toutes les bobines sont traitées. Stock réajusté et coordinateur notifié.',
+                'refuse'        =>'Toutes les bobines sont traitées. Coordinateur bloqué et notifié.',
+            }, ['site_complet' => true, 'nb_restants' => 0]);
         } catch(Exception $e){ db_rollback(); json_response(false,'Erreur: '.$e->getMessage()); }
     }
 
@@ -433,6 +525,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 // ============================================================
 $f_date = trim($_GET['date'] ?? date('Y-m-d'));
 $f_site = (int)($_GET['site'] ?? 0);
+
+// ── Décisions GSB déjà enregistrées bobine par bobine pour un site/date.
+//    Une bobine peut être traitée plusieurs fois (révision) : la ligne la plus
+//    récente d'ecarts_bobines fait foi. Retourne une map bobine_id => décision.
+function _decisions_bobines_site(int $site_id, string $date): array {
+    $rows = db_fetch_all(
+        "SELECT DISTINCT ON (e.bobine_id)
+                e.bobine_id, e.statut, e.motif, e.stock_systeme, e.stock_physique, e.ecart, e.created_at,
+                b.numero, b.type_code, b.format,
+                CONCAT(u.prenom,' ',u.nom) AS par_nom
+         FROM ecarts_bobines e
+         JOIN op_bobines b ON b.id = e.bobine_id
+         LEFT JOIN users u ON u.id = e.created_by
+         WHERE e.source = 'validation_stock' AND e.date_constat = ? AND b.site_id = ?
+         ORDER BY e.bobine_id, e.id DESC",
+        [$date, $site_id]
+    );
+    $map = [];
+    foreach ($rows as $r) {
+        $map[(int)$r['bobine_id']] = [
+            'bobine_id'      => (int)$r['bobine_id'],
+            'numero'         => $r['numero'],
+            'type_code'      => $r['type_code'] ?? '',
+            'format'         => $r['format'] ?? '',
+            'stock_systeme'  => (int)$r['stock_systeme'],
+            'films_restants' => (int)$r['stock_physique'],
+            'ecart'          => (int)$r['ecart'],
+            'decision'       => match($r['statut']) {
+                'resolu' => 'reajuste',
+                'ignore' => 'autorise_ecart',
+                default  => 'refuse',
+            },
+            'commentaire'    => $r['motif'] ?? '',
+            'par'            => trim($r['par_nom'] ?? '') ?: 'GSB',
+            'at'             => $r['created_at'],
+        ];
+    }
+    return $map;
+}
 
 // ── Fonction réutilisable : calculer les écarts d'un site pour une date
 function _calculer_ecarts_site(int $site_id, string $date): array {
@@ -548,6 +679,14 @@ if ($can_valider) {
         $s['ecarts']        = $result['ecarts'];
         $s['bobines_detail']= $result['bobines_detail'];
         $s['dernier_import']= $result['dernier_import'];
+        // Décisions déjà prises bobine par bobine : le site reste en attente
+        // tant qu'il reste des écarts sans décision.
+        $dec_site           = _decisions_bobines_site((int)$s['id'], $f_date);
+        $s['nb_traites']    = count($dec_site);
+        $s['nb_restants']   = count(array_filter(
+            $result['ecarts'],
+            fn($e) => !isset($dec_site[(int)$e['bobine_id']])
+        ));
         if ($result['nb_ecarts'] === 0 && !empty($result['bobines_detail']) && $result['dernier_import']) {
             // Auto-valider avec snapshot — seulement si un import EMUCI existe pour comparer.
             // Sans import, has_ecart est forcé à false faute de référence : ce n'est pas
@@ -764,6 +903,17 @@ $nb_avec_ecart  = count(array_filter($validations_jour, fn($v) => (int)$v['nb_ec
 .vsm-legend{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
 .vsm-legend-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 .vsm-legend-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:20px;font-size:11.5px;font-weight:700}
+/* ── DÉCISION PAR BOBINE (modal de vérification) ── */
+.vsm-dec-group{display:inline-flex;gap:4px;align-items:center;justify-content:center}
+.vsm-dec-btn{border:1.5px solid;border-radius:8px;padding:5px 8px;font-size:12px;font-weight:800;line-height:1;cursor:pointer;background:white;transition:transform .12s,box-shadow .12s}
+.vsm-dec-btn:hover{transform:translateY(-1px);box-shadow:0 3px 8px rgba(0,0,0,.14)}
+.vsm-dec-btn.dec-autorise_ecart{border-color:#F59E0B;background:#FEF3C7;color:#92400E}
+.vsm-dec-btn.dec-reajuste{border-color:#3B82F6;background:#DBEAFE;color:#1D4ED8}
+.vsm-dec-btn.dec-refuse{border-color:#F87171;background:#FEE2E2;color:#991B1B}
+.vsm-dec-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:8px;font-size:10.5px;font-weight:700;white-space:nowrap}
+.vsm-dec-edit{background:none;border:none;color:var(--muted);cursor:pointer;font-size:10.5px;font-weight:600;text-decoration:underline;padding:2px 0;margin-top:3px;display:block;width:100%}
+.vsm-dec-edit:hover{color:#1B75BC}
+.vsm-dec-help{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:11.5px;color:var(--muted);margin:-8px 0 16px;padding:8px 12px;background:#f8fafc;border-radius:8px}
 </style>
 
 <!-- BANNIÈRE -->
@@ -943,8 +1093,13 @@ $statut_colors = [
     <?php foreach($sites_non_valides as $s): ?>
     <tr>
       <td><div class="vsm-site-name"><?= h($s['nom']) ?></div></td>
-      <td class="tc"><span class="vsm-ecart-chip">⚠️ <?= $s['nb_ecarts'] ?> écart(s)</span></td>
-      <td class="tc"><span class="vsm-badge en_attente">En attente</span></td>
+      <td class="tc">
+        <span class="vsm-ecart-chip">⚠️ <?= (int)$s['nb_restants'] ?> écart(s) à traiter</span>
+        <?php if(!empty($s['nb_traites'])): ?>
+        <div style="margin-top:4px"><span class="vsm-legend-chip" style="background:#dbeafe;color:#1d4ed8">✔️ <?= (int)$s['nb_traites'] ?> bobine(s) traitée(s)</span></div>
+        <?php endif; ?>
+      </td>
+      <td class="tc"><span class="vsm-badge en_attente"><?= !empty($s['nb_traites']) ? 'Traitement en cours' : 'En attente' ?></span></td>
       <td class="tc">
         <div class="vsm-actions">
           <button class="btn-traiter" data-site-id="<?= $s['id'] ?>"
@@ -1221,9 +1376,29 @@ $statut_colors = [
   </div>
 </div>
 
+<!-- MODAL DÉCISION PAR BOBINE -->
+<div id="modalDecBobine" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:1300;align-items:center;justify-content:center;padding:20px;overflow-y:auto">
+  <div style="background:white;border-radius:16px;width:520px;max-width:95vw;margin:auto;box-shadow:0 20px 60px rgba(0,0,0,.3);padding:26px">
+    <div id="decBobTitle" style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin-bottom:4px">Décision</div>
+    <div id="decBobSubtitle" style="font-size:13px;color:var(--muted);margin-bottom:16px"></div>
+    <div id="decBobInfo"></div>
+    <div id="decBobHint" style="border-left:4px solid;padding:11px 14px;border-radius:8px;font-size:12.5px;margin-bottom:16px"></div>
+    <label style="font-size:13px;font-weight:700;color:var(--navy);display:block;margin-bottom:6px">
+      Commentaire / Motif <span style="color:#e74c3c">*</span>
+    </label>
+    <textarea id="decBobCommentaire" rows="2" class="form-control"
+      placeholder="Expliquez la cause de l'écart ou la décision prise…"
+      style="border-radius:10px;width:100%;box-sizing:border-box;margin-bottom:20px"></textarea>
+    <div style="display:flex;gap:10px;justify-content:flex-end">
+      <button onclick="document.getElementById('modalDecBobine').style.display='none'" class="btn btn-secondary">Annuler</button>
+      <button id="decBobConfirm" onclick="confirmerDecision()" class="btn btn-primary">Confirmer</button>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL VÉRIFICATION -->
 <div id="modalVSM" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:1000;align-items:flex-start;justify-content:center;padding:30px;overflow-y:auto">
-  <div style="background:white;border-radius:20px;width:620px;max-width:95vw;margin:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+  <div style="background:white;border-radius:20px;width:820px;max-width:95vw;margin:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <div style="padding:24px 28px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
       <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800;color:var(--navy)" id="vsmTitle">Vérification stock</h3>
       <button onclick="fermerVSM()" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
@@ -1281,10 +1456,24 @@ function resetFiltresHistorique() {
   filtrerHistorique();
 }
 
-let currentSiteId=null, currentEcarts=[], currentBobinesDetail=[];
+let currentSiteId=null, currentSiteNom='', currentEcarts=[], currentBobinesDetail=[];
+
+// Métadonnées des 3 décisions possibles (libellés, couleurs, effet réel)
+const DEC_META = {
+  autorise_ecart:{icon:'⚠️', label:"Autoriser l'écart", court:'Écart autorisé',
+    bg:'#FEF3C7', color:'#92400E', border:'#F59E0B',
+    hint:"Le stock DigiStock est conservé tel quel. Le coordinateur peut travailler malgré l'écart constaté sur cette bobine."},
+  reajuste:{icon:'🔄', label:'Réajuster le stock', court:'Réajusté',
+    bg:'#DBEAFE', color:'#1D4ED8', border:'#3B82F6',
+    hint:"Le stock physique DigiStock de cette bobine sera aligné sur la valeur EMUCI. Un mouvement d'ajustement est enregistré."},
+  refuse:{icon:'❌', label:'Refuser / Bloquer', court:'Bloqué',
+    bg:'#FEE2E2', color:'#991B1B', border:'#F87171',
+    hint:"Une demande de correction de saisie est envoyée au coordinateur pour cette bobine. L'écart reste ouvert."},
+};
 
 async function verifierSite(siteId, siteNom) {
   currentSiteId = siteId;
+  currentSiteNom = siteNom;
   const canValider = <?= $can_valider ? 'true' : 'false' ?>;
 
   // Spinner discret (pas de modal encore — on attend le résultat)
@@ -1328,9 +1517,10 @@ async function verifierSite(siteId, siteNom) {
         <div style="font-size:24px;font-weight:900;color:#065F46">${d.nb_bobines}</div>
         <div style="font-size:11px;color:#065F46;font-weight:700;text-transform:uppercase">Bobines vérifiées</div>
       </div>
-      <div style="text-align:center;padding:12px;background:${d.nb_ecarts>0?'#FEE2E2':'#D1FAE5'};border-radius:10px">
-        <div style="font-size:24px;font-weight:900;color:${d.nb_ecarts>0?'#991B1B':'#065F46'}">${d.nb_ecarts}</div>
-        <div style="font-size:11px;color:${d.nb_ecarts>0?'#991B1B':'#065F46'};font-weight:700;text-transform:uppercase">Écarts</div>
+      <div style="text-align:center;padding:12px;background:${(d.nb_ecarts_restants ?? d.nb_ecarts)>0?'#FEE2E2':'#D1FAE5'};border-radius:10px">
+        <div style="font-size:24px;font-weight:900;color:${(d.nb_ecarts_restants ?? d.nb_ecarts)>0?'#991B1B':'#065F46'}">${d.nb_ecarts_restants ?? d.nb_ecarts}</div>
+        <div style="font-size:11px;color:${(d.nb_ecarts_restants ?? d.nb_ecarts)>0?'#991B1B':'#065F46'};font-weight:700;text-transform:uppercase">Écarts à traiter</div>
+        ${d.nb_ecarts_traites ? `<div style="font-size:10.5px;color:#1D4ED8;font-weight:700;margin-top:4px">✔️ ${d.nb_ecarts_traites} traitée(s)</div>` : ''}
       </div>
       <div style="text-align:center;padding:12px;background:#F0F4FF;border-radius:10px">
         <div style="font-size:12.5px;font-weight:700;color:var(--navy)">${d.dernier_import ? (() => { const dt=new Date(d.dernier_import.replace(' ','T')); return dt.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'})+' à '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); })() : '—'}</div>
@@ -1339,80 +1529,103 @@ async function verifierSite(siteId, siteNom) {
     </div>`;
 
   // ── Tableau toutes bobines
+  //    En-têtes sur 2 lignes + conteneur scrollable : la colonne « Décision »
+  //    doit rester visible quelle que soit la largeur d'écran.
+  const thSub = (t, s) => `<div>${t}</div><div style="font-weight:500;opacity:.65;font-size:9.5px">${s}</div>`;
   html += `
-    <div style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px">
-      <table style="width:100%;border-collapse:collapse">
+    <div style="border:1.5px solid var(--border);border-radius:10px;overflow-x:auto;margin-bottom:16px">
+      <table style="width:100%;border-collapse:collapse;min-width:620px">
         <thead><tr style="background:#06033A">
-          <th style="padding:9px 12px;color:white;font-size:11px;text-align:left">N° Bobine</th>
-          <th style="padding:9px 12px;color:white;font-size:11px;text-align:left">Type</th>
-          ${d.dernier_import?`<th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Stock EMUCI (Système)</th>`:''}
-          <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Stock Physique (DigiStock)</th>
-          ${d.dernier_import?`<th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Écart</th>`:''}
-          <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Statut</th>
+          <th style="padding:8px 10px;color:white;font-size:11px;text-align:left">N° Bobine</th>
+          <th style="padding:8px 10px;color:white;font-size:11px;text-align:left">Type</th>
+          ${d.dernier_import?`<th style="padding:8px 10px;color:white;font-size:11px;text-align:center">${thSub('Stock EMUCI','(Système)')}</th>`:''}
+          <th style="padding:8px 10px;color:white;font-size:11px;text-align:center">${thSub('Stock Physique','(DigiStock)')}</th>
+          ${d.dernier_import?`<th style="padding:8px 10px;color:white;font-size:11px;text-align:center">Écart</th>`:''}
+          <th style="padding:8px 10px;color:white;font-size:11px;text-align:center">Statut</th>
+          ${canValider?`<th style="padding:8px 10px;color:white;font-size:11px;text-align:center">Décision</th>`:''}
         </tr></thead>
         <tbody>`;
 
+  const nbCols = 4 + (d.dernier_import ? 2 : 0) + (canValider ? 1 : 0);
   if (bobines.length === 0) {
-    html += `<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--muted)">Aucune bobine active sur ce site</td></tr>`;
+    html += `<tr><td colspan="${nbCols}" style="text-align:center;padding:20px;color:var(--muted)">Aucune bobine active sur ce site</td></tr>`;
   } else {
     bobines.forEach((b, i) => {
       const bg = b.has_ecart ? '#FFF7ED' : (i%2===0 ? 'white' : '#F8FAFC');
-      const ecartColor = b.ecart > 0 ? '#DC2626' : '#D97706';
       html += `<tr style="background:${bg}">
-        <td style="padding:9px 12px;font-family:monospace;font-weight:800;color:#06033A">${b.numero}</td>
-        <td style="padding:9px 12px;font-size:12px;color:var(--muted)">${b.type_code||b.format||'—'}</td>
+        <td style="padding:9px 10px;font-family:monospace;font-weight:800;color:#06033A;font-size:12px">${b.numero}</td>
+        <td style="padding:9px 10px;font-size:12px;color:var(--muted)">${b.type_code||b.format||'—'}</td>
         ${d.dernier_import ? `
-        <td style="padding:9px 12px;text-align:center;font-weight:600;color:#1B75BC">${b.stock_systeme??'—'}</td>` : ''}
-        <td style="padding:9px 12px;text-align:center;font-weight:700;color:${b.films_restants<=0?'#DC2626':b.films_restants<50?'#D97706':'#065F46'}">${b.films_restants??'—'}</td>
+        <td style="padding:9px 10px;text-align:center;font-weight:600;color:#1B75BC">${b.stock_systeme??'—'}</td>` : ''}
+        <td style="padding:9px 10px;text-align:center;font-weight:700;color:${b.films_restants<=0?'#DC2626':b.films_restants<50?'#D97706':'#065F46'}">${b.films_restants??'—'}</td>
         ${d.dernier_import ? `
-        <td style="padding:9px 12px;text-align:center;font-weight:800;color:${b.has_ecart?(b.ecart>0?'#DC2626':'#D97706'):'#065F46'}">
+        <td style="padding:9px 10px;text-align:center;font-weight:800;color:${b.has_ecart?(b.ecart>0?'#DC2626':'#D97706'):'#065F46'}">
           ${b.has_ecart ? (b.ecart>0?'+':'')+b.ecart : '✓'}
         </td>` : ''}
-        <td style="padding:9px 12px;text-align:center">
+        <td style="padding:9px 10px;text-align:center">
           ${b.has_ecart
-            ? `<span style="background:#FEE2E2;color:#991B1B;padding:3px 9px;border-radius:8px;font-size:11px;font-weight:700">⚠️ Écart</span>`
-            : `<span style="background:#D1FAE5;color:#065F46;padding:3px 9px;border-radius:8px;font-size:11px;font-weight:700">✅ OK</span>`}
+            ? `<span style="background:#FEE2E2;color:#991B1B;padding:3px 8px;border-radius:8px;font-size:10.5px;font-weight:700;white-space:nowrap">⚠️ Écart</span>`
+            : `<span style="background:#D1FAE5;color:#065F46;padding:3px 8px;border-radius:8px;font-size:10.5px;font-weight:700">✅ OK</span>`}
         </td>
+        ${canValider ? `<td style="padding:7px 10px;text-align:center">${celluleDecision(b)}</td>` : ''}
       </tr>`;
     });
   }
   html += `</tbody></table></div>`;
 
+  // Légende des boutons de décision par ligne
+  if (canValider && d.nb_ecarts > 0) {
+    html += `<div class="vsm-dec-help">
+      <strong style="color:var(--navy)">Décision par bobine :</strong>
+      <span>⚠️ Autoriser l'écart</span><span>🔄 Réajuster le stock</span><span>❌ Refuser / Bloquer</span>
+    </div>`;
+  }
+
   // ── Zone de décision (si GSB et écarts détectés — le cas 0 écart est auto-validé avant l'ouverture du modal)
-  if (canValider && !d.validation && d.nb_ecarts > 0) {
-    {
+  //    Chaque bobine se traite depuis sa propre ligne ; ce bloc ne sert qu'au
+  //    traitement groupé des bobines encore en attente de décision.
+  const nbRestants = d.nb_ecarts_restants ?? d.nb_ecarts ?? 0;
+  if (canValider && d.nb_ecarts > 0) {
+    if (nbRestants > 0) {
       html += `
         <div style="background:#FEF3C7;border-left:4px solid #F59E0B;padding:12px 16px;border-radius:8px;margin-bottom:14px;font-size:13px;color:#92400E">
-          <strong>⚠️ ${d.nb_ecarts} écart(s) détecté(s).</strong> Saisissez un commentaire et choisissez votre décision.
+          <strong>⚠️ ${nbRestants} écart(s) à traiter.</strong>
+          Prenez votre décision bobine par bobine avec les boutons de la colonne « Décision »,
+          ou appliquez une décision unique à toutes les bobines restantes ci-dessous.
+          ${d.nb_ecarts_traites ? `<div style="margin-top:5px;font-size:12px">✔️ ${d.nb_ecarts_traites} bobine(s) déjà traitée(s). Le site sera validé et le coordinateur notifié une fois toutes les bobines traitées.</div>` : ''}
         </div>
-        <div class="form-group" style="margin-bottom:14px">
-          <label style="font-size:13px;font-weight:700;color:var(--navy);display:block;margin-bottom:6px">
-            Commentaire / Motif <span style="color:var(--danger)">*</span>
-          </label>
-          <textarea class="form-control" id="vsmCommentaire" rows="2"
-            placeholder="Expliquez la cause de l'écart ou la décision prise…"
-            style="border-radius:10px"></textarea>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
-          <button class="btn btn-success" onclick="decisionGSB('autorise_ecart')" style="font-size:12.5px">
-            ⚠️ Autoriser l'écart
-          </button>
-          <button class="btn btn-primary" onclick="decisionGSB('reajuste')" style="font-size:12.5px">
-            🔄 Réajuster le stock
-          </button>
-          <button class="btn btn-danger" onclick="decisionGSB('refuse')" style="font-size:12.5px">
-            ❌ Refuser / Bloquer
-          </button>
+        <div style="border:1.5px dashed var(--border);border-radius:10px;padding:14px 16px">
+          <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px">
+            Traitement groupé — ${nbRestants} bobine(s) restante(s)
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+            <button class="btn btn-success" onclick="ouvrirDecisionGroupee('autorise_ecart')" style="font-size:12.5px">
+              ⚠️ Autoriser l'écart
+            </button>
+            <button class="btn btn-primary" onclick="ouvrirDecisionGroupee('reajuste')" style="font-size:12.5px">
+              🔄 Réajuster le stock
+            </button>
+            <button class="btn btn-danger" onclick="ouvrirDecisionGroupee('refuse')" style="font-size:12.5px">
+              ❌ Refuser / Bloquer
+            </button>
+          </div>
+        </div>`;
+    } else {
+      html += `
+        <div style="background:#D1FAE5;border-left:4px solid #34D399;padding:12px 16px;border-radius:8px;font-size:13px;color:#065F46">
+          <strong>✅ Toutes les bobines en écart ont été traitées.</strong>
+          ${d.validation ? '' : ' La validation du site est en cours d\'enregistrement.'}
         </div>`;
     }
-  } else if (d.validation) {
+  }
+  if (d.validation) {
     // Déjà validé — afficher le récapitulatif
     const vStatuts = {
       valide_auto:'✅ Validé automatiquement', valide_gsb:'✅ Validé par GSB',
       autorise_ecart:'⚠️ Écart autorisé', reajuste:'🔄 Stock réajusté', refuse:'❌ Bloqué'
     };
     html += `
-      <div style="background:#F0F9FF;border-radius:10px;padding:14px 18px;font-size:13px">
+      <div style="background:#F0F9FF;border-radius:10px;padding:14px 18px;font-size:13px;margin-top:14px">
         <strong>${vStatuts[d.validation.statut]||d.validation.statut}</strong>
         ${d.validation.commentaire ? `<div style="color:var(--muted);margin-top:4px">💬 ${d.validation.commentaire}</div>` : ''}
       </div>`;
@@ -1432,16 +1645,129 @@ async function validerAuto(){
   else toast(d.message,'error');
 }
 
-async function decisionGSB(decision){
-  const commentaire=document.getElementById('vsmCommentaire')?.value?.trim();
-  if(!commentaire){alert('Le commentaire est obligatoire.');return;}
-  const d=await ap({
-    action:'decision_gsb',site_id:currentSiteId,date:'<?= h($f_date) ?>',
-    decision,commentaire,ecarts_json:JSON.stringify(currentEcarts),
-    bobines_json:JSON.stringify(currentBobinesDetail)
-  });
-  if(d.success){toast(d.message);fermerVSM();setTimeout(()=>location.reload(),900);}
-  else toast(d.message,'error');
+// ── Cellule « Décision » d'une ligne bobine
+function celluleDecision(b) {
+  if (b.decision) {
+    const m = DEC_META[b.decision.decision] || {icon:'•', court:b.decision.decision, bg:'#F1F5F9', color:'#475569'};
+    return `<span class="vsm-dec-badge" style="background:${m.bg};color:${m.color}" title="${(b.decision.commentaire||'').replace(/"/g,'&quot;')}">${m.icon} ${m.court}</span>
+            <button class="vsm-dec-edit" onclick="ouvrirDecisionBobine(${b.bobine_id})">Modifier</button>`;
+  }
+  if (!b.has_ecart) return '<span style="color:var(--muted);font-size:12px">—</span>';
+  return `<div class="vsm-dec-group">
+      <button class="vsm-dec-btn dec-autorise_ecart" title="Autoriser l'écart" aria-label="Autoriser l'écart"
+              onclick="ouvrirDecisionBobine(${b.bobine_id},'autorise_ecart')">⚠️</button>
+      <button class="vsm-dec-btn dec-reajuste" title="Réajuster le stock" aria-label="Réajuster le stock"
+              onclick="ouvrirDecisionBobine(${b.bobine_id},'reajuste')">🔄</button>
+      <button class="vsm-dec-btn dec-refuse" title="Refuser / Bloquer" aria-label="Refuser / Bloquer"
+              onclick="ouvrirDecisionBobine(${b.bobine_id},'refuse')">❌</button>
+    </div>`;
+}
+
+// ── Décision en attente de confirmation : {bobines:[...], decision:'...'}
+let decisionEnCours = null;
+
+function ouvrirDecisionBobine(bobineId, decision) {
+  const b = currentBobinesDetail.find(x => Number(x.bobine_id) === Number(bobineId));
+  if (!b) { toast('Bobine introuvable.', 'error'); return; }
+  if (!decision) decision = b.decision?.decision || 'reajuste';
+  const m = DEC_META[decision];
+
+  document.getElementById('decBobTitle').textContent    = `${m.icon} ${m.label}`;
+  document.getElementById('decBobSubtitle').innerHTML   =
+    `Bobine <strong style="color:var(--navy);font-family:monospace">${b.numero}</strong> — ${currentSiteNom}`;
+  document.getElementById('decBobInfo').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
+      <div style="background:#f0f4ff;border-radius:10px;padding:11px;text-align:center">
+        <div style="font-size:10px;font-weight:700;color:#1B75BC;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Stock EMUCI</div>
+        <div style="font-size:20px;font-weight:800;color:var(--navy)">${b.stock_systeme ?? '—'}</div>
+      </div>
+      <div style="background:#f0fdf4;border-radius:10px;padding:11px;text-align:center">
+        <div style="font-size:10px;font-weight:700;color:#065F46;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Stock DigiStock</div>
+        <div style="font-size:20px;font-weight:800;color:var(--navy)">${b.films_restants ?? '—'}</div>
+      </div>
+      <div style="background:#fef2f2;border-radius:10px;padding:11px;text-align:center">
+        <div style="font-size:10px;font-weight:700;color:#991B1B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Écart</div>
+        <div style="font-size:20px;font-weight:800;color:${b.ecart>0?'#DC2626':'#D97706'}">${b.ecart>0?'+':''}${b.ecart ?? 0}</div>
+      </div>
+    </div>`;
+  const hint = document.getElementById('decBobHint');
+  hint.style.background   = m.bg;
+  hint.style.borderColor  = m.border;
+  hint.style.color        = m.color;
+  hint.textContent        = m.hint;
+
+  document.getElementById('decBobCommentaire').value = b.decision?.commentaire || '';
+  document.getElementById('decBobConfirm').textContent = `${m.icon} ${m.label}`;
+
+  decisionEnCours = { bobines: [b], decision };
+  document.getElementById('modalDecBobine').style.display = 'flex';
+  setTimeout(() => document.getElementById('decBobCommentaire').focus(), 60);
+}
+
+function ouvrirDecisionGroupee(decision) {
+  // Toutes les bobines en écart n'ayant pas encore de décision
+  const restantes = currentEcarts.filter(e =>
+    !currentBobinesDetail.find(b => Number(b.bobine_id) === Number(e.bobine_id))?.decision);
+  if (!restantes.length) { toast('Aucune bobine en attente de décision.', 'info'); return; }
+  const m = DEC_META[decision];
+
+  document.getElementById('decBobTitle').textContent  = `${m.icon} ${m.label}`;
+  document.getElementById('decBobSubtitle').innerHTML =
+    `<strong style="color:var(--navy)">${restantes.length} bobine(s)</strong> en écart — ${currentSiteNom}`;
+  document.getElementById('decBobInfo').innerHTML = `
+    <div style="border:1.5px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px;max-height:150px;overflow-y:auto;font-size:12px">
+      ${restantes.map(e => `<div style="display:flex;justify-content:space-between;padding:3px 0">
+        <span style="font-family:monospace;font-weight:700;color:var(--navy)">${e.numero}</span>
+        <span style="color:${e.ecart>0?'#DC2626':'#D97706'};font-weight:700">${e.ecart>0?'+':''}${e.ecart}</span>
+      </div>`).join('')}
+    </div>`;
+  const hint = document.getElementById('decBobHint');
+  hint.style.background  = m.bg;
+  hint.style.borderColor = m.border;
+  hint.style.color       = m.color;
+  hint.textContent       = m.hint.replace('cette bobine', 'chacune de ces bobines');
+
+  document.getElementById('decBobCommentaire').value   = '';
+  document.getElementById('decBobConfirm').textContent = `${m.icon} ${m.label} (${restantes.length})`;
+
+  decisionEnCours = { bobines: restantes, decision };
+  document.getElementById('modalDecBobine').style.display = 'flex';
+  setTimeout(() => document.getElementById('decBobCommentaire').focus(), 60);
+}
+
+async function confirmerDecision() {
+  if (!decisionEnCours) return;
+  const commentaire = document.getElementById('decBobCommentaire').value.trim();
+  if (!commentaire) { alert('Le commentaire est obligatoire.'); return; }
+
+  const btn = document.getElementById('decBobConfirm');
+  const txt = btn.textContent;
+  btn.disabled = true; btn.textContent = '⏳ Enregistrement…';
+  try {
+    const d = await ap({
+      action:'decision_gsb', site_id:currentSiteId, date:'<?= h($f_date) ?>',
+      decision:decisionEnCours.decision, commentaire,
+      ecarts_json:JSON.stringify(decisionEnCours.bobines),
+      bobines_json:JSON.stringify(currentBobinesDetail)
+    });
+    if (!d.success) { toast(d.message, 'error'); return; }
+
+    document.getElementById('modalDecBobine').style.display = 'none';
+    decisionEnCours = null;
+    toast(d.message);
+    if (d.data?.site_complet) {
+      // Site entièrement traité : validation enregistrée, on rafraîchit la page
+      fermerVSM();
+      setTimeout(() => location.reload(), 900);
+    } else {
+      // Traitement partiel : on recharge le tableau pour refléter la décision
+      verifierSite(currentSiteId, currentSiteNom);
+    }
+  } catch(err) {
+    toast('❌ Erreur réseau. Réessayez.', 'error');
+  } finally {
+    btn.disabled = false; btn.textContent = txt;
+  }
 }
 
 async function verifierTousSites(){
@@ -1456,6 +1782,7 @@ function fermerVSM(){document.getElementById('modalVSM').style.display='none';}
 document.getElementById('modalVSM').addEventListener('click',e=>{if(e.target===document.getElementById('modalVSM'))fermerVSM();});
 document.getElementById('modalDetails').addEventListener('click',e=>{if(e.target===document.getElementById('modalDetails'))e.target.style.display='none';});
 document.getElementById('miniModalCorr').addEventListener('click',e=>{if(e.target===document.getElementById('miniModalCorr'))e.target.style.display='none';});
+document.getElementById('modalDecBobine').addEventListener('click',e=>{if(e.target===document.getElementById('modalDecBobine')){e.target.style.display='none';decisionEnCours=null;}});
 
 function demanderModifBobine(bobineId, bobineNum, siteId, date, filmsPj, filmsEmuci, ecart) {
   const m = document.getElementById('miniModalCorr');
@@ -1620,6 +1947,10 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
           ${hasEcart
             ? `<span style="background:#FEE2E2;color:#991B1B;padding:3px 9px;border-radius:8px;font-size:10.5px;font-weight:700">⚠️ Écart ${b.ecart>0?'+':''}${b.ecart}</span>`
             : '<span style="background:#D1FAE5;color:#065F46;padding:3px 9px;border-radius:8px;font-size:10.5px;font-weight:700">✅ OK</span>'}
+          ${b.decision ? (() => {
+            const dm = DEC_META[b.decision.decision] || {icon:'•', court:b.decision.decision, bg:'#F1F5F9', color:'#475569'};
+            return `<div style="margin-top:4px"><span class="vsm-dec-badge" style="background:${dm.bg};color:${dm.color}" title="${(b.decision.commentaire||'').replace(/"/g,'&quot;')}">${dm.icon} ${dm.court}</span></div>`;
+          })() : ''}
         </td>
         ${<?= $can_valider ? 'true' : 'false' ?> ? `<td style="padding:7px 12px;text-align:center">
           <button onclick="demanderModifBobine(${b.bobine_id},'${b.numero}',${siteId},'<?= h($f_date) ?>',${b.films_restants||0},${b.stock_systeme||0},${b.ecart||0})"
