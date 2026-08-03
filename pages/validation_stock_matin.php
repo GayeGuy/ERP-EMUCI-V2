@@ -198,17 +198,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 [$site_id, $date]
             ) : [];
 
+            // Corrections déjà validées par le GSB dans les rounds précédents
+            $coord_corrections_valides = $exist ? db_fetch_all(
+                "SELECT cb.bobine_id, cb.films_final, b.numero
+                 FROM corrections_bobines cb
+                 JOIN op_bobines b ON b.id = cb.bobine_id
+                 WHERE cb.site_id=? AND cb.date_point=? AND cb.statut='valide'",
+                [$site_id, $date]
+            ) : [];
+
+            // Bobines réajustées sans correction active ni validée (coordinator doit encore soumettre)
+            $coord_en_attente = [];
+            if ($exist && ($exist['statut'] ?? '') === 'reajuste') {
+                $decs_json = json_decode($exist['details_ecarts'] ?? '[]', true) ?: [];
+                $reaj_bids = array_column(
+                    array_filter($decs_json, fn($d) => ($d['decision'] ?? '') === 'reajuste'),
+                    'bobine_id'
+                );
+                $done_bids = array_map('intval', array_merge(
+                    array_column($coord_corrections, 'bobine_id'),
+                    array_column($coord_corrections_valides, 'bobine_id')
+                ));
+                foreach ($reaj_bids as $bid) {
+                    if (!in_array((int)$bid, $done_bids)) {
+                        $bnum = db_fetch_value("SELECT numero FROM op_bobines WHERE id=?", [(int)$bid]);
+                        $coord_en_attente[] = ['bobine_id' => (int)$bid, 'numero' => $bnum ?? "#$bid"];
+                    }
+                }
+            }
+
             json_response(true, '', [
-                'ecarts'            => $ecarts,
-                'ecarts_restants'   => $ecarts_restants,
-                'bobines_detail'    => $bobines_detail,
-                'nb_ecarts'         => $nb_ecarts,
-                'nb_ecarts_restants'=> count($ecarts_restants),
-                'nb_ecarts_traites' => count($decisions),
-                'nb_bobines'        => count($pj_entries) ?: count($bobines_detail),
-                'dernier_import'    => $dernier_import,
-                'validation'        => $exist,
-                'coord_corrections' => $coord_corrections,
+                'ecarts'                    => $ecarts,
+                'ecarts_restants'           => $ecarts_restants,
+                'bobines_detail'            => $bobines_detail,
+                'nb_ecarts'                 => $nb_ecarts,
+                'nb_ecarts_restants'        => count($ecarts_restants),
+                'nb_ecarts_traites'         => count($decisions),
+                'nb_bobines'                => count($pj_entries) ?: count($bobines_detail),
+                'dernier_import'            => $dernier_import,
+                'validation'                => $exist,
+                'coord_corrections'         => $coord_corrections,
+                'coord_corrections_valides' => $coord_corrections_valides,
+                'coord_en_attente'          => $coord_en_attente,
             ]);
         } catch (Exception $ex) {
             json_response(false, 'Erreur serveur : ' . $ex->getMessage());
@@ -577,14 +608,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             }
 
             if ($nb_refuses === 0) {
-                // Tout validé → stock confirmé
-                db_query(
-                    "UPDATE validations_stock_matin SET statut='valide_gsb',commentaire=?,gsb_user_id=?,gsb_at=NOW()
-                     WHERE site_id=? AND date_validation=?",
-                    ["Corrections coordinateur validées ($nb_valides bobine(s))",$user['id'],$site_id,$date]
+                // Vérifier que TOUTES les bobines réajustées ont maintenant une correction validée
+                $details_raw = db_fetch_value(
+                    "SELECT details_ecarts FROM validations_stock_matin WHERE site_id=? AND date_validation=?",
+                    [$site_id, $date]
                 );
-                $msg_coord = "✅ Vos corrections ont été acceptées. Le stock du $date est validé.";
-                $titre_coord = '✅ Stock validé';
+                $all_decs_chk  = json_decode($details_raw ?? '[]', true) ?: [];
+                $reaj_bids_chk = array_column(
+                    array_filter($all_decs_chk, fn($d) => ($d['decision'] ?? '') === 'reajuste'),
+                    'bobine_id'
+                );
+                $all_reajuste_done = true;
+                if (!empty($reaj_bids_chk)) {
+                    $ph_chk = implode(',', array_fill(0, count($reaj_bids_chk), '?'));
+                    $nb_val_total = (int)db_fetch_value(
+                        "SELECT COUNT(DISTINCT bobine_id) FROM corrections_bobines WHERE site_id=? AND date_point=? AND statut='valide' AND bobine_id IN ($ph_chk)",
+                        array_merge([$site_id, $date], $reaj_bids_chk)
+                    );
+                    $all_reajuste_done = ($nb_val_total >= count($reaj_bids_chk));
+                }
+
+                if ($all_reajuste_done) {
+                    db_query(
+                        "UPDATE validations_stock_matin SET statut='valide_gsb',commentaire=?,gsb_user_id=?,gsb_at=NOW()
+                         WHERE site_id=? AND date_validation=?",
+                        ["Corrections coordinateur validées ($nb_valides bobine(s))",$user['id'],$site_id,$date]
+                    );
+                    $msg_coord = "✅ Vos corrections ont été acceptées. Le stock du $date est validé.";
+                    $titre_coord = '✅ Stock validé';
+                } else {
+                    // Ce round est ok mais d'autres bobines attendent encore le coordinateur
+                    db_query(
+                        "UPDATE validations_stock_matin SET commentaire=?,gsb_at=NOW()
+                         WHERE site_id=? AND date_validation=?",
+                        ["$nb_valides correction(s) validée(s) — d'autres bobines attendent encore",$site_id,$date]
+                    );
+                    $msg_coord = "✅ $nb_valides correction(s) validée(s). D'autres bobines de votre site nécessitent encore une correction de votre part.";
+                    $titre_coord = '🔄 Corrections partiellement traitées';
+                }
             } else {
                 // Corrections partielles → site reste en réajustement pour les bobines refusées
                 db_query(
@@ -632,6 +693,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 $motif_coord   = trim($b['motif_coord'] ?? '');
                 if (!$bobine_id) continue;
                 if (!$motif_coord) json_response(false, 'Le motif est obligatoire pour chaque bobine.');
+
+                // Ne pas re-soumettre une bobine déjà validée par le GSB
+                if ((int)db_fetch_value("SELECT COUNT(*) FROM corrections_bobines WHERE site_id=? AND date_point=? AND bobine_id=? AND statut='valide'", [$site_id, $date, $bobine_id])) continue;
 
                 // Trouver le point journalier de cette bobine
                 $point_id = (int)db_fetch_value(
@@ -1041,9 +1105,17 @@ if ($is_coord && $site_force) {
                  WHERE site_id=? AND date_point=? AND statut='coord_repond' AND bobine_id IN ($ph)",
                 array_merge([$site_force, $f_date], $bid_list)
             );
+            // Bobines déjà validées par le GSB dans des rounds précédents
+            $valide_rows = db_fetch_all(
+                "SELECT bobine_id, films_final FROM corrections_bobines
+                 WHERE site_id=? AND date_point=? AND statut='valide' AND bobine_id IN ($ph)",
+                array_merge([$site_force, $f_date], $bid_list)
+            );
+            foreach ($valide_rows as $vr) $coord_valides_map[(int)$vr['bobine_id']] = $vr;
         }
     }
 }
+$coord_valides_map = $coord_valides_map ?? [];
 
 // ── Rapport journalier GSB : sites validés (exclu reajuste/refuse — pas encore finalisés)
 $rapport_journalier = [];
@@ -1303,14 +1375,27 @@ $statut_colors = [
 <?php
 $corr_done_map = [];
 foreach ($coord_corrections_soumises as $cs) $corr_done_map[(int)$cs['bobine_id']] = $cs;
-$all_done = count($corr_done_map) >= count($coord_reajust_details);
+// Bobines qui nécessitent encore une correction (pas encore validées par GSB)
+$bobines_a_corriger = array_filter($coord_reajust_details, fn($r) => !isset($coord_valides_map[(int)$r['bobine_id']]));
+// Toutes les bobines non-validées ont-elles une correction en attente de review ?
+$all_done = !empty($bobines_a_corriger)
+    && count(array_filter($bobines_a_corriger, fn($r) => isset($corr_done_map[(int)$r['bobine_id']]))) >= count($bobines_a_corriger);
+$nb_total_valides = count($coord_valides_map);
+$nb_total_bobines = count($coord_reajust_details);
 ?>
 <div style="background:white;border:2px solid #F59E0B;border-radius:18px;padding:24px 28px;margin-bottom:20px">
-  <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:#92400E;margin-bottom:6px">
-    📋 Saisir les valeurs correctes
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:6px">
+    <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:#92400E">
+      📋 Saisir les valeurs correctes
+    </div>
+    <?php if($nb_total_valides > 0): ?>
+    <div style="font-size:12px;background:#D1FAE5;color:#065F46;border-radius:8px;padding:4px 10px;font-weight:700">
+      ✅ <?= $nb_total_valides ?> / <?= $nb_total_bobines ?> bobine(s) déjà validée(s) par le gestionnaire
+    </div>
+    <?php endif; ?>
   </div>
   <p style="font-size:13px;color:#92400E;margin-bottom:18px">
-    Pour chaque bobine réajustée, indiquez la valeur que vous considérez correcte. Le gestionnaire en tiendra compte pour la re-validation.
+    Pour chaque bobine réajustée, indiquez la valeur correcte. Le gestionnaire re-validera vos corrections bobine par bobine.
   </p>
   <?php if($all_done): ?>
   <div style="background:#d1fae5;border-radius:10px;padding:12px 16px;font-size:13px;color:#065f46;font-weight:700;margin-bottom:14px">
@@ -1322,38 +1407,61 @@ $all_done = count($corr_done_map) >= count($coord_reajust_details);
     <thead>
       <tr style="background:#F8FAFC">
         <th style="padding:9px 14px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:1.5px solid var(--border)">N° Bobine</th>
-        <th style="padding:9px 14px;text-align:center;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Valeur DigiStock avant</th>
-        <th style="padding:9px 14px;text-align:center;font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase;border-bottom:1.5px solid var(--border)">Réajusté par GSB (EMUCI)</th>
+        <th style="padding:9px 14px;text-align:center;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Valeur DigiStock</th>
+        <th style="padding:9px 14px;text-align:center;font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase;border-bottom:1.5px solid var(--border)">Réajusté GSB</th>
         <th style="padding:9px 14px;text-align:center;font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Valeur correcte *</th>
         <th style="padding:9px 14px;text-align:left;font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Justification *</th>
+        <th style="padding:9px 14px;text-align:center;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Statut</th>
       </tr>
     </thead>
     <tbody>
     <?php foreach($coord_reajust_details as $idx => $r): ?>
-    <?php $existing_corr = $corr_done_map[(int)$r['bobine_id']] ?? null; ?>
-    <tr style="border-bottom:1px solid var(--border)">
+    <?php
+      $bid          = (int)$r['bobine_id'];
+      $is_valide    = isset($coord_valides_map[$bid]);
+      $existing_corr= $corr_done_map[$bid] ?? null;
+      $row_bg       = $is_valide ? '#F0FDF4' : ($existing_corr ? '#EFF6FF' : '');
+    ?>
+    <tr style="border-bottom:1px solid var(--border);<?= $row_bg ? "background:$row_bg" : '' ?>">
       <td style="padding:10px 14px;font-weight:800;color:var(--navy);font-family:monospace"><?= h($r['numero']) ?></td>
       <td style="padding:10px 14px;text-align:center;color:var(--muted)"><?= (int)$r['films_restants'] ?></td>
       <td style="padding:10px 14px;text-align:center;color:#1d4ed8;font-weight:700"><?= (int)$r['stock_systeme'] ?></td>
       <td style="padding:10px 14px;text-align:center">
-        <input type="number" id="cr-films-<?= $idx ?>" data-bobine="<?= (int)$r['bobine_id'] ?>"
-               min="0" value="<?= $existing_corr ? (int)$existing_corr['films_final'] : (int)$r['films_restants'] ?>"
-               <?= $all_done ? 'disabled' : '' ?>
-               style="width:80px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;text-align:center;font-size:14px;font-weight:700;<?= $all_done ? 'background:#f1f5f9;color:var(--muted)' : '' ?>">
+        <?php if($is_valide): ?>
+          <span style="font-size:15px;font-weight:800;color:#065F46"><?= (int)$coord_valides_map[$bid]['films_final'] ?></span>
+        <?php else: ?>
+          <input type="number" id="cr-films-<?= $idx ?>" data-bobine="<?= $bid ?>"
+                 min="0" value="<?= $existing_corr ? (int)$existing_corr['films_final'] : (int)$r['films_restants'] ?>"
+                 <?= ($all_done || $existing_corr) ? 'disabled' : '' ?>
+                 style="width:80px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;text-align:center;font-size:14px;font-weight:700;<?= ($all_done || $existing_corr) ? 'background:#f1f5f9;color:var(--muted)' : '' ?>">
+        <?php endif; ?>
       </td>
       <td style="padding:10px 14px">
-        <input type="text" id="cr-motif-<?= $idx ?>"
-               placeholder="Justification obligatoire…"
-               value="<?= $existing_corr ? h($existing_corr['reponse_coord'] ?? '') : '' ?>"
-               <?= $all_done ? 'disabled' : '' ?>
-               style="width:100%;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12.5px;<?= $all_done ? 'background:#f1f5f9;color:var(--muted)' : '' ?>">
+        <?php if($is_valide): ?>
+          <span style="font-size:12.5px;color:#065F46">—</span>
+        <?php else: ?>
+          <input type="text" id="cr-motif-<?= $idx ?>"
+                 placeholder="Justification obligatoire…"
+                 value="<?= $existing_corr ? h($existing_corr['reponse_coord'] ?? '') : '' ?>"
+                 <?= ($all_done || $existing_corr) ? 'disabled' : '' ?>
+                 style="width:100%;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12.5px;<?= ($all_done || $existing_corr) ? 'background:#f1f5f9;color:var(--muted)' : '' ?>">
+        <?php endif; ?>
+      </td>
+      <td style="padding:10px 14px;text-align:center">
+        <?php if($is_valide): ?>
+          <span style="background:#D1FAE5;color:#065F46;border-radius:8px;padding:3px 10px;font-size:11.5px;font-weight:700">✅ Validé</span>
+        <?php elseif($existing_corr): ?>
+          <span style="background:#DBEAFE;color:#1D4ED8;border-radius:8px;padding:3px 10px;font-size:11.5px;font-weight:700">⏳ En attente GSB</span>
+        <?php else: ?>
+          <span style="background:#FEF3C7;color:#92400E;border-radius:8px;padding:3px 10px;font-size:11.5px;font-weight:700">📝 À renseigner</span>
+        <?php endif; ?>
       </td>
     </tr>
     <?php endforeach; ?>
     </tbody>
   </table>
   </div>
-  <?php if(!$all_done): ?>
+  <?php if(!$all_done && !empty($bobines_a_corriger)): ?>
   <div style="display:flex;justify-content:flex-end">
     <button onclick="soumettreCorrectionsCoord(<?= (int)$coord_validation['site_id'] ?>,'<?= h($coord_validation['date_validation']) ?>',<?= count($coord_reajust_details) ?>)"
             style="background:#1B75BC;color:white;border:none;padding:11px 26px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px">
@@ -2053,77 +2161,118 @@ async function verifierSite(siteId, siteNom) {
     };
     const vBg = {valide_auto:'#D1FAE5',valide_gsb:'#D1FAE5',autorise_ecart:'#FEF3C7',reajuste:'#EFF6FF',refuse:'#FEE2E2'};
 
-    // ── Statut reajuste + corrections coordinateur disponibles → panneau d'action par bobine
-    if (canValider && d.validation.statut === 'reajuste' && d.coord_corrections && d.coord_corrections.length > 0) {
-      const total = d.coord_corrections.length;
-      const rows = d.coord_corrections.map((c, i) => `
-        <tr id="ccrow-${i}" style="border-bottom:1px solid #E2E8F0;transition:background .2s">
-          <td style="padding:9px 12px;font-family:monospace;font-weight:700;color:#06033A">${c.numero}</td>
-          <td style="padding:9px 12px;text-align:center;color:#94a3b8">${c.films_gsb ?? '—'}</td>
-          <td style="padding:9px 12px;text-align:center;font-weight:800;color:#1D4ED8;font-size:15px">${c.films_final}</td>
-          <td style="padding:9px 12px;font-size:12px;color:#475569">${c.reponse_coord || '—'}</td>
-          <td style="padding:9px 12px">
-            <input type="text" id="cc-comment-${i}" placeholder="Motif GSB (requis si refus)"
-                   style="width:100%;box-sizing:border-box;padding:5px 8px;border:1.5px solid #E2E8F0;border-radius:6px;font-size:12px;min-width:130px">
-          </td>
-          <td style="padding:9px 12px;text-align:center;white-space:nowrap">
-            <div style="display:flex;gap:6px;justify-content:center">
-              <button id="cc-btn-ok-${i}" onclick="setCoordDec(${i},${c.bobine_id},'valider',${total})"
-                      style="padding:6px 12px;background:#D1FAE5;color:#065F46;border:1.5px solid #34D399;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s">
-                ✅ Valider
-              </button>
-              <button id="cc-btn-ref-${i}" onclick="setCoordDec(${i},${c.bobine_id},'refuser',${total})"
-                      style="padding:6px 12px;background:#FEE2E2;color:#991B1B;border:1.5px solid #F87171;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s">
-                ❌ Refuser
-              </button>
-            </div>
-            <div id="cc-badge-${i}" style="display:none;font-size:10.5px;font-weight:700;margin-top:4px;text-align:center"></div>
-          </td>
-        </tr>`).join('');
+    // ── Statut reajuste + panneau d'action par bobine
+    if (canValider && d.validation && d.validation.statut === 'reajuste') {
+      const ccNew     = d.coord_corrections         || [];
+      const ccValides = d.coord_corrections_valides || [];
+      const ccAttente = d.coord_en_attente          || [];
+      const total     = ccNew.length; // seules les nouvelles soumissions nécessitent une décision
 
-      html += `
-        <div style="background:#EFF6FF;border:2px solid #BFDBFE;border-radius:12px;padding:18px 20px;margin-top:16px">
-          <div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;color:#1D4ED8;font-size:14px;margin-bottom:4px">
-            📋 Corrections soumises par le coordinateur
-          </div>
-          <p style="font-size:12.5px;color:#3B82F6;margin-bottom:14px">
-            Validez (✅) ou refusez (❌) la correction de chaque bobine, puis confirmez.
-          </p>
-          <div style="overflow-x:auto;margin-bottom:14px">
-          <table style="width:100%;border-collapse:collapse;font-size:13px;background:white;border-radius:10px;overflow:hidden">
-            <thead>
-              <tr style="background:#1D4ED8">
-                <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:left">N° Bobine</th>
-                <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:center">Réajusté GSB</th>
-                <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:center">Valeur coord</th>
-                <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:left">Justification coord</th>
-                <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:left">Commentaire GSB</th>
-                <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:center">Décision</th>
-              </tr>
-            </thead>
-            <tbody>${rows}</tbody>
-          </table>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
-            <span id="cc-progress" style="font-size:12.5px;color:var(--muted);font-weight:600">
-              0 / ${total} bobine(s) décidée(s)
-            </span>
-            <button id="cc-confirm-btn" disabled onclick="confirmerDecisionsCoord(${siteId},${total})"
-                    style="padding:11px 24px;background:#06033A;color:white;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:not-allowed;opacity:.5;transition:all .2s;white-space:nowrap">
-              Confirmer les décisions
-            </button>
-          </div>
-        </div>`;
-    } else if (canValider && d.validation.statut === 'reajuste') {
-      // Réajusté mais coord n'a pas encore répondu
-      html += `
-        <div style="background:#FEF3C7;border:1.5px solid #F59E0B;border-radius:10px;padding:14px 18px;margin-top:14px;font-size:13px;color:#92400E">
-          <strong>🔄 Stock réajusté</strong>
-          ${d.validation.commentaire ? `<div style="margin-top:4px">💬 ${d.validation.commentaire}</div>` : ''}
-          <div style="margin-top:8px;font-size:12px;opacity:.85">
-            ⏳ En attente des corrections du coordinateur — il sera notifié de fournir les valeurs correctes.
-          </div>
-        </div>`;
+      let panelRows = '';
+
+      // Lignes déjà validées (rounds précédents)
+      ccValides.forEach(c => {
+        panelRows += `
+          <tr style="background:#F0FDF4;border-bottom:1px solid #E2E8F0">
+            <td style="padding:9px 12px;font-family:monospace;font-weight:700;color:#065F46">${c.numero}</td>
+            <td style="padding:9px 12px;text-align:center;color:#065F46;font-weight:800">${c.films_final}</td>
+            <td style="padding:9px 12px;font-size:12px;color:#065F46">—</td>
+            <td style="padding:9px 12px"></td>
+            <td style="padding:9px 12px;text-align:center">
+              <span style="background:#D1FAE5;color:#065F46;border-radius:8px;padding:3px 10px;font-size:11.5px;font-weight:700">✅ Validé</span>
+            </td>
+          </tr>`;
+      });
+
+      // Lignes en attente de re-correction coordinateur
+      ccAttente.forEach(c => {
+        panelRows += `
+          <tr style="background:#FFFBEB;border-bottom:1px solid #E2E8F0">
+            <td style="padding:9px 12px;font-family:monospace;font-weight:700;color:#92400E">${c.numero}</td>
+            <td style="padding:9px 12px;text-align:center;color:#92400E">—</td>
+            <td style="padding:9px 12px;font-size:12px;color:#92400E">—</td>
+            <td style="padding:9px 12px"></td>
+            <td style="padding:9px 12px;text-align:center">
+              <span style="background:#FEF3C7;color:#92400E;border-radius:8px;padding:3px 10px;font-size:11.5px;font-weight:700">⏳ Coord. doit re-corriger</span>
+            </td>
+          </tr>`;
+      });
+
+      // Lignes avec nouvelles soumissions coordinateur → boutons ✅/❌
+      ccNew.forEach((c, i) => {
+        panelRows += `
+          <tr id="ccrow-${i}" style="border-bottom:1px solid #E2E8F0;transition:background .2s">
+            <td style="padding:9px 12px;font-family:monospace;font-weight:700;color:#06033A">${c.numero}</td>
+            <td style="padding:9px 12px;text-align:center;font-weight:800;color:#1D4ED8;font-size:15px">${c.films_final}</td>
+            <td style="padding:9px 12px;font-size:12px;color:#475569">${c.reponse_coord || '—'}</td>
+            <td style="padding:9px 12px">
+              <input type="text" id="cc-comment-${i}" placeholder="Motif GSB (requis si refus)"
+                     style="width:100%;box-sizing:border-box;padding:5px 8px;border:1.5px solid #E2E8F0;border-radius:6px;font-size:12px;min-width:130px">
+            </td>
+            <td style="padding:9px 12px;text-align:center;white-space:nowrap">
+              <div style="display:flex;gap:6px;justify-content:center">
+                <button id="cc-btn-ok-${i}" onclick="setCoordDec(${i},${c.bobine_id},'valider',${total})"
+                        style="padding:6px 12px;background:#D1FAE5;color:#065F46;border:1.5px solid #34D399;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s">
+                  ✅ Valider
+                </button>
+                <button id="cc-btn-ref-${i}" onclick="setCoordDec(${i},${c.bobine_id},'refuser',${total})"
+                        style="padding:6px 12px;background:#FEE2E2;color:#991B1B;border:1.5px solid #F87171;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s">
+                  ❌ Refuser
+                </button>
+              </div>
+              <div id="cc-badge-${i}" style="display:none;font-size:10.5px;font-weight:700;margin-top:4px;text-align:center"></div>
+            </td>
+          </tr>`;
+      });
+
+      const hasAnything = ccNew.length > 0 || ccValides.length > 0 || ccAttente.length > 0;
+      if (hasAnything) {
+        html += `
+          <div style="background:#EFF6FF;border:2px solid #BFDBFE;border-radius:12px;padding:18px 20px;margin-top:16px">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:8px">
+              <div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;color:#1D4ED8;font-size:14px">
+                📋 Corrections du coordinateur
+              </div>
+              ${ccValides.length > 0 ? `<span style="font-size:12px;background:#D1FAE5;color:#065F46;border-radius:8px;padding:3px 10px;font-weight:700">${ccValides.length} validée(s) ✅</span>` : ''}
+            </div>
+            ${ccNew.length > 0 ? `<p style="font-size:12.5px;color:#3B82F6;margin-bottom:14px">Validez (✅) ou refusez (❌) chaque nouvelle correction du coordinateur, puis confirmez.</p>` : ''}
+            ${ccAttente.length > 0 && ccNew.length === 0 ? `<div style="font-size:12.5px;color:#92400E;background:#FEF3C7;border-radius:8px;padding:10px 14px;margin-bottom:14px">⏳ En attente : le coordinateur doit re-soumettre ${ccAttente.length} bobine(s) refusée(s).</div>` : ''}
+            <div style="overflow-x:auto;margin-bottom:${total > 0 ? 14 : 0}px">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;background:white;border-radius:10px;overflow:hidden">
+              <thead>
+                <tr style="background:#1D4ED8">
+                  <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:left">N° Bobine</th>
+                  <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:center">Valeur coord</th>
+                  <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:left">Justification coord</th>
+                  <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:left">Commentaire GSB</th>
+                  <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:center">Statut / Décision</th>
+                </tr>
+              </thead>
+              <tbody>${panelRows}</tbody>
+            </table>
+            </div>
+            ${total > 0 ? `
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap">
+              <span id="cc-progress" style="font-size:12.5px;color:var(--muted);font-weight:600">
+                0 / ${total} bobine(s) décidée(s)
+              </span>
+              <button id="cc-confirm-btn" disabled onclick="confirmerDecisionsCoord(${siteId},${total})"
+                      style="padding:11px 24px;background:#06033A;color:white;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:not-allowed;opacity:.5;transition:all .2s;white-space:nowrap">
+                Confirmer les décisions
+              </button>
+            </div>` : ''}
+          </div>`;
+      } else {
+        // Réajusté mais le coordinateur n'a pas encore rien soumis
+        html += `
+          <div style="background:#FEF3C7;border:1.5px solid #F59E0B;border-radius:10px;padding:14px 18px;margin-top:14px;font-size:13px;color:#92400E">
+            <strong>🔄 Stock réajusté</strong>
+            ${d.validation.commentaire ? `<div style="margin-top:4px">💬 ${d.validation.commentaire}</div>` : ''}
+            <div style="margin-top:8px;font-size:12px;opacity:.85">
+              ⏳ En attente des corrections du coordinateur — il sera notifié de fournir les valeurs correctes.
+            </div>
+          </div>`;
+      }
     } else {
       // Autres statuts — récapitulatif standard
       html += `
@@ -2553,6 +2702,7 @@ async function soumettreCorrectionsCoord(siteId, date, nbBobines) {
     const filmsEl = document.getElementById('cr-films-' + i);
     const motifEl = document.getElementById('cr-motif-' + i);
     if (!filmsEl || !motifEl) continue;
+    if (filmsEl.disabled) continue; // bobine déjà validée par GSB ou soumise
     const films = parseInt(filmsEl.value);
     const motif = motifEl.value.trim();
     if (!motif) {
