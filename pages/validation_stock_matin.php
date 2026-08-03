@@ -777,7 +777,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         json_response(true, '', $bobines);
     }
 
-    // ── DEMANDE DE CORRECTION PAR BOBINE (Option 2 — accord coordinateur)
+    // ── DEMANDE DE CORRECTION PAR BOBINE (aller-retour GSB ↔ Coordinateur)
     if ($action === 'demander_correction_bobine') {
         if (!$can_valider) json_response(false, 'Accès refusé.');
         $bobine_id      = (int)($_POST['bobine_id']      ?? 0);
@@ -787,63 +787,102 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $films_pj       = (int)($_POST['films_pj']       ?? 0);
         $films_proposes = (int)($_POST['films_proposes'] ?? 0);
         if (!$bobine_id || !$site_id) json_response(false, 'Données manquantes.');
-        if (!$notes)         json_response(false, 'Le motif est obligatoire.');
+        if (!$notes) json_response(false, 'Le motif est obligatoire.');
+
         try {
-            // Retrouver le point journalier et vérifier qu'il a les données bobine
-            $point_id = (int)db_fetch_value(
-                "SELECT pj.id FROM op_points_journaliers pj
-                 JOIN op_films_utilises fu ON fu.point_id = pj.id
-                 WHERE fu.bobine_id = ? AND pj.site_id = ? AND pj.date_point = ?
-                 ORDER BY pj.id DESC LIMIT 1",
-                [$bobine_id, $site_id, $date]
+            $bobine_info = db_fetch_one(
+                "SELECT numero, type_code, format FROM op_bobines WHERE id=?",
+                [$bobine_id]
             );
-            if (!$point_id) json_response(false, 'Point journalier introuvable pour cette bobine à cette date.');
+            $bobine_num = $bobine_info['numero'] ?? "bobine #$bobine_id";
 
-            // Vérifier qu'il n'y a pas déjà une correction en attente pour cette bobine/date
-            $existing = db_fetch_value(
-                "SELECT id FROM corrections_bobines WHERE bobine_id=? AND site_id=? AND date_point=? AND statut='en_attente'",
-                [$bobine_id, $site_id, $date]
+            db_begin();
+
+            // 1. Remettre le site en réajustement et mettre à jour details_ecarts
+            $current_val = db_fetch_one(
+                "SELECT statut, details_ecarts FROM validations_stock_matin WHERE site_id=? AND date_validation=?",
+                [$site_id, $date]
             );
-            if ($existing) json_response(false, 'Une demande de correction est déjà en attente pour cette bobine.');
 
-            // Insérer la correction dans la table dédiée
+            if (!$current_val) json_response(false, 'Aucune validation trouvée pour ce site à cette date.');
+
+            // Mettre à jour details_ecarts pour que la bobine apparaisse dans le formulaire coordinateur
+            $all_decs = json_decode($current_val['details_ecarts'] ?? '[]', true) ?: [];
+            $dec_map  = [];
+            foreach ($all_decs as $d) $dec_map[(int)($d['bobine_id'] ?? 0)] = $d;
+            $ecart_val = $films_pj - $films_proposes;
+            $dec_map[$bobine_id] = [
+                'bobine_id'      => $bobine_id,
+                'numero'         => $bobine_num,
+                'type_code'      => $bobine_info['type_code'] ?? '',
+                'format'         => $bobine_info['format'] ?? '',
+                'stock_systeme'  => $films_proposes,
+                'films_restants' => $films_pj,
+                'ecart'          => $ecart_val,
+                'decision'       => 'reajuste',
+                'commentaire'    => $notes,
+                'par'            => 'GSB',
+                'at'             => date('Y-m-d H:i:s'),
+            ];
+
+            // Annuler les corrections précédentes (valide/coord_repond) pour cette bobine
+            // afin que le coordinateur puisse re-soumettre
             db_query(
-                "INSERT INTO corrections_bobines
-                 (point_id, bobine_id, site_id, date_point, films_original, films_proposes, motif_gsb, gsb_id, statut)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'en_attente')",
-                [$point_id, $bobine_id, $site_id, $date, $films_pj, $films_proposes, $notes, $user['id']]
+                "UPDATE corrections_bobines SET statut='annule', traite_at=NOW()
+                 WHERE site_id=? AND date_point=? AND bobine_id=? AND statut IN ('valide','coord_repond','en_attente')",
+                [$site_id, $date, $bobine_id]
             );
-            $correction_id = (int)db_last_id();
 
-            // Notifier le(s) coordinateur(s) du site
+            // Recompter les bobines réajustées pour le statut (au moins cette bobine)
+            $n_reaj_total = count(array_filter($dec_map, fn($d) => ($d['decision'] ?? '') === 'reajuste'));
+            $n_ref_total  = count(array_filter($dec_map, fn($d) => ($d['decision'] ?? '') === 'refuse'));
+            $statut_new   = $n_ref_total > 0 ? 'refuse' : 'reajuste';
+
+            db_query(
+                "UPDATE validations_stock_matin SET statut=?, details_ecarts=?, commentaire=?, gsb_user_id=?, gsb_at=NOW()
+                 WHERE site_id=? AND date_validation=?",
+                [$statut_new, json_encode(array_values($dec_map)),
+                 "Nouvelle correction demandée sur bobine $bobine_num : $notes",
+                 $user['id'], $site_id, $date]
+            );
+
+            // Traçabilité dans ecarts_bobines
+            db_query(
+                "INSERT INTO ecarts_bobines
+                 (bobine_id, date_constat, stock_systeme, stock_physique, ecart, motif, source, statut, resolu_at, resolu_par, resolution_notes, created_by)
+                 VALUES (?, ?, ?, ?, ?, ?, 'validation_stock', 'resolu', NOW(), ?, ?, ?)",
+                [$bobine_id, $date, $films_proposes, $films_pj, $ecart_val, $notes,
+                 $user['id'], "Demande correction GSB : $notes", $user['id']]
+            );
+
+            // 2. Notifier le(s) coordinateur(s) → lien vers validation_stock_matin
             $gsb_nom = trim(($user['prenom'] ?? '') . ' ' . ($user['nom'] ?? ''));
-            $bobine_num = db_fetch_value("SELECT numero FROM op_bobines WHERE id=?", [$bobine_id]) ?? "bobine #$bobine_id";
-            $coords = db_fetch_all(
-                "SELECT u.id FROM users u
-                 JOIN roles r ON r.id = u.role_id
-                 WHERE r.slug = 'coordinateur_site' AND u.site_id = ? AND u.actif = 1",
+            $coords  = db_fetch_all(
+                "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id
+                 WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1",
                 [$site_id]
             );
             $notif_sent = 0;
             foreach ($coords as $c) {
                 db_query(
                     "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?,?,?,?,?)",
-                    [
-                        $c['id'], 'info',
-                        '✏️ Correction de saisie demandée',
-                        "Le GSB $gsb_nom demande une correction sur la bobine $bobine_num (saisie du $date). Valeur actuelle : $films_pj films → proposition : $films_proposes films. Motif : $notes",
-                        '/pages/operations/point_journalier.php',
-                    ]
+                    [$c['id'], 'info', '🔄 Correction de stock requise',
+                     "Le gestionnaire $gsb_nom demande une correction sur la bobine $bobine_num ($date). Valeur DigiStock : $films_pj → Valeur attendue : $films_proposes. Motif : $notes",
+                     '/pages/validation_stock_matin.php']
                 );
                 $notif_sent++;
             }
-            audit_log($user['id'], 'CREATE', 'corrections_bobines', $correction_id,
-                "Correction demandée bobine:$bobine_id site:$site_id date:$date original:$films_pj proposes:$films_proposes");
+
+            audit_log($user['id'], 'UPDATE', 'validations_stock_matin', 0,
+                "Correction demandée bobine:$bobine_id site:$site_id date:$date films_pj:$films_pj proposes:$films_proposes");
+            db_commit();
+
             $msg = $notif_sent > 0
-                ? 'Demande envoyée. Le coordinateur doit confirmer la correction.'
+                ? 'Demande envoyée. Le coordinateur a été notifié et doit soumettre les valeurs correctes.'
                 : 'Demande enregistrée. Aucun coordinateur actif trouvé pour ce site.';
             json_response(true, $msg);
         } catch (Exception $ex) {
+            db_rollback();
             json_response(false, $ex->getMessage());
         }
     }
