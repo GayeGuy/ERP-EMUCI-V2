@@ -650,7 +650,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     // afin que les prochains "Demander modif" et l'affichage du détail soient cohérents
                     $new_decs_map = _decisions_bobines_site($site_id, $date);
                     db_query(
-                        "UPDATE validations_stock_matin SET statut='valide_gsb',commentaire=?,gsb_user_id=?,gsb_at=NOW(),details_ecarts=?
+                        "UPDATE validations_stock_matin SET statut='valide_gsb',nb_ecarts=0,commentaire=?,gsb_user_id=?,gsb_at=NOW(),details_ecarts=?
                          WHERE site_id=? AND date_validation=?",
                         ["Corrections coordinateur validées ($nb_valides bobine(s))",$user['id'],
                          json_encode(array_values($new_decs_map)),$site_id,$date]
@@ -1753,7 +1753,7 @@ $nb_total_bobines = count($coord_reajust_details);
         $statut_badge = '<span class="vsm-badge reajuste">🔄 Réajusté</span>';
       } elseif ($v['statut'] === 'autorise_ecart') {
         $statut_badge = '<span class="vsm-badge autorise_ecart">⚠️ Avec écart</span>';
-      } elseif ((int)$v['nb_ecarts'] > 0) {
+      } elseif ($v['statut'] !== 'valide_gsb' && (int)$v['nb_ecarts'] > 0) {
         $statut_badge = '<span class="vsm-badge autorise_ecart">⚠️ Avec écart</span>';
       } else {
         $statut_badge = '<span class="vsm-badge valide_auto">✅ Conforme</span>';
@@ -1873,7 +1873,7 @@ $nb_total_bobines = count($coord_reajust_details);
       } elseif ($v['statut'] === 'reajuste') {
         $hbadge = '<span class="vsm-legend-chip" style="background:#dbeafe;color:#1d4ed8">🔄 Réajusté</span>';
         $hcat   = 'reajuste';
-      } elseif ($v['statut'] === 'autorise_ecart' || (int)$v['nb_ecarts'] > 0) {
+      } elseif ($v['statut'] === 'autorise_ecart' || ($v['statut'] !== 'valide_gsb' && (int)$v['nb_ecarts'] > 0)) {
         $hbadge = '<span class="vsm-legend-chip" style="background:#fef3c7;color:#92400e">⚠️ Avec écart</span>';
         $hcat   = 'avec_ecart';
       } else {
