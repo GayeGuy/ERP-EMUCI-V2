@@ -431,6 +431,89 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         } catch(Exception $e){ db_rollback(); json_response(false,'Erreur: '.$e->getMessage()); }
     }
 
+    // ── CORRECTION COORDINATEUR : réponse à un réajustement GSB
+    if ($action === 'coord_repond_reajust') {
+        if (!$is_coord) json_response(false, 'Accès refusé.');
+        $site_id     = (int)($_POST['site_id'] ?? 0);
+        $date        = trim($_POST['date'] ?? date('Y-m-d'));
+        $bobines_raw = $_POST['bobines_json'] ?? '[]';
+        $bobines     = json_decode($bobines_raw, true) ?: [];
+        if (!$site_id || empty($bobines)) json_response(false, 'Données manquantes.');
+
+        db_begin();
+        try {
+            foreach ($bobines as $b) {
+                $bobine_id     = (int)($b['bobine_id'] ?? 0);
+                $films_correct = (int)($b['films_correct'] ?? 0);
+                $motif_coord   = trim($b['motif_coord'] ?? '');
+                if (!$bobine_id) continue;
+                if (!$motif_coord) json_response(false, 'Le motif est obligatoire pour chaque bobine.');
+
+                // Trouver le point journalier de cette bobine
+                $point_id = (int)db_fetch_value(
+                    "SELECT pj.id FROM op_points_journaliers pj
+                     JOIN op_films_utilises fu ON fu.point_id = pj.id
+                     WHERE fu.bobine_id=? AND pj.site_id=? AND pj.date_point=?
+                     ORDER BY pj.id DESC LIMIT 1",
+                    [$bobine_id, $site_id, $date]
+                );
+                if (!$point_id) json_response(false, "Point journalier introuvable pour une bobine.");
+
+                // Récupérer valeurs GSB depuis ecarts_bobines
+                $ecart_row = db_fetch_one(
+                    "SELECT stock_physique, stock_systeme, motif FROM ecarts_bobines
+                     WHERE bobine_id=? AND date_constat=? AND source='validation_stock' AND statut='resolu'
+                     ORDER BY id DESC LIMIT 1",
+                    [$bobine_id, $date]
+                );
+                $films_original = $ecart_row ? (int)$ecart_row['stock_physique'] : 0;
+                $films_proposes = $ecart_row ? (int)$ecart_row['stock_systeme']  : $films_correct;
+                $motif_gsb      = $ecart_row ? ($ecart_row['motif'] ?? '')       : '';
+
+                // Mettre à jour ou créer l'entrée corrections_bobines
+                $existing = db_fetch_value(
+                    "SELECT id FROM corrections_bobines WHERE bobine_id=? AND site_id=? AND date_point=? AND statut='coord_repond'",
+                    [$bobine_id, $site_id, $date]
+                );
+                if ($existing) {
+                    db_query(
+                        "UPDATE corrections_bobines
+                         SET coord_id=?, reponse_coord=?, films_final=?, traite_at=NOW()
+                         WHERE id=?",
+                        [$user['id'], $motif_coord, $films_correct, (int)$existing]
+                    );
+                } else {
+                    db_query(
+                        "INSERT INTO corrections_bobines
+                         (point_id,bobine_id,site_id,date_point,films_original,films_proposes,motif_gsb,gsb_id,statut,coord_id,reponse_coord,films_final,traite_at)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NOW())",
+                        [$point_id,$bobine_id,$site_id,$date,$films_original,$films_proposes,$motif_gsb,
+                         $user['id'],'coord_repond',$user['id'],$motif_coord,$films_correct]
+                    );
+                }
+            }
+
+            // Notifier les GSB
+            $gsb_list = db_fetch_all(
+                "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id
+                 WHERE r.slug IN ('gsb','admin','superadmin') AND u.actif=1"
+            );
+            $site_nom  = db_fetch_value("SELECT nom FROM sites WHERE id=?", [$site_id]) ?? "site #$site_id";
+            $coord_nom = trim(($user['prenom'] ?? '').' '.($user['nom'] ?? ''));
+            foreach ($gsb_list as $g) {
+                db_query(
+                    "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                    [$g['id'],'stock_validation','🔄 Correction coordinateur disponible',
+                     "Le coordinateur $coord_nom a fourni les valeurs corrigées pour le site $site_nom ($date). À réviser avant re-validation.",
+                     '/pages/validation_stock_matin.php']
+                );
+            }
+            audit_log($user['id'],'UPDATE','corrections_bobines',0,"Réponse coord réajust site:$site_id $date");
+            db_commit();
+            json_response(true, 'Votre correction a été envoyée au gestionnaire. Il pourra re-valider avec ces données.');
+        } catch(Exception $e) { db_rollback(); json_response(false,'Erreur: '.$e->getMessage()); }
+    }
+
     // ── LISTE COMPLÈTE DES BOBINES D'UN SITE (pour détail)
     if ($action === 'get_bobines_detail') {
         $site_id = (int)($_POST['site_id'] ?? 0);
@@ -743,6 +826,39 @@ if ($can_valider) {
          ORDER BY v.statut='refuse' DESC, s.nom",
         [$f_date]
     );
+    // Vérifier si le coordinateur a déjà soumis des corrections pour chaque site réajusté
+    foreach ($sites_en_attente_correction as &$srv) {
+        $srv['nb_corrections_coord'] = ($srv['statut'] === 'reajuste')
+            ? (int)db_fetch_value(
+                "SELECT COUNT(*) FROM corrections_bobines WHERE site_id=? AND date_point=? AND statut='coord_repond'",
+                [$srv['site_id'], $srv['date_validation']]
+              )
+            : 0;
+    }
+    unset($srv);
+}
+
+// Corrections soumises par le coordinateur (pour sa propre vue)
+$coord_reajust_details = [];
+$coord_corrections_soumises = [];
+if ($is_coord && $site_force) {
+    $coord_val_tmp = db_fetch_one(
+        "SELECT details_ecarts, date_validation, statut FROM validations_stock_matin WHERE site_id=? AND date_validation=?",
+        [$site_force, $f_date]
+    );
+    if ($coord_val_tmp && $coord_val_tmp['statut'] === 'reajuste') {
+        $all_decs = json_decode($coord_val_tmp['details_ecarts'] ?? '[]', true) ?: [];
+        $coord_reajust_details = array_values(array_filter($all_decs, fn($d) => ($d['decision'] ?? '') === 'reajuste'));
+        if (!empty($coord_reajust_details)) {
+            $bid_list = array_column($coord_reajust_details, 'bobine_id');
+            $ph = implode(',', array_fill(0, count($bid_list), '?'));
+            $coord_corrections_soumises = db_fetch_all(
+                "SELECT bobine_id, films_final, reponse_coord FROM corrections_bobines
+                 WHERE site_id=? AND date_point=? AND statut='coord_repond' AND bobine_id IN ($ph)",
+                array_merge([$site_force, $f_date], $bid_list)
+            );
+        }
+    }
 }
 
 // ── Rapport journalier GSB : sites validés (exclu reajuste/refuse — pas encore finalisés)
@@ -982,8 +1098,8 @@ $statut_colors = [
     <?php endif; ?>
     <?php if($coord_validation['statut'] === 'reajuste'): ?>
     <div style="background:#FEF3C7;border:1.5px solid #F59E0B;border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:13px;color:#92400E">
-      <strong>Action requise :</strong> Le stock de votre site a été réajusté par le gestionnaire.
-      Veuillez corriger vos données et soumettre un nouveau point journalier pour que le gestionnaire puisse valider à nouveau.
+      <strong>Action requise :</strong> Le gestionnaire a réajusté les valeurs des bobines en écart.
+      Consultez le tableau ci-dessous, saisissez la valeur correcte pour chaque bobine et envoyez votre correction au gestionnaire.
     </div>
     <?php elseif($coord_validation['statut'] === 'refuse'): ?>
     <div style="background:#FEE2E2;border:1.5px solid #F87171;border-radius:10px;padding:12px 16px;margin-bottom:14px;font-size:13px;color:#991B1B">
@@ -991,13 +1107,78 @@ $statut_colors = [
       Veuillez corriger votre saisie et soumettre un nouveau point journalier.
     </div>
     <?php endif; ?>
-    <div style="display:flex;gap:10px">
+    <div style="display:flex;gap:10px;margin-bottom:<?= !empty($coord_reajust_details) ? '0' : '0' ?>px">
       <button class="detail-btn"
         onclick="voirDetails(<?= $coord_validation['site_id'] ?>,'<?= h($coord_validation['site_nom']) ?>',<?= (int)$coord_validation['nb_ecarts'] ?>,<?= htmlspecialchars(json_encode($coord_validation['details_ecarts']??'[]'),ENT_QUOTES) ?>,'<?= h($coord_validation['statut']) ?>','<?= h($coord_validation['commentaire']??'') ?>','<?= h($coord_validation['gsb_nom']??'Auto') ?>','<?= h(fmt_datetime($coord_validation['gsb_at'])) ?>','<?= h($coord_validation['date_validation']) ?>')">
         <i class="ph-duotone ph-eye"></i> Voir le détail des bobines
       </button>
     </div>
   </div>
+
+<?php if(!empty($coord_reajust_details)): ?>
+<?php
+$corr_done_map = [];
+foreach ($coord_corrections_soumises as $cs) $corr_done_map[(int)$cs['bobine_id']] = $cs;
+$all_done = count($corr_done_map) >= count($coord_reajust_details);
+?>
+<div style="background:white;border:2px solid #F59E0B;border-radius:18px;padding:24px 28px;margin-bottom:20px">
+  <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:#92400E;margin-bottom:6px">
+    📋 Saisir les valeurs correctes
+  </div>
+  <p style="font-size:13px;color:#92400E;margin-bottom:18px">
+    Pour chaque bobine réajustée, indiquez la valeur que vous considérez correcte. Le gestionnaire en tiendra compte pour la re-validation.
+  </p>
+  <?php if($all_done): ?>
+  <div style="background:#d1fae5;border-radius:10px;padding:12px 16px;font-size:13px;color:#065f46;font-weight:700;margin-bottom:14px">
+    ✅ Vos corrections ont été soumises au gestionnaire. En attente de re-validation.
+  </div>
+  <?php endif; ?>
+  <div style="overflow-x:auto">
+  <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
+    <thead>
+      <tr style="background:#F8FAFC">
+        <th style="padding:9px 14px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:1.5px solid var(--border)">N° Bobine</th>
+        <th style="padding:9px 14px;text-align:center;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Valeur DigiStock avant</th>
+        <th style="padding:9px 14px;text-align:center;font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase;border-bottom:1.5px solid var(--border)">Réajusté par GSB (EMUCI)</th>
+        <th style="padding:9px 14px;text-align:center;font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Valeur correcte *</th>
+        <th style="padding:9px 14px;text-align:left;font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Justification *</th>
+      </tr>
+    </thead>
+    <tbody>
+    <?php foreach($coord_reajust_details as $idx => $r): ?>
+    <?php $existing_corr = $corr_done_map[(int)$r['bobine_id']] ?? null; ?>
+    <tr style="border-bottom:1px solid var(--border)">
+      <td style="padding:10px 14px;font-weight:800;color:var(--navy);font-family:monospace"><?= h($r['numero']) ?></td>
+      <td style="padding:10px 14px;text-align:center;color:var(--muted)"><?= (int)$r['films_restants'] ?></td>
+      <td style="padding:10px 14px;text-align:center;color:#1d4ed8;font-weight:700"><?= (int)$r['stock_systeme'] ?></td>
+      <td style="padding:10px 14px;text-align:center">
+        <input type="number" id="cr-films-<?= $idx ?>" data-bobine="<?= (int)$r['bobine_id'] ?>"
+               min="0" value="<?= $existing_corr ? (int)$existing_corr['films_final'] : (int)$r['films_restants'] ?>"
+               <?= $all_done ? 'disabled' : '' ?>
+               style="width:80px;padding:6px 8px;border:1.5px solid var(--border);border-radius:8px;text-align:center;font-size:14px;font-weight:700;<?= $all_done ? 'background:#f1f5f9;color:var(--muted)' : '' ?>">
+      </td>
+      <td style="padding:10px 14px">
+        <input type="text" id="cr-motif-<?= $idx ?>"
+               placeholder="Justification obligatoire…"
+               value="<?= $existing_corr ? h($existing_corr['reponse_coord'] ?? '') : '' ?>"
+               <?= $all_done ? 'disabled' : '' ?>
+               style="width:100%;padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12.5px;<?= $all_done ? 'background:#f1f5f9;color:var(--muted)' : '' ?>">
+      </td>
+    </tr>
+    <?php endforeach; ?>
+    </tbody>
+  </table>
+  </div>
+  <?php if(!$all_done): ?>
+  <div style="display:flex;justify-content:flex-end">
+    <button onclick="soumettreCorrectionsCoord(<?= (int)$coord_validation['site_id'] ?>,'<?= h($coord_validation['date_validation']) ?>',<?= count($coord_reajust_details) ?>)"
+            style="background:#1B75BC;color:white;border:none;padding:11px 26px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;gap:8px">
+      <i class="ph-duotone ph-paper-plane-tilt"></i> Soumettre mes corrections
+    </button>
+  </div>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <?php else: ?>
   <!-- Pas encore validé ce jour -->
@@ -1149,7 +1330,13 @@ $statut_colors = [
       <td class="tc">
         <?php if($v['statut'] === 'reajuste'): ?>
         <span class="vsm-badge reajuste">🔄 Réajusté</span>
-        <div style="font-size:10.5px;color:#1d4ed8;margin-top:3px;font-weight:600">Nouvelle saisie requise</div>
+        <?php if($v['nb_corrections_coord'] > 0): ?>
+        <div style="font-size:10.5px;color:#065f46;margin-top:4px;font-weight:700;background:#d1fae5;padding:2px 8px;border-radius:20px;display:inline-block">
+          ✅ Coord a répondu (<?= (int)$v['nb_corrections_coord'] ?> bobine<?= $v['nb_corrections_coord'] > 1 ? 's' : '' ?>)
+        </div>
+        <?php else: ?>
+        <div style="font-size:10.5px;color:#1d4ed8;margin-top:3px;font-weight:600">En attente de la réponse coord</div>
+        <?php endif; ?>
         <?php else: ?>
         <span class="vsm-badge refuse">❌ Refusé</span>
         <div style="font-size:10.5px;color:#991b1b;margin-top:3px;font-weight:600">Correction requise</div>
@@ -2029,6 +2216,58 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
 
   html += `</div>`;
   document.getElementById('detailBody').innerHTML = html;
+}
+
+// ── Soumission des corrections coordinateur (réponse à un réajustement GSB)
+async function soumettreCorrectionsCoord(siteId, date, nbBobines) {
+  const bobines = [];
+  for (let i = 0; i < nbBobines; i++) {
+    const filmsEl = document.getElementById('cr-films-' + i);
+    const motifEl = document.getElementById('cr-motif-' + i);
+    if (!filmsEl || !motifEl) continue;
+    const films = parseInt(filmsEl.value);
+    const motif = motifEl.value.trim();
+    if (!motif) {
+      motifEl.style.borderColor = '#F87171';
+      motifEl.focus();
+      toast('Veuillez saisir un motif pour chaque bobine.', 'error');
+      return;
+    }
+    if (isNaN(films) || films < 0) {
+      filmsEl.style.borderColor = '#F87171';
+      filmsEl.focus();
+      toast('Valeur incorrecte pour une bobine.', 'error');
+      return;
+    }
+    bobines.push({
+      bobine_id:     parseInt(filmsEl.dataset.bobine),
+      films_correct: films,
+      motif_coord:   motif,
+    });
+  }
+  if (!bobines.length) return;
+
+  const btn = document.querySelector('[onclick^="soumettreCorrectionsCoord"]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Envoi…'; }
+
+  try {
+    const res = await ap({
+      action:       'coord_repond_reajust',
+      site_id:      siteId,
+      date:         date,
+      bobines_json: JSON.stringify(bobines),
+    });
+    if (res.success) {
+      toast('✅ ' + res.message, 'success');
+      setTimeout(() => location.reload(), 1400);
+    } else {
+      toast('❌ ' + res.message, 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '📤 Soumettre mes corrections'; }
+    }
+  } catch(err) {
+    toast('❌ Erreur réseau. Réessayez.', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '📤 Soumettre mes corrections'; }
+  }
 }
 </script>
 
