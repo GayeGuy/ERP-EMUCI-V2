@@ -584,6 +584,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     $stock_av = (int)db_fetch_value("SELECT films_restants FROM op_bobines WHERE id=?", [$bobine_id]);
                     $nouveau  = (int)$corr['films_final'];
                     $diff     = $nouveau - $stock_av;
+                    // Appliquer la valeur corrigée au stock physique
                     db_query("UPDATE op_bobines SET films_restants=? WHERE id=?", [$nouveau, $bobine_id]);
                     if ($diff !== 0) {
                         db_query(
@@ -593,6 +594,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                              "Correction coordinateur validée ($date) : ".($corr['reponse_coord']??''),$user['id']]
                         );
                     }
+                    // Réconcilier ecarts_bobines avec les nouvelles valeurs pour que l'affichage
+                    // montre le stock à jour (ecart=0, films_restants=nouveau) — sans cette entrée,
+                    // _decisions_bobines_site renverrait encore les anciennes valeurs de l'écart initial.
+                    db_query(
+                        "INSERT INTO ecarts_bobines
+                         (bobine_id,date_constat,stock_systeme,stock_physique,ecart,motif,source,statut,resolu_at,resolu_par,resolution_notes,created_by)
+                         VALUES (?,?,?,?,0,?,'validation_stock','resolu',NOW(),?,'Correction coordinateur appliquée',?)",
+                        [$bobine_id, $date, $nouveau, $nouveau,
+                         "Stock réconcilié : $nouveau films (correction coord. validée par GSB)",
+                         $user['id'], $user['id']]
+                    );
                     db_query("UPDATE corrections_bobines SET statut='valide',traite_at=NOW() WHERE id=?", [(int)$corr['id']]);
                     $nb_valides++;
                 } else {
@@ -629,10 +641,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 }
 
                 if ($all_reajuste_done) {
+                    // Rafraîchir details_ecarts avec les valeurs réconciliées (stock_physique = nouveau)
+                    // afin que les prochains "Demander modif" et l'affichage du détail soient cohérents
+                    $new_decs_map = _decisions_bobines_site($site_id, $date);
                     db_query(
-                        "UPDATE validations_stock_matin SET statut='valide_gsb',commentaire=?,gsb_user_id=?,gsb_at=NOW()
+                        "UPDATE validations_stock_matin SET statut='valide_gsb',commentaire=?,gsb_user_id=?,gsb_at=NOW(),details_ecarts=?
                          WHERE site_id=? AND date_validation=?",
-                        ["Corrections coordinateur validées ($nb_valides bobine(s))",$user['id'],$site_id,$date]
+                        ["Corrections coordinateur validées ($nb_valides bobine(s))",$user['id'],
+                         json_encode(array_values($new_decs_map)),$site_id,$date]
                     );
                     $msg_coord = "✅ Vos corrections ont été acceptées. Le stock du $date est validé.";
                     $titre_coord = '✅ Stock validé';
