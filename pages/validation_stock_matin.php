@@ -189,6 +189,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 fn($e) => !isset($decisions[(int)$e['bobine_id']])
             ));
 
+            // Corrections soumises par le coordinateur (réponse à un réajustement)
+            $coord_corrections = $exist ? db_fetch_all(
+                "SELECT cb.bobine_id, cb.films_final, cb.reponse_coord, cb.films_proposes AS films_gsb, b.numero
+                 FROM corrections_bobines cb
+                 JOIN op_bobines b ON b.id = cb.bobine_id
+                 WHERE cb.site_id=? AND cb.date_point=? AND cb.statut='coord_repond'",
+                [$site_id, $date]
+            ) : [];
+
             json_response(true, '', [
                 'ecarts'            => $ecarts,
                 'ecarts_restants'   => $ecarts_restants,
@@ -199,6 +208,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 'nb_bobines'        => count($pj_entries) ?: count($bobines_detail),
                 'dernier_import'    => $dernier_import,
                 'validation'        => $exist,
+                'coord_corrections' => $coord_corrections,
             ]);
         } catch (Exception $ex) {
             json_response(false, 'Erreur serveur : ' . $ex->getMessage());
@@ -429,6 +439,87 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 'refuse'        =>'Toutes les bobines sont traitées. Coordinateur bloqué. En attente de correction.',
             }, ['site_complet' => true, 'nb_restants' => 0]);
         } catch(Exception $e){ db_rollback(); json_response(false,'Erreur: '.$e->getMessage()); }
+    }
+
+    // ── GSB VALIDE LES CORRECTIONS DU COORDINATEUR
+    if ($action === 'valider_corrections_coord') {
+        if (!$can_valider) json_response(false, 'Accès refusé.');
+        $site_id     = (int)($_POST['site_id'] ?? 0);
+        $date        = trim($_POST['date'] ?? date('Y-m-d'));
+        $commentaire = trim($_POST['commentaire'] ?? '');
+
+        $corrections = db_fetch_all(
+            "SELECT cb.*, b.numero FROM corrections_bobines cb
+             JOIN op_bobines b ON b.id = cb.bobine_id
+             WHERE cb.site_id=? AND cb.date_point=? AND cb.statut='coord_repond'",
+            [$site_id, $date]
+        );
+        if (empty($corrections)) json_response(false, 'Aucune correction de coordinateur trouvée.');
+
+        db_begin();
+        try {
+            foreach ($corrections as $c) {
+                $stock_av = (int)db_fetch_value("SELECT films_restants FROM op_bobines WHERE id=?", [$c['bobine_id']]);
+                $nouveau  = (int)$c['films_final'];
+                $diff     = $nouveau - $stock_av;
+                db_query("UPDATE op_bobines SET films_restants=? WHERE id=?", [$nouveau, $c['bobine_id']]);
+                if ($diff !== 0) {
+                    db_query(
+                        "INSERT INTO mouvements_bobines (bobine_id,type,quantite,stock_avant,stock_apres,motif,created_by)
+                         VALUES (?,?,?,?,?,?,?)",
+                        [$c['bobine_id'],'correction_coord',$diff,$stock_av,$nouveau,
+                         "Correction coordinateur validée par GSB ($date) : ".($c['reponse_coord']??''),$user['id']]
+                    );
+                }
+                db_query("UPDATE corrections_bobines SET statut='valide',traite_at=NOW() WHERE id=?", [(int)$c['id']]);
+            }
+            $final_comment = ($commentaire ?: 'Corrections coordinateur validées')
+                           . ' (' . count($corrections) . ' bobine(s) corrigée(s))';
+            db_query(
+                "UPDATE validations_stock_matin SET statut='valide_gsb',commentaire=?,gsb_user_id=?,gsb_at=NOW()
+                 WHERE site_id=? AND date_validation=?",
+                [$final_comment,$user['id'],$site_id,$date]
+            );
+            $coords = db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1",[$site_id]);
+            foreach ($coords as $c_user) {
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                    [$c_user['id'],'stock_valide','✅ Stock validé',
+                     "Vos corrections ont été acceptées par le gestionnaire. Votre stock du $date est validé.",
+                     '/pages/validation_stock_matin.php']);
+            }
+            audit_log($user['id'],'UPDATE','validations_stock_matin',0,"Validation corrections coord site:$site_id $date");
+            db_commit();
+            json_response(true,'Corrections du coordinateur validées. Stock confirmé.');
+        } catch(Exception $e){ db_rollback(); json_response(false,'Erreur: '.$e->getMessage()); }
+    }
+
+    // ── GSB DEMANDE DE NOUVELLES MODIFICATIONS AU COORDINATEUR
+    if ($action === 'demander_nouvelles_modifs') {
+        if (!$can_valider) json_response(false, 'Accès refusé.');
+        $site_id     = (int)($_POST['site_id'] ?? 0);
+        $date        = trim($_POST['date'] ?? date('Y-m-d'));
+        $commentaire = trim($_POST['commentaire'] ?? '');
+        if (!$commentaire) json_response(false, 'Un commentaire explicatif est obligatoire.');
+
+        // Annuler les corrections en attente pour permettre une nouvelle soumission
+        db_query(
+            "UPDATE corrections_bobines SET statut='annule' WHERE site_id=? AND date_point=? AND statut='coord_repond'",
+            [$site_id, $date]
+        );
+        db_query(
+            "UPDATE validations_stock_matin SET commentaire=?,gsb_at=NOW() WHERE site_id=? AND date_validation=?",
+            ["Nouvelles modifications demandées : $commentaire",$site_id,$date]
+        );
+        $coords = db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1",[$site_id]);
+        $gsb_nom = trim(($user['prenom']??'').' '.($user['nom']??''));
+        foreach ($coords as $c_user) {
+            db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                [$c_user['id'],'stock_validation','🔄 Nouvelles corrections demandées',
+                 "Le gestionnaire $gsb_nom demande de nouvelles corrections pour votre site ($date). Motif : $commentaire",
+                 '/pages/validation_stock_matin.php']);
+        }
+        audit_log($user['id'],'UPDATE','validations_stock_matin',0,"Nouvelles modifs demandées site:$site_id $date — $commentaire");
+        json_response(true,'Demande de correction envoyée au coordinateur.');
     }
 
     // ── CORRECTION COORDINATEUR : réponse à un réajustement GSB
@@ -1861,20 +1952,78 @@ async function verifierSite(siteId, siteNom) {
     }
   }
   if (d.validation) {
-    // Déjà validé — afficher le récapitulatif
     const vStatuts = {
       valide_auto:'✅ Validé automatiquement', valide_gsb:'✅ Validé par GSB',
       autorise_ecart:'⚠️ Écart autorisé', reajuste:'🔄 Stock réajusté', refuse:'❌ Bloqué'
     };
-    html += `
-      <div style="background:#F0F9FF;border-radius:10px;padding:14px 18px;font-size:13px;margin-top:14px">
-        <strong>${vStatuts[d.validation.statut]||d.validation.statut}</strong>
-        ${d.validation.commentaire ? `<div style="color:var(--muted);margin-top:4px">💬 ${d.validation.commentaire}</div>` : ''}
-      </div>`;
-    if (canValider) {
-      html += `<div style="margin-top:12px;text-align:right">
-        <button class="btn btn-secondary btn-sm" onclick="verifierSite(${siteId},'${siteNom}')">🔄 Réviser</button>
-      </div>`;
+    const vBg = {valide_auto:'#D1FAE5',valide_gsb:'#D1FAE5',autorise_ecart:'#FEF3C7',reajuste:'#EFF6FF',refuse:'#FEE2E2'};
+
+    // ── Statut reajuste + corrections coordinateur disponibles → panneau d'action GSB
+    if (canValider && d.validation.statut === 'reajuste' && d.coord_corrections && d.coord_corrections.length > 0) {
+      const rows = d.coord_corrections.map(c => `
+        <tr style="border-bottom:1px solid #E2E8F0">
+          <td style="padding:9px 12px;font-family:monospace;font-weight:700;color:#06033A">${c.numero}</td>
+          <td style="padding:9px 12px;text-align:center;color:#94a3b8">${c.films_gsb ?? '—'}</td>
+          <td style="padding:9px 12px;text-align:center;font-weight:800;color:#1D4ED8;font-size:15px">${c.films_final}</td>
+          <td style="padding:9px 12px;font-size:12px;color:#475569">${c.reponse_coord || '—'}</td>
+        </tr>`).join('');
+
+      html += `
+        <div style="background:#EFF6FF;border:2px solid #BFDBFE;border-radius:12px;padding:18px 20px;margin-top:16px">
+          <div style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;color:#1D4ED8;font-size:14px;margin-bottom:4px">
+            📋 Corrections soumises par le coordinateur
+          </div>
+          <p style="font-size:12.5px;color:#3B82F6;margin-bottom:14px">
+            Acceptez les valeurs proposées ou demandez de nouvelles corrections.
+          </p>
+          <div style="overflow-x:auto;margin-bottom:16px">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;background:white;border-radius:10px;overflow:hidden">
+            <thead>
+              <tr style="background:#1D4ED8">
+                <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:left">N° Bobine</th>
+                <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:center">Réajusté GSB</th>
+                <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:center">Valeur coord</th>
+                <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:left">Justification</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+          </div>
+          <textarea id="gsb-modif-comment" placeholder="Commentaire GSB (optionnel pour valider, obligatoire pour refuser)"
+                    style="width:100%;box-sizing:border-box;padding:9px 12px;border:1.5px solid #BFDBFE;border-radius:8px;font-size:13px;min-height:58px;margin-bottom:12px;resize:vertical"></textarea>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <button onclick="validerCorrectionsCoord(${siteId})"
+                    style="flex:1;min-width:180px;background:#065F46;color:white;border:none;padding:11px 16px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px">
+              ✅ Valider les corrections du coordinateur
+            </button>
+            <button onclick="demanderNouvellesModifs(${siteId})"
+                    style="flex:1;min-width:180px;background:#DC2626;color:white;border:none;padding:11px 16px;border-radius:10px;font-weight:700;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:7px">
+              🔄 Demander de nouvelles corrections
+            </button>
+          </div>
+        </div>`;
+    } else if (canValider && d.validation.statut === 'reajuste') {
+      // Réajusté mais coord n'a pas encore répondu
+      html += `
+        <div style="background:#FEF3C7;border:1.5px solid #F59E0B;border-radius:10px;padding:14px 18px;margin-top:14px;font-size:13px;color:#92400E">
+          <strong>🔄 Stock réajusté</strong>
+          ${d.validation.commentaire ? `<div style="margin-top:4px">💬 ${d.validation.commentaire}</div>` : ''}
+          <div style="margin-top:8px;font-size:12px;opacity:.85">
+            ⏳ En attente des corrections du coordinateur — il sera notifié de fournir les valeurs correctes.
+          </div>
+        </div>`;
+    } else {
+      // Autres statuts — récapitulatif standard
+      html += `
+        <div style="background:${vBg[d.validation.statut]||'#F0F9FF'};border-radius:10px;padding:14px 18px;font-size:13px;margin-top:14px">
+          <strong>${vStatuts[d.validation.statut]||d.validation.statut}</strong>
+          ${d.validation.commentaire ? `<div style="color:var(--muted);margin-top:4px">💬 ${d.validation.commentaire}</div>` : ''}
+        </div>`;
+      if (canValider) {
+        html += `<div style="margin-top:12px;text-align:right">
+          <button class="btn btn-secondary btn-sm" onclick="verifierSite(${siteId},'${siteNom}')">🔄 Réviser</button>
+        </div>`;
+      }
     }
   }
 
@@ -2216,6 +2365,63 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
 
   html += `</div>`;
   document.getElementById('detailBody').innerHTML = html;
+}
+
+// ── GSB : valider les corrections soumises par le coordinateur
+async function validerCorrectionsCoord(siteId) {
+  const commentaire = document.getElementById('gsb-modif-comment')?.value.trim() || '';
+  const btn = event?.currentTarget;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Validation…'; }
+  try {
+    const res = await ap({
+      action:      'valider_corrections_coord',
+      site_id:     siteId,
+      date:        '<?= h($f_date) ?>',
+      commentaire,
+    });
+    if (res.success) {
+      toast('✅ ' + res.message, 'success');
+      fermerVSM();
+      setTimeout(() => location.reload(), 900);
+    } else {
+      toast('❌ ' + res.message, 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '✅ Valider les corrections du coordinateur'; }
+    }
+  } catch(err) {
+    toast('❌ Erreur réseau. Réessayez.', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '✅ Valider les corrections du coordinateur'; }
+  }
+}
+
+// ── GSB : demander de nouvelles corrections au coordinateur
+async function demanderNouvellesModifs(siteId) {
+  const commentaire = document.getElementById('gsb-modif-comment')?.value.trim();
+  if (!commentaire) {
+    toast('Un commentaire est obligatoire pour refuser les corrections.', 'error');
+    document.getElementById('gsb-modif-comment')?.focus();
+    return;
+  }
+  const btn = event?.currentTarget;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Envoi…'; }
+  try {
+    const res = await ap({
+      action:      'demander_nouvelles_modifs',
+      site_id:     siteId,
+      date:        '<?= h($f_date) ?>',
+      commentaire,
+    });
+    if (res.success) {
+      toast('✅ ' + res.message, 'success');
+      fermerVSM();
+      setTimeout(() => location.reload(), 900);
+    } else {
+      toast('❌ ' + res.message, 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '🔄 Demander de nouvelles corrections'; }
+    }
+  } catch(err) {
+    toast('❌ Erreur réseau. Réessayez.', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Demander de nouvelles corrections'; }
+  }
 }
 
 // ── Soumission des corrections coordinateur (réponse à un réajustement GSB)
