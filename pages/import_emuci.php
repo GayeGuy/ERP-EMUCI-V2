@@ -315,12 +315,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         'nb_ok' => $nb_ok, 'nb_err' => $nb_err,
                         'sites_inconnus' => array_keys($sites_inconnus),
                         'session_id' => $session_id, 'date' => $date_import,
-                        'nb_valide_auto' => $nb_valide_auto,
-                        'nb_bloque' => $nb_bloque,
+                        'nb_valide_auto'  => $nb_valide_auto,
+                        'nb_incoherent'   => $nb_incoherent,
                     ];
-                    $auto_msg = $nb_valide_auto>0?" · ✅ $nb_valide_auto site(s) validé(s) automatiquement":'';
-                    $bloc_msg = $nb_bloque>0?" · ⚠️ $nb_bloque site(s) bloqué(s) — validation GSB requise":'';
-                    $msg_optoplate = ['type'=>'success','text'=>"Import terminé : $nb_ok plaques importées.".($nb_err?" ($nb_err ignorées)":'').$auto_msg.$bloc_msg];
+                    $incoh_msg = $nb_incoherent>0?" · ⚠️ $nb_incoherent site(s) avec incohérence plaques — coordinateur(s) notifié(s)":'';
+                    $msg_optoplate = ['type'=>'success','text'=>"Import terminé : $nb_ok plaques importées.".($nb_err?" ($nb_err ignorées)":'').$incoh_msg];
                     } catch (Exception $e) {
                         // PostgreSQL : indispensable de rollback, sinon la connexion
                         // reste en transaction annulée (25P02) pour toute la page.
