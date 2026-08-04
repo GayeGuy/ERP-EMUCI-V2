@@ -255,7 +255,49 @@ function di_creer(array $user, string $typeCode, array $champs, bool $soumettre,
     $id = (int) db_last_id();
 
     if ($soumettre && $workflow) {
-        // Si la première étape est N+1 et qu'on a un N+1 résolu, notifier spécifiquement
+        // Si le demandeur est lui-même N+1 de son département et que l'étape 0 est 'n1',
+        // l'étape est validée d'office : il n'a pas besoin de sa propre approbation.
+        if ($workflow[0]['role'] === 'n1') {
+            $submitter_is_n1 = (bool)db_fetch_value(
+                "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND is_n1=1",
+                [(int)$user['id']]
+            );
+            if ($submitter_is_n1) {
+                $autoSig  = [['etape' => 0, 'etape_label' => $workflow[0]['label'],
+                    'user_id' => $user['id'], 'nom' => $nom,
+                    'action' => 'approuve', 'commentaire' => "Validé d'office — demandeur est N+1", 'date' => $now]];
+                $autoHist = $hist;
+                $autoHist[] = ['action' => 'valide', 'etape' => $workflow[0]['label'],
+                    'par' => $user['id'], 'nom' => $nom,
+                    'commentaire' => "Validé d'office — demandeur est N+1", 'date' => $now];
+                $next = di_next_step($workflow, 0);
+                if ($next === null) {
+                    $newStatut = !empty($type['traitement_it']) ? 'approuve_traitement' : 'approuve';
+                    $newEtape  = 0;
+                } else {
+                    $newStatut = 'en_cours';
+                    $newEtape  = $next;
+                }
+                db_query(
+                    "UPDATE di_demandes SET statut=?, etape_actuelle=?, signatures=?, historique=? WHERE id=?",
+                    [$newStatut, $newEtape, json_encode($autoSig, JSON_UNESCAPED_UNICODE),
+                     json_encode($autoHist, JSON_UNESCAPED_UNICODE), $id]
+                );
+                if ($next === null) {
+                    if (!empty($type['traitement_it'])) {
+                        di_notify((int)$user['id'], "Votre demande « {$type['label']} » est approuvée et en cours de traitement IT.", $id);
+                        di_notify_role('it', "Demande « {$type['label']} » approuvée — à traiter ($numero)", $id);
+                    } else {
+                        di_notify((int)$user['id'], "Votre demande « {$type['label']} » a été approuvée.", $id);
+                    }
+                } else {
+                    di_notify_role($workflow[$next]['role'],
+                        "Demande « {$type['label']} » en attente — étape : {$workflow[$next]['label']} ($numero)", $id);
+                }
+                return $id;
+            }
+        }
+        // Notification normale pour la première étape
         if ($workflow[0]['role'] === 'n1' && $n1UserId) {
             di_notify($n1UserId, "Nouvelle demande « {$type['label']} » de $nom ($numero) à valider", $id);
         } else {
