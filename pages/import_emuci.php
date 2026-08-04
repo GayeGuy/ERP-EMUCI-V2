@@ -59,6 +59,7 @@ function logger_site_inconnu(string $nom_emuci, string $type_import): void {
 
 // Vérifie la cohérence entre les plaques OptoPlate (in_use) et le PJ coordinateur.
 // Une plaque posée = statut 'in_use' uniquement. 'reserved' = en attente, ne compte pas.
+// Comparaison au niveau site : COUNT(in_use) EMUCI vs total_plaques déclarées dans le PJ.
 // Ne crée aucun enregistrement dans validations_stock_matin — notifie uniquement le coordinateur.
 function _verifier_coherence_optoplate(string $date_import, int $user_id): array {
     $resultats = [];
@@ -68,38 +69,27 @@ function _verifier_coherence_optoplate(string $date_import, int $user_id): array
     );
     foreach ($sites_avec_data as $s) {
         $site_id = (int)$s['site_id'];
-        $bobines = db_fetch_all(
-            "SELECT b.id, b.numero FROM op_bobines b WHERE b.site_id=? AND b.statut IN ('en_cours','en_stock')",
-            [$site_id]
+
+        // EMUCI : total plaques posées sur ce site = COUNT(in_use)
+        $nb_inuse_emuci = (int)db_fetch_value(
+            "SELECT COUNT(*) FROM import_optoplate WHERE site_id=? AND statut_plaque='in_use' AND date_import=?",
+            [$site_id, $date_import]
         );
-        if (empty($bobines)) continue;
 
-        $ecarts = [];
-        foreach ($bobines as $b) {
-            // EMUCI : plaques réellement posées = in_use uniquement (reserved = pas encore posée)
-            $nb_inuse = (int)db_fetch_value(
-                "SELECT COUNT(*) FROM import_optoplate WHERE num_bobine=? AND statut_plaque='in_use' AND date_import=?",
-                [$b['numero'], $date_import]
-            );
-            // PJ : films déclarés utilisés ce jour par le coordinateur
-            $films_pj = (int)db_fetch_value(
-                "SELECT COALESCE(SUM(fu.films_utilises),0)
-                 FROM op_films_utilises fu
-                 JOIN op_points_journaliers pj ON pj.id=fu.point_id
-                 WHERE fu.bobine_id=? AND pj.date_point=? AND pj.statut='valide'",
-                [$b['id'], $date_import]
-            );
-            if ($nb_inuse === 0 && $films_pj === 0) continue;
-            $ecart = $nb_inuse - $films_pj;
-            if ($ecart !== 0) {
-                $ecarts[] = ['bobine_id'=>$b['id'],'numero'=>$b['numero'],
-                             'nb_inuse'=>$nb_inuse,'films_pj'=>$films_pj,'ecart'=>$ecart];
-            }
-        }
+        // PJ coordinateur : total_plaques = (nb_vp*2)+(nb_camion*2)+(nb_semi*1)+(nb_moto*1)
+        $total_plaques_pj = (int)db_fetch_value(
+            "SELECT COALESCE(SUM(total_plaques),0)
+             FROM op_points_journaliers
+             WHERE site_id=? AND date_point=? AND statut='valide'",
+            [$site_id, $date_import]
+        );
 
-        $nb_ecarts = count($ecarts);
-        $site_nom  = db_fetch_value("SELECT nom FROM sites WHERE id=?", [$site_id]);
-        if ($nb_ecarts > 0) {
+        if ($nb_inuse_emuci === 0 && $total_plaques_pj === 0) continue;
+
+        $site_nom = db_fetch_value("SELECT nom FROM sites WHERE id=?", [$site_id]);
+        $ecart    = $nb_inuse_emuci - $total_plaques_pj;
+
+        if ($ecart !== 0) {
             $coords = db_fetch_all(
                 "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1",
                 [$site_id]
@@ -107,10 +97,11 @@ function _verifier_coherence_optoplate(string $date_import, int $user_id): array
             foreach ($coords as $c) {
                 db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                     [$c['id'],'info','⚠️ Incohérence plaques détectée',
-                     "Import OptoPlate du $date_import — Site $site_nom : $nb_ecarts bobine(s) avec écart entre votre PJ et les plaques EMUCI (plaques posées EMUCI ≠ films déclarés). Vérifiez votre point journalier.",
+                     "Import OptoPlate du $date_import — Site $site_nom : EMUCI enregistre $nb_inuse_emuci plaque(s) posée(s), votre PJ déclare $total_plaques_pj. Vérifiez votre point journalier.",
                      '/pages/operations/point_journalier.php']);
             }
-            $resultats[] = ['site_id'=>$site_id,'statut'=>'incoherent','nb_ecarts'=>$nb_ecarts];
+            $resultats[] = ['site_id'=>$site_id,'statut'=>'incoherent',
+                            'nb_inuse'=>$nb_inuse_emuci,'total_plaques_pj'=>$total_plaques_pj,'ecart'=>$ecart];
         } else {
             $resultats[] = ['site_id'=>$site_id,'statut'=>'coherent','nb_ecarts'=>0];
         }
