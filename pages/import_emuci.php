@@ -120,11 +120,19 @@ function _auto_valider_stock(string $date_import, int $user_id): array {
         $site_id = (int)$s['site_id'];
 
         // Sans PJ validé, films_restants n'est pas à jour → pas de comparaison possible
+        // Supprimer tout record refuse créé par un import antérieur (gsb_user_id IS NULL)
+        // pour ne pas polluer la vue GSB avec des données obsolètes
         $has_pj = (int)db_fetch_value(
             "SELECT COUNT(*) FROM op_points_journaliers WHERE site_id=? AND date_point=? AND statut='valide'",
             [$site_id, $date_import]
         );
-        if (!$has_pj) continue;
+        if (!$has_pj) {
+            db_query(
+                "DELETE FROM validations_stock_matin WHERE site_id=? AND date_validation=? AND gsb_user_id IS NULL",
+                [$site_id, $date_import]
+            );
+            continue;
+        }
 
         // Comparer films_restants (DigiStock, mis à jour par le PJ)
         // vs stock_systeme (EMUCI, mis à jour par l'import OptoTrace)
