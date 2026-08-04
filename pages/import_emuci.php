@@ -111,28 +111,28 @@ function _verifier_coherence_optoplate(string $date_import, int $user_id): array
 
 function _auto_valider_stock(string $date_import, int $user_id): array {
     $resultats = [];
-    // Sites ayant des données optoplate importées ce jour
-    $sites_avec_data = db_fetch_all(
-        "SELECT DISTINCT site_id FROM import_optoplate WHERE date_import=? AND site_id IS NOT NULL",
+
+    // Nettoyer TOUS les records créés par un import précédent (gsb_user_id IS NULL)
+    // pour cette date avant de recréer uniquement les valides.
+    // Les décisions humaines (gsb_user_id IS NOT NULL) ne sont jamais touchées.
+    db_query(
+        "DELETE FROM validations_stock_matin WHERE date_validation=? AND gsb_user_id IS NULL",
         [$date_import]
+    );
+
+    // Tous les sites ayant des bobines actives
+    $sites_avec_data = db_fetch_all(
+        "SELECT DISTINCT b.site_id FROM op_bobines b WHERE b.statut IN ('en_cours','en_stock') AND b.site_id IS NOT NULL"
     );
     foreach ($sites_avec_data as $s) {
         $site_id = (int)$s['site_id'];
 
         // Sans PJ validé, films_restants n'est pas à jour → pas de comparaison possible
-        // Supprimer tout record refuse créé par un import antérieur (gsb_user_id IS NULL)
-        // pour ne pas polluer la vue GSB avec des données obsolètes
         $has_pj = (int)db_fetch_value(
             "SELECT COUNT(*) FROM op_points_journaliers WHERE site_id=? AND date_point=? AND statut='valide'",
             [$site_id, $date_import]
         );
-        if (!$has_pj) {
-            db_query(
-                "DELETE FROM validations_stock_matin WHERE site_id=? AND date_validation=? AND gsb_user_id IS NULL",
-                [$site_id, $date_import]
-            );
-            continue;
-        }
+        if (!$has_pj) continue;
 
         // Comparer films_restants (DigiStock, mis à jour par le PJ)
         // vs stock_systeme (EMUCI, mis à jour par l'import OptoTrace)
