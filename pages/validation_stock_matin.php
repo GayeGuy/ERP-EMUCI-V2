@@ -2091,9 +2091,12 @@ async function verifierSite(siteId, siteNom) {
     toast('❌ Erreur réseau. Réessayez.', 'error'); return;
   }
 
-  // ── 0 écart + import EMUCI présent + GSB non encore validé → validation automatique silencieuse
-  // (sans import, aucune comparaison n'a eu lieu : nb_ecarts=0 ne prouve rien, donc pas d'auto-validation)
-  if (canValider && !d.validation && d.nb_ecarts === 0 && d.dernier_import) {
+  // ── 0 écart + import EMUCI présent → validation automatique silencieuse
+  // Déclenché aussi si un record refuse/reajuste existe déjà (import antérieur incorrect)
+  // mais PAS si le site est déjà valide_auto / valide_gsb / autorise_ecart (décision GSB déjà prise)
+  const existStatut = d.validation?.statut ?? null;
+  const dejaValide = ['valide_auto','valide_gsb','autorise_ecart'].includes(existStatut);
+  if (canValider && !dejaValide && d.nb_ecarts === 0 && d.dernier_import) {
     const v = await ap({action:'valider_auto', site_id:siteId, date:'<?= h($f_date) ?>'});
     if (v.success) {
       toast(`✅ ${siteNom} — Stock conforme, validé automatiquement`, 'success');
