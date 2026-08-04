@@ -119,7 +119,8 @@ function _auto_valider_stock(string $date_import, int $user_id): array {
             db_query(
                 "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,gsb_user_id,gsb_at)
                  VALUES (?,?,'valide_auto',0,?,NOW())
-                 ON CONFLICT (site_id,date_validation) DO UPDATE SET statut='valide_auto',nb_ecarts=0,gsb_user_id=EXCLUDED.gsb_user_id,gsb_at=NOW()",
+                 ON CONFLICT (site_id,date_validation) DO UPDATE SET statut='valide_auto',nb_ecarts=0,gsb_user_id=EXCLUDED.gsb_user_id,gsb_at=NOW()
+                 WHERE validations_stock_matin.gsb_user_id IS NULL",
                 [$site_id, $date_import, $user_id]
             );
             // Notifier coordinateurs
@@ -139,7 +140,8 @@ function _auto_valider_stock(string $date_import, int $user_id): array {
             db_query(
                 "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,details_ecarts)
                  VALUES (?,?,'refuse',?,?)
-                 ON CONFLICT (site_id,date_validation) DO UPDATE SET statut='refuse',nb_ecarts=EXCLUDED.nb_ecarts,details_ecarts=EXCLUDED.details_ecarts",
+                 ON CONFLICT (site_id,date_validation) DO UPDATE SET statut='refuse',nb_ecarts=EXCLUDED.nb_ecarts,details_ecarts=EXCLUDED.details_ecarts
+                 WHERE validations_stock_matin.gsb_user_id IS NULL",
                 [$site_id, $date_import, $nb_ecarts, json_encode($ecarts)]
             );
             // Notifier GSB

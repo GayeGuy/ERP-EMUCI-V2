@@ -1683,7 +1683,7 @@ $nb_total_bobines = count($coord_reajust_details);
     <?php foreach($sites_en_attente_correction as $v): ?>
     <tr style="background:#FFFBEB">
       <td><div class="vsm-site-name"><?= h($v['site_nom']) ?></div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px">Traité le <?= date('H:i', strtotime($v['gsb_at'])) ?> par <?= h($v['gsb_nom'] ?: 'GSB') ?></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px"><?= $v['gsb_at'] ? 'Traité le ' . date('H:i', strtotime($v['gsb_at'])) . ' par ' . h($v['gsb_nom'] ?: 'GSB') : 'Détecté par import' ?></div>
       </td>
       <td class="tc"><span class="vsm-ecart-chip">⚠️ <?= (int)$v['nb_ecarts'] ?> écart(s)</span></td>
       <td class="tc">
