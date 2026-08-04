@@ -57,6 +57,67 @@ function logger_site_inconnu(string $nom_emuci, string $type_import): void {
     );
 }
 
+// Vérifie la cohérence entre les plaques OptoPlate (in_use) et le PJ coordinateur.
+// Une plaque posée = statut 'in_use' uniquement. 'reserved' = en attente, ne compte pas.
+// Ne crée aucun enregistrement dans validations_stock_matin — notifie uniquement le coordinateur.
+function _verifier_coherence_optoplate(string $date_import, int $user_id): array {
+    $resultats = [];
+    $sites_avec_data = db_fetch_all(
+        "SELECT DISTINCT site_id FROM import_optoplate WHERE date_import=? AND site_id IS NOT NULL",
+        [$date_import]
+    );
+    foreach ($sites_avec_data as $s) {
+        $site_id = (int)$s['site_id'];
+        $bobines = db_fetch_all(
+            "SELECT b.id, b.numero FROM op_bobines b WHERE b.site_id=? AND b.statut IN ('en_cours','en_stock')",
+            [$site_id]
+        );
+        if (empty($bobines)) continue;
+
+        $ecarts = [];
+        foreach ($bobines as $b) {
+            // EMUCI : plaques réellement posées = in_use uniquement (reserved = pas encore posée)
+            $nb_inuse = (int)db_fetch_value(
+                "SELECT COUNT(*) FROM import_optoplate WHERE num_bobine=? AND statut_plaque='in_use' AND date_import=?",
+                [$b['numero'], $date_import]
+            );
+            // PJ : films déclarés utilisés ce jour par le coordinateur
+            $films_pj = (int)db_fetch_value(
+                "SELECT COALESCE(SUM(fu.films_utilises),0)
+                 FROM op_films_utilises fu
+                 JOIN op_points_journaliers pj ON pj.id=fu.point_id
+                 WHERE fu.bobine_id=? AND pj.date_point=? AND pj.statut='valide'",
+                [$b['id'], $date_import]
+            );
+            if ($nb_inuse === 0 && $films_pj === 0) continue;
+            $ecart = $nb_inuse - $films_pj;
+            if ($ecart !== 0) {
+                $ecarts[] = ['bobine_id'=>$b['id'],'numero'=>$b['numero'],
+                             'nb_inuse'=>$nb_inuse,'films_pj'=>$films_pj,'ecart'=>$ecart];
+            }
+        }
+
+        $nb_ecarts = count($ecarts);
+        $site_nom  = db_fetch_value("SELECT nom FROM sites WHERE id=?", [$site_id]);
+        if ($nb_ecarts > 0) {
+            $coords = db_fetch_all(
+                "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1",
+                [$site_id]
+            );
+            foreach ($coords as $c) {
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                    [$c['id'],'info','⚠️ Incohérence plaques détectée',
+                     "Import OptoPlate du $date_import — Site $site_nom : $nb_ecarts bobine(s) avec écart entre votre PJ et les plaques EMUCI (plaques posées EMUCI ≠ films déclarés). Vérifiez votre point journalier.",
+                     '/pages/operations/point_journalier.php']);
+            }
+            $resultats[] = ['site_id'=>$site_id,'statut'=>'incoherent','nb_ecarts'=>$nb_ecarts];
+        } else {
+            $resultats[] = ['site_id'=>$site_id,'statut'=>'coherent','nb_ecarts'=>0];
+        }
+    }
+    return $resultats;
+}
+
 function _auto_valider_stock(string $date_import, int $user_id): array {
     $resultats = [];
     // Sites ayant des données optoplate importées ce jour
@@ -254,10 +315,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         [$nb_ok,$nb_err,$session_id]);
                     audit_log($user['id'],'CREATE','import_emuci',0,"Import OptoPlate $date_import — $nb_ok lignes");
 
-                    // Déclencher validation automatique
-                    $auto_resultats = _auto_valider_stock($date_import, $user['id']);
-                    $nb_valide_auto  = count(array_filter($auto_resultats, fn($r)=>$r['statut']==='valide_auto'));
-                    $nb_bloque       = count(array_filter($auto_resultats, fn($r)=>$r['statut']==='bloque'));
+                    // Vérifier cohérence plaques EMUCI vs PJ coordinateur
+                    $auto_resultats  = _verifier_coherence_optoplate($date_import, $user['id']);
+                    $nb_valide_auto  = 0;
+                    $nb_incoherent   = count(array_filter($auto_resultats, fn($r)=>$r['statut']==='incoherent'));
 
                     $result_optoplate = [
                         'nb_ok' => $nb_ok, 'nb_err' => $nb_err,
