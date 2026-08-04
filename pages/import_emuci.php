@@ -774,8 +774,8 @@ include __DIR__ . '/../templates/header.php';
     <?php if($result_optoplate['nb_valide_auto']>0): ?>
     <div class="irb-stat"><div class="irb-stat-val" style="color:#059669"><?= $result_optoplate['nb_valide_auto'] ?></div><div class="irb-stat-lbl">Sites validés auto</div></div>
     <?php endif; ?>
-    <?php if($result_optoplate['nb_bloque']>0): ?>
-    <div class="irb-stat"><div class="irb-stat-val" style="color:#D97706"><?= $result_optoplate['nb_bloque'] ?></div><div class="irb-stat-lbl">Sites bloqués</div></div>
+    <?php if(($result_optoplate['nb_incoherent']??0)>0): ?>
+    <div class="irb-stat"><div class="irb-stat-val" style="color:#D97706"><?= $result_optoplate['nb_incoherent'] ?></div><div class="irb-stat-lbl">Sites incohérents</div></div>
     <?php endif; ?>
     <div class="irb-stat"><div class="irb-stat-val" style="font-size:15px"><?= fmt_date($result_optoplate['date'],'d/m/Y') ?></div><div class="irb-stat-lbl">Date import</div></div>
   </div>
