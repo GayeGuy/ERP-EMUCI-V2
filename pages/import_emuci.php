@@ -16,11 +16,7 @@ $role_slug = $user['role_slug'] ?? '';
 $page_title  = 'Import EMUCI';
 $active_page = 'import_emuci';
 
-if (!in_array($role_slug, ['admin','superadmin','superviseur_operation','controleur_production'])) {
-    http_response_code(403);
-    include __DIR__ . '/../templates/403.php';
-    exit;
-}
+require_permission('import_emuci', 'can_read');
 
 $sites_list = db_fetch_all("SELECT id, nom, nom_emuci FROM sites WHERE actif=1 ORDER BY nom");
 
@@ -61,16 +57,85 @@ function logger_site_inconnu(string $nom_emuci, string $type_import): void {
     );
 }
 
-function _auto_valider_stock(string $date_import, int $user_id): array {
+// Vérifie la cohérence entre les plaques OptoPlate (in_use) et le PJ coordinateur.
+// Une plaque posée = statut 'in_use' uniquement. 'reserved' = en attente, ne compte pas.
+// Comparaison au niveau site : COUNT(in_use) EMUCI vs total_plaques déclarées dans le PJ.
+// Ne crée aucun enregistrement dans validations_stock_matin — notifie uniquement le coordinateur.
+function _verifier_coherence_optoplate(string $date_import, int $user_id): array {
     $resultats = [];
-    // Récupérer tous les sites ayant des données importées ce jour
     $sites_avec_data = db_fetch_all(
         "SELECT DISTINCT site_id FROM import_optoplate WHERE date_import=? AND site_id IS NOT NULL",
         [$date_import]
     );
     foreach ($sites_avec_data as $s) {
         $site_id = (int)$s['site_id'];
-        // Bobines actives du site
+
+        // EMUCI : total plaques posées sur ce site = COUNT(in_use)
+        $nb_inuse_emuci = (int)db_fetch_value(
+            "SELECT COUNT(*) FROM import_optoplate WHERE site_id=? AND statut_plaque='in_use' AND date_import=?",
+            [$site_id, $date_import]
+        );
+
+        // PJ coordinateur : total_plaques = (nb_vp*2)+(nb_camion*2)+(nb_semi*1)+(nb_moto*1)
+        $total_plaques_pj = (int)db_fetch_value(
+            "SELECT COALESCE(SUM(total_plaques),0)
+             FROM op_points_journaliers
+             WHERE site_id=? AND date_point=? AND statut='valide'",
+            [$site_id, $date_import]
+        );
+
+        if ($nb_inuse_emuci === 0 && $total_plaques_pj === 0) continue;
+
+        $site_nom = db_fetch_value("SELECT nom FROM sites WHERE id=?", [$site_id]);
+        $ecart    = $nb_inuse_emuci - $total_plaques_pj;
+
+        if ($ecart !== 0) {
+            $coords = db_fetch_all(
+                "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1",
+                [$site_id]
+            );
+            foreach ($coords as $c) {
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                    [$c['id'],'info','⚠️ Incohérence plaques détectée',
+                     "Import OptoPlate du $date_import — Site $site_nom : EMUCI enregistre $nb_inuse_emuci plaque(s) posée(s), votre PJ déclare $total_plaques_pj. Vérifiez votre point journalier.",
+                     '/pages/operations/point_journalier.php']);
+            }
+            $resultats[] = ['site_id'=>$site_id,'statut'=>'incoherent',
+                            'nb_inuse'=>$nb_inuse_emuci,'total_plaques_pj'=>$total_plaques_pj,'ecart'=>$ecart];
+        } else {
+            $resultats[] = ['site_id'=>$site_id,'statut'=>'coherent','nb_ecarts'=>0];
+        }
+    }
+    return $resultats;
+}
+
+function _auto_valider_stock(string $date_import, int $user_id): array {
+    $resultats = [];
+
+    // Nettoyer TOUS les records créés par un import précédent (gsb_user_id IS NULL)
+    // pour cette date avant de recréer uniquement les valides.
+    // Les décisions humaines (gsb_user_id IS NOT NULL) ne sont jamais touchées.
+    db_query(
+        "DELETE FROM validations_stock_matin WHERE date_validation=? AND gsb_user_id IS NULL",
+        [$date_import]
+    );
+
+    // Tous les sites ayant des bobines actives
+    $sites_avec_data = db_fetch_all(
+        "SELECT DISTINCT b.site_id FROM op_bobines b WHERE b.statut IN ('en_cours','en_stock') AND b.site_id IS NOT NULL"
+    );
+    foreach ($sites_avec_data as $s) {
+        $site_id = (int)$s['site_id'];
+
+        // Sans PJ validé, films_restants n'est pas à jour → pas de comparaison possible
+        $has_pj = (int)db_fetch_value(
+            "SELECT COUNT(*) FROM op_points_journaliers WHERE site_id=? AND date_point=? AND statut='valide'",
+            [$site_id, $date_import]
+        );
+        if (!$has_pj) continue;
+
+        // Comparer films_restants (DigiStock, mis à jour par le PJ)
+        // vs stock_systeme (EMUCI, mis à jour par l'import OptoTrace)
         $bobines = db_fetch_all(
             "SELECT b.id, b.numero, b.stock_systeme, b.films_restants
              FROM op_bobines b WHERE b.site_id=? AND b.statut IN ('en_cours','en_stock')",
@@ -80,95 +145,57 @@ function _auto_valider_stock(string $date_import, int $user_id): array {
 
         $ecarts = [];
         foreach ($bobines as $b) {
-            $films_optoplate = (int)db_fetch_value(
-                "SELECT COUNT(*) FROM import_optoplate WHERE num_bobine=? AND statut_plaque='in_use' AND date_import=?",
-                [$b['numero'], $date_import]
-            );
-            // Point 18h validé par le superviseur = source de référence
-            $films_pj = (int)db_fetch_value(
-                "SELECT COALESCE(SUM(fu.films_utilises),0)
-                 FROM op_films_utilises fu
-                 JOIN op_points_journaliers pj ON pj.id=fu.point_id
-                 WHERE fu.bobine_id=? AND pj.date_point=?
-                   AND pj.type_point='point_18h' AND pj.statut='valide'",
-                [$b['id'], $date_import]
-            );
-            // Fallback : tout point valide du jour si pas de point_18h
-            if ($films_pj === 0) {
-                $films_pj = (int)db_fetch_value(
-                    "SELECT COALESCE(SUM(fu.films_utilises),0)
-                     FROM op_films_utilises fu
-                     JOIN op_points_journaliers pj ON pj.id=fu.point_id
-                     WHERE fu.bobine_id=? AND pj.date_point=? AND pj.statut='valide'",
-                    [$b['id'], $date_import]
-                );
-            }
-            $ecart = $films_optoplate - $films_pj;
-            if ($ecart != 0) {
+            $ecart = (int)$b['films_restants'] - (int)$b['stock_systeme'];
+            if ($ecart !== 0) {
                 $ecarts[] = [
-                    'bobine_id'       => $b['id'],
-                    'numero'          => $b['numero'],
-                    'stock_systeme'   => $b['stock_systeme'],
-                    'films_pj'        => $films_pj,
-                    'films_optoplate' => $films_optoplate,
-                    'ecart'           => $ecart,
+                    'bobine_id'      => $b['id'],
+                    'numero'         => $b['numero'],
+                    'stock_systeme'  => (int)$b['stock_systeme'],
+                    'films_restants' => (int)$b['films_restants'],
+                    'ecart'          => $ecart,
                 ];
             }
         }
 
         $nb_ecarts = count($ecarts);
+        $site_nom  = db_fetch_value("SELECT nom FROM sites WHERE id=?", [$site_id]);
 
         if ($nb_ecarts === 0) {
-            // Validation automatique
+            // films_restants = stock_systeme → validation automatique
             db_query(
                 "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,gsb_user_id,gsb_at)
                  VALUES (?,?,'valide_auto',0,?,NOW())
-                 ON DUPLICATE KEY UPDATE statut='valide_auto',nb_ecarts=0,gsb_user_id=?,gsb_at=NOW()",
-                [$site_id, $date_import, $user_id, $user_id]
+                 ON DUPLICATE KEY UPDATE
+                   statut = IF(gsb_user_id IS NULL, 'valide_auto', statut),
+                   nb_ecarts = IF(gsb_user_id IS NULL, 0, nb_ecarts),
+                   gsb_at = IF(gsb_user_id IS NULL, NOW(), gsb_at),
+                   gsb_user_id = IF(gsb_user_id IS NULL, VALUES(gsb_user_id), gsb_user_id)",
+                [$site_id, $date_import, $user_id]
             );
-            // Notifier coordinateurs
             $coords = db_fetch_all(
                 "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1",
                 [$site_id]
             );
             foreach ($coords as $c) {
                 db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
-                    [$c['id'],'stock_valide','✅ Stock validé',
-                     "Votre stock bobines du $date_import est validé automatiquement. Vous pouvez commencer votre activité.",
-                     '/pages/import_emuci.php']);
+                    [$c['id'],'info','✅ Stock validé',
+                     "Votre stock bobines du $date_import est validé automatiquement.",
+                     '/pages/validation_stock_matin.php']);
             }
             $resultats[] = ['site_id'=>$site_id,'statut'=>'valide_auto','nb_ecarts'=>0];
         } else {
-            // Blocage — notifier GSB
-            db_query(
-                "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,details_ecarts)
-                 VALUES (?,?,'refuse',?,?)
-                 ON DUPLICATE KEY UPDATE statut='refuse',nb_ecarts=?,details_ecarts=?",
-                [$site_id, $date_import, $nb_ecarts, json_encode($ecarts), $nb_ecarts, json_encode($ecarts)]
-            );
-            // Notifier GSB
+            // Écarts détectés → notifier le GSB pour validation manuelle
+            // Ne pas créer de record refuse automatique : c'est au GSB de décider
             $gsb_users = db_fetch_all(
-                "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug IN ('gestionnaire_stock_bobines','admin','superadmin') AND u.actif=1"
+                "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug IN ('gsb','admin','superadmin') AND u.actif=1"
             );
-            $site_nom = db_fetch_value("SELECT nom FROM sites WHERE id=?",[$site_id]);
             foreach ($gsb_users as $gsb) {
                 db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
-                    [$gsb['id'],'stock_ecart','⚠️ Écart stock détecté',
-                     "Import du $date_import — Site $site_nom : $nb_ecarts écart(s) détecté(s). Validation GSB requise avant démarrage coordinateur.",
+                    [$gsb['id'],'info','⚠️ Écart stock détecté',
+                     "Import du $date_import — Site $site_nom : $nb_ecarts écart(s) DigiStock/EMUCI. Validation requise.",
                      '/pages/validation_stock_matin.php']);
             }
-            // Notifier coordinateurs du blocage
-            $coords = db_fetch_all(
-                "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1",
-                [$site_id]
-            );
-            foreach ($coords as $c) {
-                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
-                    [$c['id'],'stock_bloque','🔒 Stock en attente de validation',
-                     "Votre stock du $date_import présente $nb_ecarts écart(s). Le gestionnaire doit valider avant que vous puissiez travailler.",
-                     '/pages/validation_stock_matin.php']);
-            }
-            $resultats[] = ['site_id'=>$site_id,'statut'=>'bloque','nb_ecarts'=>$nb_ecarts];
+            $resultats[] = ['site_id'=>$site_id,'statut'=>'ecart_detecte','nb_ecarts'=>$nb_ecarts];
         }
     }
     return $resultats;
@@ -290,21 +317,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         [$nb_ok,$nb_err,$session_id]);
                     audit_log($user['id'],'CREATE','import_emuci',0,"Import OptoPlate $date_import — $nb_ok lignes");
 
-                    // Déclencher validation automatique
-                    $auto_resultats = _auto_valider_stock($date_import, $user['id']);
-                    $nb_valide_auto  = count(array_filter($auto_resultats, fn($r)=>$r['statut']==='valide_auto'));
-                    $nb_bloque       = count(array_filter($auto_resultats, fn($r)=>$r['statut']==='bloque'));
+                    // Vérifier cohérence plaques EMUCI vs PJ coordinateur
+                    $auto_resultats  = _verifier_coherence_optoplate($date_import, $user['id']);
+                    $nb_valide_auto  = 0;
+                    $nb_incoherent   = count(array_filter($auto_resultats, fn($r)=>$r['statut']==='incoherent'));
 
                     $result_optoplate = [
                         'nb_ok' => $nb_ok, 'nb_err' => $nb_err,
                         'sites_inconnus' => array_keys($sites_inconnus),
                         'session_id' => $session_id, 'date' => $date_import,
-                        'nb_valide_auto' => $nb_valide_auto,
-                        'nb_bloque' => $nb_bloque,
+                        'nb_valide_auto'  => $nb_valide_auto,
+                        'nb_incoherent'   => $nb_incoherent,
                     ];
-                    $auto_msg = $nb_valide_auto>0?" · ✅ $nb_valide_auto site(s) validé(s) automatiquement":'';
-                    $bloc_msg = $nb_bloque>0?" · ⚠️ $nb_bloque site(s) bloqué(s) — validation GSB requise":'';
-                    $msg_optoplate = ['type'=>'success','text'=>"Import terminé : $nb_ok plaques importées.".($nb_err?" ($nb_err ignorées)":'').$auto_msg.$bloc_msg];
+                    $incoh_msg = $nb_incoherent>0?" · ⚠️ $nb_incoherent site(s) avec incohérence plaques — coordinateur(s) notifié(s)":'';
+                    $msg_optoplate = ['type'=>'success','text'=>"Import terminé : $nb_ok plaques importées.".($nb_err?" ($nb_err ignorées)":'').$incoh_msg];
                     } catch (Exception $e) {
                         // PostgreSQL : indispensable de rollback, sinon la connexion
                         // reste en transaction annulée (25P02) pour toute la page.
@@ -759,8 +785,8 @@ include __DIR__ . '/../templates/header.php';
     <?php if($result_optoplate['nb_valide_auto']>0): ?>
     <div class="irb-stat"><div class="irb-stat-val" style="color:#059669"><?= $result_optoplate['nb_valide_auto'] ?></div><div class="irb-stat-lbl">Sites validés auto</div></div>
     <?php endif; ?>
-    <?php if($result_optoplate['nb_bloque']>0): ?>
-    <div class="irb-stat"><div class="irb-stat-val" style="color:#D97706"><?= $result_optoplate['nb_bloque'] ?></div><div class="irb-stat-lbl">Sites bloqués</div></div>
+    <?php if(($result_optoplate['nb_incoherent']??0)>0): ?>
+    <div class="irb-stat"><div class="irb-stat-val" style="color:#D97706"><?= $result_optoplate['nb_incoherent'] ?></div><div class="irb-stat-lbl">Sites incohérents</div></div>
     <?php endif; ?>
     <div class="irb-stat"><div class="irb-stat-val" style="font-size:15px"><?= fmt_date($result_optoplate['date'],'d/m/Y') ?></div><div class="irb-stat-lbl">Date import</div></div>
   </div>

@@ -88,7 +88,7 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         db_query("DELETE FROM user_departements WHERE user_id=? AND departement_id != ?", [$uid, $dept_id]);
         db_query(
             "INSERT INTO user_departements (user_id, departement_id, is_n1) VALUES (?,?,?)
-             ON CONFLICT (user_id, departement_id) DO UPDATE SET is_n1=EXCLUDED.is_n1",
+             ON DUPLICATE KEY UPDATE is_n1=VALUES(is_n1)",
             [$uid, $dept_id, $is_n1]
         );
         json_response(true, 'Compte affecté.');
