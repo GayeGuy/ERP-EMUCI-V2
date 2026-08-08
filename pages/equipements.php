@@ -117,10 +117,10 @@ $equipements = db_fetch_all(
             (SELECT COUNT(*) FROM interventions_maintenance i WHERE i.equipement_id=e.id) AS nb_interventions_total,
             -- Valeur résiduelle OHADA (duree_vie_mois dans nomenclatures)
             CASE WHEN e.date_acquisition IS NOT NULL AND e.prix_achat > 0 AND COALESCE(e.duree_amortissement_mois, n.duree_vie_mois, 0) > 0
-                 THEN GREATEST(0, ROUND(e.prix_achat - (e.prix_achat / COALESCE(e.duree_amortissement_mois, n.duree_vie_mois)) * (EXTRACT(YEAR FROM age(CURRENT_DATE, e.date_acquisition))*12 + EXTRACT(MONTH FROM age(CURRENT_DATE, e.date_acquisition))), 0))
+                 THEN GREATEST(0, ROUND(e.prix_achat - (e.prix_achat / COALESCE(e.duree_amortissement_mois, n.duree_vie_mois)) * TIMESTAMPDIFF(MONTH, e.date_acquisition, CURRENT_DATE), 0))
                  ELSE NULL END AS valeur_residuelle,
             CASE WHEN e.date_acquisition IS NOT NULL AND COALESCE(e.duree_amortissement_mois, n.duree_vie_mois, 0) > 0
-                 THEN ROUND((EXTRACT(YEAR FROM age(CURRENT_DATE, e.date_acquisition))*12 + EXTRACT(MONTH FROM age(CURRENT_DATE, e.date_acquisition))) / COALESCE(e.duree_amortissement_mois, n.duree_vie_mois) * 100, 1)
+                 THEN ROUND(TIMESTAMPDIFF(MONTH, e.date_acquisition, CURRENT_DATE) / COALESCE(e.duree_amortissement_mois, n.duree_vie_mois) * 100, 1)
                  ELSE NULL END AS pct_amorti
      FROM equipements e
      LEFT JOIN sites s ON s.id=e.site_id
