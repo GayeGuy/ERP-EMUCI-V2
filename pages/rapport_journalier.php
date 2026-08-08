@@ -17,11 +17,7 @@ $role_slug = $user['role_slug'] ?? '';
 $page_title  = 'Rapport journalier';
 $active_page = 'rapport_journalier';
 
-if (!in_array($role_slug, ['maintenance_info','admin','superadmin'])) {
-    http_response_code(403);
-    echo '<p style="padding:40px;color:red">Accès refusé.</p>';
-    exit;
-}
+require_permission('rapport_journalier', 'can_read');
 
 $sites_list  = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom");
 $is_maint    = ($role_slug === 'maintenance_info');

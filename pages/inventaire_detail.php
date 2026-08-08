@@ -95,7 +95,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
             db_query(
                 "DELETE FROM ecarts_bobines
                  WHERE bobine_id=? AND source='manuel' AND inventaire_id IS NULL
-                   AND DATE(created_at)=CURDATE()",
+                   AND DATE(created_at)=CURRENT_DATE",
                 [$det['bobine_id']]
             );
             db_query(
@@ -175,7 +175,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
                 // Toujours appliquer le stock physique déclaré — source de vérité
                 db_query(
                     "UPDATE op_bobines SET films_restants=?, stock_systeme=?,
-                     statut=IF(?> 0, IF(statut IN('retiree'),'retiree', IF(statut='en_cours','en_cours','en_stock')), 'epuisee')
+                     statut=CASE WHEN ? > 0 THEN (CASE WHEN statut IN('retiree') THEN 'retiree' ELSE (CASE WHEN statut='en_cours' THEN 'en_cours' ELSE 'en_stock' END) END) ELSE 'epuisee' END
                      WHERE id=?",
                     [$phy, $phy, $phy, $l['bobine_id']]
                 );
@@ -228,9 +228,9 @@ $lignes = db_fetch_all(
             s.nom AS site_nom,
             -- Consommation moyenne 30j glissants (dynamique)
             COALESCE(
-              (SELECT SUM(cb.quantite)/GREATEST(DATEDIFF(NOW(),MIN(cb.date_conso)),1)
+              (SELECT SUM(cb.quantite)/GREATEST(DATEDIFF(CURRENT_DATE, MIN(cb.date_conso)),1)
                FROM consommations_bobines cb
-               WHERE cb.bobine_id=b.id AND cb.date_conso>=DATE_SUB(CURDATE(),INTERVAL 30 DAY)),
+               WHERE cb.bobine_id=b.id AND cb.date_conso>=(CURRENT_DATE - INTERVAL 30 DAY)),
             0) AS conso_moy_realtime
      FROM inventaire_details_bobines d
      JOIN op_bobines b ON b.id=d.bobine_id
