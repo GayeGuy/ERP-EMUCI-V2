@@ -30,6 +30,21 @@ function fin_cycle_class(?string $date_fin): string {
     if ($diff <= 30) return 'text-warning fw-bold';
     return 'text-success';
 }
+// Nom/prénom : MAJUSCULES, lettres uniquement (accents, espaces, tirets et apostrophes tolérés) — aucun chiffre.
+function format_nom_prenom(string $s): string {
+    return trim(preg_replace('/[^\p{L} \'-]/u', '', mb_strtoupper(trim($s), 'UTF-8')));
+}
+// Téléphone ivoirien : uniquement des chiffres, exactement 10.
+function is_valid_telephone(string $tel): bool {
+    return (bool)preg_match('/^[0-9]{10}$/', $tel);
+}
+// Mot de passe : min 8 caractères, au moins une majuscule, un chiffre et un caractère spécial.
+function is_valid_password(string $pwd): bool {
+    return strlen($pwd) >= 8
+        && preg_match('/[A-Z]/', $pwd)
+        && preg_match('/[0-9]/', $pwd)
+        && preg_match('/[^A-Za-z0-9]/', $pwd);
+}
 function validate_input(array $fields, array $source = []): array {
     if (empty($source)) $source = $_POST;
     $out = []; $errors = [];

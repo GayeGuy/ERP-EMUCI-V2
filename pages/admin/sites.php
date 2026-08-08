@@ -1,6 +1,6 @@
 <?php
 // ============================================================
-//  pages/sites.php  —  Gestion des sites
+//  pages/admin/sites.php  —  Gestion des sites
 // ============================================================
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx as XlsxWriter;
@@ -9,12 +9,12 @@ use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 
-require_once __DIR__ . '/../vendor/autoload.php';
-require_once __DIR__ . '/../includes/db.php';
-require_once __DIR__ . '/../includes/session.php';
-require_once __DIR__ . '/../includes/audit.php';
-require_once __DIR__ . '/../includes/helpers.php';
-require_once __DIR__ . '/../includes/notifications.php';
+require_once __DIR__ . '/../../vendor/autoload.php';
+require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/session.php';
+require_once __DIR__ . '/../../includes/audit.php';
+require_once __DIR__ . '/../../includes/helpers.php';
+require_once __DIR__ . '/../../includes/notifications.php';
 
 require_auth();
 require_permission('sites', 'can_read');
@@ -139,7 +139,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             db_query("UPDATE emuci_sites_inconnus SET statut='lie',site_id_lie=?,traite_par=?,traite_at=NOW() WHERE nom_emuci=?", [$site_id,$user['id'],$nom_emuci]);
             db_query("UPDATE import_optoplate SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$site_id,$nom_emuci]);
             db_query("UPDATE import_optotrace  SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$site_id,$nom_emuci]);
-            db_query("UPDATE op_bobines b JOIN import_optotrace ot ON ot.keyname=b.numero AND ot.site_nom_emuci=? SET b.site_id=? WHERE b.site_id IS NULL", [$nom_emuci,$site_id]);
+            db_query("UPDATE op_bobines SET site_id=? FROM import_optotrace ot WHERE ot.keyname=op_bobines.numero AND ot.site_nom_emuci=? AND op_bobines.site_id IS NULL", [$site_id,$nom_emuci]);
             $nom = db_fetch_value("SELECT nom FROM sites WHERE id=?",[$site_id]);
             audit_log($user['id'],'UPDATE','sites',$site_id,"Mapping EMUCI '$nom_emuci' → '$nom'");
             json_response(true,"Site lié. Tous les imports mis à jour.");
@@ -157,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             db_query("UPDATE emuci_sites_inconnus SET statut='cree',site_id_lie=?,traite_par=?,traite_at=NOW() WHERE nom_emuci=?", [$new_id,$user['id'],$nom_emuci]);
             db_query("UPDATE import_optoplate SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$new_id,$nom_emuci]);
             db_query("UPDATE import_optotrace  SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$new_id,$nom_emuci]);
-            db_query("UPDATE op_bobines b JOIN import_optotrace ot ON ot.keyname=b.numero AND ot.site_nom_emuci=? SET b.site_id=? WHERE b.site_id IS NULL", [$nom_emuci,$new_id]);
+            db_query("UPDATE op_bobines SET site_id=? FROM import_optotrace ot WHERE ot.keyname=op_bobines.numero AND ot.site_nom_emuci=? AND op_bobines.site_id IS NULL", [$new_id,$nom_emuci]);
             audit_log($user['id'],'CREATE','sites',$new_id,"Création depuis EMUCI '$nom_emuci'");
             json_response(true,"Site '$nom_nouveau' créé.");
         }
@@ -260,14 +260,14 @@ $sites = db_fetch_all(
      LEFT JOIN equipements e  ON e.site_id=s.id AND e.actif=1
      LEFT JOIN users us ON us.site_id=s.id AND us.actif=1
      WHERE $wsql
-     GROUP BY s.id ORDER BY s.actif DESC, s.nom ASC",
+     GROUP BY s.id, u.prenom, u.nom ORDER BY s.actif DESC, s.nom ASC",
     $params
 );
 
 // Stats globales (indépendantes des filtres)
 $stats_type = db_fetch_all(
     "SELECT type, COUNT(*) AS total, SUM(actif) AS actifs
-     FROM sites GROUP BY type ORDER BY FIELD(type,'saisie','pose','mixte','entrepot','siege')"
+     FROM sites GROUP BY type ORDER BY FIELD(type, 'saisie','pose','mixte','entrepot','siege')"
 );
 $stats_ville = db_fetch_all(
     "SELECT ville, COUNT(*) AS n FROM sites WHERE actif=1 AND ville IS NOT NULL AND ville != ''
@@ -381,11 +381,12 @@ if (isset($_GET['export'])) {
     }
 }
 
-include __DIR__ . '/../templates/header.php';
+include __DIR__ . '/../../templates/header.php';
 
 // Couleurs par type
 $type_colors = [
-    'saisie'  => ['bg'=>'#e6f1fb','color'=>'#1B75BC','icon'=>'ph-desktop'],
+    // #1B75BC ne donnait que 4.25:1 sur #e6f1fb (sous le seuil AA de 4.5) → assombri à 6.7:1
+    'saisie'  => ['bg'=>'#e6f1fb','color'=>'#15568B','icon'=>'ph-desktop'],
     'pose'    => ['bg'=>'#e8f8ef','color'=>'#166534','icon'=>'ph-wrench'],
     'mixte'   => ['bg'=>'#fff3e8','color'=>'#9a3412','icon'=>'ph-arrows-left-right'],
     'entrepot'=> ['bg'=>'#e6f9f7','color'=>'#134e4a','icon'=>'ph-warehouse'],
@@ -397,44 +398,65 @@ $type_colors = [
 .filter-bar label{font-size:11px;font-weight:700;color:var(--navy);display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.4px}
 .filter-bar input,.filter-bar select{padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:white;outline:none;min-width:140px}
 .filter-bar input:focus,.filter-bar select:focus{border-color:var(--blue)}
-.kpi-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
-.kpi-chip{display:flex;align-items:center;gap:7px;padding:8px 14px;border-radius:22px;font-size:12.5px;font-weight:600;border:1px solid transparent;cursor:default}
-.kpi-chip .cn{font-family:'Montserrat',sans-serif;font-size:18px;font-weight:900;line-height:1}
-.sites-table th{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;padding:10px 14px;background:#f8fafc;border-bottom:2px solid var(--border)}
+.stats-dash{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:18px}
+.stat-tile{position:relative;overflow:hidden;background:white;border:1px solid var(--border);border-radius:12px;padding:11px 14px 11px 18px;cursor:default}
+.stat-tile::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent,var(--muted))}
+.stat-tile-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.stat-tile-value{font-family:'Plus Jakarta Sans',sans-serif;font-size:22px;font-weight:700;color:var(--navy)}
+.stat-tile-empty{opacity:.5}
+.stat-tile-total{background:var(--navy);border-color:var(--navy)}
+.stat-tile-total::before{display:none}
+.stat-tile-total .stat-tile-label{color:rgba(255,255,255,.65)}
+.stat-tile-total .stat-tile-value{color:white}
+/* !important nécessaire : header.php impose th{background:var(--tertiary)!important;color:var(--muted)!important} */
+.sites-table th{font-size:11.5px;font-weight:700;color:#475569!important;text-transform:uppercase;letter-spacing:.4px;padding:10px 14px;border-bottom:2px solid var(--border)}
 .sites-table td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+/* Scroll interne au-delà de 4 lignes : hauteur = header + 4 lignes (~62px/ligne) */
+.sites-table-wrap{max-height:284px;overflow-y:auto}
+.sites-table thead th{position:sticky;top:0;z-index:1}
 .sites-table tr:hover td{background:#f8fafc}
 .sites-table tr.inactive td{opacity:.55}
 .type-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
-.stat-pill{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;padding:2px 9px;border-radius:10px}
-.action-btn{width:32px;height:32px;border-radius:8px;border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;transition:all .15s;background:#EFF6FF;color:#1B75BC}
-.action-btn:hover{background:#1B75BC;color:white;transform:scale(1.08)}
+/* Compteurs Équip./Util. : nombre nu, lisible d'un coup d'œil.
+   Les pastilles bleu pâle précédentes plafonnaient à 4.25:1 (sous le seuil AA). */
+.count-cell{font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700;color:var(--navy);padding:6px 8px;background:white;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;min-width:40px}
+.count-cell.zero{color:var(--muted);font-weight:600}
+.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;display:inline-block}
+.status-dot.on{background:#22c55e}
+.status-dot.off{background:var(--muted)}
+.resp-avatar{width:38px;height:38px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:700;flex-shrink:0;letter-spacing:.3px}
+/* #15568B et non #1B75BC : sur le fond #EFF6FF ce dernier ne donnait que
+   4,47:1, sous le seuil AA de 4,5. Le nouveau donne 7,05:1. */
+.action-btn{width:32px;height:32px;border-radius:8px;border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;transition:all .15s;background:#EFF6FF;color:#15568B}
+.action-btn:hover{background:#15568B;color:white;transform:scale(1.08)}
 .action-btn.edit-btn{background:#F0FDF4;color:#166534}
 .action-btn.edit-btn:hover{background:#166534;color:white}
 .action-btn.warn{background:#FFF7ED;color:#C2410C}
 .action-btn.warn:hover{background:#C2410C;color:white}
 .action-btn.success{background:#F0FDF4;color:#15803D}
 .action-btn.success:hover{background:#15803D;color:white}
-.action-btn.danger{background:#FEF2F2;color:#DC2626}
-.action-btn.danger:hover{background:#DC2626;color:white}
+/* #B91C1C : 5,91:1 contre 4,41:1 pour #DC2626 sur ce fond. */
+.action-btn.danger{background:#FEF2F2;color:#B91C1C}
+.action-btn.danger:hover{background:#B91C1C;color:white}
 /* Modals */
 .modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(13,31,53,.5);backdrop-filter:blur(4px);align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
 .modal{background:white;border-radius:16px;max-width:95vw;max-height:92vh;overflow-y:auto;animation:mIn .25s cubic-bezier(.22,1,.36,1)}
 @keyframes mIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
 .mhdr{padding:16px 22px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:white;z-index:10}
-.mhdr h3{font-family:'Montserrat',sans-serif;font-size:16px;font-weight:700}
+.mhdr h3{font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700}
 .mclose{width:30px;height:30px;border-radius:7px;border:1px solid var(--border);background:none;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center}
 .mbody{padding:22px}
 .mfoot{padding:12px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;background:white}
 /* Capacité */
 .capa-result{text-align:center;padding:24px;background:linear-gradient(135deg,var(--navy),#1a3c5e);border-radius:12px;color:white;margin-bottom:18px}
-.capa-number{font-family:'Montserrat',sans-serif;font-size:60px;font-weight:800;line-height:1}
+.capa-number{font-family:'Plus Jakarta Sans',sans-serif;font-size:60px;font-weight:800;line-height:1}
 .capa-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)}
 .capa-bar{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden}
 .capa-fill{height:100%;border-radius:3px}
 /* Config */
 .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:18px}
-.tab-btn{padding:10px 18px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition:all .15s;font-family:'DM Sans',sans-serif}
+.tab-btn{padding:10px 18px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition:all .15s;font-family:'Manrope',sans-serif}
 .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue)}
 .tab-pane{display:none}
 .tab-pane.active{display:block}
@@ -444,7 +466,7 @@ $type_colors = [
 <!-- ── TOOLBAR ─────────────────────────────────── -->
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px">
   <div>
-    <h2 style="font-family:'Montserrat',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">Gestion des Sites</h2>
+    <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">Gestion des Sites</h2>
     <p style="font-size:12px;color:var(--muted);margin-top:2px"><?= $total_actifs ?> actif(s) sur <?= $total_all ?> sites au total</p>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -471,32 +493,26 @@ $type_colors = [
 </div>
 
 <!-- ── KPI PAR TYPE ─────────────────────────────── -->
-<div class="kpi-chips">
-  <?php
-  $type_icons = ['saisie'=>'💻','pose'=>'🛠️','mixte'=>'🔀','entrepot'=>'🏭','siege'=>'🏛️'];
-  foreach ($stats_type as $st):
-    $tc = $type_colors[$st['type']] ?? ['bg'=>'#f0f4f8','color'=>'#475569'];
+<div class="stats-dash">
+  <div class="stat-tile stat-tile-total">
+    <div class="stat-tile-label">Total actifs</div>
+    <div class="stat-tile-value"><?= $total_actifs ?></div>
+  </div>
+  <?php foreach ($stats_type as $st):
+    $tc = $type_colors[$st['type']] ?? ['color'=>'#475569'];
+    $empty = (int)$st['actifs'] === 0;
   ?>
-  <div class="kpi-chip" style="background:<?= $tc['bg'] ?>;color:<?= $tc['color'] ?>;border-color:<?= $tc['bg'] ?>">
-    <span><?= $type_icons[$st['type']] ?? '🏢' ?></span>
-    <div>
-      <div class="cn"><?= (int)$st['actifs'] ?></div>
-      <div style="font-size:11px;opacity:.8"><?= $types_labels[$st['type']] ?? $st['type'] ?><?= $st['total'] > $st['actifs'] ? ' <span style="font-size:10px;opacity:.65">(+'.(int)($st['total']-$st['actifs']).' inactif)</span>' : '' ?></div>
-    </div>
+  <div class="stat-tile<?= $empty ? ' stat-tile-empty' : '' ?>" style="--accent:<?= $tc['color'] ?>">
+    <div class="stat-tile-label"><?= $types_labels[$st['type']] ?? $st['type'] ?></div>
+    <div class="stat-tile-value"><?= (int)$st['actifs'] ?></div>
   </div>
   <?php endforeach; ?>
-  <?php if (!empty($stats_ville)): ?>
-  <div style="width:1px;background:var(--border);margin:0 4px;align-self:stretch"></div>
   <?php foreach ($stats_ville as $sv): ?>
-  <div class="kpi-chip" style="background:#f0f4f8;color:#475569;border-color:#e2e8f0">
-    <i class="ph-duotone ph-map-pin" style="font-size:14px"></i>
-    <div>
-      <div class="cn" style="font-size:16px"><?= (int)$sv['n'] ?></div>
-      <div style="font-size:11px"><?= h($sv['ville']) ?></div>
-    </div>
+  <div class="stat-tile" style="--accent:#64748b">
+    <div class="stat-tile-label"><?= h($sv['ville']) ?></div>
+    <div class="stat-tile-value"><?= (int)$sv['n'] ?></div>
   </div>
   <?php endforeach; ?>
-  <?php endif; ?>
 </div>
 
 <!-- ── FILTER BAR ───────────────────────────────── -->
@@ -539,7 +555,7 @@ $type_colors = [
 
 <!-- ── TABLEAU DES SITES ────────────────────────── -->
 <div class="card">
-  <div class="table-wrap">
+  <div class="table-wrap sites-table-wrap">
     <table class="sites-table" style="width:100%">
       <thead>
         <tr>
@@ -582,34 +598,32 @@ $type_colors = [
           </td>
           <td style="font-size:13px;color:var(--muted)"><?= $s['ville'] ? h($s['ville']) : '—' ?></td>
           <td style="text-align:center">
-            <span class="stat-pill" style="background:#e6f1fb;color:#1B75BC">
-              <i class="ph-duotone ph-desktop" style="font-size:12px"></i>
-              <?= (int)$s['nb_equip'] ?>
-            </span>
+            <span class="count-cell<?= (int)$s['nb_equip'] === 0 ? ' zero' : '' ?>"><?= (int)$s['nb_equip'] ?></span>
           </td>
           <td style="text-align:center">
-            <span class="stat-pill" style="background:#f0f4f8;color:#475569">
-              <i class="ph-duotone ph-users" style="font-size:12px"></i>
-              <?= (int)$s['nb_users'] ?>
-            </span>
+            <span class="count-cell<?= (int)$s['nb_users'] === 0 ? ' zero' : '' ?>"><?= (int)$s['nb_users'] ?></span>
           </td>
           <td>
             <?php if ($s['responsable_nom']): ?>
-            <div style="display:flex;align-items:center;gap:7px">
-              <div style="width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--navy),var(--blue));display:flex;align-items:center;justify-content:center;color:white;font-size:9px;font-weight:700;flex-shrink:0">
-                <?= strtoupper(implode('',array_map(fn($w)=>$w[0],array_slice(explode(' ',$s['responsable_nom']),0,2)))) ?>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="resp-avatar">
+                <?= strtoupper(implode('',array_map(fn($w)=>$w[0],array_slice(array_filter(explode(' ',$s['responsable_nom'])),0,2)))) ?>
               </div>
-              <span style="font-size:12.5px"><?= h($s['responsable_nom']) ?></span>
+              <span style="font-size:13px;font-weight:600;color:var(--text)"><?= h($s['responsable_nom']) ?></span>
             </div>
             <?php else: ?>
-            <span style="font-size:12px;color:var(--muted)">—</span>
+            <span style="font-size:12.5px;color:var(--muted)">—</span>
             <?php endif; ?>
           </td>
           <td style="text-align:center">
             <?php if ($s['actif']): ?>
-            <span style="background:#d1fae5;color:#065f46;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700">Actif</span>
+            <div style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--navy)">
+              <span class="status-dot on"></span>Actif
+            </div>
             <?php else: ?>
-            <span style="background:#fee2e2;color:#991b1b;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700">Inactif</span>
+            <div style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--muted)">
+              <span class="status-dot off"></span>Inactif
+            </div>
             <?php endif; ?>
           </td>
           <td style="text-align:center">
@@ -874,20 +888,20 @@ function viewS(id){
       <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
         <span style="font-size:10px;font-weight:700;background:var(--lighter);border:1px solid var(--border);border-radius:5px;padding:2px 6px">${e.code}</span>
         <span style="flex:1;font-size:13px">${e.libelle}</span>
-        <span style="font-family:'Montserrat',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">${e.total}</span>
+        <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">${e.total}</span>
       </div>`).join('')||'<p style="color:var(--muted);font-size:13px">Aucun équipement.</p>';
     const users=r.utilisateurs.map(u=>`
       <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
-        <div style="width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,var(--navy),var(--blue));display:flex;align-items:center;justify-content:center;color:white;font-size:11px;font-weight:700">${u.nom.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase()}</div>
+        <div class="resp-avatar">${u.nom.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase()}</div>
         <div><div style="font-size:13px;font-weight:500">${u.nom}</div><div style="font-size:11px;color:var(--muted)">${u.email} · ${u.role}</div></div>
       </div>`).join('')||'<p style="color:var(--muted);font-size:13px">Aucun utilisateur.</p>';
     document.getElementById('sdB').innerHTML=`
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 18px;margin-bottom:18px">
         ${[['Code',r.code],['Type',r.type],['Ville',r.ville||'—'],['Responsable',r.responsable_nom||'—'],['Adresse',r.adresse||'—'],['Statut',r.actif==1?'✅ Actif':'❌ Inactif']].map(([l,v])=>`<div style="padding:6px 0;border-bottom:1px solid var(--border)"><div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">${l}</div><div style="font-size:13px">${v}</div></div>`).join('')}
       </div>
-      <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;margin-bottom:8px">Équipements (${r.equip_par_type.reduce((s,e)=>s+parseInt(e.total),0)})</h4>
+      <h4 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;margin-bottom:8px">Équipements (${r.equip_par_type.reduce((s,e)=>s+parseInt(e.total),0)})</h4>
       ${equips}
-      <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;margin:14px 0 8px">Utilisateurs (${r.utilisateurs.length})</h4>
+      <h4 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;margin:14px 0 8px">Utilisateurs (${r.utilisateurs.length})</h4>
       ${users}`;
   });
 }
@@ -910,14 +924,14 @@ function calcCapa(type){
         <span style="font-size:11px;color:var(--muted);margin:0 8px">${r.disponible}/${r.requis}</span>
         <div class="capa-bar"><div class="capa-fill" style="width:${Math.min(pct,100)}%;background:${r.ok?'var(--success)':'var(--danger)'}"></div></div>
         <span style="margin-left:8px;font-size:16px;width:18px">${r.ok?'✓':'✗'}</span>
-        <span style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:800;width:30px;text-align:right;color:var(--navy)">${r.couvre}</span>
+        <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;font-weight:800;width:30px;text-align:right;color:var(--navy)">${r.couvre}</span>
       </div>`;}).join('');
     document.getElementById('capaResult').innerHTML=`
       <div class="capa-result" style="border-top:4px solid ${col}">
         <div class="capa-number" style="color:${col}">${nb_sites}</div>
         <div style="font-size:13px;opacity:.75">site(s) «${type}» réalisable(s)</div>
       </div>
-      <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;margin-bottom:8px">Détail par équipement</h4>${rows}`;
+      <h4 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;margin-bottom:8px">Détail par équipement</h4>${rows}`;
   });
 }
 
@@ -977,9 +991,9 @@ function saveCfg(type){
     </h3>
     <span style="font-size:12px;color:#92400E">Ces sites apparaissent dans vos imports mais ne sont pas encore dans DigiStock.</span>
   </div>
-  <div class="table-wrap">
+  <div class="table-wrap sites-table-wrap">
     <table>
-      <thead><tr><th>Nom EMUCI</th><th>Source</th><th style="text-align:center">Occ.</th><th>Dernière apparition</th><th style="text-align:center">Action</th></tr></thead>
+      <thead><tr><th style="position:sticky;top:0;z-index:1">Nom EMUCI</th><th style="position:sticky;top:0;z-index:1">Source</th><th style="text-align:center;position:sticky;top:0;z-index:1">Occ.</th><th style="position:sticky;top:0;z-index:1">Dernière apparition</th><th style="text-align:center;position:sticky;top:0;z-index:1">Action</th></tr></thead>
       <tbody>
       <?php foreach ($sites_inconnus_emuci as $si): ?>
       <tr>
@@ -1004,7 +1018,7 @@ function saveCfg(type){
 <!-- Modal Lier EMUCI -->
 <div id="modalLierEmuci" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.55);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:26px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-    <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:14px">🔗 Lier site EMUCI</h3>
+    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:14px">🔗 Lier site EMUCI</h3>
     <div id="alertLierEmuci"></div>
     <input type="hidden" id="lierId">
     <div style="background:#EFF6FF;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#1D4ED8">Nom EMUCI : <strong id="lierNomEmuci"></strong></div>
@@ -1024,7 +1038,7 @@ function saveCfg(type){
 <!-- Modal Créer depuis EMUCI -->
 <div id="modalCreerEmuci" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.55);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:26px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-    <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:14px">➕ Créer site depuis EMUCI</h3>
+    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:14px">➕ Créer site depuis EMUCI</h3>
     <div id="alertCreerEmuci"></div>
     <input type="hidden" id="creerId">
     <div style="background:#EFF6FF;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#1D4ED8">Nom EMUCI : <strong id="creerNomEmuci"></strong></div>
@@ -1068,4 +1082,4 @@ async function ignorerSiteEmuci(id,nom){
 </script>
 <?php endif; ?>
 
-<?php include __DIR__ . '/../templates/footer.php'; ?>
+<?php include __DIR__ . '/../../templates/footer.php'; ?>

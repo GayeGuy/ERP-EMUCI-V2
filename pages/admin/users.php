@@ -42,16 +42,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     if ($action === 'update') {
         require_permission('users', 'can_update');
         $id      = (int)($_POST['id']          ?? 0);
-        $nom     = trim($_POST['nom']           ?? '');
-        $prenom  = trim($_POST['prenom']        ?? '');
+        $nom     = format_nom_prenom($_POST['nom']    ?? '');
+        $prenom  = format_nom_prenom($_POST['prenom'] ?? '');
         $email   = strtolower(trim($_POST['email'] ?? ''));
         $role_id = (int)($_POST['role_id']      ?? 0);
         $site_id = (int)($_POST['site_id']      ?? 0) ?: null;
         $tel     = trim($_POST['telephone']     ?? '');
         $actif   = (int)($_POST['actif']        ?? 1);
 
-        if (!$nom || !$prenom || !$email) json_response(false, 'Nom, prénom et email obligatoires.');
+        if (!$nom || !$prenom || !$email) json_response(false, 'Nom, prénom et email obligatoires (lettres uniquement pour nom/prénom).');
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) json_response(false, 'Email invalide.');
+        if ($tel !== '' && !is_valid_telephone($tel)) json_response(false, 'Téléphone invalide (10 chiffres exactement).');
 
         // Empêcher de se rétrograder soi-même
         if ($id === $user['id'] && $role_id !== (int)$user['role_id'])
@@ -81,7 +82,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         require_permission('users', 'can_update');
         $id  = (int)($_POST['id']  ?? 0);
         $pwd = trim($_POST['pwd']  ?? '');
-        if (strlen($pwd) < 8) json_response(false, 'Mot de passe trop court (min 8 caractères).');
         $result = auth_change_password($id, '', $pwd, true);
         json_response($result['success'], $result['message']);
     }
@@ -153,7 +153,7 @@ $rows = db_fetch_all(
      LEFT JOIN sites s ON s.id=u.site_id
      LEFT JOIN audit_log al ON al.user_id=u.id
      WHERE $wsql
-     GROUP BY u.id
+     GROUP BY u.id, r.nom, r.slug, r.id, s.nom
      ORDER BY u.actif DESC, r.id ASC, u.nom ASC
      LIMIT ? OFFSET ?",
     array_merge($params, [$per_page, $offset])
@@ -165,7 +165,7 @@ $sites_list = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom"
 include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
-.user-avatar-sm{width:38px;height:38px;border-radius:50%;background:linear-gradient(135deg,var(--blue-mid, #1a56a0),var(--accent-d));display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:700;flex-shrink:0}
+.user-avatar-sm{width:38px;height:38px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:700;flex-shrink:0}
 .role-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.5px}
 .role-badge.superadmin{background:#fdf0ef;color:var(--danger)}
 .role-badge.admin{background:#fef9e7;color:var(--warning)}
@@ -179,42 +179,54 @@ include __DIR__ . '/../../templates/header.php';
 .modal{background:white;border-radius:16px;max-width:95vw;max-height:92vh;overflow-y:auto;animation:mIn .25s cubic-bezier(.22,1,.36,1)}
 @keyframes mIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
 .mhdr{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:white;z-index:10}
-.mhdr h3{font-family:'Montserrat',sans-serif;font-size:17px;font-weight:700}
+.mhdr h3{font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:700}
 .mclose{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:none;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
 .mbody{padding:24px}
 .mfoot{padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;background:white}
-.fsel{padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;cursor:pointer;outline:none;font-family:'DM Sans',sans-serif}
+.fsel{padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;cursor:pointer;outline:none;font-family:'Manrope',sans-serif}
 .fsel:focus{border-color:var(--blue-mid, #1a56a0)}
 /* Tabs */
 .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px}
-.tab-btn{padding:12px 20px;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition:all .15s;font-family:'DM Sans',sans-serif}
+.tab-btn{padding:12px 20px;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition:all .15s;font-family:'Manrope',sans-serif}
 .tab-btn.active{color:var(--blue-mid, #1a56a0);border-bottom-color:var(--blue-mid, #1a56a0)}
 .tab-pane{display:none}
 .tab-pane.active{display:block}
+/* Stats rapides — dashboard */
+.stats-dash{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px;margin-bottom:18px}
+.stat-tile{position:relative;overflow:hidden;background:white;border:1px solid var(--border);border-radius:12px;padding:11px 14px 11px 16px}
+.stat-tile::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent,var(--muted))}
+.stat-tile-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.stat-tile-value{font-family:'Plus Jakarta Sans',sans-serif;font-size:21px;font-weight:700;color:var(--navy)}
+.stat-tile-empty{opacity:.5}
+.stat-tile-total{background:var(--navy);border-color:var(--navy)}
+.stat-tile-total::before{display:none}
+.stat-tile-total .stat-tile-label{color:rgba(255,255,255,.65)}
+.stat-tile-total .stat-tile-value{color:white}
+.form-control.field-invalid{border-color:#DC2626!important;box-shadow:0 0 0 3px rgba(220,38,38,.12)}
 </style>
 
 <!-- TOOLBAR -->
 <div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;align-items:center">
-  <form method="GET" style="display:flex;gap:8px;flex:1;flex-wrap:wrap">
+  <form method="GET" id="usersFilterForm" style="display:flex;gap:8px;flex:1;flex-wrap:wrap">
     <div style="position:relative;flex:1;min-width:200px">
       <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none">🔍</span>
-      <input type="text" name="q" value="<?= h($search) ?>" placeholder="Nom, prénom, email…"
-             style="width:100%;padding:10px 14px 10px 38px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;outline:none;font-family:'DM Sans',sans-serif">
+      <input type="text" name="q" value="<?= h($search) ?>" placeholder="Nom, prénom, email…" autocomplete="off"
+             style="width:100%;padding:10px 14px 10px 38px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;outline:none;font-family:'Manrope',sans-serif">
     </div>
-    <select name="role" class="fsel" onchange="this.form.submit()">
+    <select name="role" class="fsel">
       <option value="0">Tous les rôles</option>
       <?php foreach($roles_list as $r): ?>
       <option value="<?= $r['id'] ?>" <?= $f_role===$r['id']?'selected':'' ?>><?= h($r['nom']) ?></option>
       <?php endforeach; ?>
     </select>
-    <select name="actif" class="fsel" onchange="this.form.submit()">
+    <select name="actif" class="fsel">
       <option value="">Tous statuts</option>
       <option value="1" <?= $f_actif==='1'?'selected':'' ?>>Actifs</option>
       <option value="0" <?= $f_actif==='0'?'selected':'' ?>>Inactifs</option>
     </select>
-    <?php if($search||$f_role||$f_actif!==''): ?>
+    <span id="clearFiltersWrap"><?php if($search||$f_role||$f_actif!==''): ?>
     <a href="users.php" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;text-decoration:none;color:var(--text)">✕</a>
-    <?php endif; ?>
+    <?php endif; ?></span>
   </form>
   <?php if(can('users','can_create')): ?>
   <button class="btn btn-primary" onclick="openMU()">+ Nouvel utilisateur</button>
@@ -222,22 +234,27 @@ include __DIR__ . '/../../templates/header.php';
 </div>
 
 <!-- STATS RAPIDES -->
-<div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap">
+<?php
+$role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B7950B','#5D6D7E'];
+?>
+<div class="stats-dash">
+  <div class="stat-tile stat-tile-total">
+    <div class="stat-tile-label">Total actifs</div>
+    <div class="stat-tile-value"><?= (int)db_fetch_value("SELECT COUNT(*) FROM users WHERE actif=1") ?></div>
+  </div>
   <?php foreach($roles_list as $r):
-    $cnt=(int)db_fetch_value("SELECT COUNT(*) FROM users WHERE role_id=? AND actif=1",[$r['id']]);
+    $cnt = (int)db_fetch_value("SELECT COUNT(*) FROM users WHERE role_id=? AND actif=1",[$r['id']]);
+    $accent = $role_palette[$r['id'] % count($role_palette)];
   ?>
-  <div style="padding:8px 16px;background:white;border:1px solid var(--border);border-radius:20px;font-size:13px;display:flex;align-items:center;gap:8px">
-    <span class="role-badge <?= $r['slug'] ?>"><?= h($r['slug']) ?></span>
-    <strong><?= $cnt ?></strong>
+  <div class="stat-tile<?= $cnt===0?' stat-tile-empty':'' ?>" style="--accent:<?= $accent ?>">
+    <div class="stat-tile-label"><?= h($r['nom']) ?></div>
+    <div class="stat-tile-value"><?= $cnt ?></div>
   </div>
   <?php endforeach; ?>
-  <div style="padding:8px 16px;background:var(--lighter);border-radius:20px;font-size:13px;color:var(--muted)">
-    Total actifs : <strong><?= (int)db_fetch_value("SELECT COUNT(*) FROM users WHERE actif=1") ?></strong>
-  </div>
 </div>
 
 <!-- TABLE -->
-<div class="card">
+<div class="card" id="usersTableWrap">
   <div class="card-header">
     <h3>👥 Utilisateurs <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= fmt_number($total) ?>)</span></h3>
   </div>
@@ -270,7 +287,7 @@ include __DIR__ . '/../../templates/header.php';
           <td><span class="role-badge <?= $r['role_slug'] ?>"><?= h($r['role_slug']) ?></span></td>
           <td style="font-size:12.5px"><?= h($r['site_nom'] ?? '—') ?></td>
           <td style="text-align:center">
-            <span style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:15px;color:var(--navy)"><?= $r['nb_actions'] ?></span>
+            <span style="font-family:'Plus Jakarta Sans',sans-serif;font-weight:700;font-size:15px;color:var(--navy)"><?= $r['nb_actions'] ?></span>
           </td>
           <td style="text-align:center">
             <div style="display:flex;align-items:center;justify-content:center;gap:6px">
@@ -310,14 +327,15 @@ include __DIR__ . '/../../templates/header.php';
       <input type="hidden" id="uId">
       <div class="form-row cols-2">
         <div class="form-group"><label>Prénom *</label>
-          <input type="text" class="form-control" id="uPrenom">
+          <input type="text" class="form-control" id="uPrenom" oninput="uFormatNom(this)">
         </div>
         <div class="form-group"><label>Nom *</label>
-          <input type="text" class="form-control" id="uNom">
+          <input type="text" class="form-control" id="uNom" oninput="uFormatNom(this)">
         </div>
       </div>
       <div class="form-group"><label>Email *</label>
-        <input type="email" class="form-control" id="uEmail" placeholder="prenom.nom@entreprise.ci">
+        <input type="email" class="form-control" id="uEmail" placeholder="prenom.nom@entreprise.ci"
+               oninput="this.value=this.value.toLowerCase().replace(/\s/g,'')" onblur="uCheckEmail(this)" onfocus="this.classList.remove('field-invalid')">
       </div>
       <div class="form-row cols-2">
         <div class="form-group"><label>Rôle *</label>
@@ -338,10 +356,11 @@ include __DIR__ . '/../../templates/header.php';
         </div>
       </div>
       <div class="form-group"><label>Téléphone</label>
-        <input type="text" class="form-control" id="uTel" placeholder="+225 00 00 00 00">
+        <input type="text" class="form-control" id="uTel" placeholder="0700000000" maxlength="10" inputmode="numeric"
+               oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)" onblur="uCheckTel(this)" onfocus="this.classList.remove('field-invalid')">
       </div>
       <div id="uPwdWrap">
-        <div class="form-group"><label>Mot de passe * <span style="font-size:11px;color:var(--muted)">(min. 8 caractères)</span></label>
+        <div class="form-group"><label>Mot de passe * <span style="font-size:11px;color:var(--muted)">(min. 8 car., 1 majuscule, 1 chiffre, 1 caractère spécial)</span></label>
           <input type="password" class="form-control" id="uPwd" placeholder="••••••••">
         </div>
       </div>
@@ -374,8 +393,8 @@ include __DIR__ . '/../../templates/header.php';
       <input type="hidden" id="pwdUId">
       <div class="alert alert-warning" style="margin-bottom:16px">Vous allez réinitialiser le mot de passe de <strong id="pwdUNom"></strong>.</div>
       <div id="pwdAlert"></div>
-      <div class="form-group"><label>Nouveau mot de passe *</label>
-        <input type="password" class="form-control" id="pwdNew" placeholder="Min. 8 caractères">
+      <div class="form-group"><label>Nouveau mot de passe * <span style="font-size:11px;color:var(--muted)">(min. 8 car., 1 majuscule, 1 chiffre, 1 caractère spécial)</span></label>
+        <input type="password" class="form-control" id="pwdNew" placeholder="••••••••">
       </div>
       <div class="form-group"><label>Confirmer</label>
         <input type="password" class="form-control" id="pwdConfirm" placeholder="••••••••">
@@ -389,10 +408,16 @@ include __DIR__ . '/../../templates/header.php';
 </div>
 
 <script>
+function uFormatNom(el){ el.value=el.value.toUpperCase().replace(/[^A-ZÀ-ÖØ-Þ '-]/g,''); }
+const PWD_RULE = /^(?=.*[A-Z])(?=.*[0-9])(?=.*[^A-Za-z0-9]).{8,}$/;
+function uCheckEmail(el){ el.classList.toggle('field-invalid', !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(el.value.trim())); }
+function uCheckTel(el){ const v=el.value.trim(); el.classList.toggle('field-invalid', v!=='' && !/^[0-9]{10}$/.test(v)); }
 function openMU(){ resetUF(); document.getElementById('mU').classList.add('open'); }
 function closeMU(){ document.getElementById('mU').classList.remove('open'); }
 function resetUF(){
   ['uId','uPrenom','uNom','uEmail','uTel','uPwd'].forEach(i=>document.getElementById(i).value='');
+  document.getElementById('uEmail').classList.remove('field-invalid');
+  document.getElementById('uTel').classList.remove('field-invalid');
   document.getElementById('uRole').selectedIndex=1; document.getElementById('uSite').value='';
   document.getElementById('mUAlert').innerHTML=''; document.getElementById('mUT').textContent='Nouvel utilisateur';
   document.getElementById('uPwdWrap').style.display='block';
@@ -409,6 +434,8 @@ function editU(id){
     document.getElementById('uNom').value=r.nom; document.getElementById('uEmail').value=r.email;
     document.getElementById('uRole').value=r.role_id; document.getElementById('uSite').value=r.site_id||'';
     document.getElementById('uTel').value=r.telephone||'';
+    document.getElementById('uEmail').classList.remove('field-invalid');
+    document.getElementById('uTel').classList.remove('field-invalid');
     document.getElementById('uPwdWrap').style.display='none';
     document.getElementById('uActifWrap').style.display='block';
     document.getElementById('uActif').checked=r.actif==1;
@@ -418,17 +445,25 @@ function editU(id){
 
 function saveU(){
   const id=document.getElementById('uId').value, btn=document.getElementById('bSU');
+  const alertBox=document.getElementById('mUAlert');
+  const prenom=document.getElementById('uPrenom').value.trim(), nom=document.getElementById('uNom').value.trim();
+  const email=document.getElementById('uEmail').value.trim(), tel=document.getElementById('uTel').value.trim();
+  const pwd=document.getElementById('uPwd').value;
+  const err=m=>{alertBox.innerHTML=`<div class="alert alert-danger">${m}</div>`;};
+  uCheckEmail(document.getElementById('uEmail')); uCheckTel(document.getElementById('uTel'));
+  if(!prenom||!nom){err('Prénom et nom sont obligatoires (lettres uniquement).');return;}
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){err('Email invalide.');return;}
+  if(tel && !/^[0-9]{10}$/.test(tel)){err('Téléphone invalide : 10 chiffres exactement.');return;}
+  if(!id && !PWD_RULE.test(pwd)){err('Mot de passe invalide : min. 8 caractères, au moins une majuscule, un chiffre et un caractère spécial.');return;}
+  alertBox.innerHTML='';
   btn.disabled=true; btn.textContent='Enregistrement…';
-  ap({action:id?'update':'create',id,
-    prenom:document.getElementById('uPrenom').value, nom:document.getElementById('uNom').value,
-    email:document.getElementById('uEmail').value, role_id:document.getElementById('uRole').value,
-    site_id:document.getElementById('uSite').value, telephone:document.getElementById('uTel').value,
-    password:document.getElementById('uPwd').value,
+  ap({action:id?'update':'create',id, prenom, nom, email, telephone:tel, password:pwd,
+    role_id:document.getElementById('uRole').value, site_id:document.getElementById('uSite').value,
     actif:document.getElementById('uActif').checked?1:0,
   }).then(d=>{
     btn.disabled=false; btn.textContent='💾 Enregistrer';
     if(d.success){toast(d.message,'success');closeMU();setTimeout(()=>location.reload(),800);}
-    else document.getElementById('mUAlert').innerHTML=`<div class="alert alert-danger">${d.message}</div>`;
+    else err(d.message);
   });
 }
 
@@ -441,8 +476,8 @@ function viewU(id){
     document.getElementById('udT').textContent=r.prenom+' '+r.nom;
     document.getElementById('udB').innerHTML=`
       <div style="text-align:center;margin-bottom:20px">
-        <div style="width:72px;height:72px;border-radius:50%;background:linear-gradient(135deg,var(--blue-mid, #1a56a0),var(--accent-d));display:flex;align-items:center;justify-content:center;color:white;font-size:26px;font-weight:700;margin:0 auto 12px">${r.prenom[0]}${r.nom[0]}</div>
-        <div style="font-family:'Montserrat',sans-serif;font-size:18px;font-weight:700">${r.prenom} ${r.nom}</div>
+        <div style="width:72px;height:72px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:white;font-size:26px;font-weight:700;margin:0 auto 12px">${r.prenom[0]}${r.nom[0]}</div>
+        <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:700">${r.prenom} ${r.nom}</div>
         <span class="role-badge ${r.role_slug}" style="margin-top:6px;display:inline-block">${r.role_slug}</span>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 20px">
@@ -468,7 +503,10 @@ function resetPwd(id,nom){
 }
 function savePwd(){
   const p1=document.getElementById('pwdNew').value, p2=document.getElementById('pwdConfirm').value;
-  if(p1!==p2){document.getElementById('pwdAlert').innerHTML='<div class="alert alert-danger">Les mots de passe ne correspondent pas.</div>';return;}
+  const alertBox=document.getElementById('pwdAlert');
+  if(p1!==p2){alertBox.innerHTML='<div class="alert alert-danger">Les mots de passe ne correspondent pas.</div>';return;}
+  if(!PWD_RULE.test(p1)){alertBox.innerHTML='<div class="alert alert-danger">Mot de passe invalide : min. 8 caractères, au moins une majuscule, un chiffre et un caractère spécial.</div>';return;}
+  alertBox.innerHTML='';
   ap({action:'reset_pwd',id:document.getElementById('pwdUId').value,pwd:p1}).then(d=>{
     if(d.success){toast(d.message,'success');document.getElementById('mPwd').classList.remove('open');}
     else document.getElementById('pwdAlert').innerHTML=`<div class="alert alert-danger">${d.message}</div>`;
@@ -490,6 +528,61 @@ function ap(data){
   return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
 }
 ['mU','mUD','mPwd'].forEach(id=>document.getElementById(id).addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');}));
+
+// ── Recherche / filtres réactifs (sans rechargement) ──────────
+(function(){
+  const form   = document.getElementById('usersFilterForm');
+  const qInput = form.querySelector('input[name="q"]');
+  const rSel   = form.querySelector('select[name="role"]');
+  const aSel   = form.querySelector('select[name="actif"]');
+  let debounceTimer, controller;
+
+  function buildUrl(){
+    const params = new URLSearchParams();
+    for (const [k,v] of new FormData(form).entries()) if (v !== '') params.set(k, v);
+    const qs = params.toString();
+    return 'users.php' + (qs ? '?' + qs : '');
+  }
+
+  function loadUsers(url, push){
+    if (controller) controller.abort();
+    controller = new AbortController();
+    fetch(url, {signal: controller.signal})
+      .then(r => r.text())
+      .then(html => {
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        ['usersTableWrap', 'clearFiltersWrap'].forEach(id => {
+          const fresh = doc.getElementById(id), cur = document.getElementById(id);
+          if (fresh && cur) cur.innerHTML = fresh.innerHTML;
+        });
+        const params = new URLSearchParams(url.split('?')[1] || '');
+        if (document.activeElement !== qInput) qInput.value = params.get('q') || '';
+        rSel.value = params.get('role') || '0';
+        aSel.value = params.get('actif') || '';
+        if (push) history.pushState({}, '', url);
+      })
+      .catch(err => { if (err.name !== 'AbortError') console.error(err); });
+  }
+
+  qInput.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(() => loadUsers(buildUrl(), true), 350);
+  });
+  rSel.addEventListener('change', () => loadUsers(buildUrl(), true));
+  aSel.addEventListener('change', () => loadUsers(buildUrl(), true));
+  form.addEventListener('submit', e => { e.preventDefault(); clearTimeout(debounceTimer); loadUsers(buildUrl(), true); });
+
+  // Liens interceptés : pagination (dans le tableau) + bouton "effacer les filtres"
+  document.addEventListener('click', e => {
+    const a = e.target.closest('#usersTableWrap a[href], #clearFiltersWrap a[href]');
+    if (!a) return;
+    e.preventDefault();
+    clearTimeout(debounceTimer);
+    loadUsers(a.getAttribute('href'), true);
+  });
+
+  window.addEventListener('popstate', () => loadUsers(location.pathname + location.search, false));
+})();
 </script>
 
 <?php include __DIR__ . '/../../templates/footer.php'; ?>

@@ -15,6 +15,17 @@ $_SESSION['groupe_actif'] = 'DEMANDES';
 $page_title  = 'Nouvelle demande';
 $active_page = 'demandes_new';
 
+// Le lien est retiré du menu pour le lecteur, mais l'adresse resterait
+// atteignable et le formulaire soumissible : on ferme ici, pour la page
+// comme pour l'envoi.
+if (!di_peut_creer($user)) {
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        json_response(false, "Votre profil ne permet pas de déposer une demande.");
+    }
+    redirect_to('/pages/demandes.php');
+    exit;
+}
+
 // ── AJAX : création / soumission
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     header('Content-Type: application/json');
@@ -61,49 +72,169 @@ include __DIR__ . '/../templates/header.php';
     border-radius:16px;background:var(--card,#fff);cursor:pointer;text-decoration:none;color:inherit;transition:.18s;box-shadow:0 1px 2px rgba(20,30,80,.04)}
   .di-type-card:hover{border-color:#7C92FF;transform:translateY(-3px);box-shadow:0 12px 28px rgba(59,79,190,.14)}
   .di-type-card .ic{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;
-    background:linear-gradient(135deg,#3B4FBE,#7C92FF);color:#fff;font-size:21px}
+    background:#3B4FBE;color:#fff;font-size:21px}
   .di-type-card h4{margin:6px 0 0;font-size:15px;font-weight:700}
-  .di-type-card p{margin:0;font-size:12.5px;color:var(--muted,#7f8c8d);line-height:1.5}
-  .di-back{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:#7482a0;text-decoration:none;font-weight:600;margin-bottom:14px;transition:.15s}
-  .di-back:hover{color:#3B4FBE}
+  .di-type-card p{margin:0;font-size:12.5px;color:#475569;line-height:1.5}
+  .di-back{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:#31405e;text-decoration:none;
+    font-weight:700;margin:0 0 16px;padding:0 16px;min-height:38px;border-radius:9px;
+    background:#fff;border:1px solid #b9c3d6;box-shadow:0 1px 2px rgba(20,30,80,.04);
+    transition:background-color .15s,border-color .15s,color .15s}
+  .di-back i{font-size:15px}
+  .di-back:hover{color:#3B4FBE;background:#eef2f9;border-color:#7d8aa5}
+  .di-back:focus-visible{outline:2px solid #3B4FBE;outline-offset:2px}
   .di-head{display:flex;align-items:flex-start;gap:14px;margin-bottom:18px}
   .di-head .ic{width:48px;height:48px;flex-shrink:0;border-radius:14px;display:flex;align-items:center;justify-content:center;
-    background:linear-gradient(135deg,#3B4FBE,#7C92FF);color:#fff;font-size:23px;box-shadow:0 6px 16px rgba(59,79,190,.25)}
+    background:#3B4FBE;color:#fff;font-size:23px;box-shadow:0 6px 16px rgba(59,79,190,.25)}
   .di-head h2{margin:0 0 3px;font-size:21px;font-weight:800;color:var(--navy,#06033A);letter-spacing:-.2px}
-  .di-head p{margin:0;font-size:13.5px;color:var(--muted,#7f8c8d);line-height:1.5}
+  .di-head p{margin:0;font-size:13.5px;color:#475569;line-height:1.5}
   .di-circuit{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:13px 16px;margin-bottom:20px;background:#f4f6fd;border:1px solid #e6eaf8;border-radius:13px}
-  .di-circuit-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#8a93b8;margin-right:2px}
+  .di-circuit-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#5a6678;margin-right:2px}
   .di-cstep{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid #dfe4fb;border-radius:9px;padding:5px 12px 5px 6px;font-size:12.5px;font-weight:600;color:#3B4FBE}
-  .di-cnum{width:19px;height:19px;border-radius:6px;background:linear-gradient(135deg,#3B4FBE,#7C92FF);color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+  .di-cnum{width:19px;height:19px;border-radius:6px;background:#3B4FBE;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
   .di-carrow{color:#b9c2e6;font-size:13px}
-  .di-form{background:var(--card,#fff);border:1px solid #e8ecf3;border-radius:18px;padding:28px 30px;box-shadow:0 4px 24px rgba(20,30,80,.05)}
-  .di-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px 20px}
-  .di-field{display:flex;flex-direction:column;gap:7px}
-  .di-field>label{font-size:12.5px;font-weight:600;color:#46506b;letter-spacing:.1px}
-  .di-field input:not([type=checkbox]),.di-field select,.di-field textarea{padding:0 14px;height:44px;border:1.5px solid #e4e8f1;
-    border-radius:10px;font-size:14px;font-family:inherit;background:#f8fafc;color:#1f2a44;outline:none;width:100%;transition:border-color .15s,box-shadow .15s,background .15s}
-  .di-field textarea{height:auto;min-height:92px;padding:11px 14px;resize:vertical;line-height:1.5}
-  .di-field input::placeholder,.di-field textarea::placeholder{color:#a3adbf}
-  .di-field input:not([type=checkbox]):hover,.di-field select:hover,.di-field textarea:hover{border-color:#cfd6e4}
-  .di-field input:not([type=checkbox]):focus,.di-field select:focus,.di-field textarea:focus{border-color:#3B4FBE;background:#fff;box-shadow:0 0 0 3.5px rgba(59,79,190,.13)}
-  .di-field input.di-auto{background:#eef1fc;color:#3B4FBE;font-weight:700;border-color:#cdd4f6;cursor:not-allowed}
-  .di-field select{cursor:pointer;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237482a0' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");background-repeat:no-repeat;background-position:right 13px center;padding-right:40px}
-  .di-field input[type=checkbox]{width:17px;height:17px;accent-color:#3B4FBE;cursor:pointer}
-  .di-plats{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:9px}
-  .di-plat{display:flex;align-items:center;gap:9px;font-size:13.5px;font-weight:500;cursor:pointer;padding:10px 13px;border:1.5px solid #e4e8f1;border-radius:10px;background:#f8fafc;transition:.15s}
-  .di-plat:hover{border-color:#cfd6e4}
-  .di-plat:has(input:checked){border-color:#3B4FBE;background:#eef1fc;color:#3B4FBE}
-  .di-req-note{font-size:12px;color:#9aa4b8}
-  .di-req-note b{color:#ef4444;font-weight:700}
-  .di-actions{display:flex;gap:12px;justify-content:space-between;align-items:center;margin-top:24px;padding-top:20px;border-top:1px solid #eef1f6}
-  .di-btn{display:inline-flex;align-items:center;gap:8px;padding:12px 24px;border:1.5px solid transparent;border-radius:11px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;transition:.16s}
+  /* ══════════════════════════════════════════════════════════════
+     LE FORMULAIRE, EN DOCUMENT RÉGLÉ
+
+     La version précédente posait chaque champ dans sa propre boîte, sur une
+     grille à deux colonnes. Deux défauts mesurés : la bordure des champs
+     donnait 1,17:1 sur le fond de la carte, là où la norme demande 3:1 pour
+     la limite d'un contrôle de saisie, autrement dit on ne voyait pas où
+     cliquer ; et chaque champ recevait la même boîte, si bien qu'un nombre
+     de jours occupait la largeur d'un nom complet.
+
+     Ici c'est la trame qui porte la limite. Chaque champ est une ligne
+     réglée, libellé à gauche, saisie à droite, et la saisie n'a plus de
+     boîte à elle : la cellule EST le champ. Les filets sont à 3,5:1, donc
+     visibles pour de bon.
+
+     C'est aussi la forme du document imprimé que la demande produit, ce qui
+     rapproche l'écran de ce que le visa signera.
+     ══════════════════════════════════════════════════════════════ */
+
+  .di-form{background:var(--card,#fff);border:1px solid #cbd3e2;border-radius:12px;
+    padding:0;overflow:hidden;box-shadow:0 4px 24px rgba(20,30,80,.05)}
+
+  /* --di-rule : #7d8aa5 donne 3,47:1 sur blanc. En dessous, le filet
+     redevient décoratif et la limite du champ disparaît. */
+  .di-doc{--di-rule:#7d8aa5;display:grid;grid-template-columns:230px minmax(0,1fr)}
+  .di-lbl,.di-val,.di-band{min-width:0}
+  .di-val input,.di-val select,.di-val textarea{min-width:0}
+
+  .di-band{grid-column:1/-1;margin:0;padding:9px 18px;background:#e8ecfa;
+    border-bottom:1px solid var(--di-rule);border-top:1px solid var(--di-rule);
+    font-size:12px;font-weight:800;letter-spacing:.4px;text-transform:uppercase;
+    color:#2c3a7a;font-family:'Montserrat',sans-serif}
+  .di-band:first-child{border-top:none}
+
+  .di-row{display:contents}
+  .di-lbl,.di-val{border-bottom:1px solid var(--di-rule);display:flex;align-items:center;min-height:46px}
+  .di-lbl{padding:10px 14px 10px 18px;background:#f6f8fd;border-right:1px solid var(--di-rule)}
+  .di-lbl label{font-size:13px;font-weight:600;color:#31405e;line-height:1.35;cursor:pointer}
+  .di-val{padding:0}
+  .di-doc>.di-row:last-child .di-lbl,.di-doc>.di-row:last-child .di-val{border-bottom:none}
+
+  /* Champ à contenu haut : le libellé passe au-dessus, sinon sa colonne
+     reste vide sur toute la hauteur du bloc. */
+  .di-row-haut .di-lbl{grid-column:1/-1;border-right:none;min-height:0;padding:9px 18px}
+  .di-row-haut .di-val{grid-column:1/-1;padding:12px 18px}
+
+  /* La saisie occupe sa cellule et n'a pas de bordure propre : deux limites
+     concentriques feraient bavure, et le filet porte déjà le sens. */
+  .di-val input:not([type=checkbox]),.di-val select,.di-val textarea{
+    width:100%;border:none;background:transparent;font-family:inherit;font-size:14px;
+    color:#141c33;padding:0 16px;height:44px;outline:none;border-radius:0;
+    transition:background-color .14s}
+  .di-val textarea{height:auto;min-height:88px;padding:11px 16px;resize:vertical;line-height:1.55}
+  .di-val input::placeholder,.di-val textarea::placeholder{color:#5d6a85}
+  .di-val input:not([type=checkbox]):hover,.di-val select:hover,.di-val textarea:hover{background:#f3f6fd}
+
+  /* Le focus peint la cellule et pose un liseré intérieur : sur une trame
+     réglée, un anneau extérieur passerait sous les filets voisins. */
+  .di-val input:not([type=checkbox]):focus-visible,.di-val select:focus-visible,
+  .di-val textarea:focus-visible{background:#eef2ff;box-shadow:inset 0 0 0 2px #3B4FBE}
+
+  /* Champ calculé : lisible, désigné comme calculé, et non modifiable tant
+     qu'un type de permission impose sa durée. */
+  .di-val input.di-auto{background:#eef1fc;color:#25336f;font-weight:700;cursor:not-allowed}
+
+  /* Une date ou un nombre n'a pas besoin de 400 px. La cellule reste pleine
+     largeur pour que le clic porte partout, seul le champ se resserre. */
+  .di-val input.di-court{max-width:210px}
+  .di-suffixe{font-size:12.5px;color:#475569;padding-right:16px;white-space:nowrap;flex-shrink:0}
+
+  .di-val select{cursor:pointer;appearance:none;-webkit-appearance:none;padding-right:42px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat:no-repeat;background-position:right 15px center}
+
+  .di-plage{display:flex;align-items:center;gap:8px 20px;width:100%;flex-wrap:wrap}
+  .di-plage-part{display:inline-flex;align-items:center;gap:8px;min-width:0}
+  .di-plage-part label{font-size:13px;font-weight:600;color:#31405e;cursor:pointer;flex-shrink:0}
+  .di-plage input{max-width:180px;padding:0;height:40px}
+  .di-plage input:focus-visible{box-shadow:inset 0 0 0 2px #3B4FBE}
+  @media(max-width:640px){
+    .di-plage{flex-direction:column;align-items:stretch;gap:10px}
+    .di-plage-part{justify-content:flex-start}
+    .di-plage-part label{width:28px}
+    .di-plage input{max-width:none;flex:1}
+  }
+
+  .di-req{color:#b42318;text-decoration:none;font-weight:800;margin-left:2px;cursor:help}
+
+  .di-val input[type=checkbox]{width:18px;height:18px;accent-color:#3B4FBE;cursor:pointer;padding:0}
+  .di-plats{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px;width:100%}
+  .di-plat{display:flex;align-items:center;gap:10px;font-size:13.5px;font-weight:500;cursor:pointer;
+    padding:0 14px;min-height:44px;border:1px solid #b9c3d6;border-radius:8px;background:#fff;transition:.14s}
+  .di-plat:hover{border-color:#7d8aa5;background:#f6f8fd}
+  .di-plat:has(input:checked){border-color:#3B4FBE;background:#eef1fc;color:#25336f;font-weight:600}
+  .di-plat:has(input:focus-visible){box-shadow:0 0 0 3px rgba(59,79,190,.28)}
+
+  .di-req-note{font-size:12.5px;color:#5d6a85}
+  .di-req-note b{color:#b42318;font-weight:800}
+  .di-actions{display:flex;gap:12px;justify-content:space-between;align-items:center;
+    padding:18px 20px;background:#f6f8fd;border-top:1px solid #cbd3e2;flex-wrap:wrap}
+  .di-btn{display:inline-flex;align-items:center;gap:8px;padding:0 22px;min-height:44px;
+    border:1px solid transparent;border-radius:9px;font-weight:700;font-size:14px;cursor:pointer;
+    font-family:inherit;transition:background-color .16s,border-color .16s}
   .di-btn i{font-size:17px}
-  .di-btn-primary{background:linear-gradient(135deg,#3B4FBE,#7C92FF);color:#fff;box-shadow:0 6px 16px rgba(59,79,190,.28)}
-  .di-btn-primary:hover{transform:translateY(-1px);box-shadow:0 9px 22px rgba(59,79,190,.34)}
-  .di-btn-ghost{background:#f1f4fa;color:#475069}
-  .di-btn-ghost:hover{background:#e6ebf5}
-  .di-alert{display:none;padding:12px 16px;border-radius:10px;font-size:13px;margin-bottom:18px}
-  .di-alert.err{display:flex;gap:8px;align-items:center;background:#fdf0ef;color:#e74c3c;border-left:3px solid #e74c3c}
+  .di-btn:focus-visible{outline:2px solid #3B4FBE;outline-offset:2px}
+  .di-btn[disabled]{opacity:.62;cursor:progress}
+  /* Aplat plutôt que dégradé : PRODUCT.md acte l'abandon des dégradés, et le
+     tableau de bord s'en est déjà défait. */
+  .di-btn-primary{background:#3B4FBE;color:#fff}
+  .di-btn-primary:hover:not([disabled]){background:#31419e}
+  .di-btn-ghost{background:#fff;color:#31405e;border-color:#b9c3d6}
+  .di-btn-ghost:hover:not([disabled]){background:#eef2f9;border-color:#7d8aa5}
+
+  .di-calc-note{display:flex;gap:9px;align-items:flex-start;margin:0;padding:11px 18px;
+    background:#f2f5ff;border-bottom:1px solid #cbd3e2;font-size:12.5px;color:#31405e;line-height:1.5}
+  .di-calc-note i{font-size:16px;flex-shrink:0;margin-top:1px;color:#3B4FBE}
+  .di-calc-note[hidden]{display:none}
+
+  /* Le bouton dit qu'il travaille. Sans ça, une soumission lente ressemble à
+     un clic perdu, et on reclique. */
+  .di-tourne{display:inline-block;animation:di-spin .8s linear infinite}
+  @keyframes di-spin{to{transform:rotate(360deg)}}
+  @media(prefers-reduced-motion:reduce){
+    .di-tourne{animation:none;opacity:.65}
+    .di-btn,.di-plat,.di-val input,.di-val select,.di-val textarea{transition:none}
+  }
+
+  /* Message d'erreur : encadré plein, pas de liseré latéral. */
+  .di-alert{display:none}
+  .di-alert.err{display:flex;gap:9px;align-items:flex-start;margin:0;padding:13px 18px;
+    background:#fdf2f1;color:#8a1c13;border-bottom:1px solid #e6b4ae;font-size:13.5px;font-weight:500}
+  .di-alert.err i{font-size:17px;flex-shrink:0;margin-top:1px}
+
+  /* Écran étroit : la colonne des libellés passe au-dessus de la saisie.
+     Les filets restent, ce sont eux qui font tenir la lecture. */
+  @media(max-width:640px){
+    .di-doc{grid-template-columns:minmax(0,1fr)}
+    .di-lbl{grid-column:1/-1;border-right:none;border-bottom:none;min-height:0;padding:9px 16px 3px}
+    .di-val{grid-column:1/-1}
+    .di-actions{flex-direction:column-reverse;align-items:stretch}
+    .di-actions .di-btn{justify-content:center}
+    .di-req-note{text-align:center}
+  }
 </style>
 
 <div class="di-wrap">
@@ -157,15 +288,24 @@ include __DIR__ . '/../templates/header.php';
 
   <form class="di-form" id="di-form" onsubmit="return false">
     <input type="hidden" name="type_code" value="<?= h($sel) ?>">
-    <div class="di-alert" id="di-err"></div>
-    <div class="di-grid">
-      <?php foreach ($fields as $f) echo di_render_field($f); ?>
-    </div>
+    <!-- role=alert : l'échec de soumission est annoncé, pas seulement affiché.
+         aria-live=assertive parce qu'il interrompt une action volontaire. -->
+    <div class="di-alert" id="di-err" role="alert" aria-live="assertive"></div>
+    <?= di_render_form($fields) ?>
+    <?php if ($sel === 'autorisation_absence'): ?>
+      <!-- Masquée tant qu'aucun type de permission n'impose sa durée. Elle
+           explique le verrouillage plutôt que de le laisser deviner. -->
+      <p class="di-calc-note" id="di-calc-note" hidden>
+        <i class="ph-duotone ph-lock-simple"></i>
+        Le nombre de jours, la date de fin et la reprise découlent du type de
+        permission choisi. Sélectionnez « Aucune » pour les saisir vous-même.
+      </p>
+    <?php endif; ?>
     <div class="di-actions">
       <span class="di-req-note"><b>*</b> champ obligatoire</span>
-      <div style="display:flex;gap:12px">
-        <button type="button" class="di-btn di-btn-ghost" onclick="diSubmit('brouillon')"><i class="ph-duotone ph-floppy-disk"></i> Enregistrer brouillon</button>
-        <button type="button" class="di-btn di-btn-primary" onclick="diSubmit('soumettre')"><i class="ph-duotone ph-paper-plane-tilt"></i> Soumettre la demande</button>
+      <div style="display:flex;gap:12px;flex-wrap:wrap">
+        <button type="button" class="di-btn di-btn-ghost" data-di-act="brouillon" onclick="diSubmit(this,'brouillon')"><i class="ph-duotone ph-floppy-disk"></i> Enregistrer le brouillon</button>
+        <button type="button" class="di-btn di-btn-primary" data-di-act="soumettre" onclick="diSubmit(this,'soumettre')"><i class="ph-duotone ph-paper-plane-tilt"></i> Soumettre la demande</button>
       </div>
     </div>
   </form>
@@ -173,37 +313,95 @@ include __DIR__ . '/../templates/header.php';
 </div>
 
 <script>
-function diSubmit(action){
+function diSubmit(btn, action){
   const form = document.getElementById('di-form');
   const err  = document.getElementById('di-err');
-  err.classList.remove('err'); err.textContent='';
+
+  // Les champs obligatoires sont vérifiés avant l'envoi : laisser partir la
+  // requête pour se voir refuser côté serveur fait perdre un aller-retour et
+  // ne dit pas QUEL champ manque. Le brouillon échappe au contrôle, c'est
+  // justement ce qu'on enregistre quand la saisie n'est pas finie.
+  if (action === 'soumettre' && !form.reportValidity()) return;
+
+  const boutons = form.querySelectorAll('[data-di-act]');
+  const libelle = btn.innerHTML;
+  boutons.forEach(function(b){ b.disabled = true; });
+  btn.innerHTML = '<i class="ph-duotone ph-circle-notch di-tourne"></i> ' +
+                  (action === 'soumettre' ? 'Envoi…' : 'Enregistrement…');
+
+  function echouer(message){
+    boutons.forEach(function(b){ b.disabled = false; });
+    btn.innerHTML = libelle;
+    err.className = 'di-alert err';
+    err.innerHTML = '<i class="ph-duotone ph-warning-circle"></i><span></span>';
+    err.querySelector('span').textContent = message;
+    err.scrollIntoView({block:'nearest', behavior:'smooth'});
+  }
+
+  err.className = 'di-alert'; err.textContent = '';
   const fd = new FormData(form);
   fd.append('action', action);
   fetch(window.location.href, {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, body:fd})
     .then(r=>r.json())
     .then(d=>{
       if(d.success){ window.location.href='<?= APP_URL ?>/pages/demandes.php?id='+d.data.id; }
-      else { err.classList.add('err'); err.textContent='⚠️ '+(d.message||'Erreur'); window.scrollTo(0,0); }
+      else { echouer(d.message || "La demande n'a pas pu être enregistrée."); }
     })
-    .catch(()=>{ err.classList.add('err'); err.textContent='Erreur réseau.'; });
+    .catch(()=>{ echouer("Envoi impossible : vérifiez votre connexion, puis réessayez."); });
 }
 
-// Auto-remplissage agent : un champ [data-agentfill] alimente #f_agent_email et #f_agent_fonction
+// Auto-remplissage agent : quand le demandeur sélectionne un agent dans la datalist,
+// tous les champs correspondants présents dans le formulaire se remplissent automatiquement.
 (function(){
+  // Correspondance data-attribute → id du champ cible dans le formulaire
+  var AGENT_FIELDS = {
+    'email':       'f_agent_email',
+    'telephone':   'f_agent_telephone',
+    'fonction':    'f_agent_fonction',
+    'matricule':   'f_agent_matricule',
+    'departement': 'f_departement',
+    'direction':   'f_direction',
+    'site':        'f_site'
+  };
+
   document.querySelectorAll('input[data-agentfill]').forEach(function(inp){
     var dl = document.getElementById(inp.getAttribute('list'));
     if(!dl) return;
-    function fill(){
-      var val = inp.value.trim(), opts = dl.options, match = null;
-      for(var i=0; i<opts.length; i++){ if(opts[i].value === val){ match = opts[i]; break; } }
-      if(!match) return;
-      var em = document.getElementById('f_agent_email');
-      var fo = document.getElementById('f_agent_fonction');
-      if(em && match.dataset.email)    em.value = match.dataset.email;
-      if(fo && match.dataset.fonction) fo.value = match.dataset.fonction;
+
+    function findMatch(val){
+      var opts = dl.options;
+      for(var i = 0; i < opts.length; i++){
+        if(opts[i].value === val) return opts[i];
+      }
+      return null;
     }
-    inp.addEventListener('input', fill);
-    inp.addEventListener('change', fill);
+
+    function fillFromMatch(match){
+      Object.keys(AGENT_FIELDS).forEach(function(attr){
+        var el = document.getElementById(AGENT_FIELDS[attr]);
+        if(!el) return;
+        var val = match ? (match.dataset[attr] || '') : '';
+        el.value = val;
+        // data-editable="1" : le champ reste saisissable même après autofill
+        if(val && !el.dataset.editable){
+          el.classList.add('di-auto');
+          el.readOnly = true;
+        } else {
+          el.classList.remove('di-auto');
+          el.readOnly = false;
+        }
+      });
+    }
+
+    inp.addEventListener('change', function(){
+      var match = findMatch(inp.value.trim());
+      fillFromMatch(match);
+    });
+
+    // Réinitialiser si l'utilisateur efface le champ
+    inp.addEventListener('input', function(){
+      if(!inp.value.trim()) fillFromMatch(null);
+    });
   });
 })();
 </script>
@@ -218,6 +416,7 @@ function diSubmit(action){
   var jours = document.getElementById('f_nb_jours');
   var fin   = document.getElementById('f_date_fin');
   var rep   = document.getElementById('f_date_reprise');
+  var note  = document.getElementById('di-calc-note');
   if(!type || !debut || !jours || !fin || !rep) return;
   var autos = [jours, fin, rep];
 
@@ -274,26 +473,74 @@ function diSubmit(action){
       el.classList.toggle('di-auto', on);
       el.style.pointerEvents = on ? 'none' : '';
       el.tabIndex = on ? -1 : 0;
+      // Un champ calculé doit s'annoncer comme tel : readOnly seul ne dit
+      // rien à un lecteur d'écran sur la raison du verrouillage.
+      if(on) el.setAttribute('aria-describedby', 'di-calc-note');
+      else   el.removeAttribute('aria-describedby');
     });
+    if(note) note.hidden = !on;
   }
+
   function selDays(){
     var opt = type.options[type.selectedIndex];
     var m = opt ? opt.text.match(/\((\d+)\s*j\)/i) : null;
     return m ? parseInt(m[1], 10) : null;
   }
+
+  function ecart(a, b){
+    if(!a || !b) return null;
+    var d1 = parseISO(a), d2 = parseISO(b);
+    if(isNaN(d1.getTime()) || isNaN(d2.getTime())) return null;
+    var n = Math.round((d2 - d1) / 86400000) + 1;   // bornes incluses
+    return n > 0 ? n : null;
+  }
+
+  // Mode manuel. Les quatre champs décrivent deux informations seulement :
+  // une date de départ et une durée. Les laisser tous libres permettait de
+  // soumettre « du 01/07 au 05/07, 12 jours, reprise le 01/01 » — quatre
+  // valeurs qui se contredisent, toutes acceptées jusqu'au visa.
+  //
+  // Le dernier champ touché commande, les autres suivent. La reprise reste
+  // toujours dérivée de la fin, puisqu'elle n'est jamais une donnée d'entrée.
+  function depuisJours(){
+    var n = parseInt(jours.value, 10);
+    if(!debut.value || !(n > 0)) return;
+    fin.value = addDays(debut.value, n - 1);
+    majReprise();
+  }
+  function depuisFin(){
+    var n = ecart(debut.value, fin.value);
+    if(n === null) return;
+    jours.value = n;
+    majReprise();
+  }
+  function majReprise(){
+    rep.value = fin.value ? prochainOuvre(addDays(fin.value, 1)) : '';
+  }
+
   function apply(){
     var d = selDays();
     if(d){
       setAuto(true);
       jours.value = d;
       fin.value = debut.value ? addDays(debut.value, d - 1) : '';
-      rep.value = debut.value ? prochainOuvre(addDays(debut.value, d)) : '';
+      majReprise();
     } else {
       setAuto(false);
+      // Repartir de ce que la personne a déjà saisi, sans rien effacer.
+      if(jours.value)     depuisJours();
+      else if(fin.value)  depuisFin();
     }
   }
+
   type.addEventListener('change', apply);
-  debut.addEventListener('change', apply);
+  debut.addEventListener('change', function(){
+    if(selDays()) { apply(); return; }
+    if(jours.value)    depuisJours();
+    else if(fin.value) depuisFin();
+  });
+  jours.addEventListener('input',  function(){ if(!selDays()) depuisJours(); });
+  fin.addEventListener('change',   function(){ if(!selDays()) depuisFin();   });
   apply();
 })();
 </script>

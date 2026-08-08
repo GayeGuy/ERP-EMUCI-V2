@@ -17,11 +17,8 @@ $role_slug   = $user['role_slug'] ?? '';
 $page_title  = 'Point EMUCI';
 $active_page = 'point_emuci';
 
-$can_correct = in_array($role_slug, ['gestionnaire_operation','superviseur_operation','admin','superadmin']);
-
-if (!in_array($role_slug, ['gestionnaire_operation','superviseur_operation','admin','superadmin','coordinateur_site','controleur_production'])) {
-    http_response_code(403); echo '<p style="padding:40px;color:red">Accès refusé.</p>'; exit;
-}
+require_permission('point_emuci', 'can_read');
+$can_correct = can('point_emuci', 'can_update');
 
 // ============================================================
 //  AJAX

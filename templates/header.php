@@ -25,6 +25,14 @@ $unread = count($notifs);
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 
   <style>
+    /* Un changement de filtre (site, statut…) recharge la page en GET classique :
+       sans ceci, le navigateur affiche un blanc le temps du aller-retour serveur.
+       Avec, il fait un fondu entre l'ancienne et la nouvelle page — la navigation
+       reste une vraie navigation, seul le rendu change. Ignoré sans effet de bord
+       par les navigateurs qui ne le connaissent pas encore. */
+    @view-transition {
+      navigation: auto;
+    }
     /* ===== DESIGN SYSTEM v4 — Palette Soft UI ===== */
     :root {
       /* Brand */
@@ -197,6 +205,12 @@ $unread = count($notifs);
       flex: 1;
       display: flex; flex-direction: column;
       min-height: 100vh;
+      /* Item flex : sans min-width:0 il garde min-width:auto et refuse de
+         descendre sous la largeur de son contenu. Un tableau large ou une
+         barre d'onglets nombreuse l'étirait alors au-delà du viewport, et
+         c'était toute l'application — barre du haut comprise — qui partait
+         en défilement horizontal, au lieu du seul bloc concerné. */
+      min-width: 0;
     }
 
     /* ===== TOP BAR ===== */

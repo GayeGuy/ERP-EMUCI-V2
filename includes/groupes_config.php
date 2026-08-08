@@ -21,8 +21,11 @@ function _groupes_def(): array {
             'gradient'    => 'linear-gradient(135deg, #06033A 0%, #1B75BC 100%)',
             'first_page'  => 'pages/dashboard.php',
             'nav' => [
+                // Le lecteur n'a que la Vue PDG : le tableau de bord
+                // opérationnel ne lui sert pas.
                 ['label'=>'Tableau de bord','icon'=>'ph-squares-four',
-                 'url'=>'pages/dashboard.php','active_keys'=>['dashboard']],
+                 'url'=>'pages/dashboard.php','active_keys'=>['dashboard'],
+                 'roles_exclude'=>['lecteur']],
                 ['label'=>'Vue PDG','icon'=>'ph-chart-pie-slice',
                  'url'=>'pages/pdg_overview.php','active_keys'=>['pdg_overview'],
                  'roles_include'=>['lecteur']],
@@ -82,6 +85,9 @@ function _groupes_def(): array {
                 ['label'=>'Vue stock par site',   'icon'=>'ph-table',
                  'url'=>'pages/stock_bobines_vue.php','active_keys'=>['stock_bobines_vue'],
                  'roles_exclude'=>['coordinateur_site']],
+                ['label'=>'Écarts bobines',       'icon'=>'ph-warning-diamond',
+                 'url'=>'pages/ecarts_bobines.php','active_keys'=>['ecarts_bobines'],
+                 'perm'=>['ecarts_bobines','can_read']],
             ],
         ],
 
@@ -159,10 +165,15 @@ function _groupes_def(): array {
             'gradient'    => 'linear-gradient(135deg, #3B4FBE 0%, #7C92FF 100%)',
             'first_page'  => 'pages/demandes.php',
             'nav' => [
+                // Le lecteur ne dépose pas de demande : ni la création, ni la
+                // liste de ses propres demandes n'ont de sens pour lui. Il ne
+                // garde que la file de validation.
                 ['label'=>'Mes demandes',    'icon'=>'ph-list-checks',
-                 'url'=>'pages/demandes.php','active_keys'=>['demandes']],
+                 'url'=>'pages/demandes.php','active_keys'=>['demandes'],
+                 'roles_exclude'=>['lecteur']],
                 ['label'=>'Nouvelle demande','icon'=>'ph-plus-circle',
-                 'url'=>'pages/demandes_new.php','active_keys'=>['demandes_new']],
+                 'url'=>'pages/demandes_new.php','active_keys'=>['demandes_new'],
+                 'roles_exclude'=>['lecteur']],
                 ['label'=>'À valider',       'icon'=>'ph-seal-check',
                  'url'=>'pages/demandes_a_valider.php','active_keys'=>['demandes_valider'],
                  'roles_exclude'=>['coordinateur_site']],
@@ -172,6 +183,9 @@ function _groupes_def(): array {
                 ['label'=>'Circuits avancés','icon'=>'ph-buildings',
                  'url'=>'pages/demandes_roles.php','active_keys'=>['demandes_roles'],
                  'roles_include'=>['admin','superadmin']],
+                ['label'=>'Annuaire agents', 'icon'=>'ph-address-book',
+                 'url'=>'pages/agents.php','active_keys'=>['agents'],
+                 'perm'=>['agents','can_read']],
             ],
         ],
 
@@ -189,13 +203,13 @@ function _groupes_def(): array {
                 ['label'=>'Permissions',   'icon'=>'ph-lock-key',
                  'url'=>'pages/admin/permissions.php','active_keys'=>['permissions']],
                 ['label'=>'Nomenclatures', 'icon'=>'ph-tag',
-                 'url'=>'pages/nomenclatures.php','active_keys'=>['nomenclatures']],
+                 'url'=>'pages/admin/nomenclatures.php','active_keys'=>['nomenclatures']],
                 ['label'=>'Audit',         'icon'=>'ph-shield-check',
                  'url'=>'pages/admin/audit.php','active_keys'=>['audit']],
                 ['label'=>'Délégations',   'icon'=>'ph-handshake',
-                 'url'=>'pages/delegations.php','active_keys'=>['delegations']],
+                 'url'=>'pages/admin/delegations.php','active_keys'=>['delegations']],
                 ['label'=>'Sites',         'icon'=>'ph-buildings',
-                 'url'=>'pages/sites.php','active_keys'=>['sites']],
+                 'url'=>'pages/admin/sites.php','active_keys'=>['sites']],
                 ['label'=>'Départements',  'icon'=>'ph-tree-structure',
                  'url'=>'pages/admin/departements.php','active_keys'=>['departements']],
             ],
@@ -227,8 +241,11 @@ function get_groupes_pour_role(string $role_slug): array {
         'gestionnaire'               => ['DASHBOARD','STOCK'],
         // GSB (gestionnaire stock bobines)
         'gestionnaire_stock_bobines' => ['DASHBOARD','OPERATIONS','BOBINES','STOCK'],
-        // Lecture seule
-        'lecteur'                    => ['DASHBOARD','OPERATIONS','BOBINES','STOCK','RAPPORTS'],
+        // Lecture seule : uniquement la vue PDG et les demandes à valider.
+        // Les droits fins page par page (ex. resume_superviseur.php, qui
+        // autorise explicitement 'lecteur') ne changent pas — seule la
+        // page d'accueil et la navigation par groupes se resserrent.
+        'lecteur'                    => ['DASHBOARD'],
         // RAF / DAF — validation administrative et financière
         'raf'                        => ['DASHBOARD','RAPPORTS'],
         'daf'                        => ['DASHBOARD','RAPPORTS'],
