@@ -27,6 +27,7 @@ $is_gestionnaire = in_array($role_slug, ['admin','superadmin','gestionnaire_stoc
 $voir_prix     = !$is_coord; // coordinateur ne voit pas les prix
 
 $site_force    = ($is_coord && $user['site_id']) ? (int)$user['site_id'] : 0;
+require_permission('commandes', 'can_read');
 $can_create    = can('commandes', 'can_create');
 $sites_list    = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom");
 
@@ -253,9 +254,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         db_begin();
         try {
             db_query("UPDATE commandes SET statut='recu',recu_par=?,recu_at=NOW() WHERE id=?",[$user['id'],$cmd_id]);
-            db_query("UPDATE distribution_lignes dl JOIN distributions_site ds ON ds.id=dl.distribution_id
-                      SET dl.statut='livre', ds.statut='livre', ds.recu_at=NOW(), ds.recu_par=?
-                      WHERE ds.commande_id=?",[$user['id'],$cmd_id]);
+            db_query("UPDATE distribution_lignes dl SET statut='livre'
+                      FROM distributions_site ds
+                      WHERE ds.id=dl.distribution_id AND ds.commande_id=?",[$cmd_id]);
+            db_query("UPDATE distributions_site SET statut='livre',recu_at=NOW(),recu_par=?
+                      WHERE commande_id=?",[$user['id'],$cmd_id]);
             // Mettre à jour stock site — articles classiques (+)
             $lignes_rec = db_fetch_all(
                 "SELECT cl.article_id, cl.quantite_livree AS qte
@@ -268,13 +271,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 if ($lr['article_id'] && $lr['qte'] > 0) {
                     db_query(
                         "INSERT INTO stock_site (article_id,site_id,quantite) VALUES (?,?,?)
-                         ON DUPLICATE KEY UPDATE quantite = quantite + ?",
-                        [$lr['article_id'],$cmd['site_id'],$lr['qte'],$lr['qte']]
+                         ON DUPLICATE KEY UPDATE quantite = quantite + VALUES(quantite)",
+                        [$lr['article_id'],$cmd['site_id'],$lr['qte']]
                     );
                     db_query(
                         "INSERT INTO stock_consommables_site (consommable_id,site_id,quantite) VALUES (?,?,?)
-                         ON DUPLICATE KEY UPDATE quantite = quantite + ?",
-                        [$lr['article_id'],$cmd['site_id'],$lr['qte'],$lr['qte']]
+                         ON DUPLICATE KEY UPDATE quantite = quantite + VALUES(quantite)",
+                        [$lr['article_id'],$cmd['site_id'],$lr['qte']]
                     );
                 }
             }
@@ -296,8 +299,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 $type_rivet = (strpos($lib_norm, 'eclat') !== false) ? 'eclate' : 'gonflable';
                 db_query(
                     "INSERT INTO op_stock_rivets (site_id, type_rivet, quantite) VALUES (?,?,?)
-                     ON DUPLICATE KEY UPDATE quantite = quantite + ?",
-                    [$cmd['site_id'], $type_rivet, (int)$lr['qte'], (int)$lr['qte']]
+                     ON DUPLICATE KEY UPDATE quantite = quantite + VALUES(quantite)",
+                    [$cmd['site_id'], $type_rivet, (int)$lr['qte']]
                 );
             }
 
@@ -314,8 +317,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 if ($type_pmma) {
                     db_query(
                         "INSERT INTO stock_pmma_site (site_id, type_pmma, quantite) VALUES (?,?,?)
-                         ON DUPLICATE KEY UPDATE quantite = quantite + ?",
-                        [$cmd['site_id'], $type_pmma, (int)$lr['qte'], (int)$lr['qte']]
+                         ON DUPLICATE KEY UPDATE quantite = quantite + VALUES(quantite)",
+                        [$cmd['site_id'], $type_pmma, (int)$lr['qte']]
                     );
                 }
             }
@@ -346,7 +349,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $det = db_fetch_one(
             "SELECT c.*, s.nom AS site_nom,
                     CONCAT(u.prenom,' ',u.nom) AS agent,
-                    IF(uv.id IS NOT NULL, CONCAT(uv.prenom,' ',uv.nom), '') AS validateur_nom
+                    CASE WHEN uv.id IS NOT NULL THEN CONCAT(uv.prenom,' ',uv.nom) ELSE '' END AS validateur_nom
              FROM commandes c
              LEFT JOIN sites s  ON s.id  = c.site_id
              LEFT JOIN users u  ON u.id  = c.created_by
@@ -390,7 +393,7 @@ if (isset($_GET['export'], $_GET['id'])) {
         "SELECT c.*, s.nom AS site_nom,
                 CONCAT(u.prenom,' ',u.nom) AS agent,
                 u.signature AS agent_signature,
-                IF(uv.id IS NOT NULL, CONCAT(uv.prenom,' ',uv.nom), '') AS validateur_nom,
+                CASE WHEN uv.id IS NOT NULL THEN CONCAT(uv.prenom,' ',uv.nom) ELSE '' END AS validateur_nom,
                 uv.signature AS validateur_signature
          FROM commandes c
          LEFT JOIN sites s  ON s.id  = c.site_id
@@ -434,14 +437,14 @@ if (isset($_GET['export'], $_GET['id'])) {
                     "SELECT COALESCE(ROUND(SUM(COALESCE(cl.quantite_livree,cl.quantite))/4),0)
                      FROM commande_lignes cl JOIN commandes c ON c.id=cl.commande_id
                      WHERE cl.article_id=? AND c.site_id=? AND c.statut IN ('recu','livre')
-                       AND c.recu_at >= DATE_SUB(CURDATE(), INTERVAL 4 WEEK)", [$aid,$sid]) ?? 0);
+                       AND c.recu_at >= (CURRENT_DATE - INTERVAL 4 WEEK)", [$aid,$sid]) ?? 0);
             }
             return (int)(db_fetch_value(
                 "SELECT COALESCE(ROUND(SUM(COALESCE(cl.quantite_livree,cl.quantite))/4),0)
                  FROM commande_lignes cl JOIN commandes c ON c.id=cl.commande_id
                  WHERE cl.type_article=? AND cl.libelle=? AND c.site_id=?
                    AND c.statut IN ('recu','livre')
-                   AND c.recu_at >= DATE_SUB(CURDATE(), INTERVAL 4 WEEK)", [$type,$lib,$sid]) ?? 0);
+                   AND c.recu_at >= (CURRENT_DATE - INTERVAL 4 WEEK)", [$type,$lib,$sid]) ?? 0);
         };
 
         switch ($type) {
@@ -539,7 +542,7 @@ $commandes = db_fetch_all(
      LEFT JOIN users u ON u.id=c.created_by
      LEFT JOIN commande_lignes l ON l.commande_id=c.id
      WHERE ".implode(' AND ',$where)."
-     GROUP BY c.id ORDER BY c.created_at DESC LIMIT 100",
+     GROUP BY c.id, s.nom, u.prenom, u.nom ORDER BY c.created_at DESC LIMIT 100",
     $params
 );
 
@@ -569,7 +572,7 @@ $articles_dispo = db_fetch_all(
                 WHERE cl3.article_id = a.id
                   AND (? = 0 OR c3.site_id = ?)
                   AND c3.statut IN ('recu','livre')
-                  AND c3.recu_at >= DATE_SUB(CURDATE(), INTERVAL 4 WEEK)
+                  AND c3.recu_at >= (CURRENT_DATE - INTERVAL 4 WEEK)
             ), 0) AS conso
      FROM articles a
      LEFT JOIN stock_site ss  ON ss.article_id  = a.id AND ss.site_id  = ?
@@ -598,7 +601,7 @@ foreach (db_fetch_all("SELECT DISTINCT type_pmma FROM stock_pmma_site WHERE quan
             "SELECT COALESCE(ROUND(SUM(COALESCE(cl.quantite_livree,cl.quantite))/4),0)
              FROM commande_lignes cl JOIN commandes c ON c.id=cl.commande_id
              WHERE cl.type_article='pmma' AND cl.libelle=? AND c.site_id=? AND c.statut IN ('recu','livre')
-               AND c.recu_at >= DATE_SUB(CURDATE(), INTERVAL 4 WEEK)", [$lib,$_sid]) ?? 0) : 0,
+               AND c.recu_at >= (CURRENT_DATE - INTERVAL 4 WEEK)", [$lib,$_sid]) ?? 0) : 0,
     ];
 }
 
@@ -650,7 +653,7 @@ foreach ($rivet_types as $rt) {
             "SELECT COALESCE(ROUND(SUM(COALESCE(cl.quantite_livree,cl.quantite))/4),0)
              FROM commande_lignes cl JOIN commandes c ON c.id=cl.commande_id
              WHERE cl.type_article='rivet' AND cl.libelle=? AND c.site_id=? AND c.statut IN ('recu','livre')
-               AND c.recu_at >= DATE_SUB(CURDATE(), INTERVAL 4 WEEK)", [$rt['libelle'], $_sid]) ?? 0) : 0,
+               AND c.recu_at >= (CURRENT_DATE - INTERVAL 4 WEEK)", [$rt['libelle'], $_sid]) ?? 0) : 0,
     ];
 }
 
@@ -661,7 +664,7 @@ $equipements_list = db_fetch_all(
             'unité' AS unite,
             0 AS prix_unitaire,
             1 AS stock_global,
-            IF(e.site_id=?,1,0) AS stock_site,
+            CASE WHEN e.site_id=? THEN 1 ELSE 0 END AS stock_site,
             0 AS derniere,
             0 AS conso
      FROM equipements e

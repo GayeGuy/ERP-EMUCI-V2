@@ -14,9 +14,7 @@ $role_slug = $user['role_slug'] ?? '';
 $page_title  = 'Gestion Support IT';
 $active_page = 'support_it_gestion';
 
-if (!in_array($role_slug, ['admin','superadmin','superviseur_it'])) {
-    http_response_code(403); include __DIR__.'/../templates/403.php'; exit;
-}
+require_permission('affectations_it', 'can_read');
 
 $sous_roles_dispo = [
     'maintenance'           => ['icon'=>'🔧','label'=>'Maintenance','desc'=>'Interventions équipements, rapport journalier'],

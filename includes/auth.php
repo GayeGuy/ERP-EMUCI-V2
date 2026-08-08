@@ -84,8 +84,8 @@ function auth_logout(): void {
  * @param bool   $admin_reset    Si true, bypass la vérification de l'ancien mdp
  */
 function auth_change_password(int $user_id, string $old_password, string $new_password, bool $admin_reset = false): array {
-    if (strlen($new_password) < 8) {
-        return ['success' => false, 'message' => 'Le mot de passe doit contenir au moins 8 caractères.'];
+    if (!is_valid_password($new_password)) {
+        return ['success' => false, 'message' => 'Mot de passe invalide (min 8 caractères, au moins une majuscule, un chiffre et un caractère spécial).'];
     }
 
     $user = db_fetch_one("SELECT * FROM users WHERE id = ?", [$user_id]);
@@ -172,11 +172,19 @@ function auth_create_user(array $data): array {
     if (empty($data['email']) || !filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
         return ['success' => false, 'message' => 'Email invalide.'];
     }
-    if (empty($data['password']) || strlen($data['password']) < 8) {
-        return ['success' => false, 'message' => 'Mot de passe trop court (min 8 caractères).'];
+    if (empty($data['password']) || !is_valid_password($data['password'])) {
+        return ['success' => false, 'message' => 'Mot de passe invalide (min 8 caractères, au moins une majuscule, un chiffre et un caractère spécial).'];
     }
     if (empty($data['nom']) || empty($data['prenom'])) {
         return ['success' => false, 'message' => 'Nom et prénom obligatoires.'];
+    }
+    if (!empty($data['telephone']) && !is_valid_telephone($data['telephone'])) {
+        return ['success' => false, 'message' => 'Téléphone invalide (10 chiffres exactement).'];
+    }
+    $data['nom']    = format_nom_prenom($data['nom']);
+    $data['prenom'] = format_nom_prenom($data['prenom']);
+    if ($data['nom'] === '' || $data['prenom'] === '') {
+        return ['success' => false, 'message' => 'Nom et prénom ne peuvent contenir que des lettres.'];
     }
 
     // Email unique
@@ -196,8 +204,8 @@ function auth_create_user(array $data): array {
         "INSERT INTO users (nom, prenom, email, password_hash, role_id, site_id, telephone)
          VALUES (?, ?, ?, ?, ?, ?, ?)",
         [
-            trim($data['nom']),
-            trim($data['prenom']),
+            $data['nom'],
+            $data['prenom'],
             strtolower(trim($data['email'])),
             $hash,
             (int)$data['role_id'],

@@ -34,7 +34,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         if ($role && $role['slug'] === 'superadmin')
             json_response(false, 'Les permissions du Super Administrateur ne peuvent pas être modifiées.');
 
-        $modules  = ['equipements','sites','consommables','users','rapports','nomenclatures','affectations','audit','receptions','bobines','inventaire_bobines','interventions','commandes','pmma'];
+        $modules  = ['equipements','sites','consommables','nomenclatures','affectations','receptions',
+                       'bobines','inventaire_bobines','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
+                       'operations','rivets','pmma','point_emuci','import_emuci',
+                       'interventions','rapport_journalier','affectations_it',
+                       'commandes','demandes','agents','delegations','departements','users','audit','rapports'];
         $actions  = ['can_create','can_read','can_update','can_delete','can_export'];
 
         db_begin();
@@ -80,7 +84,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         db_query("INSERT INTO roles (nom,slug,description) VALUES (?,?,?)", [$nom, $slug, $desc]);
         $id = (int)db_last_id();
         // Initialiser avec aucune permission
-        $modules = ['equipements','sites','consommables','users','rapports','nomenclatures','affectations','audit','receptions','bobines','inventaire_bobines','interventions','commandes','pmma'];
+        $modules = ['equipements','sites','consommables','nomenclatures','affectations','receptions',
+                    'bobines','inventaire_bobines','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
+                    'operations','rivets','pmma','point_emuci','import_emuci',
+                    'interventions','rapport_journalier','affectations_it',
+                    'commandes','demandes','agents','delegations','departements','users','audit','rapports'];
         foreach ($modules as $m) {
             db_query("INSERT INTO permissions (role_id,module,can_read) VALUES (?,?,0)", [$id, $m]);
         }
@@ -96,20 +104,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 // ============================================================
 $roles   = db_fetch_all("SELECT * FROM roles ORDER BY id");
 $modules = [
-    'equipements'   => ['💻', 'Équipements'],
-    'nomenclatures' => ['🏷️', 'Nomenclatures'],
-    'sites'         => ['🏢', 'Sites'],
-    'affectations'  => ['🔗', 'Affectations'],
-    'consommables'  => ['🧴', 'Consommables'],
-    'receptions'         => ['📦', 'Réceptions site'],
-    'bobines'            => ['🎞️', 'Bobines & Opérations'],
-    'inventaire_bobines' => ['📊', 'Inventaire bobines'],
+    'affectations'       => ['🔗', 'Affectations'],
+    'affectations_it'    => ['👨‍💻', 'Affectations support IT'],
+    'agents'             => ['👥', 'Annuaire agents'],
+    'bobines'            => ['🎞️', 'Bobines'],
+    'commandes'          => ['🏪', 'Commandes'],
+    'commandes_bobines'  => ['🛒', 'Commandes bobines'],
+    'consommables'       => ['🧴', 'Consommables'],
+    'delegations'        => ['🤝', 'Délégations'],
+    'demandes'           => ['📝', 'Demandes internes'],
+    'departements'       => ['🏗️', 'Départements'],
+    'equipements'        => ['💻', 'Équipements'],
+    'import_emuci'       => ['📥', 'Import EMUCI'],
     'interventions'      => ['🛠️', 'Interventions maintenance'],
-    'commandes'          => ['📦', 'Commandes'],
+    'inventaire_bobines' => ['📊', 'Inventaire bobines'],
+    'audit'              => ['📋', 'Journal d\'audit'],
+    'nomenclatures'      => ['🏷️', 'Nomenclatures'],
     'pmma'               => ['🖨️', 'PMMA'],
-    'rapports'      => ['📊', 'Rapports'],
-    'users'         => ['👥', 'Utilisateurs'],
-    'audit'         => ['📋', 'Journal d\'audit'],
+    'point_emuci'        => ['🔍', 'Point EMUCI'],
+    'operations'         => ['🚛', 'Points journaliers'],
+    'rapport_journalier' => ['📄', 'Rapport journalier IT'],
+    'rapports'           => ['📊', 'Rapports & Analyses'],
+    'rapports_gsb'       => ['📋', 'Rapports GSB'],
+    'receptions'         => ['📦', 'Réceptions site'],
+    'rivets'             => ['🔩', 'Rivets'],
+    'sites'              => ['🏢', 'Sites'],
+    'users'              => ['👥', 'Utilisateurs'],
+    'validation_stock'   => ['✅', 'Validation stock matin'],
+    'stock_bobines'      => ['📈', 'Vue stock bobines'],
 ];
 $actions = [
     'can_read'   => ['👁', 'Lire'],
@@ -135,14 +157,40 @@ $users_by_role = array_column(
 include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
-.perm-tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:24px;overflow-x:auto}
-.perm-tab{padding:12px 20px;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;white-space:nowrap;font-family:'DM Sans',sans-serif;transition:all .15s}
-.perm-tab.active{color:var(--blue-mid, #1a56a0);border-bottom-color:var(--blue-mid, #1a56a0)}
+/* Maitre-detail. minmax(0,1fr) et non 1fr : sans le minimum a zero, la
+   colonne de detail refuserait de descendre sous la largeur de son tableau
+   et repousserait la mise en page. */
+.perm-layout{display:grid;grid-template-columns:236px minmax(0,1fr);gap:24px;align-items:start}
+.perm-panes{min-width:0}
+
+.perm-tabs{display:flex;flex-direction:column;gap:2px;
+  background:var(--card,#fff);border:1px solid var(--border);border-radius:12px;padding:8px;
+  max-height:calc(100vh - 210px);overflow-y:auto;position:sticky;top:88px}
+.perm-tab{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;
+  padding:9px 12px;font-size:13px;font-weight:500;color:var(--text,#2c3e50);
+  cursor:pointer;text-align:left;width:100%;
+  background:none;border:none;border-radius:8px;
+  font-family:'Manrope',sans-serif;transition:background .15s,color .15s}
+.perm-tab:hover{background:var(--lighter,#f0f4f8)}
+.perm-tab.active{background:var(--navy,#1E2B4A);color:#fff;font-weight:700}  /* navy et non --blue-mid : depuis la refonte de palette --blue-mid vaut
+     #5B76FF, ce qui ne donne que 3,83:1 avec du blanc. navy donne 14:1. */
+.perm-tab.active span{opacity:.85 !important}
+.perm-tabs::-webkit-scrollbar{width:8px}
+.perm-tabs::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:8px}
+
+/* Sous 980px la colonne passe au-dessus, en rangee defilante : garder une
+   liste verticale y mangerait toute la hauteur utile. */
+@media(max-width:980px){
+  .perm-layout{grid-template-columns:1fr;gap:16px}
+  .perm-tabs{flex-direction:row;position:static;max-height:none;overflow-x:auto;overflow-y:hidden;padding:6px}
+  .perm-tab{width:auto;flex:0 0 auto;white-space:nowrap;flex-wrap:nowrap}
+}
 .perm-pane{display:none}
 .perm-pane.active{display:block}
 
 .perm-table{width:100%;border-collapse:separate;border-spacing:0}
-.perm-table th{padding:10px 14px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:left;background:var(--lighter);border-bottom:1px solid var(--border)}
+.perm-table thead{position:sticky;top:0;z-index:5}
+.perm-table th{padding:10px 14px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:left;background:var(--lighter,#f0f4f8);border-bottom:1px solid var(--border)}
 .perm-table th.center{text-align:center}
 .perm-table td{padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
 .perm-table tr:last-child td{border-bottom:none}
@@ -170,7 +218,7 @@ include __DIR__ . '/../../templates/header.php';
 
 .role-header{display:flex;align-items:center;gap:14px;padding:20px;background:linear-gradient(135deg,var(--navy),#1a3c5e);border-radius:12px;margin-bottom:20px;color:white}
 .role-avatar{width:52px;height:52px;border-radius:14px;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0}
-.role-title{font-family:'Montserrat',sans-serif;font-size:18px;font-weight:800}
+.role-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800}
 .role-sub{font-size:12px;opacity:.65;margin-top:3px}
 
 .modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(13,31,53,.5);backdrop-filter:blur(4px);align-items:center;justify-content:center}
@@ -178,7 +226,7 @@ include __DIR__ . '/../../templates/header.php';
 .modal{background:white;border-radius:16px;width:480px;max-width:95vw;max-height:92vh;overflow-y:auto;animation:mIn .25s cubic-bezier(.22,1,.36,1)}
 @keyframes mIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
 .mhdr{padding:18px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:white;z-index:10}
-.mhdr h3{font-family:'Montserrat',sans-serif;font-size:17px;font-weight:700}
+.mhdr h3{font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:700}
 .mclose{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:none;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
 .mbody{padding:24px}
 .mfoot{padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px}
@@ -193,16 +241,20 @@ include __DIR__ . '/../../templates/header.php';
   <?php endif; ?>
 </div>
 
-<!-- TABS PAR RÔLE -->
-<div class="perm-tabs" id="permTabs">
+<!-- LISTE DES RÔLES + PANNEAU : avec 17 rôles, une rangée d'onglets
+     obligeait à défiler pour savoir lesquels existent. En colonne, ils
+     sont tous lisibles d'un regard. -->
+<div class="perm-layout">
+<nav class="perm-tabs" id="permTabs" aria-label="Rôles">
   <?php foreach($roles as $i=>$r): ?>
   <button class="perm-tab <?= $i===0?'active':'' ?>" onclick="showPerm('role-<?= $r['id'] ?>',this)">
     <?= h($r['nom']) ?>
     <span style="margin-left:6px;font-size:11px;opacity:.6">(<?= $users_by_role[$r['id']]??0 ?> user<?= ($users_by_role[$r['id']]??0)>1?'s':'' ?>)</span>
   </button>
   <?php endforeach; ?>
-</div>
+</nav>
 
+<div class="perm-panes">
 <?php foreach($roles as $r):
   $is_superadmin = $r['slug'] === 'superadmin';
   $can_edit      = $user['role_slug'] === 'superadmin' && !$is_superadmin;
@@ -225,7 +277,7 @@ include __DIR__ . '/../../templates/header.php';
       🔒 Accès total — non modifiable
     </div>
     <?php elseif($can_edit): ?>
-    <button class="btn" style="background:var(--blue-mid, #1a56a0);color:white" onclick="savePerms(<?= $r['id'] ?>)">
+    <button class="btn" style="background:var(--navy,#1E2B4A);color:white" onclick="savePerms(<?= $r['id'] ?>)">
       💾 Sauvegarder
     </button>
     <?php else: ?>
@@ -312,6 +364,8 @@ include __DIR__ . '/../../templates/header.php';
   <?php endif; ?>
 </div>
 <?php endforeach; ?>
+</div><!-- /perm-panes -->
+</div><!-- /perm-layout -->
 
 <!-- MODAL NOUVEAU RÔLE -->
 <div class="modal-overlay" id="mRole">
@@ -372,7 +426,11 @@ function toggleRow(roleId, module){
 
 function allOff(roleId){
   if(!confirm('Désactiver TOUTES les permissions de ce rôle ?'))return;
-  const modules=['equipements','nomenclatures','sites','affectations','consommables','receptions','bobines','inventaire_bobines','interventions','commandes','pmma','rapports','users','audit'];
+  const modules=['equipements','nomenclatures','sites','affectations','consommables','receptions',
+    'bobines','inventaire_bobines','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
+    'operations','rivets','pmma','point_emuci','import_emuci',
+    'interventions','rapport_journalier','affectations_it',
+    'commandes','demandes','agents','delegations','departements','users','audit','rapports'];
   const actions=['can_read','can_create','can_update','can_delete','can_export'];
   modules.forEach(m=>actions.forEach(a=>{
     const b=document.getElementById(`perm_${roleId}_${m}_${a}`);
@@ -381,7 +439,11 @@ function allOff(roleId){
 }
 
 function savePerms(roleId){
-  const modules=['equipements','nomenclatures','sites','affectations','consommables','receptions','bobines','inventaire_bobines','interventions','commandes','pmma','rapports','users','audit'];
+  const modules=['equipements','nomenclatures','sites','affectations','consommables','receptions',
+    'bobines','inventaire_bobines','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
+    'operations','rivets','pmma','point_emuci','import_emuci',
+    'interventions','rapport_journalier','affectations_it',
+    'commandes','demandes','agents','delegations','departements','users','audit','rapports'];
   const actions=['can_read','can_create','can_update','can_delete','can_export'];
   const fd=new FormData();
   fd.append('action','save_permissions');
@@ -392,7 +454,8 @@ function savePerms(roleId){
   }));
   fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd})
     .then(r=>r.json())
-    .then(d=>toast(d.message,d.success?'success':'danger'));
+    .then(d=>toast(d.message,d.success?'success':'danger'))
+    .catch(()=>toast('Erreur réseau lors de la sauvegarde.','danger'));
 }
 
 function saveRole(){

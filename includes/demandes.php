@@ -122,29 +122,39 @@ function di_a_valider(array $user, ?string $from = null, ?string $to = null): ar
 }
 
 // ── Demandes déjà traitées par cet utilisateur (a signé au moins une étape)
+// MySQL : les signatures sont du JSON stocké en TEXT (comme sur PostgreSQL,
+// cf. l'en-tête du fichier) mais l'appartenance "un des visas porte mon
+// user_id" se vérifie côté PHP plutôt que via un opérateur de containment
+// SQL — jsonb @> n'a pas d'équivalent MySQL au même comportement pour un
+// tableau d'objets, et JSON_CONTAINS exigerait une correspondance exacte de
+// l'objet entier, pas juste du champ user_id.
 function di_deja_traite(array $user, ?string $from = null, ?string $to = null): array {
     $uid   = (int)$user['id'];
-    $param = json_encode([['user_id' => $uid]]);
     $dateWhere = ''; $dateParams = [];
     if ($from) { $dateWhere .= " AND submitted_at >= ?"; $dateParams[] = $from . ' 00:00:00'; }
     if ($to)   { $dateWhere .= " AND submitted_at <= ?"; $dateParams[] = $to   . ' 23:59:59'; }
     $rows  = db_fetch_all(
-        "SELECT id FROM di_demandes
+        "SELECT id, signatures FROM di_demandes
          WHERE demandeur_id <> ?
            AND signatures != '[]'
-           AND (signatures::jsonb) @> ?::jsonb
            $dateWhere
-         ORDER BY updated_at DESC LIMIT 100",
-        array_merge([$uid, $param], $dateParams)
+         ORDER BY updated_at DESC LIMIT 500",
+        array_merge([$uid], $dateParams)
     );
     $out = [];
     foreach ($rows as $r) {
+        $sigs = json_decode($r['signatures'] ?? '[]', true) ?: [];
+        $signe = false;
+        foreach ($sigs as $s) { if ((int)($s['user_id'] ?? 0) === $uid) { $signe = true; break; } }
+        if (!$signe) continue;
+
         $d = di_get((int)$r['id']);
         if (!$d) continue;
         $wf = di_workflow_of($d);
         $d['_etape_label'] = $wf[(int)$d['etape_actuelle']]['label'] ?? '';
         $d['_demandeur']   = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$d['demandeur_id']]);
         $out[] = $d;
+        if (count($out) >= 100) break;
     }
     return $out;
 }
@@ -238,13 +248,14 @@ function di_creer(array $user, string $typeCode, array $champs, bool $soumettre,
         $n1UserId = $n1Row ? (int)$n1Row['user_id'] : null;
     }
 
-    $numero = di_generate_numero();
+    $numero       = di_generate_numero();
+    $demandeur_site_id = $user['site_id'] ? (int)$user['site_id'] : null;
     db_query(
         "INSERT INTO di_demandes
-         (numero, type_code, statut, etape_actuelle, demandeur_id, n1_user_id, champs, historique, signatures,
+         (numero, type_code, statut, etape_actuelle, demandeur_id, n1_user_id, site_id, champs, historique, signatures,
           workflow_snapshot, priorite, submitted_at, created_at, updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        [$numero, $typeCode, $statut, $etape, $user['id'], $n1UserId,
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        [$numero, $typeCode, $statut, $etape, $user['id'], $n1UserId, $demandeur_site_id,
          json_encode($champs, JSON_UNESCAPED_UNICODE),
          json_encode($hist, JSON_UNESCAPED_UNICODE),
          '[]',
@@ -254,7 +265,49 @@ function di_creer(array $user, string $typeCode, array $champs, bool $soumettre,
     $id = (int) db_last_id();
 
     if ($soumettre && $workflow) {
-        // Si la première étape est N+1 et qu'on a un N+1 résolu, notifier spécifiquement
+        // Si le demandeur est lui-même N+1 de son département et que l'étape 0 est 'n1',
+        // l'étape est validée d'office : il n'a pas besoin de sa propre approbation.
+        if ($workflow[0]['role'] === 'n1') {
+            $submitter_is_n1 = (bool)db_fetch_value(
+                "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND is_n1=1",
+                [(int)$user['id']]
+            );
+            if ($submitter_is_n1) {
+                $autoSig  = [['etape' => 0, 'etape_label' => $workflow[0]['label'],
+                    'user_id' => $user['id'], 'nom' => $nom,
+                    'action' => 'approuve', 'commentaire' => "Validé d'office — demandeur est N+1", 'date' => $now]];
+                $autoHist = $hist;
+                $autoHist[] = ['action' => 'valide', 'etape' => $workflow[0]['label'],
+                    'par' => $user['id'], 'nom' => $nom,
+                    'commentaire' => "Validé d'office — demandeur est N+1", 'date' => $now];
+                $next = di_next_step($workflow, 0);
+                if ($next === null) {
+                    $newStatut = !empty($type['traitement_it']) ? 'approuve_traitement' : 'approuve';
+                    $newEtape  = 0;
+                } else {
+                    $newStatut = 'en_cours';
+                    $newEtape  = $next;
+                }
+                db_query(
+                    "UPDATE di_demandes SET statut=?, etape_actuelle=?, signatures=?, historique=? WHERE id=?",
+                    [$newStatut, $newEtape, json_encode($autoSig, JSON_UNESCAPED_UNICODE),
+                     json_encode($autoHist, JSON_UNESCAPED_UNICODE), $id]
+                );
+                if ($next === null) {
+                    if (!empty($type['traitement_it'])) {
+                        di_notify((int)$user['id'], "Votre demande « {$type['label']} » est approuvée et en cours de traitement IT.", $id);
+                        di_notify_role('it', "Demande « {$type['label']} » approuvée — à traiter ($numero)", $id);
+                    } else {
+                        di_notify((int)$user['id'], "Votre demande « {$type['label']} » a été approuvée.", $id);
+                    }
+                } else {
+                    di_notify_role($workflow[$next]['role'],
+                        "Demande « {$type['label']} » en attente — étape : {$workflow[$next]['label']} ($numero)", $id);
+                }
+                return $id;
+            }
+        }
+        // Notification normale pour la première étape
         if ($workflow[0]['role'] === 'n1' && $n1UserId) {
             di_notify($n1UserId, "Nouvelle demande « {$type['label']} » de $nom ($numero) à valider", $id);
         } else {
@@ -359,4 +412,13 @@ function di_rejeter(array $demande, array $user, string $motif): void {
     );
     di_notify((int)$demande['demandeur_id'],
         "Votre demande « {$type['label']} » a été rejetée à l'étape « $stepLabel » : $motif", (int)$demande['id']);
+}
+
+// ── Qui peut déposer une demande
+// Le lecteur consulte et valide, mais ne dépose pas : son profil est un
+// profil de consultation. La règle vit ici pour que le menu, la page de
+// création et les boutons d'appel s'appuient tous sur la même.
+function di_peut_creer(?array $user = null): bool {
+    $user = $user ?? current_user();
+    return ($user['role_slug'] ?? '') !== 'lecteur';
 }

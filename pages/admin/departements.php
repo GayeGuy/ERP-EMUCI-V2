@@ -9,9 +9,7 @@ require_once __DIR__ . '/../../includes/notifications.php';
 
 require_auth();
 $user = current_user();
-if (!in_array($user['role_slug'] ?? '', ['admin','superadmin'])) {
-    http_response_code(403); include __DIR__ . '/../../templates/403.php'; exit;
-}
+require_permission('departements', 'can_read');
 $_SESSION['groupe_actif'] = 'ADMINISTRATION';
 $page_title  = 'Départements';
 $active_page = 'departements';
@@ -132,7 +130,7 @@ include __DIR__ . '/../../templates/header.php';
 @media(max-width:780px){.dept-layout{grid-template-columns:1fr}}
 .dept-panel{background:white;border:1px solid var(--border);border-radius:16px;overflow:hidden}
 .dept-panel-hdr{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
-.dept-panel-ttl{font-family:'Montserrat',sans-serif;font-size:13px;font-weight:800;color:var(--navy)}
+.dept-panel-ttl{font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;font-weight:800;color:var(--navy)}
 .dept-card{padding:14px 18px;border-bottom:1px solid var(--border);cursor:pointer;transition:.12s;display:flex;align-items:center;gap:12px}
 .dept-card:last-child{border-bottom:none}
 .dept-card:hover{background:#f8fafc}
@@ -158,7 +156,7 @@ include __DIR__ . '/../../templates/header.php';
 .member-role{font-size:11px;color:var(--muted)}
 .badge-n1{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:800;background:#dcfce7;color:#16a34a;margin-left:6px}
 .detail-hdr{display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap}
-.detail-ttl{font-family:'Montserrat',sans-serif;font-size:16px;font-weight:900;color:var(--navy);flex:1}
+.detail-ttl{font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:900;color:var(--navy);flex:1}
 .section-lbl{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:18px 0 10px}
 .add-form{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;margin-top:12px}
 .add-form select{flex:1;min-width:180px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:white;font-family:inherit}
@@ -170,7 +168,7 @@ include __DIR__ . '/../../templates/header.php';
 .modal-bg{display:none;position:fixed;inset:0;background:rgba(6,3,58,.45);z-index:2000;align-items:center;justify-content:center}
 .modal-bg.open{display:flex}
 .modal-box{background:white;border-radius:16px;padding:26px;width:100%;max-width:420px;box-shadow:0 20px 60px rgba(0,0,0,.2)}
-.modal-box h3{margin:0 0 16px;font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy)}
+.modal-box h3{margin:0 0 16px;font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)}
 .form-group{margin-bottom:14px}
 .form-group label{display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:5px}
 .form-group input{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box}
@@ -185,7 +183,7 @@ include __DIR__ . '/../../templates/header.php';
 
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
   <div>
-    <div style="font-family:'Montserrat',sans-serif;font-size:20px;font-weight:900;color:var(--navy)">Départements</div>
+    <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:20px;font-weight:900;color:var(--navy)">Départements</div>
     <div style="font-size:13px;color:var(--muted);margin-top:2px">Créez les départements et affectez les comptes avec leur niveau hiérarchique (N+1)</div>
   </div>
   <button class="btn-add" onclick="openCreateModal()">

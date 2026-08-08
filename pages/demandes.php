@@ -265,12 +265,12 @@ if ($fStatut) {
     else                         { $where .= ' AND d.statut = ?'; $params[] = $fStatut; }
 }
 if ($fSearch) {
-    $where .= ' AND (d.numero ILIKE ? OR LOWER(u.prenom || \' \' || u.nom) LIKE LOWER(?))';
+    $where .= " AND (d.numero LIKE ? OR CONCAT(u.prenom,' ',u.nom) LIKE ?)";
     $params[] = '%'.$fSearch.'%'; $params[] = '%'.$fSearch.'%';
 }
 $mes = $detail ? [] : db_fetch_all(
     "SELECT d.id, d.numero, d.type_code, d.statut, d.created_at, d.etape_actuelle,
-            (u.prenom || ' ' || u.nom) AS demandeur_nom
+            CONCAT(u.prenom,' ',u.nom) AS demandeur_nom
      FROM di_demandes d JOIN users u ON u.id = d.demandeur_id
      WHERE $where ORDER BY d.created_at DESC",
     $params
@@ -310,6 +310,14 @@ include __DIR__ . '/../templates/header.php';
   .di-btn-primary{background:linear-gradient(135deg,#3B4FBE,#7C92FF);color:#fff}
   .di-btn-ghost{background:var(--input,#f0f4f8);color:var(--text,#2c3e50)}
   .di-btn-danger{background:#fdf0ef;color:#e74c3c}
+  .di-btn-back{background:var(--card,#fff);color:var(--text,#2c3e50);border:1.5px solid var(--border,#e2e8f0)}
+  .di-btn-back:hover{border-color:#7C92FF;color:#3B4FBE}
+  .di-btn-back i{font-size:15px;transition:transform .15s}
+  .di-btn-back:hover i{transform:translateX(-3px)}
+  .di-btn-pdf{background:#FEF2F2;color:#DC2626}
+  .di-btn-pdf:hover{background:#DC2626;color:#fff;box-shadow:0 6px 16px rgba(220,38,38,.28);transform:translateY(-1px)}
+  [data-theme="dark"] .di-btn-pdf{background:#4A1D1D;color:#FCA5A5}
+  [data-theme="dark"] .di-btn-pdf:hover{background:#DC2626;color:#fff}
   .di-tbl{width:100%;border-collapse:collapse;background:var(--card,#fff);border:1.5px solid var(--border,#e2e8f0);border-radius:14px;overflow:hidden}
   .di-tbl th{text-align:left;padding:12px 16px;font-size:12px;color:var(--muted,#7f8c8d);background:var(--input,#f8fafc)}
   .di-tbl td{padding:13px 16px;border-top:1px solid var(--border,#eef2f7);font-size:14px}
@@ -342,8 +350,8 @@ include __DIR__ . '/../templates/header.php';
     $demandeur = db_fetch_one("SELECT prenom, nom FROM users WHERE id=?", [$detail['demandeur_id']]);
 ?>
   <div class="di-topbar">
-    <a href="<?= APP_URL ?>/pages/demandes.php" class="di-btn di-btn-ghost">← Mes demandes</a>
-    <a href="<?= APP_URL ?>/pages/demandes.php?export=pdf&id=<?= (int)$detail['id'] ?>" target="_blank" class="di-btn di-btn-ghost"><i class="ph-duotone ph-file-pdf"></i> PDF</a>
+    <a href="<?= APP_URL ?>/pages/demandes.php" class="di-btn di-btn-back"><i class="ph-duotone ph-arrow-left"></i> Retour</a>
+    <a href="<?= APP_URL ?>/pages/demandes.php?export=pdf&id=<?= (int)$detail['id'] ?>" target="_blank" class="di-btn di-btn-pdf"><i class="ph-duotone ph-file-pdf"></i> PDF</a>
   </div>
 
   <div class="di-card">
@@ -442,7 +450,9 @@ include __DIR__ . '/../templates/header.php';
 <?php else: ?>
   <div class="di-topbar">
     <h2 style="margin:0">Mes demandes</h2>
-    <a href="<?= APP_URL ?>/pages/demandes_new.php" class="di-btn di-btn-primary"><i class="ph-duotone ph-plus"></i> Nouvelle demande</a>
+    <?php if (di_peut_creer($user)): ?>
+      <a href="<?= APP_URL ?>/pages/demandes_new.php" class="di-btn di-btn-primary"><i class="ph-duotone ph-plus"></i> Nouvelle demande</a>
+    <?php endif; ?>
   </div>
 
   <div class="di-stats">
@@ -507,8 +517,12 @@ include __DIR__ . '/../templates/header.php';
         <a href="?" class="di-btn di-btn-ghost" style="margin-top:8px">Effacer les filtres</a>
       <?php else: ?>
         <i class="ph-duotone ph-tray" style="font-size:44px;color:#cbd5e1"></i>
-        <p>Vous n'avez pas encore de demande.</p>
-        <a href="<?= APP_URL ?>/pages/demandes_new.php" class="di-btn di-btn-primary" style="margin-top:8px">Créer ma première demande</a>
+        <?php if (di_peut_creer($user)): ?>
+          <p>Vous n'avez pas encore de demande.</p>
+          <a href="<?= APP_URL ?>/pages/demandes_new.php" class="di-btn di-btn-primary" style="margin-top:8px">Créer ma première demande</a>
+        <?php else: ?>
+          <p>Aucune demande à votre nom. Votre profil permet de valider celles des autres, pas d'en déposer.</p>
+        <?php endif; ?>
       <?php endif; ?>
     </div>
   <?php else: ?>
