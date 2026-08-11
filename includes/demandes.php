@@ -121,6 +121,72 @@ function di_a_valider(array $user, ?string $from = null, ?string $to = null): ar
     return $out;
 }
 
+// ── L'utilisateur peut-il effectuer le traitement IT post-approbation (rôle 'it' ou membre
+//    d'un département lié à ce rôle) ?
+function di_user_can_traiter_it(int $userId, array $roles): bool {
+    if (in_array('it', $roles, true)) return true;
+    $dept_id = db_fetch_value("SELECT departement_id FROM di_roles WHERE code='it'");
+    if ($dept_id) {
+        return (bool)db_fetch_value(
+            "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND departement_id=?",
+            [$userId, (int)$dept_id]
+        );
+    }
+    return false;
+}
+
+// ── Demandes approuvées en attente de traitement IT (statut approuve_traitement, non traitées)
+function di_a_traiter(array $user, ?string $from = null, ?string $to = null): array {
+    $roles = di_user_roles((int)$user['id']);
+    if (!di_user_can_traiter_it((int)$user['id'], $roles)) return [];
+
+    $dateWhere = ''; $dateParams = [];
+    if ($from) { $dateWhere .= " AND submitted_at >= ?"; $dateParams[] = $from . ' 00:00:00'; }
+    if ($to)   { $dateWhere .= " AND submitted_at <= ?"; $dateParams[] = $to   . ' 23:59:59'; }
+
+    $rows = db_fetch_all(
+        "SELECT id FROM di_demandes WHERE statut='approuve_traitement' AND traite_it=0 $dateWhere ORDER BY updated_at ASC",
+        $dateParams
+    );
+    $out = [];
+    foreach ($rows as $r) {
+        $d = di_get((int)$r['id']);
+        if (!$d) continue;
+        $d['_demandeur'] = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$d['demandeur_id']]);
+        $out[] = $d;
+    }
+    return $out;
+}
+
+// ── Marquer le traitement IT d'une demande approuvée comme effectué
+function di_traiter_it(array $demande, array $user, string $commentaire = ''): void {
+    $roles = di_user_roles((int)$user['id']);
+    if (!di_user_can_traiter_it((int)$user['id'], $roles)) {
+        throw new Exception("Vous ne pouvez pas traiter cette demande.");
+    }
+    if ($demande['statut'] !== 'approuve_traitement') {
+        throw new Exception("Cette demande n'est pas en attente de traitement IT.");
+    }
+    if (!empty($demande['traite_it'])) {
+        throw new Exception("Cette demande a déjà été traitée.");
+    }
+    $type = di_type($demande['type_code']);
+    $now  = date('Y-m-d H:i:s');
+    $nom  = trim(($user['prenom'] ?? '') . ' ' . ($user['nom'] ?? ''));
+
+    $historique = $demande['historique'];
+    $historique[] = ['action' => 'traite_it', 'par' => $user['id'], 'nom' => $nom,
+        'commentaire' => $commentaire, 'date' => $now];
+
+    db_query(
+        "UPDATE di_demandes SET traite_it=1, traite_par=?, traite_date=?, historique=?, updated_at=? WHERE id=?",
+        [$user['id'], $now, json_encode($historique, JSON_UNESCAPED_UNICODE), $now, $demande['id']]
+    );
+
+    di_notify((int)$demande['demandeur_id'],
+        "Le traitement IT de votre demande « {$type['label']} » est terminé.", (int)$demande['id']);
+}
+
 // ── Demandes déjà traitées par cet utilisateur (a signé au moins une étape)
 function di_deja_traite(array $user, ?string $from = null, ?string $to = null): array {
     $uid   = (int)$user['id'];

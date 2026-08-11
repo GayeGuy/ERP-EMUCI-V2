@@ -41,6 +41,8 @@ $fTo   = $date_to   !== '' ? $date_to   : null;
 $my_roles    = di_user_roles((int)$user['id']);
 $a_valider   = di_a_valider($user, $fFrom, $fTo);
 $deja_traite = di_deja_traite($user, $fFrom, $fTo);
+$can_it      = di_user_can_traiter_it((int)$user['id'], $my_roles);
+$a_traiter   = $can_it ? di_a_traiter($user, $fFrom, $fTo) : [];
 $type_labels = [];
 foreach (di_types_actifs() as $t) $type_labels[$t['code']] = $t['label'];
 
@@ -54,7 +56,7 @@ $fStat = trim($_GET['statut'] ?? '');
 // filtrage : proposer une valeur qui ne renverrait rien n'aide personne, et
 // une valeur absente de la liste ne serait plus sélectionnable.
 $opt_types = $opt_dems = $opt_stats = [];
-foreach (array_merge($a_valider, $deja_traite) as $d) {
+foreach (array_merge($a_valider, $deja_traite, $a_traiter) as $d) {
     $c = $d['type_code'] ?? '';
     if ($c !== '') $opt_types[$c] = $type_labels[$c] ?? $c;
     $dm = trim((string)($d['_demandeur'] ?? ''));
@@ -78,8 +80,10 @@ function di_filtre(array $lignes, string $ref, string $type, string $dem, string
 
 $total_av = count($a_valider);
 $total_dj = count($deja_traite);
+$total_at = count($a_traiter);
 $a_valider   = di_filtre($a_valider,   $fRef, $fType, $fDem, $fStat);
 $deja_traite = di_filtre($deja_traite, $fRef, $fType, $fDem, $fStat);
+$a_traiter   = di_filtre($a_traiter,   $fRef, $fType, $fDem, $fStat);
 $filtre_actif = ($fRef !== '' || $fType !== '' || $fDem !== '' || $fStat !== '' || $fFrom || $fTo);
 
 include __DIR__ . '/../templates/header.php';
@@ -284,6 +288,38 @@ include __DIR__ . '/../templates/header.php';
       </tbody>
     </table>
     </div>
+  <?php endif; ?>
+
+  <!-- ── À traiter (IT) -->
+  <?php if ($can_it): ?>
+  <div class="di-section">
+    À traiter (IT)
+    <span class="di-count"><?= count($a_traiter) ?><?= count($a_traiter) < $total_at ? ' / ' . $total_at : '' ?></span>
+  </div>
+
+  <?php if (empty($a_traiter)): ?>
+    <div class="di-empty">
+      <i class="ph-duotone ph-check-circle" style="font-size:40px;color:#cbd5e1"></i>
+      <p style="margin:10px 0 0">Rien à traiter<?= $filtre_actif ? ' avec ces filtres' : ' pour le moment' ?>.</p>
+    </div>
+  <?php else: ?>
+    <div<?= count($a_traiter) > 4 ? ' class="di-scroll"' : '' ?>>
+    <table class="di-tbl">
+      <thead><tr><th>Référence</th><th>Type</th><th>Demandeur</th><th>Approuvée le</th><th>Statut</th></tr></thead>
+      <tbody>
+      <?php foreach ($a_traiter as $d): ?>
+        <tr onclick="location.href='<?= APP_URL ?>/pages/demandes.php?id=<?= (int)$d['id'] ?>'">
+          <td style="font-weight:700"><?= h($d['numero']) ?></td>
+          <td><?= h($type_labels[$d['type_code']] ?? $d['type_code']) ?></td>
+          <td><?= h($d['_demandeur'] ?? '') ?></td>
+          <td style="color:var(--muted,#7f8c8d);font-size:13px"><?= $d['updated_at'] ? date('d/m/Y', strtotime($d['updated_at'])) : '—' ?></td>
+          <td><?= di_badge($d['statut']) ?></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+    </div>
+  <?php endif; ?>
   <?php endif; ?>
 
   <!-- ── Demandes où j'ai déjà visé -->

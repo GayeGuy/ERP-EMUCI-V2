@@ -66,6 +66,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         } elseif ($action === 'rejeter') {
             di_rejeter($d, $user, trim($_POST['motif'] ?? ''));
             json_response(true, 'Demande rejetée.');
+        } elseif ($action === 'traiter_it') {
+            di_traiter_it($d, $user, trim($_POST['commentaire'] ?? ''));
+            json_response(true, 'Demande marquée comme traitée.');
         }
         json_response(false, 'Action inconnue.');
     } catch (Exception $e) {
@@ -346,6 +349,8 @@ include __DIR__ . '/../templates/header.php';
     $n1Id = isset($detail['n1_user_id']) && $detail['n1_user_id'] ? (int)$detail['n1_user_id'] : null;
     $canV = di_can_validate($my_roles, (int)$user['id'], $wf, $cur, (int)$detail['demandeur_id'], $n1Id)
             && in_array($detail['statut'], ['en_attente','en_cours'], true);
+    $canTraiterIt = $detail['statut'] === 'approuve_traitement' && empty($detail['traite_it'])
+            && di_user_can_traiter_it((int)$user['id'], $my_roles);
     $fields = di_champs_of($detail['type_code']);
     $demandeur = db_fetch_one("SELECT prenom, nom FROM users WHERE id=?", [$detail['demandeur_id']]);
 ?>
@@ -363,7 +368,16 @@ include __DIR__ . '/../templates/header.php';
           · <?= date('d/m/Y', strtotime($detail['created_at'])) ?>
         </div>
       </div>
-      <?= di_badge($detail['statut']) ?>
+      <div style="text-align:right">
+        <?= di_badge($detail['statut']) ?>
+        <?php if (!empty($detail['traite_it'])):
+          $traiteur = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [(int)$detail['traite_par']]);
+        ?>
+        <div style="font-size:11px;color:#16a085;margin-top:6px">
+          <i class="ph-duotone ph-check-circle"></i> Traité par <?= h($traiteur) ?><?= $detail['traite_date'] ? ' le '.date('d/m/Y', strtotime($detail['traite_date'])) : '' ?>
+        </div>
+        <?php endif; ?>
+      </div>
     </div>
 
     <h4 style="margin:20px 0 6px;font-size:13px;color:var(--muted,#7f8c8d)">CIRCUIT DE VALIDATION</h4>
@@ -404,6 +418,9 @@ include __DIR__ . '/../templates/header.php';
         } elseif ($action === 'soumis') {
             $ic_bg = '#eef1fc'; $ic_cl = '#3B4FBE'; $ic = '→';
             $label = 'Demande soumise';
+        } elseif ($action === 'traite_it') {
+            $ic_bg = '#e8f8f5'; $ic_cl = '#16a085'; $ic = '✓';
+            $label = 'Traitement IT effectué';
         } else {
             $ic_bg = '#f1f3f8'; $ic_cl = '#98a1b3'; $ic = '→';
             $label = 'Brouillon sauvegardé';
@@ -444,6 +461,18 @@ include __DIR__ . '/../templates/header.php';
       <button class="di-btn di-btn-primary" onclick="diValider()"><i class="ph-duotone ph-check"></i> Valider</button>
       <button class="di-btn di-btn-danger" onclick="document.getElementById('di-reject').classList.add('open')"><i class="ph-duotone ph-x"></i> Rejeter</button>
     </div>
+  </div>
+  <?php endif; ?>
+
+  <?php if ($canTraiterIt): ?>
+  <div class="di-card">
+    <div class="di-alert" id="di-err"></div>
+    <h4 style="margin:0 0 8px">Traitement IT</h4>
+    <p style="margin:0 0 14px;font-size:13px;color:var(--muted,#7f8c8d)">
+      Demande approuvée, en attente d'exécution IT (création/modification d'accès, compte…).
+      Marquez-la comme traitée une fois l'action réalisée.
+    </p>
+    <button class="di-btn di-btn-primary" onclick="diTraiterIt()"><i class="ph-duotone ph-check-circle"></i> Marquer comme traité</button>
   </div>
   <?php endif; ?>
 
@@ -587,6 +616,7 @@ function diValider(){ const fd=new FormData(); fd.append('action','valider'); fd
 function diRejeter(){ const m=document.getElementById('di-motif').value.trim();
   if(!m){ alert('Le motif est obligatoire.'); return; }
   const fd=new FormData(); fd.append('action','rejeter'); fd.append('id',DI_ID); fd.append('motif',m); diPost(fd); }
+function diTraiterIt(){ const fd=new FormData(); fd.append('action','traiter_it'); fd.append('id',DI_ID); diPost(fd); }
 </script>
 
 <?php include __DIR__ . '/../templates/footer.php'; ?>
