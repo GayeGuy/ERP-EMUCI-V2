@@ -444,7 +444,11 @@ input.saisie.nok{border-color:#e74c3c;background:#fff5f5}
 <div class="inv-toolbar">
   <div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <?php if ($inv['session_id']): ?>
+      <a href="<?= APP_URL ?>/pages/inventaire_sessions.php?id=<?= (int)$inv['session_id'] ?>" style="color:var(--muted);font-size:13px;text-decoration:none">← Session</a>
+      <?php else: ?>
       <a href="<?= APP_URL ?>/pages/inventaire_bobines.php" style="color:var(--muted);font-size:13px;text-decoration:none">← Inventaires</a>
+      <?php endif; ?>
       <h2 style="font-family:'Montserrat',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">
         Inventaire du <?= fmt_date($inv['date_inventaire']) ?>
       </h2>
