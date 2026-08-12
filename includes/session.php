@@ -71,6 +71,21 @@ function can(string $module, string $droit = 'can_read'): bool {
     // Admin et superadmin ont tout
     if (in_array($user['role_slug'], ['admin', 'superadmin'])) return true;
 
+    // Le N+1 d'un gestionnaire de stock voit les commandes de son périmètre,
+    // en lecture seule, même si son rôle ne porte pas le droit : il doit
+    // pouvoir suivre les déclarations de commande de son équipe. La lecture
+    // seule est volontaire — le visa reste au superviseur opération. Ciblé
+    // sur la personne réellement N+1 (user_departements.is_n1), pas sur son
+    // rôle : un octroi par rôle dans Admin → Permissions donnerait l'accès à
+    // tout le monde ayant ce rôle, pas seulement au N+1 réel.
+    // Placé avant les embranchements support_it / gestionnaire_operation ci-
+    // dessous : ils renvoient leur propre résultat sans jamais retomber ici,
+    // et le N+1 d'un gestionnaire de stock peut très bien être support_it.
+    if ($module === 'commandes' && $droit === 'can_read'
+        && _est_n1_de_gestionnaire_stock((int)$user['id'])) {
+        return true;
+    }
+
     // Support IT : vérifier les sous-rôles actifs
     if ($user['role_slug'] === 'support_it') {
         return _support_it_can($user, $module, $droit);
@@ -88,6 +103,28 @@ function can(string $module, string $droit = 'can_read'): bool {
     }
 
     return _check_permission_db($user['role_id'], $module, $droit);
+}
+
+/**
+ * L'utilisateur est-il N+1 d'un département auquel appartient au moins un
+ * gestionnaire de stock ?
+ */
+function _est_n1_de_gestionnaire_stock(int $user_id): bool {
+    static $cache = [];
+    if (!array_key_exists($user_id, $cache)) {
+        $cache[$user_id] = (bool)db_fetch_value(
+            "SELECT COUNT(*)
+               FROM user_departements n1
+               JOIN user_departements membre ON membre.departement_id = n1.departement_id
+                                            AND membre.user_id <> n1.user_id
+               JOIN users u  ON u.id = membre.user_id AND u.actif = 1
+               JOIN roles r  ON r.id = u.role_id
+              WHERE n1.user_id = ? AND n1.is_n1 = 1
+                AND r.slug IN ('gestionnaire_stock','gestionnaire_stock_bobines')",
+            [$user_id]
+        );
+    }
+    return $cache[$user_id];
 }
 
 function _check_permission_db(int $role_id, string $module, string $droit): bool {
