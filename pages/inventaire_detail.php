@@ -54,12 +54,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
     header('Content-Type: application/json');
     $action = $_POST['action'] ?? '';
 
-    // ── SAUVER UNE LIGNE (stock physique + écart connu)
+    // ── SAUVER UNE LIGNE (stock physique — l'écart connu est en lecture seule,
+    //    renseigné par le système à l'ouverture de l'inventaire, cf. n° 17
+    //    réunion ERP : la saisie libre était une source d'erreur.)
     if ($action==='sauver_ligne') {
         if (!$can_edit) json_response(false,'Inventaire non modifiable.');
         $detail_id      = (int)($_POST['detail_id']     ?? 0);
         $stock_physique = $_POST['stock_physique'] !== '' ? (int)$_POST['stock_physique'] : null;
-        $ecart_connu    = $_POST['ecart_connu']    !== '' ? (int)$_POST['ecart_connu']    : 0;
         $notes          = trim($_POST['notes'] ?? '');
 
         $det = db_fetch_one(
@@ -69,8 +70,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         );
         if (!$det) json_response(false,'Ligne introuvable.');
 
-        $stock_sys   = (int)$det['stock_systeme'];
-        $stock_phy   = $stock_physique !== null ? $stock_physique : (int)$det['stock_physique'];
+        $stock_sys    = (int)$det['stock_systeme'];
+        $stock_phy    = $stock_physique !== null ? $stock_physique : (int)$det['stock_physique'];
+        $ecart_connu  = (int)($det['ecart_connu_avant'] ?? 0);
         $ecart_mesure = $stock_phy - $stock_sys;       // écart détecté lors de l'inventaire
         $ecart_total  = $ecart_mesure + $ecart_connu;  // écart total = mesuré + connu
 
@@ -89,24 +91,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
             [$stock_phy, $ecart_mesure, $jours_sys, $jours_phy, $date_epuis, $notes, $detail_id]
         );
 
-        // Sauver l'écart connu dans ecarts_bobines si non nul
-        if ($ecart_connu != 0) {
-            // Supprimer l'éventuel écart connu précédent de cet inventaire pour cette bobine
-            db_query(
-                "DELETE FROM ecarts_bobines
-                 WHERE bobine_id=? AND source='manuel' AND inventaire_id IS NULL
-                   AND DATE(created_at)=CURRENT_DATE",
-                [$det['bobine_id']]
-            );
-            db_query(
-                "INSERT INTO ecarts_bobines (bobine_id,date_constat,stock_systeme,stock_physique,ecart,motif,source,statut,created_by)
-                 VALUES (?,?,?,?,?,?,?,?,?)",
-                [$det['bobine_id'], $inv['date_inventaire'], $stock_sys, $stock_phy,
-                 $ecart_connu, $notes ?: 'Écart connu déclaré lors inventaire #'.$inv_id,
-                 'manuel','ouvert',$user['id']]
-            );
-        }
-
         json_response(true,'Sauvegardé.',['ecart_mesure'=>$ecart_mesure,'ecart_total'=>$ecart_total,'jours_phy'=>$jours_phy,'date_epuis'=>$date_epuis]);
     }
 
@@ -120,7 +104,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
             foreach ($lignes_data as $ld) {
                 $detail_id   = (int)($ld['id'] ?? 0);
                 $phy_val     = $ld['phy'] !== '' ? (int)$ld['phy'] : null;
-                $connu_val   = (int)($ld['connu'] ?? 0);
                 $notes       = trim($ld['notes'] ?? '');
                 if ($phy_val === null) continue;
 
@@ -143,15 +126,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
                     "UPDATE inventaire_details_bobines SET stock_physique=?,ecart=?,jours_restants_physique=?,date_epuisement_estime=?,notes=? WHERE id=?",
                     [$phy_val,$ecart_mes,$jours_phy,$date_epuis,$notes,$detail_id]
                 );
-
-                if ($connu_val != 0) {
-                    db_query(
-                        "INSERT INTO ecarts_bobines (bobine_id,date_constat,stock_systeme,stock_physique,ecart,motif,source,statut,created_by)
-                         VALUES (?,?,?,?,?,?,?,?,?)",
-                        [$det['bobine_id'],$inv['date_inventaire'],$stock_sys,$phy_val,
-                         $connu_val,'Écart connu – inventaire #'.$inv_id,'manuel','ouvert',$user['id']]
-                    );
-                }
                 $saved++;
             }
             db_commit();
@@ -448,10 +422,6 @@ input.saisie{width:80px;padding:5px 8px;border:1.5px solid #e2e8f0;border-radius
 input.saisie:focus{outline:none;border-color:var(--blue-mid,#1a56a0)}
 input.saisie.ok{border-color:#27ae60;background:#f0fdf4}
 input.saisie.nok{border-color:#e74c3c;background:#fff5f5}
-input.connu{width:70px;padding:5px 8px;border:1.5px dashed #f39c12;border-radius:6px;text-align:right;
-            font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;background:#fffbf0;transition:border-color .2s}
-input.connu:focus{outline:none;border-color:#e67e22}
-input.connu.filled{border-color:#e67e22;background:#fff3cd}
 
 .ecart-val{font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800}
 .ecart-pos{color:#27ae60}
@@ -488,7 +458,7 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
     <button class="btn btn-secondary" id="btnSauverTout" onclick="sauverTout()">💾 Tout sauver</button>
     <?php endif; ?>
     <?php if($can_validate): ?>
-    <button class="btn btn-success" onclick="validerInventaire()">✅ Valider l'inventaire</button>
+    <button class="btn btn-success" onclick="ouvrirRecapValidation()">✅ Valider l'inventaire</button>
     <?php endif; ?>
   </div>
 </div>
@@ -509,11 +479,27 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
 
 <div id="alertZone"></div>
 
+<!-- MODAL RÉCAP VALIDATION (n° 18 réunion ERP) -->
+<div id="modalRecapValidation" style="display:none;position:fixed;inset:0;background:rgba(13,31,53,.5);z-index:800;align-items:center;justify-content:center"
+     onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:white;border-radius:16px;padding:24px 26px;width:100%;max-width:560px;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <h3 style="font-family:'Montserrat',sans-serif;font-size:17px;font-weight:800;color:var(--navy);margin:0 0 4px">📋 Récapitulatif avant validation</h3>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 16px">Vérifiez les données ci-dessous avant d'enregistrer définitivement l'inventaire.</p>
+    <div id="recapStats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px"></div>
+    <div id="recapNonSaisi" style="display:none;background:#fff8e7;color:#b7791f;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px"></div>
+    <div id="recapEcarts"></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:14px;border-top:1px solid var(--border)">
+      <button class="btn btn-secondary" onclick="document.getElementById('modalRecapValidation').style.display='none'">Non, modifier les infos</button>
+      <button class="btn btn-success" id="btnConfirmerValidation" onclick="confirmerValidation()">✅ Oui, valider l'inventaire</button>
+    </div>
+  </div>
+</div>
+
 <!-- LÉGENDE -->
 <div style="display:flex;gap:16px;font-size:12px;color:var(--muted);margin-bottom:12px;align-items:center">
   <span>📝 <strong>Films comptés</strong> : stock réel compté physiquement</span>
   <span style="border-left:1px solid var(--border);padding-left:16px">
-    <span style="border-bottom:2px dashed #f39c12;padding-bottom:1px"><strong>Écart connu</strong></span> : différence connue avant l'inventaire (saisir + ou -)
+    <span style="border-bottom:2px dashed #f39c12;padding-bottom:1px"><strong>Écart connu</strong></span> : différence connue avant l'inventaire, renseignée automatiquement par le système
   </span>
 </div>
 
@@ -564,7 +550,8 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
                 : ($ecart_mes != 0     ? '#fff5f5'
                 :                        'white'));
       ?>
-      <tr id="row-<?= $l['id'] ?>" style="border-bottom:1px solid #e2e8f0;background:<?= $row_bg ?>">
+      <tr id="row-<?= $l['id'] ?>" style="border-bottom:1px solid #e2e8f0;background:<?= $row_bg ?>"
+          data-numero="<?= h($l['numero']) ?>" data-connu="<?= (int)($l['ecart_connu_avant'] ?? 0) ?>">
 
         <!-- Numéro -->
         <td style="padding:9px 14px;font-family:monospace;font-weight:700;color:var(--navy);font-size:13px"><?= h($l['numero']) ?></td>
@@ -603,23 +590,16 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
           <?php endif; ?>
         </td>
 
-        <!-- Écart connu (saisie libre) -->
+        <!-- Écart connu — lecture seule, valeur système à l'ouverture de l'inventaire
+             (n° 17 réunion ERP : plus de saisie libre, source d'erreur) -->
         <td style="padding:9px 14px;text-align:center">
-          <?php if($can_edit): ?>
-          <input type="number"
-                 class="connu <?= $ec_connu?'filled':'' ?>"
-                 id="connu-<?= $l['id'] ?>"
-                 value="<?= $ec_connu ? (int)$ec_connu['total_ecart'] : '' ?>"
-                 placeholder="0"
-                 title="<?= $ec_connu ? h($ec_connu['detail']) : 'Ex: -15 ou +3' ?>"
-                 oninput="onConnuInput(<?= $l['id'] ?>)">
-          <?php else: ?>
-            <?php if($ec_connu): ?>
-            <span style="font-family:'Montserrat',sans-serif;font-weight:800;color:<?= (int)$ec_connu['total_ecart']<0?'#e74c3c':'#27ae60' ?>">
-              <?= (int)$ec_connu['total_ecart']>0?'+':'' ?><?= (int)$ec_connu['total_ecart'] ?>
+          <?php $ecart_connu_avant = (int)($l['ecart_connu_avant'] ?? 0); ?>
+          <?php if ($ecart_connu_avant !== 0): ?>
+            <span style="font-family:'Montserrat',sans-serif;font-weight:800;color:<?= $ecart_connu_avant<0?'#e74c3c':'#27ae60' ?>"
+                  title="Renseigné automatiquement à l'ouverture de l'inventaire">
+              <?= $ecart_connu_avant>0?'+':'' ?><?= $ecart_connu_avant ?>
             </span>
-            <?php else: ?><span style="color:#94a3b8">—</span><?php endif; ?>
-          <?php endif; ?>
+          <?php else: ?><span style="color:#94a3b8">—</span><?php endif; ?>
         </td>
 
         <!-- Écart mesuré (figé — calculé au moment de l'inventaire) -->
@@ -688,7 +668,7 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
   <button class="btn btn-secondary" onclick="sauverTout()">💾 Tout sauver</button>
   <?php endif; ?>
   <?php if($can_validate): ?>
-  <button class="btn btn-success" style="font-size:14px;padding:10px 24px" onclick="validerInventaire()">✅ Valider l'inventaire</button>
+  <button class="btn btn-success" style="font-size:14px;padding:10px 24px" onclick="ouvrirRecapValidation()">✅ Valider l'inventaire</button>
   <?php endif; ?>
 </div>
 <?php endif; ?>
@@ -738,18 +718,11 @@ function onPhyInput(id, stockSys, consoMoy){
   updateStats();
 }
 
-function onConnuInput(id){
-  const inp = document.getElementById('connu-'+id);
-  inp.classList.toggle('filled', inp.value!=='' && inp.value!=='0');
-}
-
 async function sauverLigne(id){
-  const phyEl   = document.getElementById('phy-'+id);
-  const connuEl = document.getElementById('connu-'+id);
-  const phy   = phyEl   ? phyEl.value   : '';
-  const connu = connuEl ? connuEl.value : '0';
+  const phyEl = document.getElementById('phy-'+id);
+  const phy   = phyEl ? phyEl.value : '';
   if(phy===''){toast('Saisissez d\'abord le stock physique.','error');return;}
-  const d = await ap({action:'sauver_ligne',detail_id:id,stock_physique:phy,ecart_connu:connu||0,notes:''});
+  const d = await ap({action:'sauver_ligne',detail_id:id,stock_physique:phy,notes:''});
   if(d.success){
     if(phyEl) phyEl.style.borderColor='#27ae60';
     setTimeout(()=>{if(phyEl)phyEl.style.borderColor='';},2000);
@@ -765,8 +738,7 @@ async function sauverTout(){
   rows.forEach(row=>{
     const id=row.id.replace('row-','');
     const phyEl=document.getElementById('phy-'+id);
-    const connuEl=document.getElementById('connu-'+id);
-    if(phyEl&&phyEl.value!=='') lignes.push({id,phy:phyEl.value,connu:connuEl?connuEl.value||0:0,notes:''});
+    if(phyEl&&phyEl.value!=='') lignes.push({id,phy:phyEl.value,notes:''});
   });
   if(!lignes.length){toast('Aucune valeur à sauvegarder.','error');if(btn){btn.disabled=false;btn.textContent='💾 Tout sauver';}return;}
   const d=await ap({action:'sauver_tout',lignes:JSON.stringify(lignes)});
@@ -777,9 +749,78 @@ async function sauverTout(){
   } else toast('Erreur : '+d.message,'error');
 }
 
-async function validerInventaire(){
-  if(!confirm('Valider cet inventaire ?\nLes écarts seront appliqués au stock système.')) return;
-  const d=await ap({action:'valider'});
+function ouvrirRecapValidation(){
+  const rows = document.querySelectorAll('tr[id^="row-"]');
+  let total = rows.length, saisis = 0, nonSaisis = 0;
+  const lignesEcart = [];
+  rows.forEach(row=>{
+    const id     = row.id.replace('row-','');
+    const phyEl  = document.getElementById('phy-'+id);
+    const connu  = parseInt(row.dataset.connu||'0');
+    const numero = row.dataset.numero||'';
+    if(!phyEl || phyEl.value===''){
+      nonSaisis++;
+      if(connu!==0) lignesEcart.push({numero, mesure:null, connu});
+      return;
+    }
+    saisis++;
+    const sys    = parseInt(phyEl.dataset.sys||'0');
+    const mesure = parseInt(phyEl.value) - sys;
+    if(mesure!==0 || connu!==0) lignesEcart.push({numero, mesure, connu});
+  });
+
+  document.getElementById('recapStats').innerHTML = `
+    <div style="text-align:center;padding:10px;background:var(--tertiary,#f1f5f9);border-radius:8px">
+      <div style="font-size:20px;font-weight:900;color:var(--navy)">${total}</div>
+      <div style="font-size:10.5px;color:var(--muted)">Bobines</div>
+    </div>
+    <div style="text-align:center;padding:10px;background:#eafaf1;border-radius:8px">
+      <div style="font-size:20px;font-weight:900;color:#1e8449">${saisis}</div>
+      <div style="font-size:10.5px;color:#1e8449">Saisies</div>
+    </div>
+    <div style="text-align:center;padding:10px;background:${lignesEcart.length?'#fdf0ef':'#eafaf1'};border-radius:8px">
+      <div style="font-size:20px;font-weight:900;color:${lignesEcart.length?'#c0392b':'#1e8449'}">${lignesEcart.length}</div>
+      <div style="font-size:10.5px;color:${lignesEcart.length?'#c0392b':'#1e8449'}">Avec écart</div>
+    </div>
+    <div style="text-align:center;padding:10px;background:${nonSaisis?'#fff8e7':'var(--tertiary,#f1f5f9)'};border-radius:8px">
+      <div style="font-size:20px;font-weight:900;color:${nonSaisis?'#b7791f':'var(--navy)'}">${nonSaisis}</div>
+      <div style="font-size:10.5px;color:${nonSaisis?'#b7791f':'var(--muted)'}">Non saisies</div>
+    </div>`;
+
+  const nonSaisiEl = document.getElementById('recapNonSaisi');
+  if(nonSaisis>0){
+    nonSaisiEl.style.display='block';
+    nonSaisiEl.innerHTML = `⚠️ ${nonSaisis} bobine(s) sans stock physique saisi ne seront pas prises en compte dans la validation.`;
+  } else nonSaisiEl.style.display='none';
+
+  const recapEl = document.getElementById('recapEcarts');
+  if(lignesEcart.length){
+    recapEl.innerHTML = `<div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px">Lignes avec écart</div>
+      <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;max-height:220px;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+          <thead><tr style="background:#f1f5f9"><th style="padding:6px 10px;text-align:left">Numéro</th>
+            <th style="padding:6px 10px;text-align:right">Écart mesuré</th>
+            <th style="padding:6px 10px;text-align:right">Écart connu</th></tr></thead>
+          <tbody>${lignesEcart.map(l=>`<tr style="border-top:1px solid var(--border)">
+            <td style="padding:6px 10px;font-family:monospace">${l.numero}</td>
+            <td style="padding:6px 10px;text-align:right;font-weight:700;color:${l.mesure===null?'#94a3b8':(l.mesure<0?'#e74c3c':l.mesure>0?'#27ae60':'#94a3b8')}">${l.mesure===null?'—':(l.mesure>0?'+':'')+l.mesure}</td>
+            <td style="padding:6px 10px;text-align:right;font-weight:700;color:${l.connu<0?'#e74c3c':l.connu>0?'#27ae60':'#94a3b8'}">${l.connu!==0?(l.connu>0?'+':'')+l.connu:'—'}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>`;
+  } else {
+    recapEl.innerHTML = `<div style="background:#eafaf1;color:#1e8449;border-radius:8px;padding:10px 14px;font-size:13px">✅ Aucun écart, tous les stocks concordent.</div>`;
+  }
+
+  document.getElementById('modalRecapValidation').style.display='flex';
+}
+
+async function confirmerValidation(){
+  const btn = document.getElementById('btnConfirmerValidation');
+  btn.disabled = true; btn.textContent = '⏳ Validation…';
+  const d = await ap({action:'valider'});
+  document.getElementById('modalRecapValidation').style.display='none';
+  btn.disabled = false; btn.textContent = "✅ Oui, valider l'inventaire";
   if(d.success){toast(d.message);setTimeout(()=>location.href='inventaire_bobines.php',1500);}
   else{document.getElementById('alertZone').innerHTML=`<div style="background:#fdf0ef;padding:10px 16px;border-radius:8px;font-size:13px;color:#c0392b;margin-bottom:12px">❌ ${d.message}</div>`;}
 }
