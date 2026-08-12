@@ -138,13 +138,22 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         if (!$can_validate) json_response(false,'Seul le GSB ou un administrateur peut valider l\'inventaire.');
         $lignes = db_fetch_all("SELECT * FROM inventaire_details_bobines WHERE inventaire_id=?",[$inv_id]);
         $nb_ecarts = 0;
+        $total_physique = 0;
         db_begin();
         try {
             foreach ($lignes as $l) {
-                // Ignorer les lignes sans stock physique déclaré
-                if ($l['stock_physique'] === null || $l['stock_physique'] === '') continue;
+                // Ignorer les lignes sans stock physique déclaré. La colonne est
+                // NOT NULL (défaut 0 à la création, cf. inventaire_bobines.php),
+                // donc le seul moyen fiable de distinguer « jamais saisi » de
+                // « saisi à zéro » est le même critère que le récap de
+                // validation (n° 18) : stock_physique>0 OU un écart déjà stocké.
+                // Un test sur === null/'' ne se déclenche jamais et laissait
+                // passer toutes les lignes non saisies avec physique=0, ce qui
+                // vidait à tort le stock système de chaque bobine non comptée.
+                if ((int)$l['stock_physique'] <= 0 && (int)$l['ecart'] == 0) continue;
                 $phy     = (int)$l['stock_physique'];
                 $sys_inv = (int)$l['stock_systeme']; // snapshot au moment de la saisie
+                $total_physique += $phy;
 
                 // Toujours appliquer le stock physique déclaré — source de vérité
                 db_query(
@@ -181,8 +190,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
                     );
                 }
             }
-            db_query("UPDATE inventaires_bobines SET statut='valide',nb_ecarts=?,valide_par=?,valide_at=NOW() WHERE id=?",
-                [$nb_ecarts,$user['id'],$inv_id]);
+            db_query("UPDATE inventaires_bobines SET statut='valide',nb_ecarts=?,total_films_physique=?,valide_par=?,valide_at=NOW() WHERE id=?",
+                [$nb_ecarts,$total_physique,$user['id'],$inv_id]);
             audit_log($user['id'],'UPDATE','inventaire_bobines',$inv_id,"Validation inventaire #$inv_id — $nb_ecarts écart(s)");
             db_commit();
             json_response(true,"Inventaire validé. $nb_ecarts écart(s) traité(s).");
