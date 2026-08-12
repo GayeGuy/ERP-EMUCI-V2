@@ -282,7 +282,7 @@ include __DIR__ . '/../templates/header.php';
           <td><?= h($d['_demandeur'] ?? '') ?></td>
           <td><span class="di-chip"><?= h($d['_etape_label']) ?></span></td>
           <td style="color:var(--muted,#7f8c8d);font-size:13px"><?= $d['submitted_at'] ? date('d/m/Y', strtotime($d['submitted_at'])) : '—' ?></td>
-          <td><?= di_badge($d['statut']) ?></td>
+          <td><?= di_badge(di_statut_effectif($d)) ?></td>
         </tr>
       <?php endforeach; ?>
       </tbody>
@@ -313,7 +313,7 @@ include __DIR__ . '/../templates/header.php';
           <td><?= h($type_labels[$d['type_code']] ?? $d['type_code']) ?></td>
           <td><?= h($d['_demandeur'] ?? '') ?></td>
           <td style="color:var(--muted,#7f8c8d);font-size:13px"><?= $d['updated_at'] ? date('d/m/Y', strtotime($d['updated_at'])) : '—' ?></td>
-          <td><?= di_badge($d['statut']) ?></td>
+          <td><?= di_badge(di_statut_effectif($d)) ?></td>
         </tr>
       <?php endforeach; ?>
       </tbody>
@@ -331,7 +331,7 @@ include __DIR__ . '/../templates/header.php';
   <?php // Au-delà de quatre lignes la liste défile dans son cadre. ?>
   <div<?= count($deja_traite) > 4 ? ' class="di-scroll"' : '' ?>>
     <table class="di-tbl">
-      <thead><tr><th>Référence</th><th>Type</th><th>Demandeur</th><th>Étape courante</th><th>Soumise le</th><th>Statut</th></tr></thead>
+      <thead><tr><th>Référence</th><th>Type</th><th>Demandeur</th><th>Étape courante</th><th>Ticket GLPI</th><th>Soumise le</th><th>Statut</th></tr></thead>
       <tbody>
       <?php foreach ($deja_traite as $d): ?>
         <tr onclick="location.href='<?= APP_URL ?>/pages/demandes.php?id=<?= (int)$d['id'] ?>'">
@@ -339,8 +339,9 @@ include __DIR__ . '/../templates/header.php';
           <td><?= h($type_labels[$d['type_code']] ?? $d['type_code']) ?></td>
           <td><?= h($d['_demandeur'] ?? '') ?></td>
           <td><span class="di-chip done"><?= h($d['_etape_label']) ?></span></td>
+          <td style="font-size:13px;font-weight:700"><?= !empty($d['ticket_glpi']) ? h($d['ticket_glpi']) : '<span style="font-weight:400;color:var(--muted,#7f8c8d)">—</span>' ?></td>
           <td style="color:var(--muted,#7f8c8d);font-size:13px"><?= $d['submitted_at'] ? date('d/m/Y', strtotime($d['submitted_at'])) : '—' ?></td>
-          <td><?= di_badge($d['statut']) ?></td>
+          <td><?= di_badge(di_statut_effectif($d)) ?></td>
         </tr>
       <?php endforeach; ?>
       </tbody>
