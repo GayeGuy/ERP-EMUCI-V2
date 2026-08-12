@@ -81,6 +81,11 @@ function _groupes_def(): array {
                  'url'=>'pages/validation_stock_matin.php','active_keys'=>['validation_stock_matin']],
                 ['label'=>'Inventaire bobines',   'icon'=>'ph-clipboard-text',
                  'url'=>'pages/inventaire_bobines.php','active_keys'=>['inventaire_bobines']],
+                // n° 19 réunion ERP : réservé au responsable des sessions
+                // (admin/superadmin ou délégation, cf. can() et Délégations).
+                ['label'=>"Sessions d'inventaire", 'icon'=>'ph-calendar-check',
+                 'url'=>'pages/inventaire_sessions.php','active_keys'=>['inventaire_sessions'],
+                 'perm'=>['inventaire_sessions','can_read']],
                 ['label'=>'Rapports & Exports',   'icon'=>'ph-file-arrow-down',
                  'url'=>'pages/rapports_gsb.php','active_keys'=>['rapports_gsb'],
                  'roles_include'=>['admin','superadmin','gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation']],

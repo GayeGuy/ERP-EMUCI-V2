@@ -45,6 +45,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
         if (!$site_id) json_response(false,'Site obligatoire.');
 
+        // n° 19 réunion ERP : l'inventaire mensuel ne se crée plus librement,
+        // il faut une session ouverte qui couvre ce site à la date du jour.
+        // Le journalier n'est pas concerné, il garde son fonctionnement actuel.
+        $session_id = null;
+        if ($type === 'mensuel') {
+            $session = db_fetch_one(
+                "SELECT se.id FROM inventaire_sessions se
+                 JOIN inventaire_session_sites iss ON iss.session_id = se.id
+                 WHERE iss.site_id = ? AND se.statut = 'ouverte'
+                   AND CURRENT_DATE BETWEEN se.date_debut AND se.date_fin
+                 LIMIT 1",
+                [$site_id]
+            );
+            if (!$session) {
+                json_response(false, "Aucune session d'inventaire mensuel ouverte pour ce site actuellement. Contactez le responsable des sessions d'inventaire.");
+            }
+            $session_id = (int)$session['id'];
+
+            $deja = db_fetch_one(
+                "SELECT id FROM inventaires_bobines WHERE session_id=? AND site_id=? AND statut!='annule'",
+                [$session_id, $site_id]
+            );
+            if ($deja) json_response(false, "Un inventaire existe déjà pour ce site dans cette session (ouvrez-le depuis la liste).");
+        }
+
         $exist = db_fetch_one(
             "SELECT id FROM inventaires_bobines WHERE site_id=? AND date_inventaire=? AND type_inventaire=? AND statut!='annule'",
             [$site_id, $date, $type]
@@ -72,9 +97,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             $films_digi = (int)db_fetch_value("SELECT COALESCE(SUM(total_plaques),0) FROM op_points_journaliers WHERE site_id=? AND date_point=?", [$site_id, $date]);
 
             db_query(
-                "INSERT INTO inventaires_bobines (site_id,date_inventaire,type_inventaire,statut,nb_bobines,notes,total_films_systeme,total_films_emuci,ecart_digistock_emuci,cree_par)
-                 VALUES (?,?,?,'brouillon',?,?,?,?,?,?)",
-                [$site_id,$date,$type,count($bobines),$notes,$total_systeme,$films_emuci,($films_emuci-$films_digi),$user['id']]
+                "INSERT INTO inventaires_bobines (site_id,date_inventaire,type_inventaire,statut,nb_bobines,notes,total_films_systeme,total_films_emuci,ecart_digistock_emuci,cree_par,session_id)
+                 VALUES (?,?,?,'brouillon',?,?,?,?,?,?,?)",
+                [$site_id,$date,$type,count($bobines),$notes,$total_systeme,$films_emuci,($films_emuci-$films_digi),$user['id'],$session_id]
             );
             $inv_id = (int)db_last_id();
 

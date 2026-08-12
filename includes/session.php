@@ -71,6 +71,19 @@ function can(string $module, string $droit = 'can_read'): bool {
     // Admin et superadmin ont tout
     if (in_array($user['role_slug'], ['admin', 'superadmin'])) return true;
 
+    // Sessions d'inventaire (n° 19 réunion ERP) : réservé à l'admin/superadmin
+    // ci-dessus, sauf délégation explicite à une personne précise — cf.
+    // Administration → Délégations, réutilisée ici avec superviseur_id =
+    // l'admin délégant et gestionnaire_id = n'importe quel utilisateur (pas
+    // seulement Gestionnaire Opération, contrairement à l'usage historique
+    // de cette table). N'existe jamais dans la table permissions : ne pas
+    // retomber sur _check_permission_db en bas de fonction, qui renverrait
+    // toujours faux et cacherait un mauvais diagnostic si le module y est
+    // ajouté par erreur un jour.
+    if ($module === 'inventaire_sessions') {
+        return _a_delegation((int)$user['id'], 'inventaire_sessions');
+    }
+
     // Le N+1 d'un gestionnaire de stock voit les commandes de son périmètre,
     // en lecture seule, même si son rôle ne porte pas le droit : il doit
     // pouvoir suivre les déclarations de commande de son équipe. La lecture
@@ -125,6 +138,24 @@ function _est_n1_de_gestionnaire_stock(int $user_id): bool {
         );
     }
     return $cache[$user_id];
+}
+
+/**
+ * L'utilisateur a-t-il reçu une délégation active pour ce module ? Table
+ * delegations réutilisée au-delà de son usage d'origine (superviseur →
+ * gestionnaire opération) : ici superviseur_id est l'admin qui délègue,
+ * gestionnaire_id la personne choisie, quel que soit son rôle.
+ */
+function _a_delegation(int $user_id, string $module): bool {
+    static $cache = [];
+    $key = "$user_id:$module";
+    if (!array_key_exists($key, $cache)) {
+        $cache[$key] = (bool)db_fetch_value(
+            "SELECT COUNT(*) FROM delegations WHERE gestionnaire_id=? AND module=? AND actif=1",
+            [$user_id, $module]
+        );
+    }
+    return $cache[$key];
 }
 
 function _check_permission_db(int $role_id, string $module, string $droit): bool {
