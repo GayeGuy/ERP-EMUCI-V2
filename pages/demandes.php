@@ -557,19 +557,21 @@ include __DIR__ . '/../templates/header.php';
   <?php else: ?>
     <table class="di-tbl">
       <thead><tr>
-        <th>Réf.</th><th>Type</th><th>Demandeur</th><th>Statut</th><th>Étape</th><th>Date</th><th></th>
+        <th style="width:42px">N°</th><th>Réf.</th><th>Type</th><th>Demandeur</th><th>Statut</th><th>Étape</th><th>Date</th><th></th>
       </tr></thead>
       <tbody>
-      <?php foreach ($mes as $m):
+      <?php $rang = 0; foreach ($mes as $m): $rang++;
         $url = APP_URL.'/pages/demandes.php?id='.(int)$m['id'];
         $wf  = $wf_cache[$m['type_code']] ?? [];
         $idx = (int)($m['etape_actuelle'] ?? 0);
-        if (in_array($m['statut'], ['approuve','approuve_traitement'], true))   $etape_lbl = 'Approuvée';
+        if ($m['statut'] === 'approuve')            $etape_lbl = 'Approuvée';
+        elseif ($m['statut'] === 'approuve_traitement') $etape_lbl = 'Traitement IT';
         elseif ($m['statut'] === 'rejete')   $etape_lbl = 'Rejetée';
         elseif ($m['statut'] === 'brouillon') $etape_lbl = 'Brouillon';
         else $etape_lbl = $wf[$idx]['label'] ?? '—';
       ?>
         <tr style="cursor:pointer" onclick="location.href='<?= $url ?>'">
+          <td style="color:var(--muted,#7f8c8d);font-size:12px;font-weight:700"><?= $rang ?></td>
           <td style="font-weight:700;white-space:nowrap"><?= h($m['numero']) ?></td>
           <td><?= h($type_labels[$m['type_code']] ?? $m['type_code']) ?></td>
           <td style="font-size:13px"><?= h($m['demandeur_nom'] ?? '') ?></td>

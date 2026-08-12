@@ -36,7 +36,10 @@ function di_champs_config(): array {
         ],
         'creation_acces' => [
             ['key'=>'agent_nom',      'label'=>"Nom & Prénoms de l'agent", 'type'=>'agent', 'required'=>true, 'section'=>"Identité de l'agent"],
-            ['key'=>'agent_email',    'label'=>"Email de l'agent",         'type'=>'email', 'editable_after_autofill'=>true],
+            // Volontairement facultatif : en création d'accès, l'agent n'a pas
+            // toujours d'adresse, ou en a une qui n'est pas encore configurée
+            // sur les plateformes NSIIV.
+            ['key'=>'agent_email',    'label'=>"Email de l'agent",         'type'=>'email', 'editable_after_autofill'=>true, 'suffixe'=>"si l'agent en a déjà une"],
             ['key'=>'agent_fonction', 'label'=>"Fonction de l'agent",      'type'=>'text',  'required'=>true],
             ['key'=>'periode_acces',  'label'=>"Période d'accès",          'type'=>'daterange', 'span'=>true, 'section'=>"Accès demandé"],
             ['key'=>'departement',    'label'=>'Département',               'type'=>'text'],

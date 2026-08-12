@@ -331,6 +331,10 @@ function dash_blocs_visibles(?array $user = null): array {
 /** Ouvre une carte : titre, sous-titre, lien d'action optionnel. */
 function dash_carte_debut(array $bloc): void {
     $lien = $bloc['lien'] ?? null;
+    // Un bloc peut porter un second lien (« lien2 »), soumis au même contrôle
+    // de droit que le premier : deux vues d'une même donnée, par exemple le
+    // rapport mensuel et le rapport annuel.
+    $lien2 = $bloc['lien2'] ?? null;
 
     if (dash_v2()) {
         echo '<div class="dv2-c">';
@@ -347,6 +351,12 @@ function dash_carte_debut(array $bloc): void {
             $lm = $bloc['lien_module'] ?? ($bloc['module'] ?? null);
             $ld = $bloc['lien_droit']  ?? 'can_read';
             if ($lm === null || can($lm, $ld)) {
+                if ($lien2) {
+                    echo '<a class="dv2-more" href="' . APP_URL . h($lien2[0]) . '"'
+                       . ' title="' . h($lien2[1]) . '" aria-label="' . h($lien2[1]) . '"'
+                       . ' style="width:auto;padding:0 10px;font-size:11px;font-weight:700">'
+                       . h($lien2[1]) . '</a>';
+                }
                 echo '<a class="dv2-more" href="' . APP_URL . h($lien[0]) . '"'
                    . ' title="' . h($lien[1]) . '" aria-label="' . h($lien[1]) . '">•••</a>';
             }
@@ -369,7 +379,12 @@ function dash_carte_debut(array $bloc): void {
         $lm = $bloc['lien_module'] ?? ($bloc['module'] ?? null);
         $ld = $bloc['lien_droit']  ?? 'can_read';
         if ($lm === null || can($lm, $ld)) {
+            echo '<div style="display:flex;gap:12px;align-items:center">';
+            if ($lien2) {
+                echo '<a class="dash-lien" href="' . APP_URL . h($lien2[0]) . '">' . h($lien2[1]) . ' →</a>';
+            }
             echo '<a class="dash-lien" href="' . APP_URL . h($lien[0]) . '">' . h($lien[1]) . ' →</a>';
+            echo '</div>';
         }
     }
     // dash-corps porte le défilement horizontal. La carte est en
@@ -1724,6 +1739,7 @@ function dash_registre(): array {
         'module'     => 'operations',
         'largeur'    => 'plein',
         'lien'       => ['/pages/resume_superviseur.php?vue=mensuel', 'Rapport mensuel'],
+        'lien2'      => ['/pages/resume_superviseur.php?vue=annuel',  'Annuel'],
         'lien_module'=> 'rapports',
         'donnees'    => function (array $p) {
             [$w, $args] = dash_filtre_site($p, 'p.site_id');

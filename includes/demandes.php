@@ -18,7 +18,8 @@ function di_statut_label(string $s): array {
         'en_attente'          => ['En attente','#e67e22','#fef9e7'],
         'en_cours'            => ['En cours','#1B75BC','#eaf3fb'],
         'approuve'            => ['Approuvée','#27ae60','#eafaf1'],
-        'approuve_traitement' => ['Approuvée — traitement IT','#16a085','#e8f8f5'],
+        // Orange comme « En attente » : le traitement IT reste à faire, la demande n'est pas close.
+        'approuve_traitement' => ['En attente de traitement IT','#e67e22','#fef9e7'],
         'rejete'              => ['Rejetée','#e74c3c','#fdf0ef'],
         'a_revoir'            => ['À revoir','#8e44ad','#f5eefa'],
     ][$s] ?? [$s,'#7f8c8d','#f0f4f8'];
@@ -61,7 +62,10 @@ function di_user_roles(int $userId): array {
     static $map = [
         'raf'               => ['raf'],
         'daf'               => ['daf'],
-        'gestionnaire'      => ['gestionnaire'],
+        // Le rôle ERP 'gestionnaire' a été supprimé (lot 3). Le code d'étape
+        // « gestionnaire » (Visa Administration) existe toujours dans les
+        // circuits : il est porté par les affectations explicites de
+        // di_user_roles et par le département lié dans di_roles.
         'support_it'        => ['it'],
         'superviseur_it'    => ['it'],
         'maintenance_info'  => ['it'],
@@ -255,6 +259,12 @@ function di_generate_numero(): string {
 // ── Notifications (réutilise la table ERP `notifications`)
 function di_notify(int $userId, string $message, ?int $demandeId = null): void {
     $lien = $demandeId ? '/pages/demandes.php?id=' . $demandeId : '/pages/demandes.php';
+    // La référence du ticket ouvre toujours le message : le destinataire sait de quelle
+    // demande on lui parle sans avoir à ouvrir le lien.
+    if ($demandeId) {
+        $numero = db_fetch_value("SELECT numero FROM di_demandes WHERE id=?", [$demandeId]);
+        if ($numero) $message = "Réf. $numero — " . $message;
+    }
     db_query(
         "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?, 'info', 'Demande interne', ?, ?)",
         [$userId, $message, $lien]
@@ -365,10 +375,10 @@ function di_creer(array $user, string $typeCode, array $champs, bool $soumettre,
         }
         // Notification normale pour la première étape
         if ($workflow[0]['role'] === 'n1' && $n1UserId) {
-            di_notify($n1UserId, "Nouvelle demande « {$type['label']} » de $nom ($numero) à valider", $id);
+            di_notify($n1UserId, "Nouvelle demande « {$type['label']} » de $nom à valider", $id);
         } else {
             di_notify_role($workflow[0]['role'],
-                "Nouvelle demande « {$type['label']} » de $nom ($numero)", $id);
+                "Nouvelle demande « {$type['label']} » de $nom", $id);
         }
     }
     return $id;

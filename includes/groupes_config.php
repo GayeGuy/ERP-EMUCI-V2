@@ -237,8 +237,6 @@ function get_groupes_pour_role(string $role_slug): array {
         'controleur_production'      => ['DASHBOARD','OPERATIONS','BOBINES'],
         // Opérations
         'gestionnaire_operation'     => ['DASHBOARD','OPERATIONS'],
-        // Gestionnaire polyvalent (ex-EQUIPEMENTS → STOCK)
-        'gestionnaire'               => ['DASHBOARD','STOCK'],
         // GSB (gestionnaire stock bobines)
         'gestionnaire_stock_bobines' => ['DASHBOARD','OPERATIONS','BOBINES','STOCK'],
         // Lecture seule : uniquement la vue PDG et les demandes à valider.

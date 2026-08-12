@@ -258,7 +258,7 @@ include __DIR__ . '/../../templates/header.php';
 <?php foreach($roles as $r):
   $is_superadmin = $r['slug'] === 'superadmin';
   $can_edit      = $user['role_slug'] === 'superadmin' && !$is_superadmin;
-  $role_icons    = ['superadmin'=>'👑','admin'=>'🛡️','gestionnaire'=>'⚙️','lecteur'=>'👁'];
+  $role_icons    = ['superadmin'=>'👑','admin'=>'🛡️','lecteur'=>'👔'];
 ?>
 <div class="perm-pane <?= $r===reset($roles)?'active':'' ?>" id="role-<?= $r['id'] ?>">
 

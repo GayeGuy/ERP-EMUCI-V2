@@ -48,6 +48,8 @@ migration_permissions_27modules.sql
 migration_fix_action_flags.sql
 migration_fix_permissions_regressions.sql
 migration_ecarts_permissions.sql
+migration_lot2_role_pdg.sql
+migration_lot3_roles.sql
 "
 
 for f in $FICHIERS; do

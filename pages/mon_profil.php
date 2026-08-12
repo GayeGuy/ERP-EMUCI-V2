@@ -22,30 +22,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     if ($action === 'update_profile') {
         $prenom = trim($_POST['prenom'] ?? '');
         $nom    = trim($_POST['nom']    ?? '');
-        $email  = strtolower(trim($_POST['email'] ?? ''));
         $tel    = trim($_POST['telephone'] ?? '');
+        // L'email est l'identifiant de connexion et le canal de réinitialisation :
+        // il n'est plus modifiable ici. Seul un administrateur peut le changer
+        // (pages/admin/users.php). Toute valeur postée est ignorée.
+        $email  = $user['email'];
 
         if (!$prenom || !$nom)
             json_response(false, 'Prénom et nom sont obligatoires.');
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL))
-            json_response(false, 'Adresse email invalide.');
         if (strlen($prenom) > 80 || strlen($nom) > 80)
             json_response(false, 'Nom ou prénom trop long (80 caractères max).');
 
-        $exists = db_fetch_value(
-            "SELECT COUNT(*) FROM users WHERE email=? AND id!=?",
-            [$email, $user['id']]
-        );
-        if ($exists > 0)
-            json_response(false, 'Cette adresse email est déjà utilisée par un autre compte.');
-
         db_query(
-            "UPDATE users SET prenom=?, nom=?, email=?, telephone=? WHERE id=?",
-            [$prenom, $nom, $email, $tel ?: null, $user['id']]
+            "UPDATE users SET prenom=?, nom=?, telephone=? WHERE id=?",
+            [$prenom, $nom, $tel ?: null, $user['id']]
         );
         audit_log(
             $user['id'], 'UPDATE', 'users', $user['id'],
-            "Mise à jour profil : {$user['prenom']} {$user['nom']} ({$user['email']}) → $prenom $nom ($email)"
+            "Mise à jour profil : {$user['prenom']} {$user['nom']} → $prenom $nom"
         );
         json_response(true, 'Profil mis à jour avec succès.');
     }
@@ -296,9 +290,15 @@ include __DIR__ . '/../templates/header.php';
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Adresse email</label>
+              <label>Adresse email
+                <span style="font-weight:400;color:var(--muted)">(non modifiable)</span>
+              </label>
               <input type="email" class="form-control" name="email"
-                     value="<?= h($user['email']) ?>" required>
+                     value="<?= h($user['email']) ?>" readonly disabled
+                     style="background:var(--input,#f0f4f8);color:var(--muted);cursor:not-allowed">
+              <small style="color:var(--muted);font-size:12px">
+                L'adresse email sert d'identifiant de connexion. Contactez un administrateur pour la modifier.
+              </small>
             </div>
           </div>
           <div class="form-row">
@@ -475,7 +475,7 @@ document.getElementById('form-profil').addEventListener('submit', async function
       document.getElementById('js-initiales').textContent =
         (prenom[0] || '').toUpperCase() + (nom[0] || '').toUpperCase();
       document.getElementById('js-fullname').textContent  = prenom + ' ' + nom;
-      document.getElementById('js-email-display').textContent = this.email.value.trim();
+      // L'email n'est plus modifiable depuis cette page : rien à rafraîchir.
     }
   } catch { alertBox('alert-profil', false, 'Erreur réseau.'); }
 

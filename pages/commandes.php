@@ -48,6 +48,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         if (!$site_id)     json_response(false,'Site obligatoire.');
         if (empty($lignes)) json_response(false,'Ajoutez au moins un article.');
 
+        // Une seule commande en attente de validation à la fois, par site : sans
+        // ce garde-fou un chef de site pouvait empiler les commandes non validées
+        // et le superviseur recevait plusieurs demandes concurrentes pour le même
+        // besoin. Les admins gardent la main en cas d'urgence.
+        if (!in_array($user['role_slug'] ?? '', ['admin','superadmin'], true)) {
+            $en_cours = db_fetch_one(
+                "SELECT numero_commande FROM commandes
+                  WHERE site_id=? AND statut='en_attente' ORDER BY id DESC LIMIT 1",
+                [$site_id]
+            );
+            if ($en_cours) {
+                json_response(false,
+                    "La commande {$en_cours['numero_commande']} de ce site attend encore sa validation. "
+                  . "Elle doit être validée ou rejetée avant d'en créer une nouvelle.");
+            }
+        }
+
         db_begin();
         try {
             $num = 'CMD-'.date('Ymd').'-'.str_pad(rand(1,9999),4,'0',STR_PAD_LEFT);
@@ -689,7 +706,10 @@ function _bdc_pdf($cmd, $lignes, $voir_prix, array $ctx = []) {
     }
     require_once $autoload;
 
-    $sl = ['en_attente'=>'En attente','en_attente_livraison'=>'Pret livraison',
+    // Libellés alignés sur ceux de l'application : le bon de commande imprimé
+    // annonçait « Pret livraison » alors que l'écran affiche « À préparer »,
+    // ce qui laissait croire que la commande était prête à partir.
+    $sl = ['en_attente'=>'A valider','en_attente_livraison'=>'En preparation',
            'en_cours_livraison'=>'En livraison','recu'=>'Recu','livre'=>'Livre',
            'rejete'=>'Rejete','annule'=>'Annule'];
 
@@ -714,7 +734,13 @@ function _bdc_pdf($cmd, $lignes, $voir_prix, array $ctx = []) {
         $bg         = $odd ? '#ffffff' : '#f0f4ff';
         $odd        = !$odd;
 
-        $st_labels = ['valide'=>'Livré','rejete'=>'Rejeté','modifie'=>'Modifié'];
+        // Une ligne validée n'est pas une ligne livrée : tant que la commande
+        // est en préparation, le bon imprimé annonçait « Livré » à tort.
+        // Le libellé suit donc l'état réel de la commande.
+        $lbl_valide = in_array($cmd['statut'], ['recu','livre'], true)   ? 'Livré'
+                    : ($cmd['statut'] === 'en_cours_livraison'           ? 'En livraison'
+                    : 'Validé');
+        $st_labels = ['valide'=>$lbl_valide,'rejete'=>'Rejeté','modifie'=>'Modifié'];
         $st_colors = ['valide'=>'#15803d','rejete'=>'#dc2626','modifie'=>'#d97706'];
         $st_txt    = $st_labels[$l['statut_ligne'] ?? ''] ?? '';
         $st_col    = $st_colors[$l['statut_ligne'] ?? ''] ?? '#555';
