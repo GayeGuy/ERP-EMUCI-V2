@@ -431,6 +431,7 @@ input.saisie{width:80px;padding:5px 8px;border:1.5px solid #e2e8f0;border-radius
 input.saisie:focus{outline:none;border-color:var(--blue-mid,#1a56a0)}
 input.saisie.ok{border-color:#27ae60;background:#f0fdf4}
 input.saisie.nok{border-color:#e74c3c;background:#fff5f5}
+input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacity:1}
 
 .ecart-val{font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800}
 .ecart-pos{color:#27ae60}
@@ -596,6 +597,7 @@ input.saisie.nok{border-color:#e74c3c;background:#fff5f5}
                  data-sys="<?= $stock_rt ?>"
                  data-conso="<?= $conso_moy ?>"
                  data-saved="<?= $saisi ? $stock_phy : '' ?>"
+                 <?= $saisi ? 'disabled' : '' ?>
                  oninput="onPhyInput(<?= $l['id'] ?>,<?= $stock_rt ?>,<?= $conso_moy ?>)">
           <?php else: ?>
           <span style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:14px">
@@ -670,7 +672,8 @@ input.saisie.nok{border-color:#e74c3c;background:#fff5f5}
                        color:<?= $saisi ? '#1e8449' : '#b7791f' ?>;margin-right:8px">
             <?= $saisi ? '✅ Sauvegardé' : '🟠 En cours' ?>
           </span>
-          <button style="background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
+          <button id="btn-<?= $l['id'] ?>"
+                  style="display:<?= $saisi ? 'none' : 'inline-block' ?>;background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
                   onclick="sauverLigne(<?= $l['id'] ?>)">💾 Enregistrer</button>
         </td>
         <?php endif; ?>
@@ -757,8 +760,10 @@ async function sauverLigne(id){
   if(phy===''){toast('Saisissez d\'abord le stock physique.','error');return;}
   const d = await ap({action:'sauver_ligne',detail_id:id,stock_physique:phy,notes:''});
   if(d.success){
-    if(phyEl){ phyEl.style.borderColor='#27ae60'; phyEl.dataset.saved = phy; }
+    if(phyEl){ phyEl.style.borderColor='#27ae60'; phyEl.dataset.saved = phy; phyEl.disabled = true; }
     majEtat(id, phy, phy);
+    const btnEl = document.getElementById('btn-'+id);
+    if(btnEl) btnEl.style.display='none';
     setTimeout(()=>{if(phyEl)phyEl.style.borderColor='';},2000);
     toast('Ligne sauvegardée.');
   } else toast('Erreur : '+d.message,'error');
@@ -772,7 +777,7 @@ async function sauverTout(){
   rows.forEach(row=>{
     const id=row.id.replace('row-','');
     const phyEl=document.getElementById('phy-'+id);
-    if(phyEl&&phyEl.value!=='') lignes.push({id,phy:phyEl.value,notes:''});
+    if(phyEl&&!phyEl.disabled&&phyEl.value!=='') lignes.push({id,phy:phyEl.value,notes:''});
   });
   if(!lignes.length){toast('Aucune valeur à sauvegarder.','error');if(btn){btn.disabled=false;btn.textContent='💾 Tout sauver';}return;}
   const d=await ap({action:'sauver_tout',lignes:JSON.stringify(lignes)});
@@ -780,8 +785,10 @@ async function sauverTout(){
   if(d.success){
     lignes.forEach(l=>{
       const phyEl=document.getElementById('phy-'+l.id);
-      if(phyEl) phyEl.dataset.saved = l.phy;
+      if(phyEl){ phyEl.dataset.saved = l.phy; phyEl.disabled = true; }
       majEtat(l.id, l.phy, l.phy);
+      const btnEl=document.getElementById('btn-'+l.id);
+      if(btnEl) btnEl.style.display='none';
     });
     toast(d.message);
     document.getElementById('alertZone').innerHTML=`<div style="background:#eafaf1;padding:10px 16px;border-radius:8px;font-size:13px;color:#1e8449;margin-bottom:12px">✅ ${d.message}</div>`;
