@@ -46,6 +46,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
         if (!$site_id) json_response(false,'Site obligatoire.');
 
+        // Le coordinateur de site dépend désormais entièrement de la session
+        // ouverte par l'admin : plus de création libre de journalier. Le
+        // mensuel reste accessible (filet de secours du bandeau de session,
+        // cf. creerInventaireSession() côté client), lui-même gardé par le
+        // contrôle de session ouverte ci-dessous.
+        if ($type === 'journalier' && $is_coord) {
+            json_response(false, "La création d'inventaire journalier n'est plus disponible pour les coordinateurs de site : elle dépend désormais de la session ouverte par l'administrateur.");
+        }
+
         // n° 19 réunion ERP : l'inventaire mensuel ne se crée plus librement,
         // il faut une session ouverte qui couvre ce site à la date du jour.
         // En pratique il est déjà auto-provisionné à l'ouverture de la
@@ -284,7 +293,10 @@ include __DIR__ . '/../templates/header.php';
     <input type="month" name="mois" value="<?= h($f_mois) ?>" onchange="this.form.submit()"
            style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none">
   </form>
-  <?php if($can_create): ?>
+  <?php // Le coordinateur de site dépend désormais entièrement de la session
+        // ouverte par l'admin (mensuel/trimestriel/semestriel/annuel) : il n'a
+        // plus de création libre d'inventaire, journalier compris. ?>
+  <?php if($can_create && !$is_coord): ?>
   <button class="btn btn-primary" onclick="ouvrirModal()">+ Nouvel inventaire</button>
   <?php endif; ?>
 </div>
