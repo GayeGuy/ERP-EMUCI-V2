@@ -105,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     // ── RECHERCHER ÉQUIPEMENTS (pour autocomplete)
     if ($action === 'search_equip') {
         $q  = trim($_POST['q'] ?? '');
-        if (strlen($q) < 2) json_response(true, '', ['data' => []]);
+        if (strlen($q) < 2) json_response(true, '', []);
         $rows = db_fetch_all(
             "SELECT e.id, e.numero_serie_interne, e.etat, COALESCE(n.libelle,'—') AS type,
                     s.nom AS site_actuel, CONCAT(u.prenom,' ',u.nom) AS user_actuel
@@ -117,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
              LIMIT 10",
             ["%$q%", "%$q%"]
         );
-        json_response(true, '', ['data' => $rows]);
+        json_response(true, '', $rows);
     }
 
     json_response(false, 'Action inconnue.');
