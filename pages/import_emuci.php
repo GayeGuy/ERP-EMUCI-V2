@@ -832,7 +832,7 @@ include __DIR__ . '/../templates/header.php';
     📋 OptoPlate — Plaques posées
   </button>
   <button class="tab-btn <?= $onglet==='optotrace'?'active':'' ?>" onclick="showTab('optotrace')">
-    🎞️ OptoTrace — Registre véhicules
+    🎞️ BI-Stock bobine
   </button>
   <button class="tab-btn <?= $onglet==='comparaison'?'active':'' ?>" onclick="showTab('comparaison')">
     ⚖️ Comparaison EMUCI vs DigiStock
