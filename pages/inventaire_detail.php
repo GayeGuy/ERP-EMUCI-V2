@@ -94,6 +94,99 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         json_response(true,'Sauvegardé.',['ecart_mesure'=>$ecart_mesure,'ecart_total'=>$ecart_total,'jours_phy'=>$jours_phy,'date_epuis'=>$date_epuis]);
     }
 
+    // ── DEMANDER UNE MODIFICATION sur une ligne déjà saisie (verrouillée) —
+    //    typiquement la personne qui a ouvert la session, en consultant le
+    //    détail d'un site. La demande est renvoyée au site concerné.
+    if ($action==='demander_modif') {
+        if (!$can_edit) json_response(false,'Action non autorisée.');
+        $detail_id       = (int)($_POST['detail_id'] ?? 0);
+        $motif           = trim($_POST['motif'] ?? '');
+        $valeur_proposee = ($_POST['valeur_proposee'] ?? '') !== '' ? (int)$_POST['valeur_proposee'] : null;
+        if ($motif === '') json_response(false,'Le motif est obligatoire.');
+
+        $det = db_fetch_one(
+            "SELECT d.*, b.numero FROM inventaire_details_bobines d
+             JOIN op_bobines b ON b.id=d.bobine_id WHERE d.id=? AND d.inventaire_id=?",
+            [$detail_id, $inv_id]
+        );
+        if (!$det) json_response(false,'Ligne introuvable.');
+        if ((int)$det['stock_physique']===0 && (int)$det['ecart']===0) json_response(false,"Cette ligne n'a pas encore été saisie.");
+        if (db_fetch_value("SELECT COUNT(*) FROM inventaire_corrections WHERE detail_id=? AND statut='en_attente'", [$detail_id])) {
+            json_response(false,'Une demande est déjà en attente pour cette ligne.');
+        }
+
+        db_query(
+            "INSERT INTO inventaire_corrections (detail_id,inventaire_id,bobine_id,site_id,stock_physique_actuel,valeur_proposee,motif,demandeur_id)
+             VALUES (?,?,?,?,?,?,?,?)",
+            [$detail_id, $inv_id, $det['bobine_id'], $inv['site_id'], (int)$det['stock_physique'], $valeur_proposee, $motif, $user['id']]
+        );
+        $corr_id = (int)db_last_id();
+
+        $nom = trim(($user['prenom'] ?? '').' '.($user['nom'] ?? ''));
+        $coords = db_fetch_all(
+            "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id
+             WHERE r.slug='coordinateur_site' AND u.actif=1 AND u.site_id=?",
+            [$inv['site_id']]
+        );
+        foreach ($coords as $c) {
+            db_query(
+                "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                [$c['id'], 'info', '🔁 Demande de modification',
+                 "$nom demande une modification sur la bobine {$det['numero']} de votre inventaire du " . fmt_date($inv['date_inventaire']) . " : $motif",
+                 '/pages/inventaire_detail.php?id=' . $inv_id]
+            );
+        }
+        audit_log($user['id'],'CREATE','inventaire_corrections',$corr_id,"Demande modif bobine {$det['numero']} inventaire #$inv_id");
+        json_response(true,'Demande envoyée au site.',['id'=>$corr_id]);
+    }
+
+    // ── RÉPONDRE à une demande de modification — le site corrige la valeur
+    if ($action==='repondre_modif') {
+        if (!$can_edit) json_response(false,'Action non autorisée.');
+        $corr_id       = (int)($_POST['correction_id'] ?? 0);
+        $valeur_finale = ($_POST['valeur_finale'] ?? '') !== '' ? (int)$_POST['valeur_finale'] : null;
+        $reponse       = trim($_POST['reponse'] ?? '');
+        if ($valeur_finale === null) json_response(false,'La valeur corrigée est obligatoire.');
+
+        $corr = db_fetch_one("SELECT * FROM inventaire_corrections WHERE id=? AND inventaire_id=? AND statut='en_attente'", [$corr_id, $inv_id]);
+        if (!$corr) json_response(false,'Demande introuvable ou déjà traitée.');
+
+        $det = db_fetch_one(
+            "SELECT d.*, b.stock_systeme, b.numero FROM inventaire_details_bobines d
+             JOIN op_bobines b ON b.id=d.bobine_id WHERE d.id=?",
+            [$corr['detail_id']]
+        );
+        $stock_sys    = (int)$det['stock_systeme'];
+        $ecart_mesure = $valeur_finale - $stock_sys;
+        $conso_moy    = (float)$det['conso_quotidienne_moy'];
+        $jours_phy    = $conso_moy > 0 ? (int)ceil($valeur_finale / $conso_moy) : null;
+        $date_epuis   = $jours_phy ? date('Y-m-d', strtotime("+{$jours_phy} days")) : null;
+
+        db_begin();
+        try {
+            db_query(
+                "UPDATE inventaire_details_bobines SET stock_physique=?,ecart=?,jours_restants_physique=?,date_epuisement_estime=? WHERE id=?",
+                [$valeur_finale, $ecart_mesure, $jours_phy, $date_epuis, $corr['detail_id']]
+            );
+            db_query(
+                "UPDATE inventaire_corrections SET statut='traite',valeur_finale=?,reponse=?,traite_par=?,traite_at=NOW() WHERE id=?",
+                [$valeur_finale, $reponse ?: null, $user['id'], $corr_id]
+            );
+            audit_log($user['id'],'UPDATE','inventaire_corrections',$corr_id,"Réponse modif bobine {$det['numero']} inventaire #$inv_id : $valeur_finale");
+            db_commit();
+        } catch (Exception $e) { db_rollback(); json_response(false,'Erreur: '.$e->getMessage()); }
+
+        $nom = trim(($user['prenom'] ?? '').' '.($user['nom'] ?? ''));
+        db_query(
+            "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+            [$corr['demandeur_id'], 'info', '↩ Réponse à votre demande',
+             "$nom a répondu à votre demande de modification sur la bobine {$det['numero']} : nouvelle valeur $valeur_finale.",
+             '/pages/inventaire_detail.php?id=' . $inv_id]
+        );
+
+        json_response(true,'Réponse envoyée.',['ecart_mesure'=>$ecart_mesure,'jours_phy'=>$jours_phy,'date_epuis'=>$date_epuis]);
+    }
+
     // ── TOUT SAUVER
     if ($action==='sauver_tout') {
         if (!$can_edit) json_response(false,'Inventaire non modifiable.');
@@ -239,6 +332,26 @@ if (!empty($bobine_ids)) {
          GROUP BY bobine_id", $params_ec
     );
     foreach ($ecs as $ec) $ecarts_connus_map[$ec['bobine_id']] = $ec;
+}
+
+// Demandes de modification par ligne : la plus récente en attente, et la
+// plus récente traitée (pour l'historique) — une ligne ne peut avoir
+// qu'une seule demande 'en_attente' à la fois (contrôlé à la création).
+$corrections_map = [];
+$corrections_rows = db_fetch_all(
+    "SELECT c.*, CONCAT(u1.prenom,' ',u1.nom) AS demandeur_nom, CONCAT(u2.prenom,' ',u2.nom) AS traite_par_nom
+     FROM inventaire_corrections c
+     LEFT JOIN users u1 ON u1.id = c.demandeur_id
+     LEFT JOIN users u2 ON u2.id = c.traite_par
+     WHERE c.inventaire_id = ?
+     ORDER BY c.created_at DESC",
+    [$inv_id]
+);
+foreach ($corrections_rows as $c) {
+    $did = (int)$c['detail_id'];
+    if (!isset($corrections_map[$did])) $corrections_map[$did] = ['attente' => null, 'derniere' => null];
+    if ($c['statut'] === 'en_attente' && !$corrections_map[$did]['attente']) $corrections_map[$did]['attente'] = $c;
+    if (!$corrections_map[$did]['derniere']) $corrections_map[$did]['derniere'] = $c;
 }
 
 // Stats
@@ -509,6 +622,47 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
   </div>
 </div>
 
+<!-- MODAL DEMANDER UNE MODIFICATION -->
+<div id="modalDemanderModif" style="display:none;position:fixed;inset:0;background:rgba(13,31,53,.5);z-index:800;align-items:center;justify-content:center"
+     onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:white;border-radius:16px;padding:22px 24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin:0 0 14px">🔁 Demander une modification</h3>
+    <div id="demModifAlert"></div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label style="font-size:12.5px;font-weight:700">Motif *</label>
+      <textarea id="demModifMotif" rows="3" class="form-control" placeholder="Expliquez pourquoi cette valeur vous semble incorrecte…"></textarea>
+    </div>
+    <div class="form-group" style="margin-bottom:6px">
+      <label style="font-size:12.5px;font-weight:700">Valeur proposée <span style="font-weight:400;color:var(--muted)">(optionnel)</span></label>
+      <input type="number" min="0" id="demModifValeur" class="form-control" placeholder="Laisser vide si vous n'avez pas de valeur précise">
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
+      <button class="btn btn-secondary" onclick="document.getElementById('modalDemanderModif').style.display='none'">Annuler</button>
+      <button class="btn btn-primary" id="btnEnvoyerDemModif" onclick="envoyerDemandeModif()">Envoyer au site</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL RÉPONDRE À UNE DEMANDE -->
+<div id="modalRepondreModif" style="display:none;position:fixed;inset:0;background:rgba(13,31,53,.5);z-index:800;align-items:center;justify-content:center"
+     onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:white;border-radius:16px;padding:22px 24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin:0 0 6px">↩ Répondre à la demande</h3>
+    <p style="font-size:12.5px;color:var(--muted);margin:0 0 14px">
+      Corrigez d'abord la valeur dans la colonne « Qté physique », puis confirmez ici.
+    </p>
+    <div id="repModifAlert"></div>
+    <div class="form-group" style="margin-bottom:6px">
+      <label style="font-size:12.5px;font-weight:700">Commentaire <span style="font-weight:400;color:var(--muted)">(optionnel)</span></label>
+      <textarea id="repModifTexte" rows="2" class="form-control" placeholder="Précision sur la correction…"></textarea>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
+      <button class="btn btn-secondary" onclick="document.getElementById('modalRepondreModif').style.display='none'">Annuler</button>
+      <button class="btn btn-primary" id="btnEnvoyerRepModif" onclick="envoyerReponseModif()">Confirmer la correction</button>
+    </div>
+  </div>
+</div>
+
 <!-- LÉGENDE -->
 <div style="display:flex;gap:16px;font-size:12px;color:var(--muted);margin-bottom:12px;align-items:center">
   <span>📝 <strong>Films comptés</strong> : stock réel compté physiquement</span>
@@ -540,7 +694,10 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
           <th style="padding:10px 14px;text-align:right;background:rgba(255,255,255,.08)">Conso/j moy</th>
           <th style="padding:10px 14px;text-align:right;background:rgba(255,255,255,.08)">Jours restants</th>
           <th style="padding:10px 14px;text-align:center;background:rgba(255,255,255,.08)">Épuisement estimé</th>
-          <?php if($can_edit): ?><th style="padding:10px 14px;text-align:center">Enregistrement</th><?php endif; ?>
+          <?php if($can_edit): ?>
+          <th style="padding:10px 14px;text-align:center">Enregistrement</th>
+          <th style="padding:10px 14px;text-align:left">Demande de modification</th>
+          <?php endif; ?>
         </tr>
       </thead>
       <tbody>
@@ -550,6 +707,9 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
         $ecart_mes  = (int)$l['ecart'];            // figé
         $saisi      = $l['stock_physique'] > 0 || $ecart_mes != 0;
         $ec_connu   = $ecarts_connus_map[$l['bobine_id']] ?? null;
+        $demande_attente = $corrections_map[$l['id']]['attente'] ?? null;
+        $demande_traitee = ($corrections_map[$l['id']]['derniere'] ?? null);
+        $demande_traitee = ($demande_traitee && $demande_traitee['statut'] === 'traite') ? $demande_traitee : null;
 
         // ── Données temps réel (dynamiques)
         $stock_rt   = (int)$l['stock_realtime'];          // stock actuel
@@ -597,7 +757,7 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
                  data-sys="<?= $stock_rt ?>"
                  data-conso="<?= $conso_moy ?>"
                  data-saved="<?= $saisi ? $stock_phy : '' ?>"
-                 <?= $saisi ? 'disabled' : '' ?>
+                 <?= ($saisi && !$demande_attente) ? 'disabled' : '' ?>
                  oninput="onPhyInput(<?= $l['id'] ?>,<?= $stock_rt ?>,<?= $conso_moy ?>)">
           <?php else: ?>
           <span style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:14px">
@@ -675,6 +835,31 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
           <button id="btn-<?= $l['id'] ?>"
                   style="display:<?= $saisi ? 'none' : 'inline-block' ?>;background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
                   onclick="sauverLigne(<?= $l['id'] ?>)">💾 Enregistrer</button>
+        </td>
+
+        <!-- Demande de modification -->
+        <td style="padding:9px 14px;text-align:left;max-width:260px">
+          <?php if ($demande_attente): ?>
+            <div style="background:#fff8e7;border:1px solid #f0d999;border-radius:8px;padding:8px 10px;margin-bottom:6px">
+              <div style="font-size:11px;font-weight:700;color:#b7791f">🔶 Demandé par <?= h($demande_attente['demandeur_nom'] ?? '—') ?></div>
+              <div style="font-size:12px;color:#5a4a1f;margin-top:2px"><?= h($demande_attente['motif']) ?></div>
+              <?php if ($demande_attente['valeur_proposee'] !== null): ?>
+              <div style="font-size:11px;color:#5a4a1f;margin-top:2px">Valeur proposée : <strong><?= (int)$demande_attente['valeur_proposee'] ?></strong></div>
+              <?php endif; ?>
+            </div>
+            <button style="background:#fef3e2;color:#b7791f;border:1px solid #f0d999;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
+                    onclick="repondreModif(<?= (int)$demande_attente['id'] ?>,<?= $l['id'] ?>)">↩ Répondre</button>
+          <?php elseif ($saisi): ?>
+            <?php if ($demande_traitee): ?>
+            <div style="font-size:11px;color:#1e8449;margin-bottom:6px">
+              ✅ Modifiée suite à demande (<?= h($demande_traitee['demandeur_nom'] ?? '—') ?> → <?= (int)$demande_traitee['valeur_finale'] ?>)
+            </div>
+            <?php endif; ?>
+            <button style="background:#f8f9fb;color:#5a6480;border:1px solid #e2e8f0;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600"
+                    onclick="demanderModif(<?= $l['id'] ?>)">🔁 Demander modif</button>
+          <?php else: ?>
+            <span style="font-size:12px;color:#94a3b8">—</span>
+          <?php endif; ?>
         </td>
         <?php endif; ?>
       </tr>
@@ -767,6 +952,48 @@ async function sauverLigne(id){
     setTimeout(()=>{if(phyEl)phyEl.style.borderColor='';},2000);
     toast('Ligne sauvegardée.');
   } else toast('Erreur : '+d.message,'error');
+}
+
+let demModifDetailId = null;
+function demanderModif(detailId){
+  demModifDetailId = detailId;
+  document.getElementById('demModifMotif').value='';
+  document.getElementById('demModifValeur').value='';
+  document.getElementById('demModifAlert').innerHTML='';
+  document.getElementById('modalDemanderModif').style.display='flex';
+}
+async function envoyerDemandeModif(){
+  const motif = document.getElementById('demModifMotif').value.trim();
+  const alertEl = document.getElementById('demModifAlert');
+  if(!motif){ alertEl.innerHTML='<div style="background:#fdf0ef;color:#c0392b;padding:8px 12px;border-radius:8px;font-size:12.5px;margin-bottom:10px">Le motif est obligatoire.</div>'; return; }
+  const valeur = document.getElementById('demModifValeur').value;
+  const btn = document.getElementById('btnEnvoyerDemModif');
+  btn.disabled = true; btn.textContent = '⏳…';
+  const d = await ap({action:'demander_modif', detail_id:demModifDetailId, motif, valeur_proposee:valeur});
+  btn.disabled = false; btn.textContent = 'Envoyer au site';
+  if(d.success){ toast(d.message); setTimeout(()=>location.reload(), 800); }
+  else alertEl.innerHTML = `<div style="background:#fdf0ef;color:#c0392b;padding:8px 12px;border-radius:8px;font-size:12.5px;margin-bottom:10px">${d.message}</div>`;
+}
+
+let repModifCorrId = null, repModifDetailId = null;
+function repondreModif(correctionId, detailId){
+  repModifCorrId = correctionId; repModifDetailId = detailId;
+  document.getElementById('repModifTexte').value='';
+  document.getElementById('repModifAlert').innerHTML='';
+  document.getElementById('modalRepondreModif').style.display='flex';
+}
+async function envoyerReponseModif(){
+  const phyEl = document.getElementById('phy-'+repModifDetailId);
+  const valeur = phyEl ? phyEl.value : '';
+  const alertEl = document.getElementById('repModifAlert');
+  if(valeur===''){ alertEl.innerHTML='<div style="background:#fdf0ef;color:#c0392b;padding:8px 12px;border-radius:8px;font-size:12.5px;margin-bottom:10px">Renseignez la qté physique corrigée avant de confirmer.</div>'; return; }
+  const reponse = document.getElementById('repModifTexte').value.trim();
+  const btn = document.getElementById('btnEnvoyerRepModif');
+  btn.disabled = true; btn.textContent = '⏳…';
+  const d = await ap({action:'repondre_modif', correction_id:repModifCorrId, valeur_finale:valeur, reponse});
+  btn.disabled = false; btn.textContent = 'Confirmer la correction';
+  if(d.success){ toast(d.message); setTimeout(()=>location.reload(), 800); }
+  else alertEl.innerHTML = `<div style="background:#fdf0ef;color:#c0392b;padding:8px 12px;border-radius:8px;font-size:12.5px;margin-bottom:10px">${d.message}</div>`;
 }
 
 async function sauverTout(){
