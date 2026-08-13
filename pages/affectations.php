@@ -409,22 +409,39 @@ include __DIR__ . '/../templates/header.php';
 
 <script>
 let searchTimer;
+function escHtml(s){
+  return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 function searchEquip(q){
   clearTimeout(searchTimer);
   if(q.length<2){document.getElementById('affResults').style.display='none';return;}
   searchTimer=setTimeout(()=>{
     ap({action:'search_equip',q}).then(d=>{
       const res=document.getElementById('affResults');
-      if(!d.success||!d.data.length){res.style.display='none';return;}
-      res.innerHTML=d.data.map(r=>`
-        <div class="ac-item" onclick="selectEquip(${r.id},'${r.numero_serie_interne}','${r.type}','${r.site_actuel||'Stock'}','${r.user_actuel||'—'}','${r.etat}')">
-          <div class="ac-num">${r.numero_serie_interne} <span style="font-weight:400;color:var(--muted)">· ${r.type}</span></div>
-          <div class="ac-meta">📍 ${r.site_actuel||'Stock'} · 👤 ${r.user_actuel||'Non assigné'} · ${r.etat}</div>
-        </div>`).join('');
+      if(!d.success){res.style.display='none';document.getElementById('affAlert').innerHTML=`<div class="alert alert-danger">Erreur recherche : ${escHtml(d.message||'inconnue')}</div>`;return;}
+      if(!d.data.length){res.style.display='none';return;}
+      res.innerHTML=d.data.map(r=>{
+        const site=r.site_actuel||'Stock', usr=r.user_actuel||'Non assigné';
+        // data-* + délégation d'événement : évite tout onclick="..." avec des
+        // valeurs interpolées (un nom avec apostrophe, ex. "N'Guessan",
+        // cassait l'attribut inline et rendait le clic silencieusement inopérant).
+        return `<div class="ac-item" data-id="${r.id}" data-num="${escHtml(r.numero_serie_interne)}" data-type="${escHtml(r.type)}" data-site="${escHtml(site)}" data-user="${escHtml(usr)}" data-etat="${escHtml(r.etat)}">
+          <div class="ac-num">${escHtml(r.numero_serie_interne)} <span style="font-weight:400;color:var(--muted)">· ${escHtml(r.type)}</span></div>
+          <div class="ac-meta">📍 ${escHtml(site)} · 👤 ${escHtml(usr)} · ${escHtml(r.etat)}</div>
+        </div>`;
+      }).join('');
       res.style.display='block';
+    }).catch(err=>{
+      document.getElementById('affResults').style.display='none';
+      document.getElementById('affAlert').innerHTML=`<div class="alert alert-danger">Erreur réseau lors de la recherche : ${escHtml(err.message)}</div>`;
     });
   },300);
 }
+document.getElementById('affResults').addEventListener('click',e=>{
+  const item=e.target.closest('.ac-item');
+  if(!item)return;
+  selectEquip(item.dataset.id,item.dataset.num,item.dataset.type,item.dataset.site,item.dataset.user,item.dataset.etat);
+});
 
 function selectEquip(id,num,type,site,user,etat){
   document.getElementById('affEquipId').value=id;
@@ -432,8 +449,8 @@ function selectEquip(id,num,type,site,user,etat){
   document.getElementById('affResults').style.display='none';
   document.getElementById('affEquipInfo').style.display='block';
   document.getElementById('affEquipInfoContent').innerHTML=`
-    <strong>${num}</strong> · ${type}<br>
-    📍 Actuellement : <strong>${site}</strong> · 👤 ${user} · État : <strong>${etat}</strong>`;
+    <strong>${escHtml(num)}</strong> · ${escHtml(type)}<br>
+    📍 Actuellement : <strong>${escHtml(site)}</strong> · 👤 ${escHtml(user)} · État : <strong>${escHtml(etat)}</strong>`;
 }
 
 function resetAff(){
