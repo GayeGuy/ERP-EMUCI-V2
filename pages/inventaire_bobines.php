@@ -8,6 +8,7 @@ require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/audit.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
+require_once __DIR__ . '/../includes/inventaire.php';
 
 require_auth();
 
@@ -47,8 +48,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
         // n° 19 réunion ERP : l'inventaire mensuel ne se crée plus librement,
         // il faut une session ouverte qui couvre ce site à la date du jour.
+        // En pratique il est déjà auto-provisionné à l'ouverture de la
+        // session (cf. inv_creer_mensuel() appelé depuis inventaire_sessions.php) :
+        // ce chemin ne sert plus que de filet de secours (ex. bobines
+        // ajoutées après coup sur un site qui n'en avait aucune à l'ouverture).
         // Le journalier n'est pas concerné, il garde son fonctionnement actuel.
-        $session_id = null;
         if ($type === 'mensuel') {
             $session = db_fetch_one(
                 "SELECT se.id FROM inventaire_sessions se
@@ -59,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 [$site_id]
             );
             if (!$session) {
-                json_response(false, "Aucune session d'inventaire mensuel ouverte pour ce site actuellement. Contactez le responsable des sessions d'inventaire.");
+                json_response(false, "Aucune session d'inventaire ouverte pour ce site actuellement. Contactez le responsable des sessions d'inventaire.");
             }
             $session_id = (int)$session['id'];
 
@@ -68,6 +72,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 [$session_id, $site_id]
             );
             if ($deja) json_response(false, "Un inventaire existe déjà pour ce site dans cette session (ouvrez-le depuis la liste).");
+
+            db_begin();
+            try {
+                $res = inv_creer_mensuel($site_id, $date, $session_id, (int)$user['id']);
+                audit_log($user['id'],'CREATE','inventaire_bobines',$res['id'],"Création inventaire mensuel $date site:$site_id — {$res['nb']} bobines");
+                db_commit();
+                json_response(true,'Inventaire créé.',['id'=>$res['id'],'nb'=>$res['nb'],'type'=>'mensuel']);
+            } catch (Exception $e) { db_rollback(); json_response(false,'Erreur: '.$e->getMessage()); }
         }
 
         $exist = db_fetch_one(
@@ -97,9 +109,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             $films_digi = (int)db_fetch_value("SELECT COALESCE(SUM(total_plaques),0) FROM op_points_journaliers WHERE site_id=? AND date_point=?", [$site_id, $date]);
 
             db_query(
-                "INSERT INTO inventaires_bobines (site_id,date_inventaire,type_inventaire,statut,nb_bobines,notes,total_films_systeme,total_films_emuci,ecart_digistock_emuci,cree_par,session_id)
-                 VALUES (?,?,?,'brouillon',?,?,?,?,?,?,?)",
-                [$site_id,$date,$type,count($bobines),$notes,$total_systeme,$films_emuci,($films_emuci-$films_digi),$user['id'],$session_id]
+                "INSERT INTO inventaires_bobines (site_id,date_inventaire,type_inventaire,statut,nb_bobines,notes,total_films_systeme,total_films_emuci,ecart_digistock_emuci,cree_par)
+                 VALUES (?,?,?,'brouillon',?,?,?,?,?,?)",
+                [$site_id,$date,$type,count($bobines),$notes,$total_systeme,$films_emuci,($films_emuci-$films_digi),$user['id']]
             );
             $inv_id = (int)db_last_id();
 
@@ -192,6 +204,24 @@ $nb_mensuel    = count(array_filter($inventaires, fn($i)=>$i['type_inventaire']=
 $nb_valides    = count(array_filter($inventaires, fn($i)=>$i['statut']==='valide'));
 $nb_brouillon  = count(array_filter($inventaires, fn($i)=>$i['statut']==='brouillon'));
 
+// Session ouverte sur le site du chef de site : son inventaire est déjà
+// auto-provisionné (cf. inv_creer_mensuel() appelé à l'ouverture de la
+// session) — il n'a pas de "nouvel inventaire" à créer, juste à l'ouvrir.
+$session_active = null;
+if ($site_force) {
+    $session_active = db_fetch_one(
+        "SELECT se.id, se.libelle, se.date_debut, se.date_fin, se.type_periode,
+                ib.id AS inv_id, ib.statut AS inv_statut
+         FROM inventaire_sessions se
+         JOIN inventaire_session_sites iss ON iss.session_id = se.id
+         LEFT JOIN inventaires_bobines ib ON ib.session_id = se.id AND ib.site_id = iss.site_id AND ib.statut != 'annule'
+         WHERE iss.site_id = ? AND se.statut = 'ouverte'
+           AND CURRENT_DATE BETWEEN se.date_debut AND se.date_fin
+         LIMIT 1",
+        [$site_force]
+    );
+}
+
 include __DIR__ . '/../templates/header.php';
 ?>
 <style>
@@ -205,6 +235,8 @@ include __DIR__ . '/../templates/header.php';
 .statut-inv{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
 .statut-brouillon{background:#fef9e7;color:#9a6c00} .statut-valide{background:#d5f5e3;color:#1e7e40}
 .fsel{padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none;cursor:pointer}
+.session-banner{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;
+  background:#eaf2fb;border:1.5px solid #90caf9;border-radius:14px;padding:14px 20px;margin-bottom:20px}
 </style>
 
 <div class="inv-kpi">
@@ -213,6 +245,25 @@ include __DIR__ . '/../templates/header.php';
   <div class="ik green"><div class="ik-val" style="color:var(--success)"><?= $nb_valides ?></div><div class="ik-lbl">Validés</div></div>
   <div class="ik orange"><div class="ik-val" style="color:#f39c12"><?= $nb_brouillon ?></div><div class="ik-lbl">En cours</div></div>
 </div>
+
+<?php if ($session_active): ?>
+<div class="session-banner">
+  <div>
+    📋 Session d'inventaire <strong><?= h(mb_strtolower(inv_periode_label($session_active['type_periode']))) ?></strong>
+    en cours<?= $session_active['libelle'] ? ' — ' . h($session_active['libelle']) : '' ?>
+    <span style="color:var(--muted)">(du <?= fmt_date($session_active['date_debut']) ?> au <?= fmt_date($session_active['date_fin']) ?>)</span>
+  </div>
+  <?php if ($session_active['inv_id']): ?>
+    <?php if ($session_active['inv_statut'] === 'valide'): ?>
+    <span style="font-size:13px;color:var(--success);font-weight:700">✅ Inventaire déjà clôturé</span>
+    <?php else: ?>
+    <a href="inventaire_detail.php?id=<?= (int)$session_active['inv_id'] ?>" class="btn btn-primary btn-sm">📝 Continuer mon inventaire</a>
+    <?php endif; ?>
+  <?php elseif ($can_create): ?>
+    <button class="btn btn-primary btn-sm" onclick="creerInventaireSession(<?= (int)$session_active['id'] ?>)">📝 Préparer mon inventaire</button>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
   <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
@@ -295,18 +346,14 @@ include __DIR__ . '/../templates/header.php';
 <div id="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:20px;padding:30px;width:520px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px">
-      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800;color:var(--navy)">📦 Nouvel inventaire</h3>
+      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800;color:var(--navy)">📅 Nouvel inventaire journalier</h3>
       <button onclick="fermer()" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
     </div>
+    <p style="font-size:12.5px;color:var(--muted);margin:-10px 0 16px">
+      L'inventaire mensuel/trimestriel/semestriel/annuel n'est pas créé ici : il est déjà prêt dès l'ouverture
+      d'une session par le responsable (bandeau bleu ci-dessus).
+    </p>
     <div id="mAlert"></div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px">
-      <button id="btnJ" class="btn btn-primary" onclick="setType('journalier')" style="justify-content:center;flex-direction:column;padding:14px;gap:4px">
-        <span>📅 Journalier</span><small style="font-weight:400;opacity:.8">Suivi quotidien</small>
-      </button>
-      <button id="btnM" class="btn btn-secondary" onclick="setType('mensuel')" style="justify-content:center;flex-direction:column;padding:14px;gap:4px">
-        <span>📆 Mensuel</span><small style="font-weight:400;opacity:.8">Bilan fin de mois</small>
-      </button>
-    </div>
     <input type="hidden" id="fType" value="journalier">
     <div style="display:grid;grid-template-columns:<?= $site_force?'1fr':'1fr 1fr' ?>;gap:14px;margin-bottom:14px">
       <?php if(!$site_force): ?>
@@ -335,10 +382,16 @@ include __DIR__ . '/../templates/header.php';
 <script>
 function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
 function toast(m,t='success'){const el=document.createElement('div');el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white`;el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),3500);}
-function ouvrirModal(){document.getElementById('fDate').value='<?= date('Y-m-d') ?>';document.getElementById('fNotes').value='';document.getElementById('mAlert').innerHTML='';setType('journalier');document.getElementById('modal').style.display='flex';}
+function ouvrirModal(){document.getElementById('fDate').value='<?= date('Y-m-d') ?>';document.getElementById('fNotes').value='';document.getElementById('mAlert').innerHTML='';document.getElementById('modal').style.display='flex';}
 function fermer(){document.getElementById('modal').style.display='none';}
 document.getElementById('modal').addEventListener('click',e=>{if(e.target===document.getElementById('modal'))fermer();});
-function setType(t){document.getElementById('fType').value=t;document.getElementById('btnJ').className='btn '+(t==='journalier'?'btn-primary':'btn-secondary');document.getElementById('btnM').className='btn '+(t==='mensuel'?'btn-primary':'btn-secondary');}
+async function creerInventaireSession(sessionId){
+  const site=<?= (int)$site_force ?>;
+  const date=<?= json_encode($session_active['date_debut'] ?? '') ?>;
+  const d=await ap({action:'creer',site_id:site,date,type:'mensuel',notes:''});
+  if(d.success){toast(`Inventaire prêt — ${d.data.nb} bobines`);setTimeout(()=>location.href=`inventaire_detail.php?id=${d.data.id}`,600);}
+  else toast(d.message,'error');
+}
 async function creer(){
   const site=document.getElementById('fSite').value,date=document.getElementById('fDate').value;
   if(!site||!date){document.getElementById('mAlert').innerHTML='<div class="alert alert-danger">Site et date obligatoires.</div>';return;}

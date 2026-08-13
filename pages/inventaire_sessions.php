@@ -10,6 +10,7 @@ require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/audit.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
+require_once __DIR__ . '/../includes/inventaire.php';
 
 require_auth();
 require_permission('inventaire_sessions', 'can_read');
@@ -28,15 +29,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     if ($action === 'ouvrir') {
         $libelle = trim($_POST['libelle'] ?? '');
         $debut   = trim($_POST['date_debut'] ?? '');
-        $fin     = trim($_POST['date_fin'] ?? '');
+        $periode = trim($_POST['type_periode'] ?? '');
         $notes   = trim($_POST['notes'] ?? '');
         $sites   = $_POST['sites'] ?? [];
         if (!is_array($sites)) $sites = [];
         $sites = array_values(array_unique(array_map('intval', $sites)));
 
-        if (!$debut || !$fin) json_response(false, 'Période obligatoire.');
-        if (strtotime($fin) < strtotime($debut)) json_response(false, 'La date de fin doit être après la date de début.');
+        if (!$debut) json_response(false, 'Date de début obligatoire.');
+        if (!isset(INV_PERIODES[$periode])) json_response(false, 'Périodicité invalide.');
         if (empty($sites)) json_response(false, 'Choisissez au moins un site.');
+
+        // La date de fin se déduit toujours de la périodicité choisie —
+        // jamais saisie librement (mensuelle/trimestrielle/semestrielle/annuelle).
+        $fin = inv_date_fin($debut, $periode);
 
         // Aucun site déjà couvert par une autre session ouverte : sinon un
         // inventaire créé ensuite ne saurait pas à quelle session se rattacher.
@@ -56,13 +61,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         db_begin();
         try {
             db_query(
-                "INSERT INTO inventaire_sessions (libelle, date_debut, date_fin, notes, ouverte_par) VALUES (?,?,?,?,?)",
-                [$libelle ?: null, $debut, $fin, $notes ?: null, $user['id']]
+                "INSERT INTO inventaire_sessions (libelle, date_debut, date_fin, type_periode, notes, ouverte_par) VALUES (?,?,?,?,?,?)",
+                [$libelle ?: null, $debut, $fin, $periode, $notes ?: null, $user['id']]
             );
             $session_id = (int)db_last_id();
 
             foreach ($sites as $site_id) {
                 db_query("INSERT INTO inventaire_session_sites (session_id, site_id) VALUES (?,?)", [$session_id, $site_id]);
+            }
+
+            // Auto-provisionne l'inventaire de chaque site dès l'ouverture : le
+            // chef de site le trouve déjà prêt à saisir, il n'a plus à créer
+            // lui-même un "nouvel inventaire" ni à choisir une période.
+            $sites_sans_bobine = [];
+            foreach ($sites as $site_id) {
+                try {
+                    inv_creer_mensuel($site_id, $debut, $session_id, $user['id']);
+                } catch (Exception $e) {
+                    $sites_sans_bobine[] = db_fetch_value("SELECT nom FROM sites WHERE id=?", [$site_id]);
+                }
             }
 
             // Notifier les coordinateurs des sites concernés
@@ -71,19 +88,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                  WHERE r.slug='coordinateur_site' AND u.actif=1 AND u.site_id IN ($ph)",
                 $sites
             );
+            $periode_lbl = mb_strtolower(inv_periode_label($periode));
             foreach ($coords as $c) {
                 db_query(
                     "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                     [$c['id'], 'info', '📋 Session d\'inventaire ouverte',
-                     "Une session d'inventaire mensuel est ouverte du " . fmt_date($debut) . " au " . fmt_date($fin) . " pour votre site. Vous pouvez saisir votre inventaire.",
+                     "Une session d'inventaire $periode_lbl est ouverte du " . fmt_date($debut) . " au " . fmt_date($fin) . " pour votre site. Votre inventaire est déjà prêt : ouvrez-le directement depuis Inventaire bobines.",
                      '/pages/inventaire_bobines.php']
                 );
             }
 
             audit_log($user['id'], 'CREATE', 'inventaire_sessions', $session_id,
-                "Ouverture session inventaire " . count($sites) . " site(s), du $debut au $fin");
+                "Ouverture session inventaire ($periode) " . count($sites) . " site(s), du $debut au $fin"
+                . ($sites_sans_bobine ? ' — sans bobine active : ' . implode(', ', $sites_sans_bobine) : ''));
             db_commit();
-            json_response(true, 'Session ouverte.', ['id' => $session_id]);
+            $msg = $sites_sans_bobine
+                ? 'Session ouverte. Inventaire prêt pour chaque site, sauf ' . implode(', ', $sites_sans_bobine) . ' (aucune bobine active — à créer une fois les bobines enregistrées).'
+                : 'Session ouverte — l\'inventaire est déjà prêt pour chaque site.';
+            json_response(true, $msg, ['id' => $session_id]);
         } catch (Exception $e) { db_rollback(); json_response(false, 'Erreur : ' . $e->getMessage()); }
     }
 
@@ -191,7 +213,8 @@ include __DIR__ . '/../templates/header.php';
         <span class="statut-badge statut-<?= $session['statut'] ?>"><?= $session['statut']==='ouverte'?'⏳ Ouverte':'✅ Clôturée' ?></span>
       </h2>
       <p style="font-size:13px;color:var(--muted);margin-top:4px">
-        Du <?= fmt_date($session['date_debut']) ?> au <?= fmt_date($session['date_fin']) ?>
+        <?= h(inv_periode_label($session['type_periode'] ?? 'mensuel')) ?>
+        · Du <?= fmt_date($session['date_debut']) ?> au <?= fmt_date($session['date_fin']) ?>
         · Ouverte par <?= h($session['ouverte_par_nom'] ?? '—') ?>
         <?php if ($session['statut'] === 'cloturee'): ?>
         · Clôturée par <?= h($session['cloturee_par_nom'] ?? '—') ?> le <?= fmt_datetime($session['cloturee_at']) ?>
@@ -264,14 +287,15 @@ include __DIR__ . '/../templates/header.php';
     <div class="table-wrap">
       <table>
         <thead><tr>
-          <th>Période</th><th>Libellé</th><th style="text-align:center">Sites</th>
+          <th>Périodicité</th><th>Dates</th><th>Libellé</th><th style="text-align:center">Sites</th>
           <th style="text-align:center">Avancement</th><th>Statut</th><th>Ouverte par</th><th></th>
         </tr></thead>
         <tbody>
         <?php if (empty($sessions)): ?>
-          <tr><td colspan="7" style="text-align:center;padding:40px;color:var(--muted)">Aucune session pour le moment.</td></tr>
+          <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">Aucune session pour le moment.</td></tr>
         <?php else: foreach ($sessions as $s): ?>
           <tr>
+            <td style="font-weight:600;white-space:nowrap"><?= h(inv_periode_label($s['type_periode'] ?? 'mensuel')) ?></td>
             <td style="font-weight:600;white-space:nowrap"><?= fmt_date($s['date_debut']) ?> → <?= fmt_date($s['date_fin']) ?></td>
             <td><?= h($s['libelle'] ?: '—') ?></td>
             <td style="text-align:center;font-weight:700"><?= $s['nb_sites'] ?></td>
@@ -297,9 +321,20 @@ include __DIR__ . '/../templates/header.php';
       <div class="form-group" style="margin-bottom:14px"><label>Libellé (optionnel)</label>
         <input type="text" class="form-control" id="fLibelle" placeholder="Ex: Inventaire mensuel Août 2026">
       </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-        <div class="form-group"><label>Du *</label><input type="date" class="form-control" id="fDebut" value="<?= date('Y-m-d') ?>"></div>
-        <div class="form-group"><label>Au *</label><input type="date" class="form-control" id="fFin"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:8px">
+        <div class="form-group"><label>Du *</label><input type="date" class="form-control" id="fDebut" value="<?= date('Y-m-d') ?>" onchange="majFin()"></div>
+        <div class="form-group"><label>Périodicité *</label>
+          <select class="form-control" id="fPeriode" onchange="majFin()">
+            <option value="mensuel">Mensuelle (1 mois)</option>
+            <option value="trimestriel">Trimestrielle (3 mois)</option>
+            <option value="semestriel">Semestrielle (6 mois)</option>
+            <option value="annuel">Annuelle (12 mois)</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group" style="margin-bottom:14px">
+        <label>Fin de la période <span style="font-weight:400;color:var(--muted)">(calculée)</span></label>
+        <input type="text" class="form-control" id="fFinAffiche" disabled style="background:#f1f5f9;color:var(--muted)">
       </div>
       <div class="form-group" style="margin-bottom:10px">
         <label style="display:flex;align-items:center;justify-content:space-between">
@@ -334,14 +369,26 @@ function ap(d){
 function toast(m,t='success'){const el=document.createElement('div');el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white;box-shadow:0 4px 20px rgba(0,0,0,.15)`;el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),3500);}
 
 <?php if (!$detail_id): ?>
+const DUREES_MOIS = {mensuel:1, trimestriel:3, semestriel:6, annuel:12};
+function majFin(){
+  const debut = document.getElementById('fDebut').value;
+  const periode = document.getElementById('fPeriode').value;
+  const affiche = document.getElementById('fFinAffiche');
+  if(!debut){affiche.value='';return;}
+  const d = new Date(debut+'T00:00:00');
+  d.setMonth(d.getMonth() + DUREES_MOIS[periode]);
+  d.setDate(d.getDate() - 1);
+  affiche.value = d.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'});
+}
 function ouvrirModal(){
   document.getElementById('fLibelle').value='';
   document.getElementById('fDebut').value='<?= date('Y-m-d') ?>';
-  document.getElementById('fFin').value='';
+  document.getElementById('fPeriode').value='mensuel';
   document.getElementById('fNotes').value='';
   document.getElementById('fTousSites').checked=false;
   document.querySelectorAll('.site-cb').forEach(cb=>cb.checked=false);
   document.getElementById('mAlert').innerHTML='';
+  majFin();
   document.getElementById('modal').style.display='flex';
 }
 function fermer(){document.getElementById('modal').style.display='none';}
@@ -349,15 +396,15 @@ document.getElementById('modal').addEventListener('click',e=>{if(e.target===docu
 function toggleTousSites(checked){document.querySelectorAll('.site-cb').forEach(cb=>cb.checked=checked);}
 async function ouvrirSession(){
   const sites=[...document.querySelectorAll('.site-cb:checked')].map(cb=>cb.value);
-  const debut=document.getElementById('fDebut').value, fin=document.getElementById('fFin').value;
+  const debut=document.getElementById('fDebut').value, periode=document.getElementById('fPeriode').value;
   const alertEl=document.getElementById('mAlert');
-  if(!debut||!fin){alertEl.innerHTML='<div class="alert alert-danger">Période obligatoire.</div>';return;}
+  if(!debut){alertEl.innerHTML='<div class="alert alert-danger">Date de début obligatoire.</div>';return;}
   if(!sites.length){alertEl.innerHTML='<div class="alert alert-danger">Choisissez au moins un site.</div>';return;}
   const btn=document.getElementById('btnOuvrir');btn.disabled=true;btn.textContent='⏳...';
-  const d=await ap({action:'ouvrir',libelle:document.getElementById('fLibelle').value,date_debut:debut,date_fin:fin,
+  const d=await ap({action:'ouvrir',libelle:document.getElementById('fLibelle').value,date_debut:debut,type_periode:periode,
     notes:document.getElementById('fNotes').value, sites});
   btn.disabled=false;btn.textContent='🚀 Ouvrir la session';
-  if(d.success){toast('Session ouverte.');setTimeout(()=>location.href='?id='+d.data.id,500);}
+  if(d.success){toast(d.message);setTimeout(()=>location.href='?id='+d.data.id,600);}
   else alertEl.innerHTML=`<div class="alert alert-danger">${d.message}</div>`;
 }
 <?php else: ?>

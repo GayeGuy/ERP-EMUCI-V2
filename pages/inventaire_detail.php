@@ -539,7 +539,7 @@ input.saisie.nok{border-color:#e74c3c;background:#fff5f5}
           <th style="padding:10px 14px;text-align:right;background:rgba(255,255,255,.08)">Conso/j moy</th>
           <th style="padding:10px 14px;text-align:right;background:rgba(255,255,255,.08)">Jours restants</th>
           <th style="padding:10px 14px;text-align:center;background:rgba(255,255,255,.08)">Épuisement estimé</th>
-          <?php if($can_edit): ?><th style="padding:10px 14px;text-align:center">💾</th><?php endif; ?>
+          <?php if($can_edit): ?><th style="padding:10px 14px;text-align:center">Enregistrement</th><?php endif; ?>
         </tr>
       </thead>
       <tbody>
@@ -595,6 +595,7 @@ input.saisie.nok{border-color:#e74c3c;background:#fff5f5}
                  placeholder="—"
                  data-sys="<?= $stock_rt ?>"
                  data-conso="<?= $conso_moy ?>"
+                 data-saved="<?= $saisi ? $stock_phy : '' ?>"
                  oninput="onPhyInput(<?= $l['id'] ?>,<?= $stock_rt ?>,<?= $conso_moy ?>)">
           <?php else: ?>
           <span style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:14px">
@@ -663,9 +664,10 @@ input.saisie.nok{border-color:#e74c3c;background:#fff5f5}
 
         <!-- Sauver -->
         <?php if($can_edit): ?>
-        <td style="padding:9px 14px;text-align:center">
-          <button style="background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:12px"
-                  onclick="sauverLigne(<?= $l['id'] ?>)">💾</button>
+        <td style="padding:9px 14px;text-align:center;white-space:nowrap">
+          <span id="etat-<?= $l['id'] ?>" style="display:none;font-size:11px;font-weight:700;color:#b7791f;margin-right:8px">🟠 En cours</span>
+          <button style="background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
+                  onclick="sauverLigne(<?= $l['id'] ?>)">💾 Enregistrer</button>
         </td>
         <?php endif; ?>
       </tr>
@@ -702,6 +704,8 @@ function onPhyInput(id, stockSys, consoMoy){
   const jEl  = document.getElementById('jours-'+id);
   const eEl  = document.getElementById('epuis-'+id);
   const row  = document.getElementById('row-'+id);
+  const etatEl = document.getElementById('etat-'+id);
+  if(etatEl) etatEl.style.display = (val !== (inp.dataset.saved||'')) ? 'inline' : 'none';
 
   if(val === ''){
     inp.className='saisie'; ecEl.innerHTML='<span style="color:#94a3b8">—</span>';
@@ -737,7 +741,9 @@ async function sauverLigne(id){
   if(phy===''){toast('Saisissez d\'abord le stock physique.','error');return;}
   const d = await ap({action:'sauver_ligne',detail_id:id,stock_physique:phy,notes:''});
   if(d.success){
-    if(phyEl) phyEl.style.borderColor='#27ae60';
+    if(phyEl){ phyEl.style.borderColor='#27ae60'; phyEl.dataset.saved = phy; }
+    const etatEl = document.getElementById('etat-'+id);
+    if(etatEl) etatEl.style.display='none';
     setTimeout(()=>{if(phyEl)phyEl.style.borderColor='';},2000);
     toast('Ligne sauvegardée.');
   } else toast('Erreur : '+d.message,'error');
@@ -757,6 +763,12 @@ async function sauverTout(){
   const d=await ap({action:'sauver_tout',lignes:JSON.stringify(lignes)});
   if(btn){btn.disabled=false;btn.textContent='💾 Tout sauver';}
   if(d.success){
+    lignes.forEach(l=>{
+      const phyEl=document.getElementById('phy-'+l.id);
+      if(phyEl) phyEl.dataset.saved = l.phy;
+      const etatEl=document.getElementById('etat-'+l.id);
+      if(etatEl) etatEl.style.display='none';
+    });
     toast(d.message);
     document.getElementById('alertZone').innerHTML=`<div style="background:#eafaf1;padding:10px 16px;border-radius:8px;font-size:13px;color:#1e8449;margin-bottom:12px">✅ ${d.message}</div>`;
   } else toast('Erreur : '+d.message,'error');

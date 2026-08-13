@@ -52,6 +52,7 @@ migration_lot1_ticket_glpi.sql
 migration_lot2_role_pdg.sql
 migration_lot3_roles.sql
 migration_lot_sessions_inventaire.sql
+migration_lot4_periode_inventaire.sql
 "
 
 for f in $FICHIERS; do
