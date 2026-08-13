@@ -108,7 +108,7 @@ $where = ["e.categorie=?","e.actif=1"]; $params = [$f_categorie];
 if ($f_site)   { $where[] = "e.site_id=?";          $params[] = $f_site; }
 if ($f_etat)   { $where[] = "e.etat=?";              $params[] = $f_etat; }
 if ($f_type)   { $where[] = "e.nomenclature_id=?";   $params[] = $f_type; }
-if ($f_search) { $where[] = "(e.numero_serie_interne LIKE ? OR e.marque LIKE ? OR e.modele LIKE ?)"; $params[] = "%$f_search%"; $params[] = "%$f_search%"; $params[] = "%$f_search%"; }
+if ($f_search) { $where[] = "(e.numero_serie_interne ILIKE ? OR e.marque ILIKE ? OR e.modele ILIKE ?)"; $params[] = "%$f_search%"; $params[] = "%$f_search%"; $params[] = "%$f_search%"; }
 
 $equipements = db_fetch_all(
     "SELECT e.*, s.nom AS site_nom, n.libelle AS type_nom,

@@ -80,7 +80,7 @@ $f_to     = trim($_GET['date_to']           ?? '');
 
 $where  = ['1=1'];
 $params = [];
-if ($search)   { $where[] = 'al.description LIKE ?'; $params[] = "%$search%"; }
+if ($search)   { $where[] = 'al.description ILIKE ?'; $params[] = "%$search%"; }
 if ($f_user)   { $where[] = 'al.user_id=?';           $params[] = $f_user; }
 if ($f_module) { $where[] = 'al.module=?';             $params[] = $f_module; }
 if ($f_action) { $where[] = 'al.action=?';             $params[] = $f_action; }

@@ -360,7 +360,7 @@ if($f_site)   {$where[]='b.site_id=?';    $params[]=$f_site;}
 if($f_statut) {$where[]='b.statut=?';     $params[]=$f_statut;}
 if($f_serie)  {$where[]='b.serie=?';      $params[]=$f_serie;}
 if($f_type)   {$where[]='b.type_code=?';  $params[]=$f_type;}
-if($f_search) {$where[]='b.numero LIKE ?'; $params[]="%$f_search%";}
+if($f_search) {$where[]='b.numero ILIKE ?'; $params[]="%$f_search%";}
 $wsql = count($where)?'WHERE '.implode(' AND ',$where):'';
 
 $bobines = db_fetch_all(

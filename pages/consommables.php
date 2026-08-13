@@ -252,7 +252,7 @@ $site_force_conso  = ($role_slug_conso === 'coordinateur_site' && $user['site_id
 $search   = trim($_GET['q']      ?? '');
 $f_alerte = (int)($_GET['alerte']?? 0);
 $where    = ['1=1']; $params = [];
-if ($search)   { $where[] = '(c.code LIKE ? OR c.libelle LIKE ?)'; $s="%$search%"; $params=[$s,$s]; }
+if ($search)   { $where[] = '(c.code ILIKE ? OR c.libelle ILIKE ?)'; $s="%$search%"; $params=[$s,$s]; }
 if ($f_alerte) { $where[] = 'c.stock_global <= c.seuil_alerte'; }
 // Coordinateur : filtrer sur les consommables distribués sur son site
 if ($site_force_conso) {

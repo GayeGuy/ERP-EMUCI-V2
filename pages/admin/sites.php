@@ -242,7 +242,7 @@ $f_actif  = $_GET['actif']      ?? '1';
 $where  = ['1=1'];
 $params = [];
 if ($f_search) {
-    $where[]  = '(s.nom LIKE ? OR s.code LIKE ? OR s.ville LIKE ?)';
+    $where[]  = '(s.nom ILIKE ? OR s.code ILIKE ? OR s.ville ILIKE ?)';
     $params[] = "%$f_search%"; $params[] = "%$f_search%"; $params[] = "%$f_search%";
 }
 if ($f_type)  { $where[] = 's.type=?';  $params[] = $f_type; }

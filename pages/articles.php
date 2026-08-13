@@ -314,7 +314,7 @@ $search   = trim($_GET['q']       ?? '');
 $f_alerte = (int)($_GET['alerte'] ?? 0);
 $f_type   = trim($_GET['type']    ?? '');
 $where = ['1=1']; $params = [];
-if ($search)   { $where[] = '(a.code LIKE ? OR a.libelle LIKE ?)'; $s="%$search%"; $params=[$s,$s]; }
+if ($search)   { $where[] = '(a.code ILIKE ? OR a.libelle ILIKE ?)'; $s="%$search%"; $params=[$s,$s]; }
 if ($f_alerte) { $where[] = 'a.stock_global <= a.seuil_alerte'; }
 if ($f_type)   { $where[] = 'a.type_article=?'; $params[] = $f_type; }
 if ($site_force) {

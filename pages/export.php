@@ -58,7 +58,7 @@ $sheet->getDefaultRowDimension()->setRowHeight(18);
 if ($type==='equipements') {
     require_permission('equipements','can_export');
     $w=[]; $p=[];
-    if(!empty($_GET['q'])){$w[]='(e.numero_serie_interne LIKE ? OR e.numero_serie_origine LIKE ? OR e.marque LIKE ?)';$s='%'.$_GET['q'].'%';$p=array_merge($p,[$s,$s,$s]);}
+    if(!empty($_GET['q'])){$w[]='(e.numero_serie_interne ILIKE ? OR e.numero_serie_origine ILIKE ? OR e.marque ILIKE ?)';$s='%'.$_GET['q'].'%';$p=array_merge($p,[$s,$s,$s]);}
     if(!empty($_GET['nom'])){$w[]='e.nomenclature_id=?';$p[]=(int)$_GET['nom'];}
     if(!empty($_GET['etat'])){$w[]='e.etat=?';$p[]=$_GET['etat'];}
     if(!empty($_GET['site'])){$w[]='e.site_id=?';$p[]=(int)$_GET['site'];}
