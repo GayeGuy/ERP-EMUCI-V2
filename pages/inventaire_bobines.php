@@ -255,10 +255,11 @@ include __DIR__ . '/../templates/header.php';
   </div>
   <?php if ($session_active['inv_id']): ?>
     <?php if ($session_active['inv_statut'] === 'valide'): ?>
-    <span style="font-size:13px;color:var(--success);font-weight:700">✅ Inventaire déjà clôturé</span>
-    <?php else: ?>
-    <a href="inventaire_detail.php?id=<?= (int)$session_active['inv_id'] ?>" class="btn btn-primary btn-sm">📝 Continuer mon inventaire</a>
+    <span style="font-size:13px;color:var(--success);font-weight:700;margin-right:10px">✅ Clôturé</span>
     <?php endif; ?>
+    <a href="inventaire_detail.php?id=<?= (int)$session_active['inv_id'] ?>" class="btn btn-primary btn-sm">
+      <?= $session_active['inv_statut'] === 'valide' ? '👁 Voir mon inventaire' : '📝 Continuer mon inventaire' ?>
+    </a>
   <?php elseif ($can_create): ?>
     <button class="btn btn-primary btn-sm" onclick="creerInventaireSession(<?= (int)$session_active['id'] ?>)">📝 Préparer mon inventaire</button>
   <?php endif; ?>
