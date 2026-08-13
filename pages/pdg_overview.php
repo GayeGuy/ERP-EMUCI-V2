@@ -14,15 +14,43 @@ $page_title  = 'Vue PDG';
 $active_page = 'pdg_overview';
 
 $mois    = trim($_GET['mois'] ?? date('Y-m'));
+if (!preg_match('/^\d{4}-\d{2}$/', $mois)) $mois = date('Y-m');
 $site_id = (int)($_GET['site_id'] ?? 0);
-$annee   = substr($mois, 0, 4);
 $mc = ['01'=>'Jan','02'=>'Fév','03'=>'Mar','04'=>'Avr','05'=>'Mai','06'=>'Juin',
        '07'=>'Juil','08'=>'Aoû','09'=>'Sep','10'=>'Oct','11'=>'Nov','12'=>'Déc'];
 $ml = ['01'=>'Janvier','02'=>'Février','03'=>'Mars','04'=>'Avril','05'=>'Mai','06'=>'Juin',
        '07'=>'Juillet','08'=>'Août','09'=>'Septembre','10'=>'Octobre','11'=>'Novembre','12'=>'Décembre'];
-$mois_display = ($ml[substr($mois,5,2)] ?? '') . ' ' . $annee;
-$mois_prec    = date('Y-m', strtotime($mois.'-01 -1 month'));
-$mois_prec_lbl= ($mc[substr($mois_prec,5,2)] ?? '') . ' ' . substr($mois_prec,0,4);
+
+// ── PÉRIODE — mensuel (comportement d'origine) ou annuel (n° du rapport
+// réunion ERP : point d'une année complète). $date_fmt/$periode_val
+// pilotent tous les TO_CHAR(...)='?' de la page ; $periode_val_prec sert
+// aux comparaisons vs période précédente.
+$periode = ($_GET['periode'] ?? '') === 'annuel' ? 'annuel' : 'mensuel';
+$annee_max = (int)date('Y');
+$annee_min = (int)(db_fetch_value("SELECT MIN(EXTRACT(YEAR FROM date_point)) FROM op_points_journaliers") ?? $annee_max);
+if ($annee_min > $annee_max) $annee_min = $annee_max;
+
+if ($periode === 'annuel') {
+    $annee_filtre = (int)($_GET['annee'] ?? $annee_max);
+    if ($annee_filtre < 2000 || $annee_filtre > 2100) $annee_filtre = $annee_max;
+    $annee            = (string)$annee_filtre;
+    $date_fmt         = 'YYYY';
+    $periode_val      = $annee;
+    $periode_val_prec = (string)($annee_filtre - 1);
+    $mois_display     = 'Année ' . $annee;
+    $mois_prec_lbl    = 'Année ' . $periode_val_prec;
+    $periode_mot      = 'cette année';
+} else {
+    $annee_filtre     = (int)substr($mois, 0, 4);
+    $annee            = substr($mois, 0, 4);
+    $date_fmt         = 'YYYY-MM';
+    $periode_val      = $mois;
+    $mois_prec        = date('Y-m', strtotime($mois.'-01 -1 month'));
+    $periode_val_prec = $mois_prec;
+    $mois_display     = ($ml[substr($mois,5,2)] ?? '') . ' ' . $annee;
+    $mois_prec_lbl    = ($mc[substr($mois_prec,5,2)] ?? '') . ' ' . substr($mois_prec,0,4);
+    $periode_mot      = 'ce mois';
+}
 
 // ── LISTE DES SITES pour le filtre
 $sites_list = db_fetch_all("SELECT id, nom FROM sites WHERE actif=1 ORDER BY nom");
@@ -46,17 +74,17 @@ $ops = db_fetch_one(
             COALESCE(SUM(rivets_utilises),0) AS rivets_utilises,
             COALESCE(ROUND(AVG(NULLIF(moyenne_prod,0)),1),0) AS moy_prod
      FROM op_points_journaliers
-     WHERE TO_CHAR(date_point,'YYYY-MM')=? AND statut != 'brouillon' $sf",
-    [$mois]
+     WHERE TO_CHAR(date_point,'$date_fmt')=? AND statut != 'brouillon' $sf",
+    [$periode_val]
 );
 
-// ── OPÉRATIONS mois précédent (tendance)
+// ── OPÉRATIONS période précédente (tendance)
 $ops_prec = db_fetch_one(
     "SELECT COALESCE(SUM(total_engins),0) AS total_engins,
             COALESCE(SUM(total_plaques),0) AS total_plaques
      FROM op_points_journaliers
-     WHERE TO_CHAR(date_point,'YYYY-MM')=? AND statut != 'brouillon' $sf",
-    [$mois_prec]
+     WHERE TO_CHAR(date_point,'$date_fmt')=? AND statut != 'brouillon' $sf",
+    [$periode_val_prec]
 );
 $engins_curr = (int)($ops['total_engins'] ?? 0);
 $engins_prev = (int)($ops_prec['total_engins'] ?? 0);
@@ -73,10 +101,10 @@ $prod_par_site = db_fetch_all(
             SUM(CASE WHEN p.statut='en_attente_validation' THEN 1 ELSE 0 END) AS en_attente
      FROM sites s
      LEFT JOIN op_points_journaliers p ON p.site_id=s.id
-                AND TO_CHAR(p.date_point,'YYYY-MM')=? AND p.statut != 'brouillon'
+                AND TO_CHAR(p.date_point,'$date_fmt')=? AND p.statut != 'brouillon'
      WHERE s.actif=1 $sf_s
      GROUP BY s.id, s.nom, s.type ORDER BY engins DESC",
-    [$mois]
+    [$periode_val]
 );
 $max_engins = empty($prod_par_site) ? 1 : max(1, ...array_column($prod_par_site, 'engins'));
 $best_site  = !empty($prod_par_site) ? $prod_par_site[0] : null;
@@ -99,34 +127,34 @@ $films_mois = (int)db_fetch_value(
     "SELECT COALESCE(SUM(fu.films_utilises),0)
      FROM op_films_utilises fu
      JOIN op_points_journaliers p ON p.id=fu.point_id
-     WHERE TO_CHAR(p.date_point,'YYYY-MM')=? $sf_p",
-    [$mois]
+     WHERE TO_CHAR(p.date_point,'$date_fmt')=? $sf_p",
+    [$periode_val]
 );
 $films_mois_prec = (int)db_fetch_value(
     "SELECT COALESCE(SUM(fu.films_utilises),0)
      FROM op_films_utilises fu
      JOIN op_points_journaliers p ON p.id=fu.point_id
-     WHERE TO_CHAR(p.date_point,'YYYY-MM')=? $sf_p",
-    [$mois_prec]
+     WHERE TO_CHAR(p.date_point,'$date_fmt')=? $sf_p",
+    [$periode_val_prec]
 );
 $films_par_site = db_fetch_all(
     "SELECT s.nom, COALESCE(SUM(fu.films_utilises),0) AS films
      FROM sites s
-     LEFT JOIN op_points_journaliers p ON p.site_id=s.id AND TO_CHAR(p.date_point,'YYYY-MM')=?
+     LEFT JOIN op_points_journaliers p ON p.site_id=s.id AND TO_CHAR(p.date_point,'$date_fmt')=?
      LEFT JOIN op_films_utilises fu ON fu.point_id=p.id
      WHERE s.actif=1 $sf_s
      GROUP BY s.id, s.nom ORDER BY films DESC",
-    [$mois]
+    [$periode_val]
 );
 $films_detail_raw = db_fetch_all(
     "SELECT s.nom AS site, b.type_code, COALESCE(SUM(fu.films_utilises),0) AS films
      FROM sites s
-     JOIN op_points_journaliers p ON p.site_id=s.id AND TO_CHAR(p.date_point,'YYYY-MM')=?
+     JOIN op_points_journaliers p ON p.site_id=s.id AND TO_CHAR(p.date_point,'$date_fmt')=?
      JOIN op_films_utilises fu ON fu.point_id=p.id
      JOIN op_bobines b ON b.id=fu.bobine_id
      WHERE s.actif=1 $sf_s
      GROUP BY s.id, s.nom, b.type_code ORDER BY s.nom, b.type_code",
-    [$mois]
+    [$periode_val]
 );
 $films_par_type = [];
 $films_by_type  = [];
@@ -142,9 +170,9 @@ $cmd_stats = db_fetch_one(
     "SELECT SUM(CASE WHEN statut='en_attente' THEN 1 ELSE 0 END) AS en_attente,
             SUM(CASE WHEN statut='en_attente_livraison' THEN 1 ELSE 0 END) AS a_livrer,
             SUM(CASE WHEN statut='en_cours_livraison' THEN 1 ELSE 0 END) AS en_route,
-            SUM(CASE WHEN statut='livre' AND TO_CHAR(created_at,'YYYY-MM')=? THEN 1 ELSE 0 END) AS livrees_mois
+            SUM(CASE WHEN statut='livre' AND TO_CHAR(created_at,'$date_fmt')=? THEN 1 ELSE 0 END) AS livrees_mois
      FROM commandes WHERE 1=1 $sf",
-    [$mois]
+    [$periode_val]
 );
 
 // ── RIVETS
@@ -191,8 +219,8 @@ $total_alertes  = $points_attente + $cmd_en_attente + $alertes_stock + $rivets_b
 $sf_di      = $site_id ? "AND d.demandeur_id IN (SELECT id FROM users WHERE site_id = $site_id)" : "";
 $sf_di_bare = $site_id ? "AND demandeur_id IN (SELECT id FROM users WHERE site_id = $site_id)"   : "";
 $di_pending = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE statut IN ('en_attente','en_cours') $sf_di_bare");
-$di_mois    = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE TO_CHAR(created_at,'YYYY-MM')=? AND statut != 'brouillon' $sf_di_bare", [$mois]);
-$di_approuv = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE TO_CHAR(updated_at,'YYYY-MM')=? AND statut IN ('approuve','approuve_traitement') $sf_di_bare", [$mois]);
+$di_mois    = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE TO_CHAR(created_at,'$date_fmt')=? AND statut != 'brouillon' $sf_di_bare", [$periode_val]);
+$di_approuv = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE TO_CHAR(updated_at,'$date_fmt')=? AND statut IN ('approuve','approuve_traitement') $sf_di_bare", [$periode_val]);
 $di_tx      = $di_mois > 0 ? round($di_approuv / $di_mois * 100) : 0;
 // L'étape qui retient la demande est plus utile que son auteur : elle dit
 // chez qui elle attend. etape_actuelle indexe la liste des étapes triées par
@@ -362,14 +390,14 @@ foreach ($prod_par_site as $i => $s) {
     ];
 }
 $js_pfw_sites    = json_encode($pfw_sites_json);
-$pfw_quarter_def = max(1, (int)ceil((int)substr($mois, 5, 2) / 3));
+$pfw_quarter_def = $periode === 'annuel' ? 1 : max(1, (int)ceil((int)substr($mois, 5, 2) / 3));
 
 // ══════════════════════════════════════════════════════════
 //  KPI BUSINESS — service, gâche matière, écart de consommation,
 //  couverture de stock, fiabilité, productivité, mix produit
 // ══════════════════════════════════════════════════════════
-$df   = "TO_CHAR(date_point,'YYYY-MM')=?";     // filtre mois sur la table des points
-$df_p = "TO_CHAR(p.date_point,'YYYY-MM')=?";   // idem quand la table est aliasée p
+$df   = "TO_CHAR(date_point,'$date_fmt')=?";     // filtre période sur la table des points
+$df_p = "TO_CHAR(p.date_point,'$date_fmt')=?";   // idem quand la table est aliasée p
 
 // Affichage en nombre entier. Une valeur non nulle qui tomberait à zéro
 // par arrondi s'affiche « < 1 » : un faux zéro se lirait comme l'absence
@@ -429,7 +457,7 @@ $biz = db_fetch_one(
             COALESCE(SUM(nb_heures_travail),0)          AS heures
      FROM op_points_journaliers
      WHERE $df AND statut <> 'brouillon' $sf",
-    [$mois]
+    [$periode_val]
 );
 } catch (Throwable $e) {}
 
@@ -450,7 +478,7 @@ $gache = db_fetch_one(
      FROM op_films_utilises fu
      JOIN op_points_journaliers p ON p.id = fu.point_id
      WHERE $df_p AND p.statut <> 'brouillon' $sf_p",
-    [$mois]
+    [$periode_val]
 );
 } catch (Throwable $e) {}
 $f_ok = (int)($gache['ok'] ?? 0);
@@ -507,7 +535,7 @@ $couv_raw = db_fetch_all(
      ) st ON st.site_id = s.id
      WHERE s.actif = 1 $sf_s
      ORDER BY s.nom",
-    [$mois]
+    [$periode_val]
 );
 } catch (Throwable $e) {}
 $couverture = [];
@@ -582,8 +610,8 @@ try {
                 COALESCE(SUM(CASE WHEN statut_ecart = 'majeur' THEN 1 ELSE 0 END),0)                AS majeurs,
                 COALESCE(SUM(CASE WHEN statut_ecart = 'majeur' AND ajuste = 0 THEN 1 ELSE 0 END),0) AS majeurs_ouverts
          FROM comparaisons_stock
-         WHERE TO_CHAR(date_comparaison,'YYYY-MM')=? $sf",
-        [$mois]
+         WHERE TO_CHAR(date_comparaison,'$date_fmt')=? $sf",
+        [$periode_val]
     );
     $rec_total   = (int)($recon['total'] ?? 0);
     $rec_majeurs = (int)($recon['majeurs'] ?? 0);
@@ -707,7 +735,19 @@ include __DIR__ . '/../templates/header.php';
         </option>
         <?php endforeach; ?>
       </select>
+      <select name="periode" class="month-inp" onchange="this.form.submit()" title="Type de période" style="min-width:104px">
+        <option value="mensuel"<?= $periode==='mensuel' ? ' selected' : '' ?>>Mensuel</option>
+        <option value="annuel"<?= $periode==='annuel' ? ' selected' : '' ?>>Annuel</option>
+      </select>
+      <?php if ($periode === 'annuel'): ?>
+      <select name="annee" class="month-inp" onchange="this.form.submit()" title="Choisir l'année">
+        <?php for ($_y = $annee_max; $_y >= $annee_min; $_y--): ?>
+        <option value="<?= $_y ?>"<?= $annee_filtre===$_y ? ' selected' : '' ?>><?= $_y ?></option>
+        <?php endfor; ?>
+      </select>
+      <?php else: ?>
       <input type="month" name="mois" value="<?= h($mois) ?>" class="month-inp" onchange="this.form.submit()">
+      <?php endif; ?>
     </form>
   </div>
 </div>
@@ -1210,7 +1250,7 @@ include __DIR__ . '/../templates/header.php';
       <div class="leg-list">
         <div class="leg-item"><div class="leg-dot" style="background:#d97706"></div>En attente<span class="leg-val"><?= $cmd_stats['en_attente']??0 ?></span></div>
         <div class="leg-item"><div class="leg-dot" style="background:#1B75BC"></div>En livraison<span class="leg-val"><?= ($cmd_stats['a_livrer']??0)+($cmd_stats['en_route']??0) ?></span></div>
-        <div class="leg-item"><div class="leg-dot" style="background:#16a34a"></div>Livrées ce mois<span class="leg-val"><?= $cmd_stats['livrees_mois']??0 ?></span></div>
+        <div class="leg-item"><div class="leg-dot" style="background:#16a34a"></div>Livrées <?= $periode_mot ?><span class="leg-val"><?= $cmd_stats['livrees_mois']??0 ?></span></div>
         <div style="margin-top:6px;padding-top:6px;border-top:1px solid #f1f5f9;font-size:11px;color:#5a6678">
           Rivets posés : <strong style="color:#06033A"><?= number_format((int)($ops['rivets_utilises']??0),0,',',' ') ?></strong>
         </div>
@@ -1233,7 +1273,7 @@ include __DIR__ . '/../templates/header.php';
       </div>
       <div class="kpi-m">
         <div class="kpi-m-val" style="color:#1B75BC"><?= $di_mois ?></div>
-        <div class="kpi-m-lbl">Soumises ce mois</div>
+        <div class="kpi-m-lbl">Soumises <?= $periode_mot ?></div>
       </div>
       <div class="kpi-m">
         <div class="kpi-m-val" style="color:#15803d"><?= $di_approuv ?></div>
