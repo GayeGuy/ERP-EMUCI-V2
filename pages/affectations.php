@@ -107,10 +107,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $q  = trim($_POST['q'] ?? '');
         if (strlen($q) < 2) json_response(true, '', ['data' => []]);
         $rows = db_fetch_all(
-            "SELECT e.id, e.numero_serie_interne, e.etat, n.libelle AS type,
+            "SELECT e.id, e.numero_serie_interne, e.etat, COALESCE(n.libelle,'—') AS type,
                     s.nom AS site_actuel, CONCAT(u.prenom,' ',u.nom) AS user_actuel
              FROM equipements e
-             JOIN nomenclatures n ON n.id=e.nomenclature_id
+             LEFT JOIN nomenclatures n ON n.id=e.nomenclature_id
              LEFT JOIN sites s ON s.id=e.site_id
              LEFT JOIN users u ON u.id=e.utilisateur_id
              WHERE e.actif=1 AND (e.numero_serie_interne ILIKE ? OR e.numero_serie_origine ILIKE ?)
@@ -141,13 +141,13 @@ $total  = (int)db_fetch_value("SELECT COUNT(*) FROM mouvements_equipements me WH
 $offset = ($page - 1) * $per_page;
 
 $mouvements = db_fetch_all(
-    "SELECT me.*, e.numero_serie_interne, n.libelle AS type_equip,
+    "SELECT me.*, e.numero_serie_interne, COALESCE(n.libelle,'—') AS type_equip,
             s1.nom AS site_source, s2.nom AS site_dest,
             CONCAT(u.prenom,' ',u.nom) AS agent,
             CONCAT(ud.prenom,' ',ud.nom) AS user_dest
      FROM mouvements_equipements me
      JOIN equipements e ON e.id=me.equipement_id
-     JOIN nomenclatures n ON n.id=e.nomenclature_id
+     LEFT JOIN nomenclatures n ON n.id=e.nomenclature_id
      LEFT JOIN sites s1 ON s1.id=me.site_source_id
      LEFT JOIN sites s2 ON s2.id=me.site_dest_id
      LEFT JOIN users u  ON u.id=me.created_by
@@ -160,11 +160,11 @@ $mouvements = db_fetch_all(
 
 // Équipements affectés (avec site)
 $affectes = db_fetch_all(
-    "SELECT e.id, e.numero_serie_interne, e.etat, n.libelle AS type_equip,
+    "SELECT e.id, e.numero_serie_interne, e.etat, COALESCE(n.libelle,'—') AS type_equip,
             s.nom AS site_nom, s.id AS site_id,
             CONCAT(u.prenom,' ',u.nom) AS utilisateur
      FROM equipements e
-     JOIN nomenclatures n ON n.id=e.nomenclature_id
+     LEFT JOIN nomenclatures n ON n.id=e.nomenclature_id
      JOIN sites s ON s.id=e.site_id
      LEFT JOIN users u ON u.id=e.utilisateur_id
      WHERE e.actif=1 AND e.site_id IS NOT NULL
