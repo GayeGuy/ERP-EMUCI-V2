@@ -35,6 +35,15 @@ if (($_GET['export'] ?? '') === 'pdf' && !empty($_GET['id'])) {
             }
         }
     }
+    // Traitement IT : certains types (ex. transfert_agent) n'ont pas d'étape
+    // "it" dans leur circuit de validation alors qu'ils exigent un traitement
+    // IT après approbation — l'IT doit pouvoir ouvrir la fiche pour la traiter.
+    if (!$isValidator) {
+        $dType = di_type($d['type_code']);
+        if (!empty($dType['traitement_it']) && di_user_can_traiter_it((int)$user['id'], $my_roles)) {
+            $isValidator = true;
+        }
+    }
     if (!$owner && !$isValidator && !$is_admin) { http_response_code(403); exit('Accès refusé.'); }
 
     $autoload = __DIR__ . '/../vendor/autoload.php';
@@ -259,6 +268,15 @@ if (!empty($_GET['id'])) {
                 if ($dept_id && db_fetch_value("SELECT COUNT(*) FROM user_departements WHERE user_id=? AND departement_id=?", [(int)$user['id'], (int)$dept_id])) {
                     $isValidator = true; break;
                 }
+            }
+        }
+        // Traitement IT : certains types (ex. transfert_agent) n'ont pas d'étape
+        // "it" dans leur circuit de validation alors qu'ils exigent un traitement
+        // IT après approbation — l'IT doit pouvoir ouvrir la fiche pour la traiter.
+        if (!$isValidator) {
+            $dType = di_type($detail['type_code']);
+            if (!empty($dType['traitement_it']) && di_user_can_traiter_it((int)$user['id'], $my_roles)) {
+                $isValidator = true;
             }
         }
         if (!$owner && !$isValidator && !$is_admin) { $detail = null; }
