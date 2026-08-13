@@ -173,9 +173,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         );
         if (!$row) json_response(false, 'Introuvable.');
         $row['equip_par_type'] = db_fetch_all(
-            "SELECT n.code, n.libelle, COUNT(e.id) AS total, n.id AS nom_id
-             FROM equipements e JOIN nomenclatures n ON n.id=e.nomenclature_id
-             WHERE e.site_id=? AND e.actif=1 GROUP BY n.id ORDER BY n.libelle", [$id]
+            "SELECT n.code, COALESCE(n.libelle,'Sans type') AS libelle, COUNT(e.id) AS total, n.id AS nom_id
+             FROM equipements e LEFT JOIN nomenclatures n ON n.id=e.nomenclature_id
+             WHERE e.site_id=? AND e.actif=1 GROUP BY n.id ORDER BY libelle", [$id]
         );
         $row['utilisateurs'] = db_fetch_all(
             "SELECT u.id, CONCAT(u.prenom,' ',u.nom) AS nom, u.email, r.nom AS role

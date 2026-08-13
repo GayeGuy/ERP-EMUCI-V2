@@ -103,11 +103,11 @@ $mouvements_mois = db_fetch_all(
 
 // ── TOP ÉQUIPEMENTS PROCHES FIN DE CYCLE
 $fin_cycle_soon = db_fetch_all(
-    "SELECT e.numero_serie_interne, n.libelle AS type, s.nom AS site,
+    "SELECT e.numero_serie_interne, COALESCE(n.libelle,'—') AS type, s.nom AS site,
             e.date_fin_cycle,
             ((e.date_fin_cycle)::date - (CURRENT_DATE)::date) AS jours
      FROM equipements e
-     JOIN nomenclatures n ON n.id=e.nomenclature_id
+     LEFT JOIN nomenclatures n ON n.id=e.nomenclature_id
      LEFT JOIN sites s ON s.id=e.site_id
      WHERE e.actif=1 AND e.date_fin_cycle IS NOT NULL
        AND e.date_fin_cycle <= (CURRENT_DATE + INTERVAL '90 DAY')
