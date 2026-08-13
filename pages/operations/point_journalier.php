@@ -1728,7 +1728,7 @@ function renderBobinesRows(selectedIds){
 
 function buildBobineRow(selectedBobineId, idx){
   const opts = bobinesEnCours.map(b=>
-    `<option value="${b.id}" ${b.id==selectedBobineId?'selected':''}>${b.numero} — ${b.films_restants} films restants</option>`
+    `<option value="${b.id}" ${b.id==selectedBobineId?'selected':''}>${b.numero} — ${b.type_code||''} — ${b.films_restants} films restants</option>`
   ).join('');
   const b = bobinesCache[selectedBobineId]||{};
   return `
