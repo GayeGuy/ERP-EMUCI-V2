@@ -220,6 +220,27 @@ function di_traiter_it(array $demande, array $user, string $commentaire = '', st
         (int)$demande['id']);
 }
 
+// ── Historique des demandes traitées par le service IT (file partagée, pas propre à un utilisateur)
+function di_it_traitees(?string $from = null, ?string $to = null, int $limit = 100): array {
+    $dateWhere = ''; $dateParams = [];
+    if ($from) { $dateWhere .= " AND submitted_at >= ?"; $dateParams[] = $from . ' 00:00:00'; }
+    if ($to)   { $dateWhere .= " AND submitted_at <= ?"; $dateParams[] = $to   . ' 23:59:59'; }
+    $limit = max(1, min($limit, 200));
+    $rows = db_fetch_all(
+        "SELECT id FROM di_demandes WHERE traite_it=1 $dateWhere ORDER BY traite_date DESC LIMIT $limit",
+        $dateParams
+    );
+    $out = [];
+    foreach ($rows as $r) {
+        $d = di_get((int)$r['id']);
+        if (!$d) continue;
+        $d['_demandeur']  = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$d['demandeur_id']]);
+        $d['_traite_par'] = $d['traite_par'] ? db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$d['traite_par']]) : '';
+        $out[] = $d;
+    }
+    return $out;
+}
+
 // ── Demandes déjà traitées par cet utilisateur (a signé au moins une étape)
 function di_deja_traite(array $user, ?string $from = null, ?string $to = null): array {
     $uid   = (int)$user['id'];
