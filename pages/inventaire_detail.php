@@ -665,7 +665,11 @@ input.saisie.nok{border-color:#e74c3c;background:#fff5f5}
         <!-- Sauver -->
         <?php if($can_edit): ?>
         <td style="padding:9px 14px;text-align:center;white-space:nowrap">
-          <span id="etat-<?= $l['id'] ?>" style="display:none;font-size:11px;font-weight:700;color:#b7791f;margin-right:8px">🟠 En cours</span>
+          <span id="etat-<?= $l['id'] ?>"
+                style="display:<?= $saisi ? 'inline' : 'none' ?>;font-size:11px;font-weight:700;
+                       color:<?= $saisi ? '#1e8449' : '#b7791f' ?>;margin-right:8px">
+            <?= $saisi ? '✅ Sauvegardé' : '🟠 En cours' ?>
+          </span>
           <button style="background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
                   onclick="sauverLigne(<?= $l['id'] ?>)">💾 Enregistrer</button>
         </td>
@@ -697,6 +701,19 @@ function toast(msg,type='success'){
   t.innerHTML=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),3500);
 }
 
+// État de la ligne : rien tant que rien n'est saisi, orange "En cours" tant
+// que la valeur diffère de la dernière sauvegardée, vert "Sauvegardé" sinon.
+function majEtat(id, val, saved){
+  const etatEl = document.getElementById('etat-'+id);
+  if(!etatEl) return;
+  if(val === ''){ etatEl.style.display='none'; return; }
+  if(val === saved){
+    etatEl.style.display='inline'; etatEl.style.color='#1e8449'; etatEl.textContent='✅ Sauvegardé';
+  } else {
+    etatEl.style.display='inline'; etatEl.style.color='#b7791f'; etatEl.textContent='🟠 En cours';
+  }
+}
+
 function onPhyInput(id, stockSys, consoMoy){
   const inp  = document.getElementById('phy-'+id);
   const val  = inp.value;
@@ -704,8 +721,7 @@ function onPhyInput(id, stockSys, consoMoy){
   const jEl  = document.getElementById('jours-'+id);
   const eEl  = document.getElementById('epuis-'+id);
   const row  = document.getElementById('row-'+id);
-  const etatEl = document.getElementById('etat-'+id);
-  if(etatEl) etatEl.style.display = (val !== (inp.dataset.saved||'')) ? 'inline' : 'none';
+  majEtat(id, val, inp.dataset.saved||'');
 
   if(val === ''){
     inp.className='saisie'; ecEl.innerHTML='<span style="color:#94a3b8">—</span>';
@@ -742,8 +758,7 @@ async function sauverLigne(id){
   const d = await ap({action:'sauver_ligne',detail_id:id,stock_physique:phy,notes:''});
   if(d.success){
     if(phyEl){ phyEl.style.borderColor='#27ae60'; phyEl.dataset.saved = phy; }
-    const etatEl = document.getElementById('etat-'+id);
-    if(etatEl) etatEl.style.display='none';
+    majEtat(id, phy, phy);
     setTimeout(()=>{if(phyEl)phyEl.style.borderColor='';},2000);
     toast('Ligne sauvegardée.');
   } else toast('Erreur : '+d.message,'error');
@@ -766,8 +781,7 @@ async function sauverTout(){
     lignes.forEach(l=>{
       const phyEl=document.getElementById('phy-'+l.id);
       if(phyEl) phyEl.dataset.saved = l.phy;
-      const etatEl=document.getElementById('etat-'+l.id);
-      if(etatEl) etatEl.style.display='none';
+      majEtat(l.id, l.phy, l.phy);
     });
     toast(d.message);
     document.getElementById('alertZone').innerHTML=`<div style="background:#eafaf1;padding:10px 16px;border-radius:8px;font-size:13px;color:#1e8449;margin-bottom:12px">✅ ${d.message}</div>`;
