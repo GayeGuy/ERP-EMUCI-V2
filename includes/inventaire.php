@@ -21,6 +21,23 @@ function inv_date_fin(string $debut, string $typePeriode): string {
     return date('Y-m-d', strtotime("$debut +$mois months -1 day"));
 }
 
+// ── Libellé par défaut quand l'admin n'en saisit pas (colonne jamais vide)
+function inv_libelle_auto(string $debut, string $typePeriode): string {
+    $ts    = strtotime($debut);
+    $annee = (int)date('Y', $ts);
+    $mois  = (int)date('n', $ts);
+    $mois_fr = [1=>'janvier',2=>'février',3=>'mars',4=>'avril',5=>'mai',6=>'juin',
+                7=>'juillet',8=>'août',9=>'septembre',10=>'octobre',11=>'novembre',12=>'décembre'];
+    switch ($typePeriode) {
+        case 'mensuel':     $periode = $mois_fr[$mois] . ' ' . $annee; break;
+        case 'trimestriel': $periode = 'T' . (int)ceil($mois / 3) . ' ' . $annee; break;
+        case 'semestriel':  $periode = 'S' . ($mois <= 6 ? 1 : 2) . ' ' . $annee; break;
+        case 'annuel':      $periode = (string)$annee; break;
+        default:            $periode = $debut;
+    }
+    return 'Inventaire ' . mb_strtolower(inv_periode_label($typePeriode)) . ' — ' . $periode;
+}
+
 // ── Crée l'inventaire mensuel d'un site (+ ses lignes détail) et le
 //    rattache à une session. Lève une Exception si impossible (déjà
 //    existant, ou aucune bobine active sur le site).

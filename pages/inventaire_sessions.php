@@ -58,11 +58,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             json_response(false, "Déjà couvert par une session ouverte : $noms.");
         }
 
+        // Colonne jamais vide : à défaut d'un libellé saisi par l'admin, on
+        // en génère un à partir de la périodicité et de la date de début.
+        $libelle = $libelle ?: inv_libelle_auto($debut, $periode);
+
         db_begin();
         try {
             db_query(
                 "INSERT INTO inventaire_sessions (libelle, date_debut, date_fin, type_periode, notes, ouverte_par) VALUES (?,?,?,?,?,?)",
-                [$libelle ?: null, $debut, $fin, $periode, $notes ?: null, $user['id']]
+                [$libelle, $debut, $fin, $periode, $notes ?: null, $user['id']]
             );
             $session_id = (int)db_last_id();
 
@@ -319,7 +323,7 @@ include __DIR__ . '/../templates/header.php';
       </div>
       <div id="mAlert"></div>
       <div class="form-group" style="margin-bottom:14px"><label>Libellé (optionnel)</label>
-        <input type="text" class="form-control" id="fLibelle" placeholder="Ex: Inventaire mensuel Août 2026">
+        <input type="text" class="form-control" id="fLibelle" placeholder="Laissé vide = généré automatiquement (ex. Inventaire mensuel — août 2026)">
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:8px">
         <div class="form-group"><label>Du *</label><input type="date" class="form-control" id="fDebut" value="<?= date('Y-m-d') ?>" onchange="majFin()"></div>
