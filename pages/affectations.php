@@ -349,7 +349,7 @@ include __DIR__ . '/../templates/header.php';
         <?php endif; ?>
       </form>
       <?php if(can('affectations','can_export')): ?>
-      <a href="<?= APP_URL ?>/api/export.php?type=mouvements" class="btn btn-secondary btn-sm">📥 Excel</a>
+      <a href="<?= APP_URL ?>/api/export.php?type=mouvements<?= $f_site ? '&site='.$f_site : '' ?><?= $f_type ? '&type_mouv='.urlencode($f_type) : '' ?>" class="btn btn-secondary btn-sm">📥 Excel</a>
       <?php endif; ?>
     </div>
 

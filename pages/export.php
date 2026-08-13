@@ -63,7 +63,7 @@ if ($type==='equipements') {
     if(!empty($_GET['etat'])){$w[]='e.etat=?';$p[]=$_GET['etat'];}
     if(!empty($_GET['site'])){$w[]='e.site_id=?';$p[]=(int)$_GET['site'];}
     $w[]='e.actif=1';
-    $rows=db_fetch_all("SELECT e.numero_chrono,e.numero_serie_interne,e.numero_serie_origine,n.libelle AS type,e.marque,e.modele,e.etat,s.nom AS site,CONCAT(u.prenom,' ',u.nom) AS utilisateur,e.date_acquisition,e.date_mise_en_service,e.date_fin_cycle,e.observations FROM equipements e JOIN nomenclatures n ON n.id=e.nomenclature_id LEFT JOIN sites s ON s.id=e.site_id LEFT JOIN users u ON u.id=e.utilisateur_id WHERE ".implode(' AND ',$w)." ORDER BY e.numero_chrono DESC",$p);
+    $rows=db_fetch_all("SELECT e.numero_chrono,e.numero_serie_interne,e.numero_serie_origine,COALESCE(n.libelle,'—') AS type,e.marque,e.modele,e.etat,s.nom AS site,CONCAT(u.prenom,' ',u.nom) AS utilisateur,e.date_acquisition,e.date_mise_en_service,e.date_fin_cycle,e.observations FROM equipements e LEFT JOIN nomenclatures n ON n.id=e.nomenclature_id LEFT JOIN sites s ON s.id=e.site_id LEFT JOIN users u ON u.id=e.utilisateur_id WHERE ".implode(' AND ',$w)." ORDER BY e.numero_chrono DESC",$p);
     $sheet->setTitle('Équipements');
     $sheet->fromArray(['#','N° Interne','N° Série Fabricant','Type','Marque','Modèle','État','Site','Utilisateur','Date Acquisition','Mise en service','Fin de cycle','Observations'],null,'A1');
     apply_header($sp,'A1:M1'); $sheet->getRowDimension(1)->setRowHeight(22);
@@ -284,6 +284,85 @@ elseif ($type==='bilan_mensuel') {
     $sp = $sp2; // swap pour le téléchargement
     $filename='bilan_mensuel_'.sprintf('%04d-%02d',$annee,$mois).'.xlsx';
     audit_log($user['id'],'EXPORT','rapports',null,"Export bilan mensuel $annee-$mois");
+}
+
+// ── AFFECTATIONS / MOUVEMENTS ÉQUIPEMENTS ─────────────────────
+elseif ($type==='mouvements') {
+    require_permission('affectations','can_export');
+    $f_site = (int)($_GET['site'] ?? 0);
+    $f_type = trim($_GET['type_mouv'] ?? '');
+    $where  = ['1=1']; $params = [];
+    if ($f_site) { $where[] = '(me.site_source_id=? OR me.site_dest_id=?)'; $params[] = $f_site; $params[] = $f_site; }
+    if ($f_type) { $where[] = 'me.type=?'; $params[] = $f_type; }
+    $rows = db_fetch_all(
+        "SELECT me.created_at, me.type, e.numero_serie_interne, COALESCE(n.libelle,'—') AS type_equip,
+                s1.nom AS site_source, s2.nom AS site_dest,
+                CONCAT(ud.prenom,' ',ud.nom) AS user_dest,
+                CONCAT(u.prenom,' ',u.nom) AS agent,
+                me.fichier_bl, me.notes
+         FROM mouvements_equipements me
+         JOIN equipements e ON e.id=me.equipement_id
+         LEFT JOIN nomenclatures n ON n.id=e.nomenclature_id
+         LEFT JOIN sites s1 ON s1.id=me.site_source_id
+         LEFT JOIN sites s2 ON s2.id=me.site_dest_id
+         LEFT JOIN users u  ON u.id=me.created_by
+         LEFT JOIN users ud ON ud.id=me.user_dest_id
+         WHERE " . implode(' AND ', $where) . "
+         ORDER BY me.created_at DESC",
+        $params
+    );
+    $type_labels = ['entree'=>'Entrée','sortie'=>'Sortie','transfert'=>'Transfert','reforme'=>'Réforme','maintenance'=>'Maintenance'];
+    $sheet->setTitle('Mouvements');
+    $sheet->fromArray(['Date','Type','Équipement','Type équipement','Site source','Site destination','Utilisateur assigné','Agent','Bon de livraison','Notes'],null,'A1');
+    apply_header($sp,'A1:J1'); $sheet->getRowDimension(1)->setRowHeight(22);
+    $row=2; foreach($rows as $r){
+        $sheet->fromArray([
+            $r['created_at'], $type_labels[$r['type']] ?? $r['type'], $r['numero_serie_interne'], $r['type_equip'],
+            $r['site_source'] ?? '—', $r['site_dest'] ?? '—', trim($r['user_dest'] ?? '') ?: '—',
+            $r['agent'] ?? '—', $r['fichier_bl'] ? 'Oui' : 'Non', $r['notes'] ?? '',
+        ],null,"A$row");
+        stripe($sheet,"A$row:J$row"); $row++;
+    }
+    if($row>2) apply_data($sp,"A2:J".($row-1));
+    auto_size($sheet,10);
+    $filename='mouvements_'.date('Ymd_His').'.xlsx';
+    audit_log($user['id'],'EXPORT','affectations',null,"Export Excel mouvements équipements (".count($rows)." lignes)");
+}
+
+// ── INTERVENTIONS MAINTENANCE ─────────────────────────────────
+elseif ($type==='interventions') {
+    require_permission('interventions','can_export');
+    $f_site = (int)($_GET['site'] ?? 0);
+    $f_mois = trim($_GET['mois'] ?? '');
+    $where  = ['1=1']; $params = [];
+    if ($user['role_slug']==='maintenance_info') { $where[]='im.technicien_id=?'; $params[]=$user['id']; }
+    if ($f_site) { $where[]='im.site_id=?'; $params[]=$f_site; }
+    if ($f_mois) { $where[]="TO_CHAR(im.date_intervention,'YYYY-MM')=?"; $params[]=$f_mois; }
+    $rows = db_fetch_all(
+        "SELECT im.date_intervention, s.nom AS site, im.type_action, im.description,
+                e.numero_serie_interne AS equipement, im.probleme_signale, im.solution_apportee,
+                im.statut_apres, im.duree_minutes, im.pieces_changees,
+                CONCAT(u.prenom,' ',u.nom) AS technicien
+         FROM interventions_maintenance im
+         JOIN sites s ON s.id=im.site_id
+         LEFT JOIN equipements e ON e.id=im.equipement_id
+         JOIN users u ON u.id=im.technicien_id
+         WHERE ".implode(' AND ',$where)." ORDER BY im.date_intervention DESC",
+        $params
+    );
+    $sheet->setTitle('Interventions');
+    $sheet->fromArray(['Date','Site','Type d\'action','Description','Équipement','Problème','Solution','Statut','Durée (min)','Pièces changées','Technicien'],null,'A1');
+    apply_header($sp,'A1:K1'); $sheet->getRowDimension(1)->setRowHeight(22);
+    $row=2; foreach($rows as $r){
+        $sheet->fromArray([$r['date_intervention'],$r['site'],$r['type_action'],$r['description'],
+            $r['equipement']??'—',$r['probleme_signale']??'',$r['solution_apportee']??'',
+            $r['statut_apres'],$r['duree_minutes']??'',$r['pieces_changees']??'',$r['technicien']],null,"A$row");
+        stripe($sheet,"A$row:K$row"); $row++;
+    }
+    if($row>2) apply_data($sp,"A2:K".($row-1));
+    auto_size($sheet,11);
+    $filename='interventions_'.date('Ymd_His').'.xlsx';
+    audit_log($user['id'],'EXPORT','interventions',null,"Export Excel interventions");
 }
 
 else { http_response_code(400); die('Type d\'export non reconnu.'); }
