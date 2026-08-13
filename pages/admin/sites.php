@@ -789,7 +789,9 @@ cfgData['<?= $k ?>'] = <?= json_encode($cfg) ?>;
 function ap(data){
   const fd=new FormData();
   for(const[k,v]of Object.entries(data))if(v!==undefined)fd.append(k,v);
-  return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
+  return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd})
+    .then(r=>r.json())
+    .catch(err=>({success:false,message:'Erreur réseau : '+err.message}));
 }
 function closeMX(id){document.getElementById(id).classList.remove('open');}
 function applyFilters(){
@@ -1056,7 +1058,9 @@ function saveCfg(type){
 </div>
 
 <script>
-function apSite(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
+function apSite(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)})
+  .then(r=>r.json())
+  .catch(err=>({success:false,message:'Erreur réseau : '+err.message}));}
 function ouvrirLierSite(id,nom){document.getElementById('lierId').value=id;document.getElementById('lierNomEmuci').textContent=nom;document.getElementById('lierSiteId').value='';document.getElementById('alertLierEmuci').innerHTML='';document.getElementById('modalLierEmuci').style.display='flex';}
 async function confirmerLier(){
   const sid=document.getElementById('lierSiteId').value;
