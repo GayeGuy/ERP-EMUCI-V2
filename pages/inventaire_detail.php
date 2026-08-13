@@ -44,6 +44,11 @@ $role_slug    = $user['role_slug'] ?? '';
 $can_edit     = $inv['statut'] === 'brouillon' && can('inventaire_bobines','can_update');
 $can_validate = $inv['statut'] === 'brouillon'
     && in_array($role_slug, ['admin','superadmin','superviseur_operation','gestionnaire_stock_bobines','gestionnaire_stock']);
+$is_coord           = ($role_slug === 'coordinateur_site');
+// Seuls l'admin/superadmin (ou une délégation du module) peuvent interpeller
+// directement le site sur une ligne verrouillée, ou autoriser/refuser une
+// demande d'autorisation venue du coordinateur.
+$can_demander_site  = can('inventaire_sessions','can_read');
 $page_title  = 'Inventaire du ' . fmt_date($inv['date_inventaire']);
 $active_page = 'inventaire_bobines';
 
@@ -95,10 +100,11 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
     }
 
     // ── DEMANDER UNE MODIFICATION sur une ligne déjà saisie (verrouillée) —
-    //    typiquement la personne qui a ouvert la session, en consultant le
-    //    détail d'un site. La demande est renvoyée au site concerné.
+    //    réservé à l'admin/superadmin ou à la personne qui a ouvert la
+    //    session (délégation) : le site répond directement (ligne déjà
+    //    déverrouillée), pas d'étape d'autorisation.
     if ($action==='demander_modif') {
-        if (!$can_edit) json_response(false,'Action non autorisée.');
+        if (!$can_demander_site) json_response(false,'Action réservée à l\'administrateur ou au responsable de session.');
         $detail_id       = (int)($_POST['detail_id'] ?? 0);
         $motif           = trim($_POST['motif'] ?? '');
         $valeur_proposee = ($_POST['valeur_proposee'] ?? '') !== '' ? (int)$_POST['valeur_proposee'] : null;
@@ -111,13 +117,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         );
         if (!$det) json_response(false,'Ligne introuvable.');
         if ((int)$det['stock_physique']===0 && (int)$det['ecart']===0) json_response(false,"Cette ligne n'a pas encore été saisie.");
-        if (db_fetch_value("SELECT COUNT(*) FROM inventaire_corrections WHERE detail_id=? AND statut='en_attente'", [$detail_id])) {
-            json_response(false,'Une demande est déjà en attente pour cette ligne.');
+        if (db_fetch_value("SELECT COUNT(*) FROM inventaire_corrections WHERE detail_id=? AND statut IN ('en_attente','autorise')", [$detail_id])) {
+            json_response(false,'Une demande est déjà en cours pour cette ligne.');
         }
 
         db_query(
-            "INSERT INTO inventaire_corrections (detail_id,inventaire_id,bobine_id,site_id,stock_physique_actuel,valeur_proposee,motif,demandeur_id)
-             VALUES (?,?,?,?,?,?,?,?)",
+            "INSERT INTO inventaire_corrections (detail_id,inventaire_id,bobine_id,site_id,stock_physique_actuel,valeur_proposee,motif,demandeur_id,type)
+             VALUES (?,?,?,?,?,?,?,?,'demande_site')",
             [$detail_id, $inv_id, $det['bobine_id'], $inv['site_id'], (int)$det['stock_physique'], $valeur_proposee, $motif, $user['id']]
         );
         $corr_id = (int)db_last_id();
@@ -140,7 +146,101 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         json_response(true,'Demande envoyée au site.',['id'=>$corr_id]);
     }
 
-    // ── RÉPONDRE à une demande de modification — le site corrige la valeur
+    // ── DEMANDER UNE AUTORISATION DE MODIFICATION — le coordinateur (site)
+    //    ne peut pas rouvrir sa ligne lui-même : il demande l'accord de
+    //    l'admin, qui doit autoriser avant que le champ ne se déverrouille.
+    if ($action==='demander_autorisation') {
+        if (!$is_coord) json_response(false,'Action réservée au coordinateur de site.');
+        $detail_id       = (int)($_POST['detail_id'] ?? 0);
+        $motif           = trim($_POST['motif'] ?? '');
+        $valeur_proposee = ($_POST['valeur_proposee'] ?? '') !== '' ? (int)$_POST['valeur_proposee'] : null;
+        if ($motif === '') json_response(false,'Le motif est obligatoire.');
+
+        $det = db_fetch_one(
+            "SELECT d.*, b.numero FROM inventaire_details_bobines d
+             JOIN op_bobines b ON b.id=d.bobine_id WHERE d.id=? AND d.inventaire_id=?",
+            [$detail_id, $inv_id]
+        );
+        if (!$det) json_response(false,'Ligne introuvable.');
+        if ((int)$det['stock_physique']===0 && (int)$det['ecart']===0) json_response(false,"Cette ligne n'a pas encore été saisie.");
+        if (db_fetch_value("SELECT COUNT(*) FROM inventaire_corrections WHERE detail_id=? AND statut IN ('en_attente','autorise')", [$detail_id])) {
+            json_response(false,'Une demande est déjà en cours pour cette ligne.');
+        }
+
+        db_query(
+            "INSERT INTO inventaire_corrections (detail_id,inventaire_id,bobine_id,site_id,stock_physique_actuel,valeur_proposee,motif,demandeur_id,type)
+             VALUES (?,?,?,?,?,?,?,?,'demande_autorisation')",
+            [$detail_id, $inv_id, $det['bobine_id'], $inv['site_id'], (int)$det['stock_physique'], $valeur_proposee, $motif, $user['id']]
+        );
+        $corr_id = (int)db_last_id();
+
+        $nom = trim(($user['prenom'] ?? '').' '.($user['nom'] ?? ''));
+        $admins = db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug IN ('admin','superadmin') AND u.actif=1");
+        foreach ($admins as $a) {
+            db_query(
+                "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                [$a['id'], 'info', '🔒 Demande d\'autorisation de modification',
+                 "$nom demande à modifier la bobine {$det['numero']} sur l'inventaire du " . fmt_date($inv['date_inventaire']) . " ({$inv['site_nom']}) : $motif",
+                 '/pages/inventaire_detail.php?id=' . $inv_id]
+            );
+        }
+        audit_log($user['id'],'CREATE','inventaire_corrections',$corr_id,"Demande autorisation bobine {$det['numero']} inventaire #$inv_id");
+        json_response(true,"Demande d'autorisation envoyée à l'administrateur.",['id'=>$corr_id]);
+    }
+
+    // ── AUTORISER une demande du coordinateur — déverrouille la ligne
+    if ($action==='autoriser_modif') {
+        if (!$can_demander_site) json_response(false,'Action réservée à l\'administrateur ou au responsable de session.');
+        $corr_id = (int)($_POST['correction_id'] ?? 0);
+        $corr = db_fetch_one(
+            "SELECT * FROM inventaire_corrections WHERE id=? AND inventaire_id=? AND type='demande_autorisation' AND statut='en_attente'",
+            [$corr_id, $inv_id]
+        );
+        if (!$corr) json_response(false,'Demande introuvable ou déjà traitée.');
+
+        db_query("UPDATE inventaire_corrections SET statut='autorise', autorise_par=?, autorise_at=NOW() WHERE id=?", [$user['id'], $corr_id]);
+        $det = db_fetch_one("SELECT numero FROM op_bobines WHERE id=?", [$corr['bobine_id']]);
+        $nom = trim(($user['prenom'] ?? '').' '.($user['nom'] ?? ''));
+        db_query(
+            "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+            [$corr['demandeur_id'], 'info', '✅ Autorisation accordée',
+             "$nom a autorisé la modification de la bobine {$det['numero']} : vous pouvez corriger la quantité physique.",
+             '/pages/inventaire_detail.php?id=' . $inv_id]
+        );
+        audit_log($user['id'],'UPDATE','inventaire_corrections',$corr_id,"Autorisation accordée bobine {$det['numero']} inventaire #$inv_id");
+        json_response(true,'Autorisation accordée — le site peut maintenant corriger la ligne.');
+    }
+
+    // ── REFUSER une demande du coordinateur — la ligne reste verrouillée
+    if ($action==='refuser_modif') {
+        if (!$can_demander_site) json_response(false,'Action réservée à l\'administrateur ou au responsable de session.');
+        $corr_id = (int)($_POST['correction_id'] ?? 0);
+        $motif_refus = trim($_POST['motif'] ?? '');
+        $corr = db_fetch_one(
+            "SELECT * FROM inventaire_corrections WHERE id=? AND inventaire_id=? AND type='demande_autorisation' AND statut='en_attente'",
+            [$corr_id, $inv_id]
+        );
+        if (!$corr) json_response(false,'Demande introuvable ou déjà traitée.');
+
+        db_query(
+            "UPDATE inventaire_corrections SET statut='refuse', reponse=?, traite_par=?, traite_at=NOW() WHERE id=?",
+            [$motif_refus ?: null, $user['id'], $corr_id]
+        );
+        $det = db_fetch_one("SELECT numero FROM op_bobines WHERE id=?", [$corr['bobine_id']]);
+        $nom = trim(($user['prenom'] ?? '').' '.($user['nom'] ?? ''));
+        db_query(
+            "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+            [$corr['demandeur_id'], 'info', '❌ Autorisation refusée',
+             "$nom a refusé la demande de modification sur la bobine {$det['numero']}" . ($motif_refus ? " : $motif_refus" : '.'),
+             '/pages/inventaire_detail.php?id=' . $inv_id]
+        );
+        audit_log($user['id'],'UPDATE','inventaire_corrections',$corr_id,"Autorisation refusée bobine {$det['numero']} inventaire #$inv_id");
+        json_response(true,'Demande refusée.');
+    }
+
+    // ── RÉPONDRE à une demande de modification — le site corrige la valeur.
+    //    Couvre les deux cas : demande directe de l'admin (en_attente) et
+    //    demande d'autorisation déjà accordée (autorise).
     if ($action==='repondre_modif') {
         if (!$can_edit) json_response(false,'Action non autorisée.');
         $corr_id       = (int)($_POST['correction_id'] ?? 0);
@@ -148,8 +248,11 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         $reponse       = trim($_POST['reponse'] ?? '');
         if ($valeur_finale === null) json_response(false,'La valeur corrigée est obligatoire.');
 
-        $corr = db_fetch_one("SELECT * FROM inventaire_corrections WHERE id=? AND inventaire_id=? AND statut='en_attente'", [$corr_id, $inv_id]);
+        $corr = db_fetch_one("SELECT * FROM inventaire_corrections WHERE id=? AND inventaire_id=? AND statut IN ('en_attente','autorise')", [$corr_id, $inv_id]);
         if (!$corr) json_response(false,'Demande introuvable ou déjà traitée.');
+        if ($corr['type'] === 'demande_autorisation' && $corr['statut'] !== 'autorise') {
+            json_response(false,"Cette demande doit d'abord être autorisée par l'administrateur.");
+        }
 
         $det = db_fetch_one(
             "SELECT d.*, b.stock_systeme, b.numero FROM inventaire_details_bobines d
@@ -334,9 +437,10 @@ if (!empty($bobine_ids)) {
     foreach ($ecs as $ec) $ecarts_connus_map[$ec['bobine_id']] = $ec;
 }
 
-// Demandes de modification par ligne : la plus récente en attente, et la
-// plus récente traitée (pour l'historique) — une ligne ne peut avoir
-// qu'une seule demande 'en_attente' à la fois (contrôlé à la création).
+// Demandes de modification par ligne : la plus récente active (en_attente
+// ou autorise — déverrouille ou non selon le type), et la plus récente
+// close (traite/refuse, pour l'historique). Une ligne ne peut avoir
+// qu'une seule demande active à la fois (contrôlé à la création).
 $corrections_map = [];
 $corrections_rows = db_fetch_all(
     "SELECT c.*, CONCAT(u1.prenom,' ',u1.nom) AS demandeur_nom, CONCAT(u2.prenom,' ',u2.nom) AS traite_par_nom
@@ -349,9 +453,13 @@ $corrections_rows = db_fetch_all(
 );
 foreach ($corrections_rows as $c) {
     $did = (int)$c['detail_id'];
-    if (!isset($corrections_map[$did])) $corrections_map[$did] = ['attente' => null, 'derniere' => null];
-    if ($c['statut'] === 'en_attente' && !$corrections_map[$did]['attente']) $corrections_map[$did]['attente'] = $c;
-    if (!$corrections_map[$did]['derniere']) $corrections_map[$did]['derniere'] = $c;
+    if (!isset($corrections_map[$did])) $corrections_map[$did] = ['active' => null, 'close' => null];
+    if (in_array($c['statut'], ['en_attente','autorise'], true) && !$corrections_map[$did]['active']) {
+        $corrections_map[$did]['active'] = $c;
+    }
+    if (in_array($c['statut'], ['traite','refuse'], true) && !$corrections_map[$did]['close']) {
+        $corrections_map[$did]['close'] = $c;
+    }
 }
 
 // Stats
@@ -622,23 +730,23 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
   </div>
 </div>
 
-<!-- MODAL DEMANDER UNE MODIFICATION -->
-<div id="modalDemanderModif" style="display:none;position:fixed;inset:0;background:rgba(13,31,53,.5);z-index:800;align-items:center;justify-content:center"
+<!-- MODAL MOTIF (partagée : demander modif au site / demander autorisation / refuser) -->
+<div id="modalMotif" style="display:none;position:fixed;inset:0;background:rgba(13,31,53,.5);z-index:800;align-items:center;justify-content:center"
      onclick="if(event.target===this)this.style.display='none'">
   <div style="background:white;border-radius:16px;padding:22px 24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-    <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin:0 0 14px">🔁 Demander une modification</h3>
-    <div id="demModifAlert"></div>
+    <h3 id="modalMotifTitre" style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin:0 0 14px"></h3>
+    <div id="modalMotifAlert"></div>
     <div class="form-group" style="margin-bottom:12px">
-      <label style="font-size:12.5px;font-weight:700">Motif *</label>
-      <textarea id="demModifMotif" rows="3" class="form-control" placeholder="Expliquez pourquoi cette valeur vous semble incorrecte…"></textarea>
+      <label id="modalMotifLabel" style="font-size:12.5px;font-weight:700">Motif *</label>
+      <textarea id="modalMotifTexte" rows="3" class="form-control" placeholder="Expliquez la raison…"></textarea>
     </div>
-    <div class="form-group" style="margin-bottom:6px">
+    <div class="form-group" id="modalMotifValeurWrap" style="margin-bottom:6px">
       <label style="font-size:12.5px;font-weight:700">Valeur proposée <span style="font-weight:400;color:var(--muted)">(optionnel)</span></label>
-      <input type="number" min="0" id="demModifValeur" class="form-control" placeholder="Laisser vide si vous n'avez pas de valeur précise">
+      <input type="number" min="0" id="modalMotifValeur" class="form-control" placeholder="Laisser vide si vous n'avez pas de valeur précise">
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
-      <button class="btn btn-secondary" onclick="document.getElementById('modalDemanderModif').style.display='none'">Annuler</button>
-      <button class="btn btn-primary" id="btnEnvoyerDemModif" onclick="envoyerDemandeModif()">Envoyer au site</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('modalMotif').style.display='none'">Annuler</button>
+      <button class="btn btn-primary" id="btnModalMotif" onclick="envoyerModalMotif()">Envoyer</button>
     </div>
   </div>
 </div>
@@ -707,9 +815,15 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
         $ecart_mes  = (int)$l['ecart'];            // figé
         $saisi      = $l['stock_physique'] > 0 || $ecart_mes != 0;
         $ec_connu   = $ecarts_connus_map[$l['bobine_id']] ?? null;
-        $demande_attente = $corrections_map[$l['id']]['attente'] ?? null;
-        $demande_traitee = ($corrections_map[$l['id']]['derniere'] ?? null);
-        $demande_traitee = ($demande_traitee && $demande_traitee['statut'] === 'traite') ? $demande_traitee : null;
+        $demande_active = $corrections_map[$l['id']]['active'] ?? null;
+        $demande_close  = $corrections_map[$l['id']]['close']  ?? null;
+        // Déverrouille la ligne : toujours pour une demande directe de
+        // l'admin (demande_site), seulement une fois autorisée pour une
+        // demande venant du coordinateur (demande_autorisation).
+        $deverrouille = $demande_active && (
+            $demande_active['type'] === 'demande_site'
+            || ($demande_active['type'] === 'demande_autorisation' && $demande_active['statut'] === 'autorise')
+        );
 
         // ── Données temps réel (dynamiques)
         $stock_rt   = (int)$l['stock_realtime'];          // stock actuel
@@ -757,7 +871,7 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
                  data-sys="<?= $stock_rt ?>"
                  data-conso="<?= $conso_moy ?>"
                  data-saved="<?= $saisi ? $stock_phy : '' ?>"
-                 <?= ($saisi && !$demande_attente) ? 'disabled' : '' ?>
+                 <?= ($saisi && !$deverrouille) ? 'disabled' : '' ?>
                  oninput="onPhyInput(<?= $l['id'] ?>,<?= $stock_rt ?>,<?= $conso_moy ?>)">
           <?php else: ?>
           <span style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:14px">
@@ -838,25 +952,69 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
         </td>
 
         <!-- Demande de modification -->
-        <td style="padding:9px 14px;text-align:left;max-width:260px">
-          <?php if ($demande_attente): ?>
+        <td style="padding:9px 14px;text-align:left;max-width:270px">
+          <?php if ($demande_active && $demande_active['type'] === 'demande_site'): ?>
+            <!-- Flux direct : admin/responsable de session -> site, réponse immédiate -->
             <div style="background:#fff8e7;border:1px solid #f0d999;border-radius:8px;padding:8px 10px;margin-bottom:6px">
-              <div style="font-size:11px;font-weight:700;color:#b7791f">🔶 Demandé par <?= h($demande_attente['demandeur_nom'] ?? '—') ?></div>
-              <div style="font-size:12px;color:#5a4a1f;margin-top:2px"><?= h($demande_attente['motif']) ?></div>
-              <?php if ($demande_attente['valeur_proposee'] !== null): ?>
-              <div style="font-size:11px;color:#5a4a1f;margin-top:2px">Valeur proposée : <strong><?= (int)$demande_attente['valeur_proposee'] ?></strong></div>
+              <div style="font-size:11px;font-weight:700;color:#b7791f">🔶 Demandé par <?= h($demande_active['demandeur_nom'] ?? '—') ?></div>
+              <div style="font-size:12px;color:#5a4a1f;margin-top:2px"><?= h($demande_active['motif']) ?></div>
+              <?php if ($demande_active['valeur_proposee'] !== null): ?>
+              <div style="font-size:11px;color:#5a4a1f;margin-top:2px">Valeur proposée : <strong><?= (int)$demande_active['valeur_proposee'] ?></strong></div>
               <?php endif; ?>
             </div>
+            <?php if ($can_edit): ?>
             <button style="background:#fef3e2;color:#b7791f;border:1px solid #f0d999;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
-                    onclick="repondreModif(<?= (int)$demande_attente['id'] ?>,<?= $l['id'] ?>)">↩ Répondre</button>
+                    onclick="repondreModif(<?= (int)$demande_active['id'] ?>,<?= $l['id'] ?>)">↩ Répondre</button>
+            <?php endif; ?>
+
+          <?php elseif ($demande_active && $demande_active['type'] === 'demande_autorisation' && $demande_active['statut'] === 'en_attente'): ?>
+            <!-- Le coordinateur a demandé l'autorisation de l'admin -->
+            <div style="background:#eaf2fb;border:1px solid #90caf9;border-radius:8px;padding:8px 10px;margin-bottom:6px">
+              <div style="font-size:11px;font-weight:700;color:#1565c0">⏳ Demandé par <?= h($demande_active['demandeur_nom'] ?? '—') ?> — en attente d'autorisation</div>
+              <div style="font-size:12px;color:#1a3a5c;margin-top:2px"><?= h($demande_active['motif']) ?></div>
+              <?php if ($demande_active['valeur_proposee'] !== null): ?>
+              <div style="font-size:11px;color:#1a3a5c;margin-top:2px">Valeur proposée : <strong><?= (int)$demande_active['valeur_proposee'] ?></strong></div>
+              <?php endif; ?>
+            </div>
+            <?php if ($can_demander_site): ?>
+            <div style="display:flex;gap:6px">
+              <button style="background:#eafaf1;color:#1e8449;border:1px solid #bfe6d0;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
+                      onclick="autoriserModif(<?= (int)$demande_active['id'] ?>)">✅ Autoriser</button>
+              <button style="background:#fdf0ef;color:#c0392b;border:1px solid #f6c9c4;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
+                      onclick="ouvrirModalMotif('refuser_modif',<?= (int)$demande_active['id'] ?>)">❌ Refuser</button>
+            </div>
+            <?php else: ?>
+            <span style="font-size:11px;color:#94a3b8">En attente de réponse de l'administrateur</span>
+            <?php endif; ?>
+
+          <?php elseif ($demande_active && $demande_active['type'] === 'demande_autorisation' && $demande_active['statut'] === 'autorise'): ?>
+            <!-- Autorisation accordée : le site peut maintenant corriger -->
+            <div style="background:#eafaf1;border:1px solid #bfe6d0;border-radius:8px;padding:8px 10px;margin-bottom:6px">
+              <div style="font-size:11px;font-weight:700;color:#1e8449">✅ Autorisation accordée</div>
+              <div style="font-size:12px;color:#1e5c3a;margin-top:2px">Corrigez la quantité physique puis confirmez.</div>
+            </div>
+            <?php if ($can_edit): ?>
+            <button style="background:#eafaf1;color:#1e8449;border:1px solid #bfe6d0;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
+                    onclick="repondreModif(<?= (int)$demande_active['id'] ?>,<?= $l['id'] ?>)">💾 Enregistrer la correction</button>
+            <?php endif; ?>
+
           <?php elseif ($saisi): ?>
-            <?php if ($demande_traitee): ?>
+            <?php if ($demande_close && $demande_close['statut'] === 'traite'): ?>
             <div style="font-size:11px;color:#1e8449;margin-bottom:6px">
-              ✅ Modifiée suite à demande (<?= h($demande_traitee['demandeur_nom'] ?? '—') ?> → <?= (int)$demande_traitee['valeur_finale'] ?>)
+              ✅ Modifiée suite à demande (<?= h($demande_close['demandeur_nom'] ?? '—') ?> → <?= (int)$demande_close['valeur_finale'] ?>)
+            </div>
+            <?php elseif ($demande_close && $demande_close['statut'] === 'refuse'): ?>
+            <div style="font-size:11px;color:#c0392b;margin-bottom:6px">
+              ❌ Autorisation refusée<?= $demande_close['reponse'] ? ' : ' . h($demande_close['reponse']) : '' ?>
             </div>
             <?php endif; ?>
+            <?php if ($can_demander_site): ?>
             <button style="background:#f8f9fb;color:#5a6480;border:1px solid #e2e8f0;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600"
-                    onclick="demanderModif(<?= $l['id'] ?>)">🔁 Demander modif</button>
+                    onclick="ouvrirModalMotif('demander_modif',<?= $l['id'] ?>)">🔁 Demander modif au site</button>
+            <?php elseif ($is_coord): ?>
+            <button style="background:#f8f9fb;color:#5a6480;border:1px solid #e2e8f0;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600"
+                    onclick="ouvrirModalMotif('demander_autorisation',<?= $l['id'] ?>)">🔒 Demander une autorisation</button>
+            <?php endif; ?>
           <?php else: ?>
             <span style="font-size:12px;color:#94a3b8">—</span>
           <?php endif; ?>
@@ -954,25 +1112,47 @@ async function sauverLigne(id){
   } else toast('Erreur : '+d.message,'error');
 }
 
-let demModifDetailId = null;
-function demanderModif(detailId){
-  demModifDetailId = detailId;
-  document.getElementById('demModifMotif').value='';
-  document.getElementById('demModifValeur').value='';
-  document.getElementById('demModifAlert').innerHTML='';
-  document.getElementById('modalDemanderModif').style.display='flex';
+// Modal motif partagée : mode = 'demander_modif' (admin -> site) |
+// 'demander_autorisation' (coordinateur -> admin) | 'refuser_modif'
+let modalMotifMode = null, modalMotifId = null;
+function ouvrirModalMotif(mode, id){
+  modalMotifMode = mode; modalMotifId = id;
+  document.getElementById('modalMotifTexte').value='';
+  document.getElementById('modalMotifValeur').value='';
+  document.getElementById('modalMotifAlert').innerHTML='';
+  const titres = {
+    demander_modif: '🔁 Demander une modification au site',
+    demander_autorisation: "🔒 Demander une autorisation de modification",
+    refuser_modif: '❌ Refuser la demande',
+  };
+  document.getElementById('modalMotifTitre').textContent = titres[mode];
+  document.getElementById('modalMotifLabel').textContent = mode==='refuser_modif' ? 'Motif du refus (optionnel)' : 'Motif *';
+  document.getElementById('modalMotifValeurWrap').style.display = mode==='refuser_modif' ? 'none' : 'block';
+  document.getElementById('btnModalMotif').textContent = mode==='demander_modif' ? 'Envoyer au site'
+    : mode==='demander_autorisation' ? "Envoyer à l'administrateur" : 'Refuser';
+  document.getElementById('modalMotif').style.display='flex';
 }
-async function envoyerDemandeModif(){
-  const motif = document.getElementById('demModifMotif').value.trim();
-  const alertEl = document.getElementById('demModifAlert');
-  if(!motif){ alertEl.innerHTML='<div style="background:#fdf0ef;color:#c0392b;padding:8px 12px;border-radius:8px;font-size:12.5px;margin-bottom:10px">Le motif est obligatoire.</div>'; return; }
-  const valeur = document.getElementById('demModifValeur').value;
-  const btn = document.getElementById('btnEnvoyerDemModif');
-  btn.disabled = true; btn.textContent = '⏳…';
-  const d = await ap({action:'demander_modif', detail_id:demModifDetailId, motif, valeur_proposee:valeur});
-  btn.disabled = false; btn.textContent = 'Envoyer au site';
+async function envoyerModalMotif(){
+  const motif = document.getElementById('modalMotifTexte').value.trim();
+  const alertEl = document.getElementById('modalMotifAlert');
+  if(modalMotifMode!=='refuser_modif' && !motif){ alertEl.innerHTML='<div style="background:#fdf0ef;color:#c0392b;padding:8px 12px;border-radius:8px;font-size:12.5px;margin-bottom:10px">Le motif est obligatoire.</div>'; return; }
+  const btn = document.getElementById('btnModalMotif');
+  btn.disabled = true;
+  let d;
+  if(modalMotifMode==='refuser_modif'){
+    d = await ap({action:'refuser_modif', correction_id:modalMotifId, motif});
+  } else {
+    const valeur = document.getElementById('modalMotifValeur').value;
+    d = await ap({action:modalMotifMode, detail_id:modalMotifId, motif, valeur_proposee:valeur});
+  }
+  btn.disabled = false;
   if(d.success){ toast(d.message); setTimeout(()=>location.reload(), 800); }
   else alertEl.innerHTML = `<div style="background:#fdf0ef;color:#c0392b;padding:8px 12px;border-radius:8px;font-size:12.5px;margin-bottom:10px">${d.message}</div>`;
+}
+async function autoriserModif(correctionId){
+  if(!confirm('Autoriser la modification de cette ligne par le site ?')) return;
+  const d = await ap({action:'autoriser_modif', correction_id:correctionId});
+  if(d.success){ toast(d.message); setTimeout(()=>location.reload(), 800); } else toast(d.message,'error');
 }
 
 let repModifCorrId = null, repModifDetailId = null;
