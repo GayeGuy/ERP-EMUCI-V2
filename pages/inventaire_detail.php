@@ -1013,7 +1013,7 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
                     onclick="ouvrirModalMotif('demander_modif',<?= $l['id'] ?>)">🔁 Demander modif au site</button>
             <?php elseif ($is_coord): ?>
             <button style="background:#f8f9fb;color:#5a6480;border:1px solid #e2e8f0;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600"
-                    onclick="ouvrirModalMotif('demander_autorisation',<?= $l['id'] ?>)">🔒 Demander une autorisation</button>
+                    onclick="ouvrirModalMotif('demander_autorisation',<?= $l['id'] ?>)">🔁 Demander une modification</button>
             <?php endif; ?>
           <?php else: ?>
             <span style="font-size:12px;color:#94a3b8">—</span>
@@ -1122,7 +1122,7 @@ function ouvrirModalMotif(mode, id){
   document.getElementById('modalMotifAlert').innerHTML='';
   const titres = {
     demander_modif: '🔁 Demander une modification au site',
-    demander_autorisation: "🔒 Demander une autorisation de modification",
+    demander_autorisation: '🔁 Demander une modification',
     refuser_modif: '❌ Refuser la demande',
   };
   document.getElementById('modalMotifTitre').textContent = titres[mode];
