@@ -272,7 +272,9 @@ elseif ($type==='bilan_mensuel') {
     $mois  = (int)($_GET['mois']  ?? date('n'));
     $date_debut = sprintf('%04d-%02d-01', $annee, $mois);
     $date_fin   = date('Y-m-t', strtotime($date_debut));
-    $mois_label = strftime('%B %Y', strtotime($date_debut)) ?: date('Y-m', strtotime($date_debut));
+    $mois_fr = [1=>'janvier',2=>'février',3=>'mars',4=>'avril',5=>'mai',6=>'juin',
+                7=>'juillet',8=>'août',9=>'septembre',10=>'octobre',11=>'novembre',12=>'décembre'];
+    $mois_label = ($mois_fr[$mois] ?? $mois) . ' ' . $annee;
 
     $rows = db_fetch_all(
         "SELECT s.nom AS site, c.code, c.libelle AS article, c.unite,
