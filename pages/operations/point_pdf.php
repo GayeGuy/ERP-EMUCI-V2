@@ -29,6 +29,29 @@ if ($point['statut'] === 'brouillon' && $role !== 'coordinateur_site' && $point[
     http_response_code(403); exit('Accès refusé.');
 }
 
+// n° 16 réunion ERP — l'observation est désormais une liste de lignes
+// typées (JSON), avec repli sur l'ancien format texte libre pour les
+// points saisis avant ce lot.
+$OBS_TYPES = [
+    'info'     => ['label'=>'Info',     'border'=>'#64748b', 'bg'=>'#f1f5f9', 'text'=>'#334155'],
+    'alerte'   => ['label'=>'Alerte',   'border'=>'#d97706', 'bg'=>'#fef9e7', 'text'=>'#92400e'],
+    'relance'  => ['label'=>'Relance',  'border'=>'#1565c0', 'bg'=>'#e3f2fd', 'text'=>'#1565c0'],
+    'incident' => ['label'=>'Incident', 'border'=>'#c0392b', 'bg'=>'#fdecea', 'text'=>'#c0392b'],
+    'urgence'  => ['label'=>'Urgence',  'border'=>'#991b1b', 'bg'=>'#fee2e2', 'text'=>'#991b1b'],
+    'autre'    => ['label'=>'Autre',    'border'=>'#7c3aed', 'bg'=>'#f5f3ff', 'text'=>'#6d28d9'],
+];
+$observations_list = [];
+if (!empty($point['observations'])) {
+    $decoded = json_decode($point['observations'], true);
+    if (is_array($decoded)) {
+        foreach ($decoded as $o) {
+            if (!empty($o['texte'])) $observations_list[] = ['type'=>$o['type'] ?? 'info', 'texte'=>$o['texte']];
+        }
+    } else {
+        $observations_list[] = ['type'=>'autre', 'texte'=>$point['observations']];
+    }
+}
+
 $pmma  = db_fetch_all("SELECT type_pmma, utilises, endommages FROM op_pmma_utilises WHERE point_id=? ORDER BY type_pmma", [$point_id]);
 $films = db_fetch_all(
     "SELECT b.numero AS bobine_num, b.type_code, fu.films_utilises, fu.films_endommages
@@ -348,10 +371,15 @@ ob_start();
   <?php endif; ?>
 
   <!-- Observations -->
-  <?php if(!empty($point['observations'])): ?>
+  <?php if(!empty($observations_list)): ?>
   <div class="section">
     <div class="section-title">Observations</div>
-    <div class="obs-box"><?= h($point['observations']) ?></div>
+    <?php foreach ($observations_list as $o): $cfg = $OBS_TYPES[$o['type']] ?? $OBS_TYPES['info']; ?>
+    <div class="obs-box" style="background:<?= $cfg['bg'] ?>;border-left-color:<?= $cfg['border'] ?>;margin-bottom:6px">
+      <div style="font-size:9px;font-weight:bold;color:<?= $cfg['text'] ?>;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px"><?= h($cfg['label']) ?></div>
+      <?= h($o['texte']) ?>
+    </div>
+    <?php endforeach; ?>
   </div>
   <?php endif; ?>
 

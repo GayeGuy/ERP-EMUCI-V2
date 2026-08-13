@@ -1290,8 +1290,10 @@ foreach($points as $p):
             <input type="number" class="form-control" id="p-np-usag" min="0" value="0">
           </div>
         </div>
-        <div class="form-group"><label>Observations / NB</label>
-          <textarea class="form-control" id="p-obs" rows="3" placeholder="Erreur carte grise, remarques particulières…"></textarea>
+        <div class="form-group">
+          <label>Observations</label>
+          <div id="obs-lignes"></div>
+          <button type="button" class="btn btn-secondary" style="font-size:12.5px;padding:6px 12px" onclick="ajouterObservation()">+ Ajouter une observation</button>
         </div>
       </div><!-- /form-section ⑥ -->
 
@@ -1457,7 +1459,7 @@ function resetPointForm(){
   <?php if($role_slug_pj !== 'coordinateur_site'): ?>
   document.getElementById('p-site').value='';
   <?php endif; ?>
-  ['p-obs'].forEach(i=>document.getElementById(i).value='');
+  resetObservations();
   document.getElementById('p-date').value='<?= date('Y-m-d') ?>';
   document.getElementById('p-type').value='final';
   document.getElementById('p-heures').value='8';
@@ -1609,6 +1611,89 @@ function collectPmmaData(){
     result.push({type_pmma, utilises:util, endommages:endomm});
   });
   return result;
+}
+
+// ── OBSERVATIONS (n° 16 réunion ERP) — plusieurs lignes typées et colorées
+const OBS_TYPES = {
+  info:     {label:'Info',     icon:'ℹ️', border:'#64748b', bg:'#f1f5f9', text:'#334155'},
+  alerte:   {label:'Alerte',   icon:'⚠️', border:'#d97706', bg:'#fef9e7', text:'#92400e'},
+  relance:  {label:'Relance',  icon:'🔁', border:'#1565c0', bg:'#e3f2fd', text:'#1565c0'},
+  incident: {label:'Incident', icon:'🔴', border:'#c0392b', bg:'#fdecea', text:'#c0392b'},
+  urgence:  {label:'Urgence',  icon:'🚨', border:'#991b1b', bg:'#fee2e2', text:'#991b1b'},
+  autre:    {label:'Autre',    icon:'📝', border:'#7c3aed', bg:'#f5f3ff', text:'#6d28d9'},
+};
+function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escAttr(s){ return escHtml(s).replace(/"/g,'&quot;'); }
+
+function ajouterObservation(type, texte){
+  type = type || 'info'; texte = texte || '';
+  const optsHtml = Object.entries(OBS_TYPES).map(([k,v])=>`<option value="${k}"${k===type?' selected':''}>${v.icon} ${v.label}</option>`).join('');
+  const div = document.createElement('div');
+  div.setAttribute('data-obs-row','1');
+  div.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:6px;padding:6px 8px;border-radius:8px;border-left:3px solid';
+  div.innerHTML = `
+    <span class="obs-num" style="font-size:11px;font-weight:700;color:var(--muted);flex:0 0 56px">Obs.</span>
+    <select class="form-control" style="flex:0 0 130px;font-size:12.5px" onchange="majCouleurObservation(this)">${optsHtml}</select>
+    <input type="text" class="form-control" style="flex:1;font-size:13px" placeholder="Observation…" value="${escAttr(texte)}">
+    <button type="button" onclick="this.closest('[data-obs-row]').remove();renumeroterObservations();"
+            style="background:#fee2e2;border:none;border-radius:7px;cursor:pointer;font-size:14px;color:#991b1b;width:30px;height:30px;flex:0 0 30px">✕</button>`;
+  document.getElementById('obs-lignes').appendChild(div);
+  majCouleurObservation(div.querySelector('select'));
+  renumeroterObservations();
+}
+function renumeroterObservations(){
+  document.querySelectorAll('#obs-lignes [data-obs-row]').forEach((row,i)=>{
+    const num = row.querySelector('.obs-num');
+    if(num) num.textContent = `Obs. ${i+1}`;
+  });
+}
+function majCouleurObservation(select){
+  const row = select.closest('[data-obs-row]');
+  const cfg = OBS_TYPES[select.value] || OBS_TYPES.info;
+  row.style.background = cfg.bg;
+  row.style.borderLeftColor = cfg.border;
+}
+function resetObservations(){
+  document.getElementById('obs-lignes').innerHTML = '';
+  ajouterObservation('info', '');
+}
+function chargerObservations(raw){
+  document.getElementById('obs-lignes').innerHTML = '';
+  let list = [];
+  if (raw) {
+    try { const parsed = JSON.parse(raw); if (Array.isArray(parsed)) list = parsed; }
+    catch(e) { list = [{type:'autre', texte:raw}]; } // ancien format texte libre, saisi avant ce lot
+  }
+  if (!list.length) { ajouterObservation('info',''); return; }
+  list.forEach(o=>ajouterObservation(o.type, o.texte));
+}
+function collectObservations(){
+  const result = [];
+  document.querySelectorAll('#obs-lignes [data-obs-row]').forEach(row=>{
+    const type  = row.querySelector('select').value;
+    const texte = row.querySelector('input[type="text"]').value.trim();
+    if (texte) result.push({type, texte});
+  });
+  return result;
+}
+function renderObservationsSection(raw){
+  let list = [];
+  if (raw) {
+    try { const parsed = JSON.parse(raw); if (Array.isArray(parsed)) list = parsed.filter(o=>o && o.texte); }
+    catch(e) { if (String(raw).trim()) list = [{type:'autre', texte:raw}]; }
+  }
+  if (!list.length) return '';
+  const rows = list.map(o=>{
+    const cfg = OBS_TYPES[o.type] || OBS_TYPES.info;
+    return `<div style="background:${cfg.bg};border-left:3px solid ${cfg.border};border-radius:8px;padding:8px 12px;margin-bottom:6px">
+      <span style="font-size:11px;font-weight:700;color:${cfg.text};text-transform:uppercase;letter-spacing:.4px">${cfg.icon} ${cfg.label}</span>
+      <div style="font-size:13px;color:var(--navy);margin-top:2px">${escHtml(o.texte)}</div>
+    </div>`;
+  }).join('');
+  return `<div style="margin-bottom:20px">
+    <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Observations</div>
+    ${rows}
+  </div>`;
 }
 
 async function loadBobines(){
@@ -1822,7 +1907,7 @@ function savePoint(){
     non_poses_concessionnaires: document.getElementById('p-np-conc').value,
     non_poses_usagers: document.getElementById('p-np-usag').value,
     nb_heures:   document.getElementById('p-heures').value,
-    observations:document.getElementById('p-obs').value,
+    observations:JSON.stringify(collectObservations()),
     films_data:  JSON.stringify(films_data),
     pmma_data:   JSON.stringify(collectPmmaData()),
   }).then(d=>{
@@ -1897,11 +1982,7 @@ async function viewPoint(id){
       </div>
     </div>` : '';
 
-  const obsSection = p.observations ? `
-    <div style="background:#f8fafc;border-radius:10px;padding:14px;margin-bottom:20px;border-left:3px solid #94a3b8">
-      <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Observations</div>
-      <div style="font-size:13px;color:var(--navy)">${p.observations}</div>
-    </div>` : '';
+  const obsSection = renderObservationsSection(p.observations);
 
   const motifSection = p.motif_rejet ? `
     <div style="background:#fee2e2;border-radius:10px;padding:14px;margin-bottom:20px;border-left:3px solid #ef4444">
@@ -2012,7 +2093,7 @@ async function editPoint(id){
   document.getElementById('p-heures').value= p.nb_heures_travail||'8';
   document.getElementById('p-np-conc').value = p.non_poses_concessionnaires||'0';
   document.getElementById('p-np-usag').value = p.non_poses_usagers||'0';
-  document.getElementById('p-obs').value    = p.observations||'';
+  chargerObservations(p.observations);
   // Véhicules
   const nbVP   = document.getElementById('nb-VP');   if(nbVP)   nbVP.value   = p.nb_vp||'0';
   const nbCAM  = document.getElementById('nb-CAM');  if(nbCAM)  nbCAM.value  = p.nb_camion||'0';
