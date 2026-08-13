@@ -445,7 +445,7 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
 <div class="inv-toolbar">
   <div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
-      <?php if ($inv['session_id']): ?>
+      <?php if ($inv['session_id'] && can('inventaire_sessions','can_read')): ?>
       <a href="<?= APP_URL ?>/pages/inventaire_sessions.php?id=<?= (int)$inv['session_id'] ?>" style="color:var(--muted);font-size:13px;text-decoration:none">← Session</a>
       <?php else: ?>
       <a href="<?= APP_URL ?>/pages/inventaire_bobines.php" style="color:var(--muted);font-size:13px;text-decoration:none">← Inventaires</a>
