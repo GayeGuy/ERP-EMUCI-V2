@@ -220,7 +220,9 @@ $session_active = null;
 if ($site_force) {
     $session_active = db_fetch_one(
         "SELECT se.id, se.libelle, se.date_debut, se.date_fin, se.type_periode,
-                ib.id AS inv_id, ib.statut AS inv_statut
+                ib.id AS inv_id, ib.statut AS inv_statut, ib.nb_bobines,
+                (SELECT COUNT(*) FROM inventaire_details_bobines d
+                 WHERE d.inventaire_id = ib.id AND (d.stock_physique > 0 OR d.ecart != 0)) AS nb_saisis
          FROM inventaire_sessions se
          JOIN inventaire_session_sites iss ON iss.session_id = se.id
          LEFT JOIN inventaires_bobines ib ON ib.session_id = se.id AND ib.site_id = iss.site_id AND ib.statut != 'annule'
@@ -229,6 +231,14 @@ if ($site_force) {
          LIMIT 1",
         [$site_force]
     );
+    // Toutes les lignes sont déjà saisies (donc verrouillées côté fiche
+    // détail) : rien à "continuer", même si le statut reste 'brouillon'
+    // en attendant la validation par un superviseur.
+    if ($session_active) {
+        $session_active['inv_complet'] = $session_active['inv_statut'] === 'brouillon'
+            && (int)$session_active['nb_bobines'] > 0
+            && (int)$session_active['nb_saisis'] >= (int)$session_active['nb_bobines'];
+    }
 }
 
 include __DIR__ . '/../templates/header.php';
@@ -265,9 +275,11 @@ include __DIR__ . '/../templates/header.php';
   <?php if ($session_active['inv_id']): ?>
     <?php if ($session_active['inv_statut'] === 'valide'): ?>
     <span style="font-size:13px;color:var(--success);font-weight:700;margin-right:10px">✅ Clôturé</span>
+    <?php elseif ($session_active['inv_complet']): ?>
+    <span style="font-size:13px;color:#1565c0;font-weight:700;margin-right:10px">📤 Complet — en attente de validation</span>
     <?php endif; ?>
     <a href="inventaire_detail.php?id=<?= (int)$session_active['inv_id'] ?>" class="btn btn-primary btn-sm">
-      <?= $session_active['inv_statut'] === 'valide' ? '👁 Voir mon inventaire' : '📝 Continuer mon inventaire' ?>
+      <?= ($session_active['inv_statut'] === 'valide' || $session_active['inv_complet']) ? '👁 Voir mon inventaire' : '📝 Continuer mon inventaire' ?>
     </a>
   <?php elseif ($can_create): ?>
     <button class="btn btn-primary btn-sm" onclick="creerInventaireSession(<?= (int)$session_active['id'] ?>)">📝 Préparer mon inventaire</button>
