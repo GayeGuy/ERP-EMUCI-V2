@@ -323,7 +323,7 @@ include __DIR__ . '/../templates/header.php';
         <th style="text-align:center">Stock système</th>
         <th style="text-align:center">Stock physique</th>
         <th style="text-align:center">Écarts</th>
-        <th style="text-align:center">EMUCI vs DigiStock</th>
+        <th style="text-align:center">EMUCI vs ERP EMUCI</th>
         <th>Statut</th><th>Créé par</th>
         <th style="text-align:center">Actions</th>
       </tr></thead>

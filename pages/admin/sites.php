@@ -133,7 +133,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             json_response(true,'Ignoré.');
         }
         if ($decision === 'lier') {
-            if (!$site_id) json_response(false,'Site DigiStock obligatoire.');
+            if (!$site_id) json_response(false,'Site ERP EMUCI obligatoire.');
             $nom_emuci = $inconnu['nom_emuci'];
             db_query("UPDATE sites SET nom_emuci=?, nom=? WHERE id=?", [$nom_emuci, $nom_emuci, $site_id]);
             db_query("UPDATE emuci_sites_inconnus SET statut='lie',site_id_lie=?,traite_par=?,traite_at=NOW() WHERE nom_emuci=?", [$site_id,$user['id'],$nom_emuci]);
@@ -991,7 +991,7 @@ function saveCfg(type){
       Sites EMUCI non reconnus
       <span style="background:#F59E0B;color:white;padding:2px 10px;border-radius:20px;font-size:12px;margin-left:8px"><?= $nb_inconnus ?></span>
     </h3>
-    <span style="font-size:12px;color:#92400E">Ces sites apparaissent dans vos imports mais ne sont pas encore dans DigiStock.</span>
+    <span style="font-size:12px;color:#92400E">Ces sites apparaissent dans vos imports mais ne sont pas encore dans ERP EMUCI.</span>
   </div>
   <div class="table-wrap sites-table-wrap">
     <table>
@@ -1024,7 +1024,7 @@ function saveCfg(type){
     <div id="alertLierEmuci"></div>
     <input type="hidden" id="lierId">
     <div style="background:#EFF6FF;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#1D4ED8">Nom EMUCI : <strong id="lierNomEmuci"></strong></div>
-    <div class="form-group" style="margin-bottom:18px"><label>Site DigiStock *</label>
+    <div class="form-group" style="margin-bottom:18px"><label>Site ERP EMUCI *</label>
       <select class="form-control" id="lierSiteId">
         <option value="">— Sélectionner —</option>
         <?php foreach ($all_sites_list as $s): ?><option value="<?= $s['id'] ?>"><?= h($s['nom']) ?></option><?php endforeach; ?>
@@ -1044,7 +1044,7 @@ function saveCfg(type){
     <div id="alertCreerEmuci"></div>
     <input type="hidden" id="creerId">
     <div style="background:#EFF6FF;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#1D4ED8">Nom EMUCI : <strong id="creerNomEmuci"></strong></div>
-    <div class="form-group" style="margin-bottom:12px"><label>Nom DigiStock *</label><input type="text" class="form-control" id="creerNom"></div>
+    <div class="form-group" style="margin-bottom:12px"><label>Nom ERP EMUCI *</label><input type="text" class="form-control" id="creerNom"></div>
     <div class="form-group" style="margin-bottom:18px"><label>Type *</label>
       <select class="form-control" id="creerType">
         <option value="pose">Pose</option><option value="saisie">Saisie</option><option value="entrepot">Entrepôt</option><option value="siege">Siège</option><option value="mixte">Mixte</option>

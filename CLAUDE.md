@@ -1,10 +1,10 @@
-# DigiStock — Contexte projet pour Claude Code
+# ERP EMUCI — Contexte projet pour Claude Code
 
 ## Présentation
 
 Application web de gestion de stock industriel (bobines, équipements, opérations terrain) pour EMU-CI dans le cadre du projet NSIIV (Nouveau Système d'Immatriculation des Véhicules).
 
-**Nom interne :** DigiStock / StockApp
+**Nom interne :** ERP EMUCI / StockApp
 **GitHub :** RUTHAXELLE/stockapp, branche `main`
 **Production :** https://stockapp-p8us.onrender.com (auto-déployé depuis GitHub `main` via Render + Docker, région Frankfurt)
 

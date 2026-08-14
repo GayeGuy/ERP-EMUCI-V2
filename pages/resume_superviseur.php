@@ -79,7 +79,7 @@ if (isset($_GET['export'])) {
             foreach($vals as $ci=>$v) $ws->setCellValueByColumnAndRow($ci+1,$ri+2,$v);
         }
         foreach(range('A','N') as $c) $ws->getColumnDimension($c)->setAutoSize(true);
-        $filename = "PJ_DigiStock_{$f_date}.xlsx";
+        $filename = "PJ_ERP_EMUCI_{$f_date}.xlsx";
 
     } elseif ($type === 'mensuel') {
         $ws->setTitle('Résumé Mensuel');

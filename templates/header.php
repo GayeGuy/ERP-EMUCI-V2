@@ -656,7 +656,7 @@ $unread = count($notifs);
       </svg>
     </div>
     <div class="brand-text">
-      <h1>DigiStock</h1>
+      <h1>ERP EMUCI</h1>
       <span>by EMUCI</span>
     </div>
   </div>

@@ -131,7 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     $stock_debut    = $films_restants + $films_total_pj;
                 }
 
-                // Écart : DigiStock restant vs EMUCI restant (stock_systeme mis par l'import)
+                // Écart : ERP EMUCI restant vs EMUCI restant (stock_systeme mis par l'import)
                 $stock_emuci = (int)($b['stock_systeme'] ?? 0);
                 $ecart_val   = $dernier_import ? ($films_restants - $stock_emuci) : 0;
                 $has_ecart   = $dernier_import !== null && $ecart_val !== 0;
@@ -263,7 +263,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         }
         if ($snap['nb_ecarts'] > 0) {
             json_response(false,
-                $snap['nb_ecarts'] . ' bobine(s) ont un écart DigiStock / EMUCI. '
+                $snap['nb_ecarts'] . ' bobine(s) ont un écart ERP EMUCI / EMUCI. '
                 . 'Traitez les écarts avant de valider.');
         }
         $snapshot= json_encode($snap['bobines_detail'] ?: []);
@@ -321,7 +321,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             // Si réajustement : aligner films_restants sur la valeur EMUCI (stock_systeme)
             if ($decision === 'reajuste') {
                 foreach ($ecarts as $e) {
-                    $stock_av = max(0, (int)$e['films_restants']); // DigiStock avant ajust.
+                    $stock_av = max(0, (int)$e['films_restants']); // ERP EMUCI avant ajust.
                     $nouveau  = max(0, (int)$e['stock_systeme']);   // cible = valeur EMUCI
                     $diff     = $nouveau - $stock_av;
                     db_query("UPDATE op_bobines SET films_restants=? WHERE id=?",
@@ -329,7 +329,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     db_query("INSERT INTO mouvements_bobines (bobine_id,type,quantite,stock_avant,stock_apres,motif,created_by)
                               VALUES (?,?,?,?,?,?,?)",
                         [$e['bobine_id'],'ajustement_gsb',$diff,$stock_av,$nouveau,
-                         "Réajustement GSB matin $date (DigiStock $stock_av → EMUCI $nouveau) : $commentaire",
+                         "Réajustement GSB matin $date (ERP EMUCI $stock_av → EMUCI $nouveau) : $commentaire",
                          $user['id']]);
                 }
             }
@@ -353,7 +353,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                             $site_id,
                             $user['id'],
                             $date,
-                            (int)$e['films_restants'],  // DigiStock restant calculé
+                            (int)$e['films_restants'],  // ERP EMUCI restant calculé
                             (int)$e['stock_systeme'],   // EMUCI/OPTOTRACE restant
                             (int)$e['ecart'],
                             $commentaire,
@@ -381,7 +381,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     );
                 } else {
                     $notes_res = $statut_ecart === 'resolu'
-                        ? 'Réajusté : DigiStock ' . (int)($e['films_restants'] ?? 0) . ' → EMUCI ' . (int)$e['stock_systeme']
+                        ? 'Réajusté : ERP EMUCI ' . (int)($e['films_restants'] ?? 0) . ' → EMUCI ' . (int)$e['stock_systeme']
                         : 'Écart autorisé : ' . $commentaire;
                     db_query(
                         "INSERT INTO ecarts_bobines
@@ -452,7 +452,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             $coords = db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1",[$site_id]);
             $msg_map = [
                 'autorise_ecart' => "⚠️ Votre stock du $date présente des écarts mais vous êtes autorisé à travailler. Commentaire GSB : $comment_site",
-                'reajuste'       => "🔄 Votre stock du $date a été réajusté (DigiStock corrigé). Veuillez corriger votre saisie et soumettre un nouveau point journalier pour finaliser la validation. Motif : $comment_site",
+                'reajuste'       => "🔄 Votre stock du $date a été réajusté (ERP EMUCI corrigé). Veuillez corriger votre saisie et soumettre un nouveau point journalier pour finaliser la validation. Motif : $comment_site",
                 'refuse'         => "❌ Votre activité du $date est bloquée. Corrigez vos données et soumettez un nouveau point journalier. Commentaire : $comment_site",
             ];
             $titre_map = [
@@ -888,7 +888,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 db_query(
                     "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?,?,?,?,?)",
                     [$c['id'], 'info', '🔄 Correction de stock requise',
-                     "Le gestionnaire $gsb_nom demande une correction sur la bobine $bobine_num ($date). Valeur DigiStock : $films_pj → Valeur attendue : $films_proposes. Motif : $notes",
+                     "Le gestionnaire $gsb_nom demande une correction sur la bobine $bobine_num ($date). Valeur ERP EMUCI : $films_pj → Valeur attendue : $films_proposes. Motif : $notes",
                      '/pages/validation_stock_matin.php']
                 );
                 $notif_sent++;
@@ -1474,7 +1474,7 @@ $nb_total_bobines = count($coord_reajust_details);
     <thead>
       <tr style="background:#F8FAFC">
         <th style="padding:9px 14px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:1.5px solid var(--border)">N° Bobine</th>
-        <th style="padding:9px 14px;text-align:center;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Valeur DigiStock</th>
+        <th style="padding:9px 14px;text-align:center;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Valeur ERP EMUCI</th>
         <th style="padding:9px 14px;text-align:center;font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase;border-bottom:1.5px solid var(--border)">Réajusté GSB</th>
         <th style="padding:9px 14px;text-align:center;font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Valeur correcte *</th>
         <th style="padding:9px 14px;text-align:left;font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Justification *</th>
@@ -2064,10 +2064,10 @@ let ccState = {}; // décisions par bobine pour les corrections coordinateur
 const DEC_META = {
   autorise_ecart:{icon:'⚠️', label:"Autoriser l'écart", court:'Écart autorisé',
     bg:'#FEF3C7', color:'#92400E', border:'#F59E0B',
-    hint:"Le stock DigiStock est conservé tel quel. Le coordinateur peut travailler malgré l'écart constaté sur cette bobine."},
+    hint:"Le stock ERP EMUCI est conservé tel quel. Le coordinateur peut travailler malgré l'écart constaté sur cette bobine."},
   reajuste:{icon:'🔄', label:'Réajuster le stock', court:'Réajusté',
     bg:'#DBEAFE', color:'#1D4ED8', border:'#3B82F6',
-    hint:"Le stock physique DigiStock de cette bobine sera aligné sur la valeur EMUCI. Un mouvement d'ajustement est enregistré."},
+    hint:"Le stock physique ERP EMUCI de cette bobine sera aligné sur la valeur EMUCI. Un mouvement d'ajustement est enregistré."},
   refuse:{icon:'❌', label:'Refuser / Bloquer', court:'Bloqué',
     bg:'#FEE2E2', color:'#991B1B', border:'#F87171',
     hint:"Une demande de correction de saisie est envoyée au coordinateur pour cette bobine. L'écart reste ouvert."},
@@ -2145,7 +2145,7 @@ async function verifierSite(siteId, siteNom) {
           <th style="padding:8px 10px;color:white;font-size:11px;text-align:left">N° Bobine</th>
           <th style="padding:8px 10px;color:white;font-size:11px;text-align:left">Type</th>
           ${d.dernier_import?`<th style="padding:8px 10px;color:white;font-size:11px;text-align:center">${thSub('Stock EMUCI','(Système)')}</th>`:''}
-          <th style="padding:8px 10px;color:white;font-size:11px;text-align:center">${thSub('Stock Physique','(DigiStock)')}</th>
+          <th style="padding:8px 10px;color:white;font-size:11px;text-align:center">${thSub('Stock Physique','(ERP EMUCI)')}</th>
           ${d.dernier_import?`<th style="padding:8px 10px;color:white;font-size:11px;text-align:center">Écart</th>`:''}
           <th style="padding:8px 10px;color:white;font-size:11px;text-align:center">Statut</th>
           ${canValider?`<th style="padding:8px 10px;color:white;font-size:11px;text-align:center">Décision</th>`:''}
@@ -2404,7 +2404,7 @@ function ouvrirDecisionBobine(bobineId, decision) {
         <div style="font-size:20px;font-weight:800;color:var(--navy)">${b.stock_systeme ?? '—'}</div>
       </div>
       <div style="background:#f0fdf4;border-radius:10px;padding:11px;text-align:center">
-        <div style="font-size:10px;font-weight:700;color:#065F46;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Stock DigiStock</div>
+        <div style="font-size:10px;font-weight:700;color:#065F46;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Stock ERP EMUCI</div>
         <div style="font-size:20px;font-weight:800;color:var(--navy)">${b.films_restants ?? '—'}</div>
       </div>
       <div style="background:#fef2f2;border-radius:10px;padding:11px;text-align:center">
@@ -2642,7 +2642,7 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:left">N° Bobine</th>
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:left">Type</th>
             ${hasImport ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Stock EMUCI (Système)</th>' : ''}
-            <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Stock Physique (DigiStock)</th>
+            <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Stock Physique (ERP EMUCI)</th>
             ${hasImport ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Écart</th>' : ''}
             <th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Statut</th>
             ${<?= $can_valider ? 'true' : 'false' ?> ? '<th style="padding:9px 12px;color:white;font-size:10.5px;text-align:center">Action</th>' : ''}
