@@ -732,7 +732,11 @@ $type_colors = [
     <div class="mbody">
       <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Combien de sites de ce type puis-je créer avec le stock disponible ?</p>
       <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap">
-        <?php foreach ($types_labels as $k => $l): ?>
+        <?php
+        // Entrepôt et Siège n'ont pas de kit d'équipements type à respecter :
+        // le calculateur ne s'applique qu'aux types de site opérationnels.
+        $types_calculables = array_diff_key($types_labels, ['entrepot'=>1,'siege'=>1]);
+        foreach ($types_calculables as $k => $l): ?>
         <button class="btn btn-secondary" onclick="calcCapa('<?= $k ?>')" id="cb-<?= $k ?>"><?= $l ?></button>
         <?php endforeach; ?>
       </div>
