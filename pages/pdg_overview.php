@@ -722,7 +722,7 @@ include __DIR__ . '/../templates/header.php';
 <div class="pdg-topbar">
   <div>
     <div class="pdg-title">Vue Exécutive</div>
-    <div class="pdg-sub">Express Multiservices CI · DigiStock<?= $site_nom_sel ? ' · <strong style="color:var(--navy,#06033A)">'.h($site_nom_sel).'</strong>' : '' ?></div>
+    <div class="pdg-sub">Express Multiservices CI · ERP EMUCI<?= $site_nom_sel ? ' · <strong style="color:var(--navy,#06033A)">'.h($site_nom_sel).'</strong>' : '' ?></div>
   </div>
   <div class="pdg-controls">
     <form method="get" id="pdg-filter-form" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -990,7 +990,7 @@ include __DIR__ . '/../templates/header.php';
           <div class="biz-risk-i"><i class="ph-duotone ph-arrows-left-right"></i></div>
           <div class="biz-risk-b">
             <div class="biz-risk-t">Écarts EMUCI majeurs non ajustés</div>
-            <div class="biz-risk-s">Comparaisons EMUCI / DigiStock au-delà du seuil, sans ajustement</div>
+            <div class="biz-risk-s">Comparaisons EMUCI / ERP EMUCI au-delà du seuil, sans ajustement</div>
           </div>
           <div class="biz-risk-n" data-k="rec-ouverts" data-v="<?= (int)$rec_ouverts ?>" data-d="0"><?= $rec_ouverts ?></div>
         </div>
@@ -1009,7 +1009,7 @@ include __DIR__ . '/../templates/header.php';
         <?php if ($taux_recon !== null): ?>
         <div class="biz-risk-ft">
           <div class="biz-risk-b">
-            <div class="biz-risk-t">Concordance EMUCI ↔ DigiStock</div>
+            <div class="biz-risk-t">Concordance EMUCI ↔ ERP EMUCI</div>
             <div class="biz-risk-s"><?= number_format($rec_total - $rec_majeurs, 0, ',', ' ') ?> comparaisons alignées sur <?= number_format($rec_total, 0, ',', ' ') ?></div>
           </div>
           <div class="biz-risk-n" data-k="recon" data-v="<?= $taux_recon ?>" data-d="0"><?= ent($taux_recon) ?> %</div>

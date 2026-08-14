@@ -394,7 +394,7 @@ ob_start();
   <!-- Footer -->
   <div class="footer">
     <div class="footer-left">Enregistré par <strong><?= h($point['agent'] ?? '—') ?></strong></div>
-    <div class="footer-right">Généré le <?= date('d/m/Y à H:i') ?> · DigiStock</div>
+    <div class="footer-right">Généré le <?= date('d/m/Y à H:i') ?> · ERP EMUCI</div>
   </div>
 
 </div>

@@ -34,7 +34,7 @@ define('DB_PASS',    env('DB_PASS',    'postgres'));
 define('DB_SSLMODE', env('DB_SSLMODE', 'prefer'));   // Neon => require
 
 // --- Configuration application -----------------------------------------
-define('APP_NAME',    'DigiStock');
+define('APP_NAME',    'ERP EMUCI');
 define('APP_VERSION', '2.0.0');
 define('APP_URL',     env('APP_URL', 'http://localhost:8080'));
 define('APP_TIMEZONE', env('APP_TIMEZONE', 'Africa/Abidjan'));

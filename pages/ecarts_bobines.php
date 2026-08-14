@@ -132,7 +132,7 @@ include __DIR__ . '/../templates/header.php';
     <i class="ph ph-warning-diamond" style="font-size:28px;color:#D97706"></i>
     <div>
       <h1>Écarts bobines</h1>
-      <p style="margin:0;font-size:13px;color:var(--muted)">Historique des écarts DigiStock / EMUCI détectés lors des validations</p>
+      <p style="margin:0;font-size:13px;color:var(--muted)">Historique des écarts ERP EMUCI / EMUCI détectés lors des validations</p>
     </div>
   </div>
 
@@ -233,7 +233,7 @@ include __DIR__ . '/../templates/header.php';
             <th>N° Bobine</th>
             <th>Type</th>
             <th style="text-align:center">Stock EMUCI</th>
-            <th style="text-align:center">Stock DigiStock</th>
+            <th style="text-align:center">Stock ERP EMUCI</th>
             <th style="text-align:center">Écart</th>
             <th>Source</th>
             <th>Statut</th>

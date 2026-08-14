@@ -30,7 +30,7 @@ un lieu de travail, c'est un point de départ.
 
 ## Product Purpose
 
-DigiStock suit la production de plaques et la chaîne de stock qui l'alimente :
+ERP EMUCI suit la production de plaques et la chaîne de stock qui l'alimente :
 points journaliers par site, bobines, consommables, rivets, équipements,
 maintenance, demandes internes.
 

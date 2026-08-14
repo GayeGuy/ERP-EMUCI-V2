@@ -32,11 +32,11 @@ function trouver_site_id(string $nom_emuci, array $sites): ?int {
         if (!empty($s['nom_emuci']) && strtolower(trim($s['nom_emuci'])) === $nom)
             return (int)$s['id'];
     }
-    // 2. Correspondance exacte sur nom DigiStock
+    // 2. Correspondance exacte sur nom ERP EMUCI
     foreach ($sites as $s) {
         if (strtolower(trim($s['nom'])) === $nom) return (int)$s['id'];
     }
-    // 3. Correspondance partielle sur nom DigiStock (fallback)
+    // 3. Correspondance partielle sur nom ERP EMUCI (fallback)
     foreach ($sites as $s) {
         if (str_contains(strtolower($s['nom']), $nom) || str_contains($nom, strtolower($s['nom'])))
             return (int)$s['id'];
@@ -134,7 +134,7 @@ function _auto_valider_stock(string $date_import, int $user_id): array {
         );
         if (!$has_pj) continue;
 
-        // Comparer films_restants (DigiStock, mis à jour par le PJ)
+        // Comparer films_restants (ERP EMUCI, mis à jour par le PJ)
         // vs stock_systeme (EMUCI, mis à jour par l'import OptoTrace)
         $bobines = db_fetch_all(
             "SELECT b.id, b.numero, b.stock_systeme, b.films_restants
@@ -189,7 +189,7 @@ function _auto_valider_stock(string $date_import, int $user_id): array {
             foreach ($gsb_users as $gsb) {
                 db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                     [$gsb['id'],'info','⚠️ Écart stock détecté',
-                     "Import du $date_import — Site $site_nom : $nb_ecarts écart(s) DigiStock/EMUCI. Validation requise.",
+                     "Import du $date_import — Site $site_nom : $nb_ecarts écart(s) ERP EMUCI / EMUCI. Validation requise.",
                      '/pages/validation_stock_matin.php']);
             }
             $resultats[] = ['site_id'=>$site_id,'statut'=>'ecart_detecte','nb_ecarts'=>$nb_ecarts];
@@ -631,7 +631,7 @@ $detail_bobines_optotrace = db_fetch_all(
     [$f_date]
 );
 
-// Comparaison OptoPlate vs DigiStock PJ par site
+// Comparaison OptoPlate vs ERP EMUCI PJ par site
 $comparaison = db_fetch_all(
     "SELECT
         s.nom AS site_nom,
@@ -835,7 +835,7 @@ include __DIR__ . '/../templates/header.php';
     🎞️ BI-Stock bobine
   </button>
   <button class="tab-btn <?= $onglet==='comparaison'?'active':'' ?>" onclick="showTab('comparaison')">
-    ⚖️ Comparaison EMUCI vs DigiStock
+    ⚖️ Comparaison EMUCI vs ERP EMUCI
   </button>
   <button class="tab-btn <?= $onglet==='historique'?'active':'' ?>" onclick="showTab('historique')">
     📅 Historique imports
@@ -871,7 +871,7 @@ include __DIR__ . '/../templates/header.php';
       <div class="alert alert-<?= $msg_optoplate['type'] ?>" style="margin-bottom:16px"><?= h($msg_optoplate['text']) ?></div>
       <?php endif; ?>
       <?php if(!empty($result_optoplate['sites_inconnus'])): ?>
-      <div class="alert alert-warning">⚠️ Sites non reconnus dans DigiStock : <strong><?= implode(', ', array_map('h',$result_optoplate['sites_inconnus'])) ?></strong></div>
+      <div class="alert alert-warning">⚠️ Sites non reconnus dans ERP EMUCI : <strong><?= implode(', ', array_map('h',$result_optoplate['sites_inconnus'])) ?></strong></div>
       <?php endif; ?>
 
       <form method="POST" enctype="multipart/form-data">
@@ -1055,11 +1055,11 @@ include __DIR__ . '/../templates/header.php';
     </div>
   </div>
 
-  <!-- Détail bobines avec comparaison DigiStock -->
+  <!-- Détail bobines avec comparaison ERP EMUCI -->
   <?php if(!empty($detail_bobines_optotrace)): ?>
   <div class="card">
     <div class="card-header">
-      <h3>🔍 Détail bobines — OptoTrace vs DigiStock</h3>
+      <h3>🔍 Détail bobines — OptoTrace vs ERP EMUCI</h3>
       <span style="font-size:12px;color:var(--muted)">keyname = N° bobine</span>
     </div>
     <div class="table-wrap">
@@ -1069,7 +1069,7 @@ include __DIR__ . '/../templates/header.php';
           <th>Format</th>
           <th>Site</th>
           <th style="text-align:center">Films OptoTrace</th>
-          <th style="text-align:center">Films DigiStock</th>
+          <th style="text-align:center">Films ERP EMUCI</th>
           <th style="text-align:center">Écart</th>
           <th style="text-align:center">État</th>
         </tr></thead>
@@ -1114,7 +1114,7 @@ include __DIR__ . '/../templates/header.php';
 <div id="tab-comparaison" class="tab-pane <?= $onglet==='comparaison'?'active':'' ?>">
   <div class="card">
     <div class="card-header">
-      <h3>⚖️ Comparaison EMUCI (OptoPlate) vs DigiStock (PJ coordinateurs) — <?= fmt_date($f_date,'d/m/Y') ?></h3>
+      <h3>⚖️ Comparaison EMUCI (OptoPlate) vs ERP EMUCI (PJ coordinateurs) — <?= fmt_date($f_date,'d/m/Y') ?></h3>
       <a href="?tab=comparaison&date=<?= $f_date ?>&site=<?= $f_site ?>&export=comparaison"
          class="btn btn-secondary btn-sm">📥 Export Excel</a>
     </div>
@@ -1125,7 +1125,7 @@ include __DIR__ . '/../templates/header.php';
           <th style="text-align:center">In Use EMUCI</th>
           <th style="text-align:center">Reserved EMUCI</th>
           <th style="text-align:center">Broken EMUCI</th>
-          <th style="text-align:center">PJ DigiStock</th>
+          <th style="text-align:center">PJ ERP EMUCI</th>
           <th style="text-align:center">Écart</th>
           <th style="text-align:center">Statut</th>
         </tr></thead>
@@ -1135,7 +1135,7 @@ include __DIR__ . '/../templates/header.php';
         <?php else: foreach($comparaison as $c):
           $ecart = (int)$c['ecart'];
           $ecart_cls = $ecart===0?'ecart-zero':($ecart>0?'ecart-pos':'ecart-neg');
-          $statut_icon = $ecart===0?'✅ OK':($ecart>0?'⚠️ EMUCI > DigiStock':'⚠️ DigiStock > EMUCI');
+          $statut_icon = $ecart===0?'✅ OK':($ecart>0?'⚠️ EMUCI > ERP EMUCI':'⚠️ ERP EMUCI > EMUCI');
         ?>
         <tr>
           <td style="font-weight:600;color:var(--navy)"><?= h($c['site_nom']) ?></td>
@@ -1152,7 +1152,7 @@ include __DIR__ . '/../templates/header.php';
     </div>
     <div style="padding:14px 20px;background:var(--tertiary);font-size:12px;color:var(--muted)">
       <strong>Légende :</strong>
-      Écart = (Plaques In Use EMUCI) − (Plaques PJ DigiStock).
+      Écart = (Plaques In Use EMUCI) − (Plaques PJ ERP EMUCI).
       Un écart positif signifie qu'EMUCI a plus de plaques posées que le déclaratif coordinateur.
     </div>
   </div>

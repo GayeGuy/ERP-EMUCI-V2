@@ -330,7 +330,7 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
         <rect x="12.5" y="12.5" width="8.5" height="8.5" rx="2" fill="white" opacity=".95"/>
       </svg>
     </div>
-    <span class="navbar-brand-name">DigiStock</span>
+    <span class="navbar-brand-name">ERP EMUCI</span>
     <span class="navbar-brand-sep"></span>
     <span class="navbar-accueil">Accueil</span>
   </a>
