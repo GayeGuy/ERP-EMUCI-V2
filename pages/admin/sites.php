@@ -193,7 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     COUNT(e.id) AS stock_disponible
              FROM configurations_site cs JOIN nomenclatures n ON n.id=cs.nomenclature_id
              LEFT JOIN equipements e ON e.nomenclature_id=cs.nomenclature_id AND e.actif=1 AND e.site_id IS NULL AND e.etat IN ('neuf','bon')
-             WHERE cs.type_site=? GROUP BY cs.nomenclature_id", [$type_site]
+             WHERE cs.type_site=? GROUP BY cs.nomenclature_id, cs.quantite, cs.optionnel, n.code, n.libelle", [$type_site]
         );
         if (empty($besoins)) json_response(false, "Aucune configuration définie pour «$type_site».");
         $nb_sites = PHP_INT_MAX;
