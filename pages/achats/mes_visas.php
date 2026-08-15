@@ -49,13 +49,40 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $pieces = db_fetch_all("SELECT id, nom_origine, fichier FROM feb_pieces_jointes WHERE feb_id=?", [$feb_id]);
 
+        // Budget du département de la FEB, par famille (Bloc 5, point 25) —
+        // le département est nommé explicitement : un signataire qui en
+        // couvre plusieurs (le DAF, par exemple) ne doit jamais avoir à
+        // deviner duquel il s'agit. Situation hors cette FEB (exclure_feb)
+        // pour montrer la place qui existait avant elle.
+        $departement_nom = $feb['departement_id'] ? db_fetch_value("SELECT label FROM departements WHERE id=?", [$feb['departement_id']]) : null;
+        $budget = [];
+        if ($feb['departement_id']) {
+            $familles_feb = db_fetch_all(
+                "SELECT famille_id, SUM(montant_ttc) AS montant FROM feb_lignes
+                  WHERE feb_id=? AND arbitrage='achat' AND famille_id IS NOT NULL GROUP BY famille_id",
+                [$feb_id]
+            );
+            foreach ($familles_feb as $ff) {
+                $sit = ach_budget_situation((int)$feb['departement_id'], (int)$ff['famille_id'], (int)$feb['exercice'], $feb_id);
+                $budget[] = [
+                    'famille'      => db_fetch_value("SELECT libelle FROM familles_achat WHERE id=?", [$ff['famille_id']]),
+                    'montant_feb'  => (int)$ff['montant'],
+                    'total_engage' => $sit['total_engage'],
+                    'enveloppe'    => $sit['enveloppe'],
+                    'disponible'   => $sit['disponible'],
+                ];
+            }
+        }
+
         json_response(true, '', [
             'feb'            => $feb,
             'demandeur_nom'  => $demandeur_nom ?: '—',
             'site_nom'       => $site_nom ?: '—',
+            'departement_nom'=> $departement_nom ?: '—',
             'etape_label'    => $feb['workflow_snapshot'][(int)$feb['etape_actuelle']]['label'] ?? '',
             'lots'           => $lots,
             'offres'         => $offres_par_lot,
+            'budget'         => $budget,
             'pieces'         => array_map(fn($p) => [
                 'nom_origine' => $p['nom_origine'], 'url' => '/uploads/feb/' . rawurlencode($p['fichier']),
             ], $pieces),
@@ -175,9 +202,18 @@ include __DIR__ . '/../../templates/header.php';
     <div class="visa-grid">
       <div><div class="visa-lbl">Demandeur</div><div class="visa-val" id="mv-demandeur"></div></div>
       <div><div class="visa-lbl">Site</div><div class="visa-val" id="mv-site"></div></div>
+      <div><div class="visa-lbl">Département</div><div class="visa-val" id="mv-departement" style="color:#B45309"></div></div>
       <div><div class="visa-lbl">Étape</div><div class="visa-val" id="mv-etape"></div></div>
       <div><div class="visa-lbl">Montant total</div><div class="visa-val big" id="mv-montant"></div></div>
       <div style="grid-column:1/-1"><div class="visa-lbl">Objet</div><div class="visa-val" id="mv-objet"></div></div>
+    </div>
+
+    <div class="visa-lbl">Budget du département, par famille</div>
+    <div style="overflow-x:auto;margin-bottom:18px">
+    <table class="ach-table">
+      <thead><tr><th>Famille</th><th>Demandé (cette FEB)</th><th>Déjà engagé (hors cette FEB)</th><th>Enveloppe</th><th>Disponible avant cette FEB</th></tr></thead>
+      <tbody id="mv-budget"></tbody>
+    </table>
     </div>
 
     <div id="mv-lots"></div>
@@ -215,11 +251,21 @@ function mvOuvrir(febId) {
     document.getElementById('mv-numero').textContent = d.feb.numero || '—';
     document.getElementById('mv-demandeur').textContent = d.demandeur_nom;
     document.getElementById('mv-site').textContent = d.site_nom;
+    document.getElementById('mv-departement').textContent = d.departement_nom;
     document.getElementById('mv-etape').textContent = d.etape_label;
     document.getElementById('mv-montant').textContent = Number(d.feb.montant_total).toLocaleString('fr-FR') + ' XOF';
     document.getElementById('mv-objet').textContent = d.feb.objet;
     document.getElementById('mv-commentaire').value = '';
     document.getElementById('mv-err').style.display = 'none';
+
+    document.getElementById('mv-budget').innerHTML = (d.budget || []).map(b => `
+      <tr>
+        <td style="font-weight:700">${esc(b.famille)}</td>
+        <td>${Number(b.montant_feb).toLocaleString('fr-FR')} XOF</td>
+        <td>${Number(b.total_engage).toLocaleString('fr-FR')} XOF</td>
+        <td>${b.enveloppe != null ? Number(b.enveloppe).toLocaleString('fr-FR') + ' XOF' : 'Non plafonnée'}</td>
+        <td style="font-weight:700;${b.disponible != null && b.disponible < b.montant_feb ? 'color:#991B1B' : ''}">${b.disponible != null ? Number(b.disponible).toLocaleString('fr-FR') + ' XOF' : '—'}</td>
+      </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:14px">Aucune ligne budgétaire pour ce département — non contrôlé.</td></tr>';
 
     document.getElementById('mv-lots').innerHTML = d.lots.map(lot => {
       const offres = d.offres[lot.lot] || [];
