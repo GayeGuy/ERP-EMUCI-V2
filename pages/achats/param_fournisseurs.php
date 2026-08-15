@@ -131,16 +131,39 @@ include __DIR__ . '/../../templates/header.php';
   <div style="overflow-x:auto">
   <table class="ach-table">
     <thead><tr>
-      <th>Raison sociale</th><th>Contact</th><th>Téléphone</th><th>Email</th><th>Statut</th>
+      <th>Raison sociale</th><th>Contact</th><th>Téléphone</th><th>Email</th>
+      <th>Score prix</th><th>Score délai</th><th>Statut</th>
       <?php if ($can_edit): ?><th>Actions</th><?php endif; ?>
     </tr></thead>
     <tbody>
-      <?php foreach ($fournisseurs as $f): ?>
+      <?php foreach ($fournisseurs as $f):
+        // Deux critères mesurables aujourd'hui, jamais agrégés en une note
+        // unique — le poids de chacun n'est pas encore arbitré (Bloc 6,
+        // point 23). Le troisième critère annoncé à l'origine (le service)
+        // reste hors V1, sa donnée n'existe pas encore.
+        $score = ach_score_fournisseur((int)$f['id']);
+      ?>
       <tr id="frow-<?= $f['id'] ?>">
         <td style="font-weight:700;color:var(--navy)"><?= h($f['raison_sociale']) ?></td>
         <td><?= h($f['contact_nom'] ?: '—') ?></td>
         <td><?= h($f['telephone'] ?: '—') ?></td>
         <td><?= h($f['email'] ?: '—') ?></td>
+        <td>
+          <?php if ($score['score_prix'] === null): ?>
+            <span style="color:var(--muted);font-size:12px">— (aucune offre)</span>
+          <?php else: ?>
+            <span style="font-weight:700;color:<?= $score['score_prix'] <= 0 ? '#065F46' : '#991B1B' ?>"><?= ($score['score_prix'] > 0 ? '+' : '') . $score['score_prix'] ?>%</span>
+            <div style="font-size:10.5px;color:var(--muted)">vs moyenne du lot, <?= $score['nb_offres'] ?> offre(s)</div>
+          <?php endif; ?>
+        </td>
+        <td>
+          <?php if ($score['score_delai'] === null): ?>
+            <span style="color:var(--muted);font-size:12px">— (aucune livraison)</span>
+          <?php else: ?>
+            <span style="font-weight:700;color:<?= $score['score_delai'] >= 80 ? '#065F46' : ($score['score_delai'] >= 50 ? '#92400E' : '#991B1B') ?>"><?= $score['score_delai'] ?>%</span>
+            <div style="font-size:10.5px;color:var(--muted)">délais respectés, <?= $score['nb_livraisons'] ?> livraison(s)</div>
+          <?php endif; ?>
+        </td>
         <td><span class="ach-badge <?= $f['actif'] ? 'on' : 'off' ?>"><?= $f['actif'] ? 'Actif' : 'Inactif' ?></span></td>
         <?php if ($can_edit): ?>
         <td style="display:flex;gap:8px">
