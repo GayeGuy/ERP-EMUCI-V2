@@ -663,3 +663,240 @@ function ach_verifier_comparatif(int $feb_id): array {
     }
     return ['ok' => true, 'message' => 'Comparatif vérifié : tout est cohérent.'];
 }
+
+// ── Décode les colonnes JSON d'une FEB portant le circuit — même rôle que
+//    di_get() pour di_demandes, nécessaire car workflow_snapshot/signatures/
+//    historique reviennent en texte JSON brut de PDO (jsonb côté colonne,
+//    mais PDO ne décode jamais lui-même).
+function ach_feb_decode(array $feb): array {
+    foreach (['workflow_snapshot', 'signatures', 'historique'] as $k) {
+        $feb[$k] = json_decode($feb[$k] ?? 'null', true) ?? [];
+    }
+    return $feb;
+}
+
+// ── Notifie tous les porteurs d'un code d'étape — même logique que
+//    di_notify_role() (rôles ERP mappés + membres du département lié dans
+//    di_roles), mais avec un lien vers l'écran de visas Achats : di_notify()
+//    pointe en dur vers /pages/demandes.php, impropre ici.
+function ach_notifier_role(string $roleCode, string $message, ?int $febId = null): void {
+    $lien = '/pages/achats/mes_visas.php';
+    $notified = [];
+    foreach (db_fetch_all("SELECT id FROM users WHERE actif=1") as $u) {
+        $uid = (int)$u['id'];
+        if (in_array($roleCode, di_user_roles($uid), true)) {
+            db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','Visa FEB',?,?)", [$uid, $message, $lien]);
+            $notified[] = $uid;
+        }
+    }
+    $dept_id = db_fetch_value("SELECT departement_id FROM di_roles WHERE code=?", [$roleCode]);
+    if ($dept_id) {
+        foreach (db_fetch_all("SELECT user_id FROM user_departements WHERE departement_id=?", [(int)$dept_id]) as $u) {
+            $uid = (int)$u['user_id'];
+            if (!in_array($uid, $notified, true)) {
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','Visa FEB',?,?)", [$uid, $message, $lien]);
+                $notified[] = $uid;
+            }
+        }
+    }
+}
+
+// ── Lance la validation d'une FEB — calcule et fige le circuit (Bloc 2).
+//    Réservé à l'acheteur qui détient la FEB, comme le reste du traitement.
+function ach_lancer_validation(int $feb_id, array $user): array {
+    $uid = (int)$user['id'];
+    $feb = db_fetch_one("SELECT * FROM feb WHERE id=?", [$feb_id]);
+    if (!$feb) throw new AchValidationException('FEB introuvable.');
+    if ((int)$feb['acheteur_id'] !== $uid || $feb['statut'] !== 'prise_en_charge') {
+        throw new AchValidationException("Cette FEB n'est pas (ou plus) en cours de traitement par vous.");
+    }
+
+    $verif = ach_verifier_comparatif($feb_id);
+    if (!$verif['ok']) throw new AchValidationException($verif['message']);
+
+    $nb_achat = (int) db_fetch_value("SELECT COUNT(*) FROM feb_lignes WHERE feb_id=? AND arbitrage='achat'", [$feb_id]);
+    if ($nb_achat === 0) throw new AchValidationException('Aucune ligne à acheter ne subsiste — rien à faire signer.');
+
+    // RG-10 : le circuit se calcule sur le montant total de la FEB, jamais
+    // par ligne ni par lot.
+    $montant = (int)$feb['montant_total'];
+    $palier  = ach_palier_pour_montant($montant);
+    if (!$palier) {
+        // Symptôme d'une grille trouée (RG-13) : le message nomme le montant
+        // pour qu'on aille corriger la grille, pas deviner pourquoi ça bloque.
+        throw new AchValidationException("Aucun palier ne couvre le montant de $montant XOF — vérifiez la grille des paliers de validation.");
+    }
+    if (!$palier['signataires']) {
+        throw new AchValidationException("Le palier « {$palier['libelle']} » n'a aucun signataire configuré.");
+    }
+
+    // RG-11 : le figeage a lieu ici, au lancement — jamais à la soumission,
+    // puisque le montant n'est connu qu'une fois le comparatif terminé.
+    $labels = array_column(db_fetch_all("SELECT code, label FROM di_roles"), 'label', 'code');
+    $workflow = array_map(fn($code) => ['role' => $code, 'label' => $labels[$code] ?? $code], $palier['signataires']);
+
+    $now = date('Y-m-d H:i:s');
+    $nom = trim(($user['prenom'] ?? '') . ' ' . ($user['nom'] ?? ''));
+    $historique = [['action' => 'lancement_validation', 'par' => $uid, 'nom' => $nom,
+        'commentaire' => "Palier « {$palier['libelle']} » — $montant XOF", 'date' => $now]];
+
+    db_query(
+        "UPDATE feb SET workflow_snapshot=?::jsonb, etape_actuelle=0, statut='en_validation',
+                date_lancement_validation=?, signatures='[]'::jsonb, historique=?::jsonb,
+                etape_rejet=NULL, motif_rejet=NULL
+          WHERE id=?",
+        [json_encode($workflow, JSON_UNESCAPED_UNICODE), $now, json_encode($historique, JSON_UNESCAPED_UNICODE), $feb_id]
+    );
+    audit_log($uid, 'UPDATE', 'achats', $feb_id, "Lancement de la validation — palier « {$palier['libelle']} », $montant XOF, " . count($workflow) . ' étape(s)');
+
+    ach_notifier_role($workflow[0]['role'], "FEB {$feb['numero']} en attente de votre visa — étape : {$workflow[0]['label']}.", $feb_id);
+
+    return ['etapes' => count($workflow), 'palier' => $palier['libelle']];
+}
+
+// ── Vise (accepte ou rejette) l'étape courante d'une FEB en validation.
+//    Réutilise di_can_validate()/di_next_step() tels quels — aucune règle
+//    de droits n'est réécrite (Bloc 3, point 16).
+//    Le verrou est l'UPDATE conditionnel WHERE etape_actuelle=? (comme
+//    ach_prendre_en_charge en J3) : deux signataires du même département
+//    qui cliquent ensemble ne peuvent pas produire deux signatures — celui
+//    qui arrive en second obtient rowCount=0 et se voit répondre false.
+function ach_viser(int $feb_id, array $user, bool $accepte, string $commentaire = ''): bool {
+    $uid = (int)$user['id'];
+    if (!$accepte && trim($commentaire) === '') {
+        throw new AchValidationException('Le motif de rejet est obligatoire.');
+    }
+
+    $row = db_fetch_one("SELECT * FROM feb WHERE id=?", [$feb_id]);
+    if (!$row) throw new AchValidationException('FEB introuvable.');
+    if ($row['statut'] !== 'en_validation') throw new AchValidationException("Cette FEB n'est pas en cours de validation.");
+    $feb = ach_feb_decode($row);
+    $cur = (int)$feb['etape_actuelle'];
+    $wf  = $feb['workflow_snapshot'];
+
+    $roles = di_user_roles($uid);
+    if (!di_can_validate($roles, $uid, $wf, $cur, (int)$feb['demandeur_id'], null)) {
+        throw new AchValidationException('Vous ne pouvez pas viser cette étape.');
+    }
+
+    $now = date('Y-m-d H:i:s');
+    $nom = trim(($user['prenom'] ?? '') . ' ' . ($user['nom'] ?? ''));
+    $etape_label = $wf[$cur]['label'] ?? $wf[$cur]['role'];
+
+    $signatures   = $feb['signatures'];
+    $signatures[] = ['etape' => $cur, 'etape_label' => $etape_label, 'user_id' => $uid, 'nom' => $nom,
+        'action' => $accepte ? 'approuve' : 'rejete', 'commentaire' => $commentaire, 'date' => $now];
+    $historique   = $feb['historique'];
+    $historique[] = ['action' => $accepte ? 'valide' : 'rejete', 'etape' => $etape_label, 'par' => $uid,
+        'nom' => $nom, 'commentaire' => $commentaire, 'date' => $now];
+    $sigJson  = json_encode($signatures, JSON_UNESCAPED_UNICODE);
+    $histJson = json_encode($historique, JSON_UNESCAPED_UNICODE);
+
+    if (!$accepte) {
+        $stmt = db_query(
+            "UPDATE feb SET statut='rejetee', etape_rejet=?, motif_rejet=?, signatures=?::jsonb, historique=?::jsonb
+              WHERE id=? AND etape_actuelle=?",
+            [$cur, $commentaire, $sigJson, $histJson, $feb_id, $cur]
+        );
+        if ($stmt->rowCount() === 0) return false;
+        audit_log($uid, 'UPDATE', 'achats', $feb_id, "Rejet à l'étape « $etape_label » : $commentaire");
+        if ($feb['demandeur_id'])  ach_notifier_demandeur_feb($feb_id, "Votre FEB {$feb['numero']} a été rejetée à l'étape « $etape_label » : $commentaire");
+        if ($feb['acheteur_id'])   db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','FEB rejetée',?,?)",
+            [(int)$feb['acheteur_id'], "FEB {$feb['numero']} rejetée à l'étape « $etape_label » : $commentaire", '/pages/achats/file_attente.php']);
+        return true;
+    }
+
+    $next = di_next_step($wf, $cur);
+    if ($next === null) {
+        $stmt = db_query(
+            "UPDATE feb SET statut='confirmee', date_confirmation=?, signatures=?::jsonb, historique=?::jsonb
+              WHERE id=? AND etape_actuelle=?",
+            [$now, $sigJson, $histJson, $feb_id, $cur]
+        );
+        if ($stmt->rowCount() === 0) return false;
+        audit_log($uid, 'UPDATE', 'achats', $feb_id, "Dernière signature obtenue (étape « $etape_label ») — FEB confirmée");
+        ach_notifier_demandeur_feb($feb_id, "Votre FEB {$feb['numero']} est entièrement signée.");
+        if ($feb['acheteur_id']) db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','FEB confirmée',?,?)",
+            [(int)$feb['acheteur_id'], "FEB {$feb['numero']} entièrement signée.", '/pages/achats/file_attente.php']);
+        return true;
+    }
+
+    $stmt = db_query(
+        "UPDATE feb SET etape_actuelle=?, signatures=?::jsonb, historique=?::jsonb WHERE id=? AND etape_actuelle=?",
+        [$next, $sigJson, $histJson, $feb_id, $cur]
+    );
+    if ($stmt->rowCount() === 0) return false;
+    audit_log($uid, 'UPDATE', 'achats', $feb_id, "Étape « $etape_label » signée — passage à « {$wf[$next]['label']} »");
+    ach_notifier_role($wf[$next]['role'], "FEB {$feb['numero']} en attente de votre visa — étape : {$wf[$next]['label']}.", $feb_id);
+    return true;
+}
+
+function ach_notifier_demandeur_feb(int $feb_id, string $message): void {
+    $demandeur_id = db_fetch_value("SELECT demandeur_id FROM feb WHERE id=?", [$feb_id]);
+    if (!$demandeur_id) return;
+    db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','FEB',?,?)",
+        [(int)$demandeur_id, $message, '/pages/achats/mes_feb.php']);
+}
+
+// ── Reprise d'une FEB rejetée par son acheteur — le rejet n'est pas une
+//    mort : retour en prise_en_charge, signatures effacées, circuit à
+//    recalculer (nouvel appel à ach_lancer_validation quand l'acheteur est prêt).
+function ach_reprendre_feb_rejetee(int $feb_id, array $user): bool {
+    $uid = (int)$user['id'];
+    $stmt = db_query(
+        "UPDATE feb SET statut='prise_en_charge', etape_actuelle=-1, signatures='[]'::jsonb,
+                workflow_snapshot=NULL, etape_rejet=NULL, motif_rejet=NULL
+          WHERE id=? AND acheteur_id=? AND statut='rejetee'",
+        [$feb_id, $uid]
+    );
+    if ($stmt->rowCount() === 0) return false;
+    audit_log($uid, 'UPDATE', 'achats', $feb_id, 'Reprise de la FEB rejetée — circuit à relancer');
+    return true;
+}
+
+// ── Réouverture administrative d'une FEB en cours de validation (Bloc 5,
+//    RG-12) : les offres et montants sont verrouillés dès en_validation par
+//    le contrôle d'accès déjà en place sur pages/achats/feb_traitement.php
+//    (acheteur_id + statut='prise_en_charge') — rien à ajouter là. Cette
+//    fonction est l'unique porte de sortie, réservée à un administrateur,
+//    tracée explicitement : elle annule les signatures et remet la FEB à
+//    disposition de son acheteur, qui corrige puis relance
+//    ach_lancer_validation() — c'est ce second appel qui recalcule le
+//    palier et repart à l'étape 0.
+function ach_admin_reouvrir_validation(int $feb_id, array $user): bool {
+    $uid = (int)$user['id'];
+    $stmt = db_query(
+        "UPDATE feb SET statut='prise_en_charge', etape_actuelle=-1, signatures='[]'::jsonb,
+                workflow_snapshot=NULL, etape_rejet=NULL, motif_rejet=NULL, date_lancement_validation=NULL
+          WHERE id=? AND statut='en_validation'",
+        [$feb_id]
+    );
+    if ($stmt->rowCount() === 0) return false;
+    audit_log($uid, 'UPDATE', 'achats', $feb_id,
+        "Réouverture administrative : signatures annulées, circuit à relancer depuis l'étape 0 (RG-12)");
+    return true;
+}
+
+// ── FEB que CET utilisateur peut viser — même principe que di_a_valider().
+function ach_a_viser(array $user): array {
+    $uid   = (int)$user['id'];
+    $roles = di_user_roles($uid);
+    $has_dept_role = (bool)db_fetch_value(
+        "SELECT COUNT(*) FROM user_departements ud JOIN di_roles dr ON dr.departement_id = ud.departement_id WHERE ud.user_id=?",
+        [$uid]
+    );
+    if (!$roles && !$has_dept_role) return [];
+
+    $febs = db_fetch_all(
+        "SELECT * FROM feb WHERE statut='en_validation' AND demandeur_id <> ? ORDER BY date_lancement_validation ASC",
+        [$uid]
+    );
+    $out = [];
+    foreach ($febs as $f) {
+        $f = ach_feb_decode($f);
+        if (di_can_validate($roles, $uid, $f['workflow_snapshot'], (int)$f['etape_actuelle'], (int)$f['demandeur_id'], null)) {
+            $out[] = $f;
+        }
+    }
+    return $out;
+}

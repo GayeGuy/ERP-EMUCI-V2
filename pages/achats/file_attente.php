@@ -61,6 +61,18 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         json_response(false, 'Réattribution impossible — cette FEB n\'est plus en cours de traitement.');
     }
 
+    // ── Réouverture administrative d'une FEB bloquée en validation (Bloc 5,
+    //    RG-12) : les offres/montants sont verrouillés dès en_validation
+    //    (feb_traitement.php) — c'est l'unique porte de sortie, tracée.
+    if ($action === 'reouvrir_admin') {
+        if (!$is_admin) json_response(false, 'Réservé à un administrateur.');
+        $feb_id = (int)($_POST['feb_id'] ?? 0);
+        if (ach_admin_reouvrir_validation($feb_id, $user)) {
+            json_response(true, "FEB rouverte — signatures annulées, l'acheteur doit relancer la validation après correction.");
+        }
+        json_response(false, "Réouverture impossible — cette FEB n'est plus en cours de validation.");
+    }
+
     // ── Consultation sans engagement : lecture seule, n'importe quelle FEB
     //    visible de la file (Bloc 1, point 8 — regarder ne doit pas engager).
     if ($action === 'get_feb_detail') {
@@ -72,7 +84,7 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
              LEFT JOIN users u ON u.id = f.demandeur_id
              LEFT JOIN sites s ON s.id = f.site_id
              LEFT JOIN users a ON a.id = f.acheteur_id
-             WHERE f.id=? AND f.statut IN ('soumise','prise_en_charge')",
+             WHERE f.id=? AND f.statut IN ('soumise','prise_en_charge','en_validation')",
             [$feb_id]
         );
         if (!$feb) json_response(false, 'FEB introuvable.');
@@ -138,6 +150,18 @@ $mes_feb = db_fetch_all(
     array_merge([$uid], $params)
 );
 
+// Section 4 — en circuit de validation, réservée à l'administration : la
+// seule action possible ici est la réouverture d'urgence (Bloc 5, RG-12).
+$en_validation = $is_admin ? db_fetch_all(
+    "$select_base, f.date_lancement_validation
+     FROM feb f
+     LEFT JOIN users u ON u.id = f.demandeur_id
+     LEFT JOIN sites s ON s.id = f.site_id
+     WHERE f.statut='en_validation' $whereSql
+     ORDER BY f.date_lancement_validation ASC",
+    $params
+) : [];
+
 // ── Compteur en tête — global, non filtré : c'est ce chiffre qui alimente
 //    « À traiter aujourd'hui » sur le tableau de bord (hors de ce lot).
 $total_attente = (int) db_fetch_value("SELECT COUNT(*) FROM feb WHERE statut='soumise' AND acheteur_id IS NULL");
@@ -153,6 +177,10 @@ foreach ([$a_prendre, $prises_autres, $mes_feb] as &$section) {
     unset($f);
 }
 unset($section);
+foreach ($en_validation as &$f) {
+    $f['anciennete_h'] = ach_anciennete_heures_ouvrees($f['date_lancement_validation'] ?? $f['date_soumission']);
+}
+unset($f);
 
 $sites_list  = db_fetch_all("SELECT id, nom FROM sites WHERE actif=1 ORDER BY nom");
 $demandeurs  = db_fetch_all(
@@ -297,6 +325,8 @@ function ach_fa_render_section(string $titre, array $feb_list, string $mode, boo
                   <button type="button" class="btn btn-secondary btn-sm" onclick="faRestituer(<?= $f['id'] ?>)">Restituer</button>
                 <?php elseif ($mode === 'autres' && $is_admin): ?>
                   <button type="button" class="btn btn-secondary btn-sm" onclick="faReattribuerOuvrir(<?= $f['id'] ?>)">Réattribuer</button>
+                <?php elseif ($mode === 'en_validation'): ?>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="faReouvrir(<?= $f['id'] ?>)">Réouvrir</button>
                 <?php endif; ?>
               </td>
             </tr>
@@ -312,6 +342,9 @@ function ach_fa_render_section(string $titre, array $feb_list, string $mode, boo
 ach_fa_render_section('À prendre en charge', $a_prendre, 'a_prendre', $is_admin);
 ach_fa_render_section('Prises en charge', $prises_autres, 'autres', $is_admin);
 ach_fa_render_section('Les miennes', $mes_feb, 'mine', $is_admin);
+if ($is_admin) {
+    ach_fa_render_section('En circuit de validation (administration)', $en_validation, 'en_validation', $is_admin);
+}
 ?>
 
 <!-- MODALE consultation (lecture seule) -->
@@ -397,6 +430,13 @@ function faReattribuerConfirmer() {
   faPost({ action: 'reattribuer', feb_id, nouvel_acheteur_id }).then(res => {
     toast(res.message, res.success ? 'success' : 'danger');
     if (res.success) { faFermerModal('reattr-modal'); setTimeout(() => location.reload(), 500); }
+  });
+}
+function faReouvrir(id) {
+  if (!confirm("Réouvrir cette FEB ? Les signatures obtenues seront annulées et le circuit devra être relancé après correction.")) return;
+  faPost({ action: 'reouvrir_admin', feb_id: id }).then(res => {
+    toast(res.message, res.success ? 'success' : 'danger');
+    if (res.success) setTimeout(() => location.reload(), 500);
   });
 }
 function faConsulter(id) {

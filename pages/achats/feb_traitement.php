@@ -18,12 +18,24 @@ $uid = (int)$user['id'];
 $_SESSION['groupe_actif'] = 'ACHATS';
 
 // ── Charge la FEB si, et seulement si, l'utilisateur courant en est
-//    l'acheteur détenteur — contrôle serveur, pas un simple masquage de
-//    bouton (Bloc 3, point 17).
+//    l'acheteur détenteur ET qu'elle est éditable — contrôle serveur, pas un
+//    simple masquage de bouton (Bloc 3, point 17). Verrouille de fait toute
+//    modification (offres, montants, arbitrage) dès que la FEB quitte
+//    prise_en_charge — en particulier au lancement de la validation
+//    (Bloc 5, RG-12) : rien à ajouter côté verrou, ce gate suffit.
 function feb_charger_pour_traitement(int $feb_id, int $uid): ?array {
     $feb = db_fetch_one("SELECT * FROM feb WHERE id=?", [$feb_id]);
     if (!$feb) return null;
     if ((int)$feb['acheteur_id'] !== $uid || $feb['statut'] !== 'prise_en_charge') return null;
+    return $feb;
+}
+
+// ── Chargement large pour la simple consultation (y compris une FEB
+//    rejetée, pour afficher le motif et proposer la reprise).
+function feb_charger_pour_vue(int $feb_id, int $uid): ?array {
+    $feb = db_fetch_one("SELECT * FROM feb WHERE id=?", [$feb_id]);
+    if (!$feb) return null;
+    if ((int)$feb['acheteur_id'] !== $uid || !in_array($feb['statut'], ['prise_en_charge', 'rejetee'], true)) return null;
     return $feb;
 }
 
@@ -34,6 +46,16 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
     $action = $_POST['action'] ?? '';
     $post_feb_id = (int)($_POST['feb_id'] ?? 0);
+
+    // Seule action valable sur une FEB rejetée : la reprendre. Toutes les
+    // autres exigent prise_en_charge (gate strict ci-dessus).
+    if ($action === 'reprendre') {
+        if (ach_reprendre_feb_rejetee($post_feb_id, $user)) {
+            json_response(true, 'FEB reprise — le circuit est à relancer une fois vos corrections faites.');
+        }
+        json_response(false, "Reprise impossible — vérifiez que vous détenez cette FEB et qu'elle est bien rejetée.");
+    }
+
     $feb = feb_charger_pour_traitement($post_feb_id, $uid);
     if (!$feb) json_response(false, "Cette FEB n'est pas (ou plus) en cours de traitement par vous.");
 
@@ -141,6 +163,15 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         } catch (AchValidationException $e) {
             json_response(false, $e->getMessage());
         } catch (Exception $e) {
+            json_response(false, $e->getMessage());
+        }
+    }
+
+    if ($action === 'lancer_validation') {
+        try {
+            $res = ach_lancer_validation($post_feb_id, $user);
+            json_response(true, "Validation lancée — {$res['etapes']} étape(s), palier « {$res['palier']} ».", $res);
+        } catch (AchValidationException $e) {
             json_response(false, $e->getMessage());
         }
     }
@@ -256,12 +287,15 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 // ── PAGE PHP ─────────────────────────────────────────────────
-$feb = feb_charger_pour_traitement($feb_id, $uid);
+$feb = feb_charger_pour_vue($feb_id, $uid);
 if (!$feb) {
     http_response_code(403);
     include __DIR__ . '/../../templates/403.php';
     exit;
 }
+// FEB rejetée : consultation + reprise uniquement, aucune modification tant
+// qu'elle n'est pas reprise (retour en prise_en_charge).
+$editable = $feb['statut'] === 'prise_en_charge';
 
 $demandeur = db_fetch_one(
     "SELECT CONCAT(prenom,' ',nom) AS nom FROM users WHERE id=?", [$feb['demandeur_id']]
@@ -384,18 +418,31 @@ include __DIR__ . '/../../templates/header.php';
 </div>
 <?php endif; ?>
 
+<?php if (!$editable): ?>
+<div class="feb-commande-box" style="background:#FEE2E2;border-color:#FCA5A5">
+  <div>
+    <div class="feb-hdr-lbl" style="color:#991B1B">FEB rejetée — étape <?= h($feb['workflow_snapshot'] ? (json_decode($feb['workflow_snapshot'], true)[$feb['etape_rejet']]['label'] ?? '') : '') ?></div>
+    <div class="feb-hdr-val" style="color:#991B1B"><?= h($feb['motif_rejet'] ?: 'Aucun motif renseigné.') ?></div>
+  </div>
+  <button type="button" class="btn btn-primary btn-sm" onclick="febReprendre()">Reprendre la FEB</button>
+</div>
+<?php endif; ?>
+
 <div class="feb-actions-bar">
   <div class="feb-hint" style="margin:0">L'arbitrage se décide ligne par ligne. Aucun mouvement de stock n'a lieu à ce stade.</div>
-  <div style="display:flex;gap:10px">
+  <?php if ($editable): ?>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
     <?php if ($au_moins_une_arbitrable): ?>
     <button type="button" class="btn btn-secondary" id="btn-tout-stock" <?= $toutes_couvertes ? '' : 'disabled' ?> onclick="febToutStock()">
       Tout servir sur stock
     </button>
     <?php endif; ?>
     <?php if (!$commande_liee): ?>
-    <button type="button" class="btn btn-primary" onclick="febBasculer()">Basculer vers la commande interne</button>
+    <button type="button" class="btn btn-secondary" onclick="febBasculer()">Basculer vers la commande interne</button>
     <?php endif; ?>
+    <button type="button" class="btn btn-primary" onclick="febLancerValidation()">Lancer la validation</button>
   </div>
+  <?php endif; ?>
 </div>
 
 <div class="ach-table-wrap">
@@ -432,7 +479,7 @@ include __DIR__ . '/../../templates/header.php';
         <td><?= $arbitrable ? (int)$l['stock_global'] : '—' ?></td>
         <td><span class="ach-badge <?= $badge_class ?>"><?= h($badge_label) ?></span></td>
         <td>
-          <?php if ($arbitrable && !$commande_liee): ?>
+          <?php if ($arbitrable && !$commande_liee && $editable): ?>
           <button type="button" class="btn btn-secondary btn-sm"
                   onclick='febOuvrirArbitrage(<?= json_encode([
                     "id"=>(int)$l["id"], "designation"=>$l["designation"], "quantite"=>(int)$l["quantite"],
@@ -481,7 +528,7 @@ include __DIR__ . '/../../templates/header.php';
         <td style="font-weight:700;color:var(--navy)"><?= h($l['designation']) ?></td>
         <td><?= (int)$l['quantite'] ?></td>
         <td>
-          <select class="inline-input" onchange="febMajLigneType(<?= (int)$l['id'] ?>, this.value)">
+          <select class="inline-input" <?= $editable ? '' : 'disabled' ?> onchange="febMajLigneType(<?= (int)$l['id'] ?>, this.value)">
             <option value="">— Sélectionner —</option>
             <?php foreach ($types_achat as $t): ?>
               <option value="<?= h($t['code']) ?>" <?= $l['type_achat'] === $t['code'] ? 'selected' : '' ?>><?= h($t['libelle']) ?></option>
@@ -489,7 +536,7 @@ include __DIR__ . '/../../templates/header.php';
           </select>
         </td>
         <td>
-          <select class="inline-input" onchange="febDerogerFournisseur(<?= (int)$l['id'] ?>, this.value)">
+          <select class="inline-input" <?= $editable ? '' : 'disabled' ?> onchange="febDerogerFournisseur(<?= (int)$l['id'] ?>, this.value)">
             <option value="">— Aucun —</option>
             <?php foreach ($fournisseurs as $f): ?>
               <option value="<?= $f['id'] ?>" <?= (string)$l['fournisseur_id'] === (string)$f['id'] ? 'selected' : '' ?>><?= h($f['raison_sociale']) ?></option>
@@ -498,7 +545,7 @@ include __DIR__ . '/../../templates/header.php';
           <?php if ($l['fournisseur_derogation']): ?><span class="derog-badge">Dérogée</span><?php endif; ?>
         </td>
         <td>
-          <input type="number" min="0" step="1" class="inline-input" style="max-width:140px"
+          <input type="number" min="0" step="1" class="inline-input" style="max-width:140px" <?= $editable ? '' : 'disabled' ?>
                  value="<?= (int)$l['montant_ttc'] ?>"
                  onchange="febMajLigneMontant(<?= (int)$l['id'] ?>, this.value)">
         </td>
@@ -529,9 +576,10 @@ include __DIR__ . '/../../templates/header.php';
         <td style="display:flex;gap:6px;flex-wrap:wrap">
           <?php if ($o['retenue']): ?>
             <span class="ach-badge badge-stock">Retenue</span>
-          <?php else: ?>
+          <?php elseif ($editable): ?>
             <button type="button" class="btn btn-primary btn-sm" onclick="febRetenirOffre(<?= (int)$o['id'] ?>)">Retenir</button>
           <?php endif; ?>
+          <?php if ($editable): ?>
           <button type="button" class="btn btn-secondary btn-sm" aria-label="Modifier l'offre de <?= h($o['fournisseur_nom'] ?: '') ?>"
                   onclick='febOuvrirOffre(<?= json_encode([
                     "id"=>(int)$o["id"], "lot"=>$lot["lot"], "fournisseur_id"=>$o["fournisseur_id"],
@@ -545,18 +593,21 @@ include __DIR__ . '/../../templates/header.php';
                   onclick="febSupprimerOffre(<?= (int)$o['id'] ?>)">
             <i class="ph ph-trash" aria-hidden="true"></i>
           </button>
+          <?php endif; ?>
         </td>
       </tr>
       <?php endforeach; ?>
     </tbody>
   </table>
   </div>
+  <?php if ($editable): ?>
   <div style="padding:14px 18px">
     <button type="button" class="btn btn-secondary btn-sm" <?= count($offres) >= 3 ? 'disabled title="Trois offres au maximum par lot."' : '' ?>
             onclick="febOuvrirOffre(null, <?= json_encode($lot['lot']) ?>)">
       <i class="ph ph-plus" aria-hidden="true"></i> Ajouter une offre
     </button>
   </div>
+  <?php endif; ?>
 </div>
 <?php endforeach; ?>
 <?php endif; ?>
@@ -824,6 +875,20 @@ function febMajLigneType(ligne_id, type_achat) {
 function febVerifierComparatif() {
   febPost({ action: 'verifier_comparatif' }).then(res => {
     toast(res.message, res.success ? 'success' : 'danger');
+  });
+}
+function febLancerValidation() {
+  if (!confirm('Lancer la validation ? Le circuit sera figé sur le montant actuel de la FEB.')) return;
+  febPost({ action: 'lancer_validation' }).then(res => {
+    toast(res.message, res.success ? 'success' : 'danger');
+    if (res.success) setTimeout(() => location.href = '../achats/file_attente.php', 900);
+  });
+}
+function febReprendre() {
+  if (!confirm('Reprendre cette FEB ? Le circuit devra être relancé après correction.')) return;
+  febPost({ action: 'reprendre' }).then(res => {
+    toast(res.message, res.success ? 'success' : 'danger');
+    if (res.success) setTimeout(() => location.reload(), 500);
   });
 }
 </script>
