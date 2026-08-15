@@ -546,6 +546,7 @@ function setThemePref(pref) {
   document.querySelectorAll('.theme-opt').forEach(el =>
     el.classList.toggle('active', el.dataset.pref === pref)
   );
+  if (typeof syncThemeToggleIcon === 'function') syncThemeToggleIcon();
 
   const msgs = { light: '☀️ Thème clair', dark: '🌙 Thème sombre', auto: '💻 Thème système' };
   const fb = document.getElementById('theme-fb');

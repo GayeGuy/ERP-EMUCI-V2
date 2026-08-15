@@ -516,6 +516,12 @@ $unread = count($notifs);
     --border:   #2D4060;
     --tertiary: #162032;
     --white:    #1E293B;
+    --lighter:  #162032;
+    /* --card n'est jamais défini ailleurs dans le dépôt : les ~20 usages en
+       var(--card,#fff) (module demandes internes, admin/permissions.php)
+       retombent tous sur le repli #fff. Le définir ici suffit à les
+       basculer en sombre sans toucher chaque fichier individuellement. */
+    --card:     #1E293B;
   }
 
   /* 2 — Surfaces principales */
@@ -607,6 +613,7 @@ $unread = count($notifs);
 
   /* 13 — Éléments inline courants dans les pages */
   [data-theme="dark"] .table-wrap          { background: #1E293B; }
+  [data-theme="dark"] .vue-table td        { background: #1E293B; }
   [data-theme="dark"] .vue-table tbody tr:nth-child(even) td { background: #1A2848; }
   [data-theme="dark"] .vue-table tr.total-row td { background: #0F172A !important; color: #E2E8F0 !important; }
   [data-theme="dark"] h2, [data-theme="dark"] h3,
@@ -691,6 +698,214 @@ $unread = count($notifs);
   [data-theme="dark"] .s-reserved       { background: #1C3B6E !important; color: #93C5FD !important; }
   [data-theme="dark"] .s-declared_broken { background: #4A1D1D !important; color: #FCA5A5 !important; }
   [data-theme="dark"] .s-lost           { background: #253349 !important; color: #94A3B8 !important; }
+
+  /* ═══ COUVERTURE STRUCTURELLE ═══
+     Chaque page définit ses propres classes de carte/panneau avec un fond
+     blanc en dur (background:white/#fff) plutôt que de réutiliser .card.
+     Sans ceci, le texte redevient clair (cf. --navy redéfini plus haut)
+     sur un fond resté blanc : illisible. Recensé par script sur tout le
+     dépôt (79 sélecteurs), regroupé ici plutôt que repris page par page —
+     un fond de carte uniforme partout plutôt qu'une teinte par page. */
+  [data-theme="dark"] .modal, [data-theme="dark"] .mhdr, [data-theme="dark"] .mfoot,
+  [data-theme="dark"] .kpi, [data-theme="dark"] .kpi-card, [data-theme="dark"] .stat-tile,
+  [data-theme="dark"] .ik, [data-theme="dark"] .pmma-card, [data-theme="dark"] .deleg-card,
+  [data-theme="dark"] .dept-panel, [data-theme="dark"] .modal-box, [data-theme="dark"] .nom-card,
+  [data-theme="dark"] .affecte-item, [data-theme="dark"] .autocomplete-results, [data-theme="dark"] .sit-card,
+  [data-theme="dark"] .ag-kpi, [data-theme="dark"] .ag-modal, [data-theme="dark"] .art-card,
+  [data-theme="dark"] .conso-card, [data-theme="dark"] .dash-card, [data-theme="dark"] .di-modal .box,
+  [data-theme="dark"] .di-back, [data-theme="dark"] .di-cstep, [data-theme="dark"] .di-plat,
+  [data-theme="dark"] .ek, [data-theme="dark"] .import-card, [data-theme="dark"] .stat-card,
+  [data-theme="dark"] .ld-box, [data-theme="dark"] .ses-k, [data-theme="dark"] .site-chip,
+  [data-theme="dark"] .bk, [data-theme="dark"] .veh-card, [data-theme="dark"] .point-preview,
+  [data-theme="dark"] .emuci-card, [data-theme="dark"] .profil-card, [data-theme="dark"] .rkpi,
+  [data-theme="dark"] .r-card, [data-theme="dark"] .cout-kpi, [data-theme="dark"] .rg-filters,
+  [data-theme="dark"] .rg-card, [data-theme="dark"] .rg-card-full, [data-theme="dark"] .rg-info,
+  [data-theme="dark"] .rk, [data-theme="dark"] .kk, [data-theme="dark"] .vsm-kpi,
+  [data-theme="dark"] .vsm-section, [data-theme="dark"] .card, [data-theme="dark"] .month-inp,
+  [data-theme="dark"] .ch-box, [data-theme="dark"] .biz-m, [data-theme="dark"] .eq-sel,
+  [data-theme="dark"] .di-btn-ghost, [data-theme="dark"] .btn-vsm-detail, [data-theme="dark"] .vsm-dec-btn,
+  [data-theme="dark"] .detail-btn, [data-theme="dark"] .btn-csv, [data-theme="dark"] .btn-xlsx,
+  [data-theme="dark"] .btn-pptx, [data-theme="dark"] .btn-pdf,
+  [data-theme="dark"] .filter-bar, [data-theme="dark"] .filtre-bar, [data-theme="dark"] .vsm-filters,
+  [data-theme="dark"] .add-form, [data-theme="dark"] .ag-drop, [data-theme="dark"] .ag-filters,
+  [data-theme="dark"] .biz-cov-bar, [data-theme="dark"] .biz-mix, [data-theme="dark"] .biz-risk-r,
+  [data-theme="dark"] .bstat-retiree, [data-theme="dark"] .btn-ghost, [data-theme="dark"] .btn-n1-off,
+  [data-theme="dark"] .chip.gray, [data-theme="dark"] .kpi-m, [data-theme="dark"] .pfw-q,
+  [data-theme="dark"] .pj-pill.veh, [data-theme="dark"] .point-badge.suivi, [data-theme="dark"] .prio-normale,
+  [data-theme="dark"] .site-picker, [data-theme="dark"] .site-statut.non_commence,
+  [data-theme="dark"] .statut-annulee, [data-theme="dark"] .statut-suivi {
+    background: #1E293B !important;
+    border-color: #334155 !important;
+  }
+  [data-theme="dark"] .btn-sm:hover, [data-theme="dark"] .dept-card:hover {
+    background: #253349 !important;
+  }
+  /* .perm-tab.active (et motifs similaires) : fond var(--navy) + texte blanc
+     fixe. --navy redevient clair plus haut (pensé pour le texte), donc ce
+     fond-là devient clair aussi tout en gardant un texte blanc — illisible.
+     On fige la combinaison plutôt que de suivre la variable. */
+  [data-theme="dark"] .perm-tab.active {
+    background: var(--primary-d) !important;
+    color: #fff !important;
+  }
+  [data-theme="dark"] .perm-tab:hover { background: #253349 !important; }
+
+  /* Même bug que .perm-tab.active ci-dessus, sur les autres éléments qui
+     utilisent var(--navy) comme fond plein (badge, en-tête, avatar rond)
+     avec du texte blanc en dur — recensés par script sur tout le dépôt. */
+  [data-theme="dark"] .ag-btn-pri, [data-theme="dark"] .ag-table thead th,
+  [data-theme="dark"] .bilan-site-hdr, [data-theme="dark"] .biz-dot-a,
+  [data-theme="dark"] .btn-add, [data-theme="dark"] .btn-primary,
+  [data-theme="dark"] .coord-bob-table th, [data-theme="dark"] .deleg-head,
+  [data-theme="dark"] .dept-card.active .dept-ico, [data-theme="dark"] .ecarts-table thead th,
+  [data-theme="dark"] .filtre-bar button, [data-theme="dark"] .form-section-num,
+  [data-theme="dark"] .matrice-table th, [data-theme="dark"] .pdg-bar::after,
+  [data-theme="dark"] .pmma-head, [data-theme="dark"] .resp-avatar,
+  [data-theme="dark"] .seg-op, [data-theme="dark"] .sit-head, [data-theme="dark"] .sq-op,
+  [data-theme="dark"] .stat-tile-total, [data-theme="dark"] .table-wrap thead th,
+  [data-theme="dark"] .user-avatar-sm {
+    background: #1E2B4A !important;
+  }
+
+  /* Champs de formulaire locaux (hors .form-control) : même traitement que
+     les champs génériques, un ton plus sombre que les cartes ci-dessus. */
+  [data-theme="dark"] .filter-bar input, [data-theme="dark"] .filter-bar select,
+  [data-theme="dark"] .filtre-bar input, [data-theme="dark"] .filtre-bar select,
+  [data-theme="dark"] .rg-field input, [data-theme="dark"] .rg-field select,
+  [data-theme="dark"] .vsm-filters input, [data-theme="dark"] .vsm-filters select,
+  [data-theme="dark"] .ag-filters input, [data-theme="dark"] .ag-filters select,
+  [data-theme="dark"] .add-form select {
+    background: #0F172A !important;
+    color: #E2E8F0 !important;
+    border-color: #334155 !important;
+  }
+
+  /* Lignes de tableau alternées/survolées declarées localement (hors table
+     generique deja couverte plus haut). */
+  [data-theme="dark"] .ag-table tbody tr:nth-child(even) td,
+  [data-theme="dark"] .coord-bob-table tr:nth-child(even) td,
+  [data-theme="dark"] .ecarts-table tbody tr:nth-child(even) td,
+  [data-theme="dark"] .vue-table tbody tr:nth-child(even) td {
+    background: #1A2848 !important;
+  }
+  [data-theme="dark"] .dv2-t tbody tr:hover td,
+  [data-theme="dark"] .sites-table tr:hover td,
+  [data-theme="dark"] .ag-table tbody tr:hover td,
+  [data-theme="dark"] .ecarts-table tbody tr:hover td,
+  [data-theme="dark"] .vsm-tbl tbody tr:hover td,
+  [data-theme="dark"] .ptbl tr:hover td,
+  [data-theme="dark"] .vue-table tbody tr:not(.total-row):hover td,
+  [data-theme="dark"] .dash-lien:hover,
+  [data-theme="dark"] .dept-card:hover,
+  [data-theme="dark"] .di-back:hover,
+  [data-theme="dark"] .di-btn-ghost:hover:not([disabled]),
+  [data-theme="dark"] .notif-item:hover {
+    background: #253349 !important;
+  }
+
+  /* Barres d'en-tête de section (mêmes classes de bandeau que .vsm-section-hdr,
+     répétées sous d'autres noms page par page). */
+  [data-theme="dark"] .vsm-section-hdr,
+  [data-theme="dark"] .rg-card-hdr,
+  [data-theme="dark"] .rg-info-hdr,
+  [data-theme="dark"] .di-actions,
+  [data-theme="dark"] .di-lbl,
+  [data-theme="dark"] .vsm-dec-help,
+  [data-theme="dark"] .kpi-cell,
+  [data-theme="dark"] .btn-annul,
+  [data-theme="dark"] .btn-sec {
+    background: #162032 !important;
+    border-color: #334155 !important;
+  }
+  /* Petits badges "fond clair + texte var(--navy)" restants (compteurs). */
+  [data-theme="dark"] .dept-ico, [data-theme="dark"] .member-ava,
+  [data-theme="dark"] .vsm-cnt, [data-theme="dark"] .vsm-tab-badge {
+    background: #253349 !important;
+    color: #E2E8F0 !important;
+  }
+  /* Pastilles neutres gris clair (.prio-normale et semblables) : fond assombri
+     plus haut, mais texte reste #64748b/#475569 (gris clair d'origine, pense
+     pour un fond pale) -> trop peu contraste sur le nouveau fond sombre. */
+  [data-theme="dark"] .statut-annulee, [data-theme="dark"] .chip.gray,
+  [data-theme="dark"] .site-statut.non_commence, [data-theme="dark"] .point-badge.suivi,
+  [data-theme="dark"] .prio-normale, [data-theme="dark"] .statut-suivi,
+  [data-theme="dark"] .s-lost, [data-theme="dark"] .st-annule {
+    color: #94A3B8 !important;
+  }
+  /* Numeros/valeurs colores en ligne (style="color:#xxx"), calibres pour un
+     fond blanc, desormais sur des cartes/tableaux assombris. */
+  [data-theme="dark"] .main-wrap [style*="color:#1D4ED8"],
+  [data-theme="dark"] .main-wrap [style*="color: #1D4ED8"],
+  [data-theme="dark"] .main-wrap [style*="color:#1d4ed8"],
+  [data-theme="dark"] .main-wrap [style*="color: #1d4ed8"] { color: #60A5FA !important; }
+  [data-theme="dark"] .main-wrap [style*="color:#065f46"],
+  [data-theme="dark"] .main-wrap [style*="color:#065F46"] { color: #34D399 !important; }
+  [data-theme="dark"] .main-wrap [style*="color:#92400e"],
+  [data-theme="dark"] .main-wrap [style*="color:#92400E"] { color: #FBBF24 !important; }
+  [data-theme="dark"] .main-wrap [style*="color:#e65100"] { color: #FB923C !important; }
+  [data-theme="dark"] .main-wrap [style*="color:#991b1b"],
+  [data-theme="dark"] .main-wrap [style*="color:#991B1B"] { color: #FCA5A5 !important; }
+  [data-theme="dark"] .main-wrap [style*="color:#c0392b"],
+  [data-theme="dark"] .main-wrap [style*="color:#c62828"] { color: #FCA5A5 !important; }
+  [data-theme="dark"] .step.s-valide .s-num  { color: #60A5FA !important; }
+  [data-theme="dark"] .step.s-recu .s-num    { color: #34D399 !important; }
+  [data-theme="dark"] .step.s-attente .s-num,
+  [data-theme="dark"] .st-en_attente         { color: #FBBF24 !important; }
+  [data-theme="dark"] .step.s-livraison .s-num { color: #FB923C !important; }
+  [data-theme="dark"] .ac-type-badge, [data-theme="dark"] .count-cell,
+  [data-theme="dark"] .cell-empty {
+    background: #253349 !important;
+    color: #E2E8F0 !important;
+  }
+  /* .sites-table th force color:#475569!important localement ; meme
+     specificite que la regle generique th{} plus haut mais chargee apres
+     (donc gagnante) -> on la re-surclasse avec un selecteur plus specifique. */
+  [data-theme="dark"] .sites-table th {
+    background: #162032 !important;
+    color: #94A3B8 !important;
+  }
+  /* .kpi utilise --kpi-c (posee en inline style par tuile) pour son accent de
+     texte/avant : les teintes choisies pour un fond blanc n'ont plus assez
+     de contraste sur .kpi assombri. */
+  [data-theme="dark"] .main-wrap [style*="--kpi-c:#1B75BC"] { --kpi-c: #60A5FA; }
+  [data-theme="dark"] .main-wrap [style*="--kpi-c:#1565c0"] { --kpi-c: #60A5FA; }
+  [data-theme="dark"] .main-wrap [style*="--kpi-c:#2e7d32"] { --kpi-c: #34D399; }
+  [data-theme="dark"] .main-wrap [style*="--kpi-c:#7b1fa2"] { --kpi-c: #C084FC; }
+
+  /* Garde-fou générique : tout fond blanc laissé en style="" inline sur une
+     page non encore migrée individuellement (mêmes teintes que la carte). */
+  [data-theme="dark"] .main-wrap [style*="background:#fff"]:not([style*="background:#fff5f5"]),
+  [data-theme="dark"] .main-wrap [style*="background: #fff"]:not([style*="background: #fff5f5"]),
+  [data-theme="dark"] .main-wrap [style*="background:#ffffff"],
+  [data-theme="dark"] .main-wrap [style*="background: #ffffff"] {
+    background: #1E293B !important;
+    color: #E2E8F0 !important;
+  }
+  [data-theme="dark"] .main-wrap [style*="background:var(--navy)"],
+  [data-theme="dark"] .main-wrap [style*="background: var(--navy)"],
+  [data-theme="dark"] .main-wrap [style*="background:var(--navy,"] {
+    background: #1E2B4A !important;
+    color: #fff !important;
+  }
+
+  /* Dégradés décoratifs qui utilisent var(--navy) comme couleur de FOND
+     (bannières, en-têtes de rôle) plutôt que comme couleur de texte : la
+     redéfinition de --navy plus haut (pensée pour le texte) les délave en
+     clair. On les repointe sur la teinte navy d'origine, indépendamment du
+     thème — ce sont des éléments de marque, pas du texte lisible. */
+  [data-theme="dark"] .welcome-banner,
+  [data-theme="dark"] .role-header,
+  [data-theme="dark"] .capa-result,
+  [data-theme="dark"] .nom-code,
+  [data-theme="dark"] .profil-avatar-section {
+    background: linear-gradient(135deg, #1E2B4A, #2D3E6E 60%, #3B5098) !important;
+  }
+  [data-theme="dark"] .main-wrap [style*="linear-gradient(90deg,var(--navy)"] {
+    background: linear-gradient(90deg, #3B5098, transparent) !important;
+  }
+  [data-theme="dark"] .main-wrap [style*="linear-gradient(270deg,var(--navy)"] {
+    background: linear-gradient(270deg, #3B5098, transparent) !important;
+  }
   </style>
 
   <script>
@@ -701,6 +916,27 @@ $unread = count($notifs);
     var t    = pref === 'dark' ? 'dark' : pref === 'light' ? 'light' : (sys ? 'dark' : 'light');
     document.documentElement.setAttribute('data-theme', t);
   })();
+
+  /* Bascule rapide depuis la topbar (clair <-> sombre). Réutilise la même
+     clé localStorage que le sélecteur complet de Mon Profil — les deux
+     restent synchronisés, aucune préférence "auto" ici (raccourci volontairement
+     simple : cycler 3 états depuis une icône sans libellé serait peu clair). */
+  function toggleThemeQuick() {
+    var current = document.documentElement.getAttribute('data-theme') || 'light';
+    var next = current === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('ds-theme-pref', next);
+    document.documentElement.setAttribute('data-theme', next);
+    syncThemeToggleIcon();
+    document.querySelectorAll('.theme-opt').forEach(function (el) {
+      el.classList.toggle('active', el.dataset.pref === next);
+    });
+  }
+  function syncThemeToggleIcon() {
+    var icon = document.getElementById('theme-toggle-icon');
+    if (!icon) return;
+    var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    icon.className = dark ? 'ph ph-sun' : 'ph ph-moon';
+  }
   </script>
 </head>
 <body>
@@ -788,6 +1024,12 @@ $unread = count($notifs);
       <?php endif; ?>
     </h1>
     <div class="topbar-actions">
+
+      <!-- Thème -->
+      <button class="notif-btn" onclick="toggleThemeQuick()" title="Basculer le thème clair/sombre" aria-label="Basculer le thème clair/sombre">
+        <i class="ph" id="theme-toggle-icon" style="font-size:19px;color:var(--muted)" aria-hidden="true"></i>
+      </button>
+      <script>syncThemeToggleIcon();</script>
 
       <!-- Notifications -->
       <button class="notif-btn" onclick="toggleNotifs()" title="Notifications">

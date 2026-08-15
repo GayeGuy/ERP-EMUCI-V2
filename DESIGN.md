@@ -140,11 +140,57 @@ Prochain emoji-icône ajouté à une page : vérifier d'abord si sa valeur finit
 par transiter par un de ces chemins avant de le convertir — c'est la
 majorité des erreurs rencontrées lors de cette conversion.
 
-## Ce qui reste ouvert
+## Thème sombre
 
-- Thème sombre : en cours de finition (2026-08) — une bascule fonctionnelle
-  existe déjà (`pages/mon_profil.php`, section « Apparence », JS
-  `setThemePref()`, persistée dans `localStorage['ds-theme-pref']`) avec
-  anti-FOUC dans `templates/header.php`, mais la couverture CSS
-  `[data-theme="dark"]` reste partielle — la plupart des pages n'ont aucune
-  règle sombre sur leur propre `<style>` local.
+Bascule fonctionnelle dans `pages/mon_profil.php` (section « Apparence »,
+JS `setThemePref()`, persistée dans `localStorage['ds-theme-pref']`), plus
+un raccourci icône ☀️/🌙 dans la topbar (`toggleThemeQuick()`, même clé
+localStorage, synchronisé avec Mon Profil) — `templates/header.php` applique
+l'attribut `data-theme` avant le premier paint pour éviter le flash.
+
+La couverture CSS (2026-08) a été étendue depuis `templates/header.php` en
+recensant par script tout le dépôt plutôt qu'en reprenant chaque page à la
+main :
+- Variables CSS pâles redéfinies pour le mode sombre (`--tertiary`,
+  `--white`, `--lighter`, `--card` — cette dernière n'était même jamais
+  définie ailleurs : ~20 usages `var(--card,#fff)` retombaient tous sur le
+  repli blanc).
+- ~100 classes de carte/panneau/filtre à fond blanc en dur (repérées par
+  script, une même teinte de fond partout plutôt qu'une reprise par page).
+- Dégradés décoratifs utilisant `var(--navy)` comme fond (bannières,
+  en-têtes de rôle) : `--navy` redéfini en clair pour le texte les délavait
+  — repointés sur la teinte navy d'origine, indépendamment du thème.
+- ~25 classes à fond `var(--navy)` plein + texte blanc en dur (même bug,
+  variante badge/avatar/en-tête de tableau).
+- Un garde-fou générique par attribut (`[style*="background:#fff"]` etc.)
+  pour les styles inline non couverts par les classes ci-dessus.
+- Couleurs de texte en ligne (bleu/vert/orange/rouge, ex. `#1D4ED8`,
+  `#065F46`) calibrées pour un fond blanc, éclaircies pour rester lisibles
+  sur les cartes désormais sombres.
+
+Vérifié via audit de contraste programmatique (Playwright, calcul de ratio
+WCAG sur chaque nœud de texte, pas à l'œil) sur 20 pages : environ 240
+échecs de contraste mesurés avant correctifs, ~15 cas résiduels après —
+tous des paires couleur/fond ponctuelles (une cellule de tableau, un badge
+de statut isolé) plutôt qu'un problème de lisibilité générale. Non
+poursuivi au-delà : chaque cas restant nécessite de tracer une couleur en
+ligne jusqu'à sa source une par une, rendement décroissant par rapport au
+reste de la page. À reprendre si signalé comme gênant en usage réel.
+
+Reste ouvert :
+- Les ~15 paires résiduelles ci-dessus (voir git log du commit correspondant
+  pour le détail exact des classes/pages).
+- Les badges de statut pastel (fond pâle + texte saturé, ex.
+  `.badge-success`, `.ac-type-badge`) sont volontairement laissés tels
+  quels : ils restent lisibles indépendamment du thème (texte contrasté sur
+  son propre fond), les reprendre en sombre serait cosmétique, pas
+  fonctionnel.
+- `pages/accueil.php`, `login.php`, `forgot-password.php`,
+  `reset-password.php`, `templates/403.php` sont des pages autonomes qui
+  n'incluent pas `templates/header.php` : elles ne reçoivent ni l'attribut
+  `data-theme` ni le script anti-flash, et restent toujours en thème clair.
+  Délibéré pour les pages pré-connexion ; `accueil.php` (page d'accueil
+  post-connexion mais avec sa propre mise en page complète) est un cas
+  limite non traité — l'y rattacher demanderait de dupliquer ou factoriser
+  le script anti-FOUC, hors périmètre de cette passe.
+
