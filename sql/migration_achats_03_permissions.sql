@@ -29,6 +29,20 @@ ON CONFLICT (role_id, module) DO UPDATE SET
     can_read = 1;  -- ne touche a aucun autre champ : ne retire jamais un droit deja accorde
 
 -- ══════════════════════════════════════════════════════════════
+--  1bis. TOUS SAUF LE LECTEUR (PDG) — creation sur `achats`, pour deposer
+--     une FEB. Le lecteur est un profil de consultation qui ne depose
+--     jamais rien (meme regle que di_peut_creer() pour les demandes
+--     internes, cf. includes/demandes.php) : lecture + visa uniquement
+--     pour lui, accordes plus bas (etape 4).
+-- ══════════════════════════════════════════════════════════════
+INSERT INTO permissions (role_id, module, can_read, can_create, can_update, can_delete, can_export)
+SELECT r.id, 'achats', 1, 1, 0, 0, 0
+FROM roles r
+WHERE r.slug <> 'lecteur'
+ON CONFLICT (role_id, module) DO UPDATE SET
+    can_create = 1;
+
+-- ══════════════════════════════════════════════════════════════
 --  2. ADMIN & SUPERADMIN — tous droits sur les 4 modules
 -- ══════════════════════════════════════════════════════════════
 INSERT INTO permissions (role_id, module, can_read, can_create, can_update, can_delete, can_export)

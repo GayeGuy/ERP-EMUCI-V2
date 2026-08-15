@@ -6,6 +6,7 @@
 define('UPLOAD_DIR',       __DIR__ . '/../uploads/');
 define('UPLOAD_BL_DIR',    UPLOAD_DIR . 'bl/');
 define('UPLOAD_FICHE_DIR', UPLOAD_DIR . 'fiches/');
+define('UPLOAD_FEB_DIR',   UPLOAD_DIR . 'feb/');
 define('UPLOAD_MAX_SIZE',  10 * 1024 * 1024);  // 10 Mo
 define('UPLOAD_URL',       APP_URL . '/uploads/');
 
@@ -24,7 +25,7 @@ const UPLOAD_ALLOWED_TYPES = [
  * S'assure que les dossiers d'upload existent.
  */
 function upload_ensure_dirs(): void {
-    foreach ([UPLOAD_BL_DIR, UPLOAD_FICHE_DIR] as $dir) {
+    foreach ([UPLOAD_BL_DIR, UPLOAD_FICHE_DIR, UPLOAD_FEB_DIR] as $dir) {
         if (!is_dir($dir)) {
             mkdir($dir, 0775, true);
         }
@@ -35,7 +36,7 @@ function upload_ensure_dirs(): void {
  * Traite l'upload d'un fichier BL ou fiche signée.
  *
  * @param string $field_name   Nom du champ input file ($_FILES key)
- * @param string $type         'bl' ou 'fiche'
+ * @param string $type         'bl', 'fiche' ou 'feb'
  * @param string $prefix       Préfixe du nom de fichier (ex: 'livraison_42')
  * @param bool   $required     Si true, retourne une erreur si aucun fichier
  * @return array ['success'=>bool, 'filename'=>string|null, 'message'=>string]
@@ -43,13 +44,22 @@ function upload_ensure_dirs(): void {
 function upload_document(string $field_name, string $type, string $prefix, bool $required = true): array {
     upload_ensure_dirs();
 
-    $dir = $type === 'fiche' ? UPLOAD_FICHE_DIR : UPLOAD_BL_DIR;
+    $dir = match ($type) {
+        'fiche' => UPLOAD_FICHE_DIR,
+        'feb'   => UPLOAD_FEB_DIR,
+        default => UPLOAD_BL_DIR,
+    };
 
     // Vérifier si un fichier est fourni
     if (empty($_FILES[$field_name]) || $_FILES[$field_name]['error'] === UPLOAD_ERR_NO_FILE) {
         if ($required) {
+            $label = match ($type) {
+                'fiche' => 'fiche signée',
+                'feb'   => 'pièce jointe',
+                default => 'bon de livraison',
+            };
             return ['success' => false, 'filename' => null,
-                    'message' => 'Le document ' . ($type === 'fiche' ? 'fiche signée' : 'bon de livraison') . ' est obligatoire.'];
+                    'message' => "Le document $label est obligatoire."];
         }
         return ['success' => true, 'filename' => null, 'message' => ''];
     }
@@ -99,7 +109,11 @@ function upload_document(string $field_name, string $type, string $prefix, bool 
  * Supprime un fichier uploadé (bl ou fiche).
  */
 function upload_delete(string $filename, string $type): void {
-    $dir  = $type === 'fiche' ? UPLOAD_FICHE_DIR : UPLOAD_BL_DIR;
+    $dir = match ($type) {
+        'fiche' => UPLOAD_FICHE_DIR,
+        'feb'   => UPLOAD_FEB_DIR,
+        default => UPLOAD_BL_DIR,
+    };
     $path = $dir . basename($filename);
     if (file_exists($path)) {
         unlink($path);
@@ -110,7 +124,11 @@ function upload_delete(string $filename, string $type): void {
  * Retourne l'URL publique d'un fichier uploadé.
  */
 function upload_url(string $filename, string $type): string {
-    $sub = $type === 'fiche' ? 'fiches' : 'bl';
+    $sub = match ($type) {
+        'fiche' => 'fiches',
+        'feb'   => 'feb',
+        default => 'bl',
+    };
     return UPLOAD_URL . $sub . '/' . rawurlencode($filename);
 }
 
