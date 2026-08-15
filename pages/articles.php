@@ -428,7 +428,7 @@ include __DIR__ . '/../templates/header.php';
     </select>
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:9px 13px;border:1.5px solid var(--border);border-radius:9px;background:white">
       <input type="checkbox" id="alerteOnly" <?= $f_alerte?'checked':'' ?> onchange="filterArticles()">
-      <i class="ph-duotone ph-warning" style="color:var(--warning)"></i> Alertes
+      <i class="ph-duotone ph-warning" style="color:var(--warning-d)"></i> Alertes
     </label>
     <?php if(can('consommables','can_create')): ?>
     <button class="btn btn-primary" onclick="openMA()">
@@ -463,7 +463,7 @@ include __DIR__ . '/../templates/header.php';
     </div>
     <div class="ac-stock">
       <div>
-        <div class="ac-stock-num" style="color:<?= $ratio<=0?'var(--danger)':($ratio<=1?'var(--warning)':'var(--navy)') ?>">
+        <div class="ac-stock-num" style="color:<?= $ratio<=0?'var(--danger-d)':($ratio<=1?'var(--warning-d)':'var(--navy)') ?>">
           <?= fmt_number($a['stock_global']) ?>
         </div>
         <div style="font-size:10.5px;color:var(--muted)"><?= $UNITES[$a['unite']]??$a['unite'] ?></div>
@@ -471,7 +471,7 @@ include __DIR__ . '/../templates/header.php';
       <div style="flex:1">
         <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
           <span style="color:var(--muted)">Seuil : <?= $a['seuil_alerte'] ?></span>
-          <span style="color:<?= $cls?'var(--danger)':'var(--success)' ?>;font-weight:700"><?= round($pct) ?>%</span>
+          <span style="color:<?= $cls?'var(--danger-d)':'var(--success-d)' ?>;font-weight:700"><?= round($pct) ?>%</span>
         </div>
         <div class="stock-bar"><div class="stock-fill" style="width:<?= $pct ?>%;background:<?= $fill ?>"></div></div>
         <div style="font-size:10px;color:var(--muted);margin-top:3px;display:flex;gap:8px">
@@ -624,12 +624,12 @@ include __DIR__ . '/../templates/header.php';
         </div>
         <div class="form-group" style="background:#fff8e7;border:2px dashed #f59e0b;border-radius:10px;padding:13px;margin-bottom:13px">
           <label style="font-size:13px;font-weight:700;color:#b7791f;display:block;margin-bottom:6px">
-            <i class="ph-duotone ph-paperclip"></i> Bon de livraison <span style="color:var(--danger)">*</span>
+            <i class="ph-duotone ph-paperclip"></i> Bon de livraison <span style="color:var(--danger-d)">*</span>
             <span style="font-size:11px;font-weight:400;color:var(--muted)"> — PDF ou image obligatoire</span>
           </label>
           <input type="file" id="distFichierBL" accept=".pdf,.jpg,.jpeg,.png,.webp"
             style="width:100%;padding:8px;border:1.5px solid #f59e0b;border-radius:8px;font-size:13px;background:white">
-          <div id="distBLPreview" style="display:none;margin-top:6px;font-size:12px;color:var(--success);font-weight:600"></div>
+          <div id="distBLPreview" style="display:none;margin-top:6px;font-size:12px;color:var(--success-d);font-weight:600"></div>
         </div>
         <div class="form-group"><label>Notes</label>
           <textarea class="form-control" id="distNotes" rows="2" placeholder="Destination, motif…"></textarea>
@@ -684,7 +684,7 @@ include __DIR__ . '/../templates/header.php';
             <td style="font-size:12px;white-space:nowrap"><?= fmt_date($h['date_op']) ?></td>
             <td><span class="flux-badge <?= $h['type_op'] ?>"><?= $h['type_op']==='reception'?'Réception':'Distribution' ?></span></td>
             <td><strong style="font-size:11.5px;color:var(--navy)"><?= h($h['art_code']) ?></strong> <?= h($h['art_lib']) ?></td>
-            <td style="text-align:right;font-weight:800;font-size:15px;color:<?= $h['type_op']==='reception'?'var(--success)':'var(--primary)' ?>">
+            <td style="text-align:right;font-weight:800;font-size:15px;color:<?= $h['type_op']==='reception'?'var(--success-d)':'var(--primary-d)' ?>">
               <?= $h['type_op']==='reception'?'+':'-' ?><?= fmt_number($h['quantite']) ?>
               <span style="font-size:11px;font-weight:400;color:var(--muted)"><?= $h['unite'] ?></span>
             </td>
@@ -779,10 +779,10 @@ function updStockActuel(pfx){
   info.style.display='block';
   val.textContent=stock.toLocaleString('fr-FR');
   ind.style.background=stock<=0?'#FEE2E2':stock<=seuil?'#FEF3C7':'#D1FAE5';
-  val.style.color=stock<=0?'var(--danger)':stock<=seuil?'var(--warning)':'var(--success)';
-  msg.innerHTML=stock<=0?'<span style="color:var(--danger);font-weight:600">Stock épuisé</span>':
-                stock<=seuil?'<span style="color:var(--warning);font-weight:600">Stock bas</span>':
-                '<span style="color:var(--success)">Stock suffisant</span>';
+  val.style.color=stock<=0?'var(--danger-d)':stock<=seuil?'var(--warning-d)':'var(--success-d)';
+  msg.innerHTML=stock<=0?'<span style="color:var(--danger-d);font-weight:600">Stock épuisé</span>':
+                stock<=seuil?'<span style="color:var(--warning-d);font-weight:600">Stock bas</span>':
+                '<span style="color:var(--success-d)">Stock suffisant</span>';
   if(o.dataset.prix>0){
     const pEl=document.getElementById(pfx==='rec'?'recPrix':'distPrix');
     if(pEl&&pEl.value==0) pEl.value=o.dataset.prix;

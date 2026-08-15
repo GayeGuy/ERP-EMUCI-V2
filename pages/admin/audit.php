@@ -150,8 +150,8 @@ include __DIR__ . '/../../templates/header.php';
   overflow:hidden;line-height:1.35}
 
 .role-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px}
-.role-badge.superadmin{background:#fdf0ef;color:var(--danger)}
-.role-badge.admin{background:#fef9e7;color:var(--warning)}
+.role-badge.superadmin{background:#fdf0ef;color:var(--danger-d)}
+.role-badge.admin{background:#fef9e7;color:var(--warning-d)}
 .role-badge.gestionnaire{background:#d6eaf8;color:#1a5276}
 .role-badge.lecteur{background:#eaecee;color:#424949}
 
@@ -352,8 +352,8 @@ function viewLog(id){
               <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${l}</div>
               <div style="font-size:13px">${v}</div></div>`).join('')}
         </div>
-        ${oldJson?`<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:var(--danger);margin-bottom:6px;text-transform:uppercase">📤 Ancienne valeur</div><div class="diff-block old">${escHtml(oldJson)}</div></div>`:''}
-        ${newJson?`<div><div style="font-size:11px;font-weight:700;color:var(--success);margin-bottom:6px;text-transform:uppercase">📥 Nouvelle valeur</div><div class="diff-block new">${escHtml(newJson)}</div></div>`:''}
+        ${oldJson?`<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:var(--danger-d);margin-bottom:6px;text-transform:uppercase">📤 Ancienne valeur</div><div class="diff-block old">${escHtml(oldJson)}</div></div>`:''}
+        ${newJson?`<div><div style="font-size:11px;font-weight:700;color:var(--success-d);margin-bottom:6px;text-transform:uppercase">📥 Nouvelle valeur</div><div class="diff-block new">${escHtml(newJson)}</div></div>`:''}
         ${!oldJson&&!newJson?'<p style="color:var(--muted);text-align:center;padding:20px">Aucune donnée de modification enregistrée.</p>':''}`;
     });
 }

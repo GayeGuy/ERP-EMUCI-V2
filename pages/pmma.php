@@ -480,7 +480,7 @@ include __DIR__ . '/../templates/header.php';
   </div>
   <?php if ($nb_stock_bas > 0): ?>
   <div class="kpi" style="border-color:#fca5a5;background:#fff5f5">
-    <div class="kpi-val" style="color:var(--danger)"><?= $nb_stock_bas ?></div>
+    <div class="kpi-val" style="color:var(--danger-d)"><?= $nb_stock_bas ?></div>
     <div class="kpi-lbl">Type(s) en stock bas</div>
   </div>
   <?php endif; ?>
@@ -490,7 +490,7 @@ include __DIR__ . '/../templates/header.php';
   </div>
   <?php if ($grand_total['endommages'] > 0): ?>
   <div class="kpi" style="border-color:#fca5a5">
-    <div class="kpi-val" style="color:var(--danger)"><?= fmt_number($grand_total['endommages']) ?></div>
+    <div class="kpi-val" style="color:var(--danger-d)"><?= fmt_number($grand_total['endommages']) ?></div>
     <div class="kpi-lbl">Endommagés sur la période</div>
   </div>
   <?php endif; ?>
@@ -525,7 +525,7 @@ include __DIR__ . '/../templates/header.php';
           <div style="font-size:11px;color:var(--muted)">Seuil : <?= (int)($item['seuil_alerte'] ?? 10) ?></div>
         </div>
         <div style="text-align:right">
-          <div style="font-family:'Montserrat',sans-serif;font-size:26px;font-weight:900;color:<?= $item['quantite'] < ($item['seuil_alerte'] ?? 10) ? 'var(--danger)' : 'var(--blue)' ?>">
+          <div style="font-family:'Montserrat',sans-serif;font-size:26px;font-weight:900;color:<?= $item['quantite'] < ($item['seuil_alerte'] ?? 10) ? 'var(--danger-d)' : 'var(--blue)' ?>">
             <?= (int)$item['quantite'] ?>
           </div>
           <div style="font-size:10px;color:var(--muted)">unités</div>
@@ -575,11 +575,11 @@ include __DIR__ . '/../templates/header.php';
             <?= h($c['type_pmma'] ?: 'Standard') ?>
           </span></td>
           <td style="text-align:center;font-weight:700;color:var(--blue)"><?= (int)$c['utilises'] ?></td>
-          <td style="text-align:center;font-weight:600;color:<?= $c['endommages'] > 0 ? 'var(--danger)' : 'var(--muted)' ?>">
+          <td style="text-align:center;font-weight:600;color:<?= $c['endommages'] > 0 ? 'var(--danger-d)' : 'var(--muted)' ?>">
             <?= (int)$c['endommages'] ?: '—' ?>
           </td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px"><?= (int)$c['total_sortis'] ?></td>
-          <td style="text-align:center;font-weight:700;color:<?= is_int($restant) && $restant < 10 ? 'var(--danger)' : 'var(--navy)' ?>">
+          <td style="text-align:center;font-weight:700;color:<?= is_int($restant) && $restant < 10 ? 'var(--danger-d)' : 'var(--navy)' ?>">
             <?= is_int($restant) ? $restant : $restant ?>
           </td>
         </tr>
@@ -588,7 +588,7 @@ include __DIR__ . '/../templates/header.php';
         <tr style="background:#f0f4ff">
           <td colspan="<?= $site_force ? 2 : 3 ?>" style="font-weight:700;color:var(--navy)">TOTAL PÉRIODE</td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;color:var(--blue)"><?= $grand_total['utilises'] ?></td>
-          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;color:var(--danger)"><?= $grand_total['endommages'] ?: '—' ?></td>
+          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;color:var(--danger-d)"><?= $grand_total['endommages'] ?: '—' ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;font-size:16px;color:var(--navy)"><?= $grand_total['total'] ?></td>
           <td></td>
         </tr>

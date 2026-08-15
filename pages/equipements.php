@@ -217,7 +217,7 @@ include __DIR__ . '/../templates/header.php';
 .etat-neuf{background:#d1fae5;color:#065f46} .etat-bon{background:#dbeafe;color:#1d4ed8}
 .etat-usage{background:#fef3c7;color:#92400e} .etat-endomage,.etat-endommage{background:#fee2e2;color:#991b1b}
 .etat-hs{background:#1a1a1a;color:white}
-.taux-ok{color:var(--success);font-weight:700} .taux-warn{color:#f39c12;font-weight:700} .taux-danger{color:var(--danger);font-weight:700}
+.taux-ok{color:var(--success-d);font-weight:700} .taux-warn{color:#f39c12;font-weight:700} .taux-danger{color:var(--danger-d);font-weight:700}
 </style>
 
 <!-- ── LIGNE 1 : Onglets catégorie + bouton Ajouter ── -->
@@ -239,8 +239,8 @@ include __DIR__ . '/../templates/header.php';
 <!-- ── KPIs ── -->
 <div class="equip-kpis">
   <div class="ek">          <div class="ek-val"><?= $nb_total ?></div>                                          <div class="ek-lbl">Total</div></div>
-  <div class="ek green">    <div class="ek-val" style="color:var(--success)"><?= $nb_ok ?></div>                <div class="ek-lbl">✅ Opérationnels</div></div>
-  <div class="ek red">      <div class="ek-val" style="color:var(--danger)"><?= $nb_hs ?></div>                 <div class="ek-lbl">❌ Hors service</div></div>
+  <div class="ek green">    <div class="ek-val" style="color:var(--success-d)"><?= $nb_ok ?></div>                <div class="ek-lbl">✅ Opérationnels</div></div>
+  <div class="ek red">      <div class="ek-val" style="color:var(--danger-d)"><?= $nb_hs ?></div>                 <div class="ek-lbl">❌ Hors service</div></div>
   <div class="ek purple">   <div class="ek-val" style="color:#8e44ad"><?= $nb_stock ?></div>                    <div class="ek-lbl">📦 En stock</div></div>
   <div class="ek orange">   <div class="ek-val" style="color:#f39c12"><?= $nb_fin_cycle ?></div>               <div class="ek-lbl">⚠️ Fin cycle &lt;30j</div></div>
 </div>
@@ -296,11 +296,11 @@ include __DIR__ . '/../templates/header.php';
   <div class="card-header">
     <h3>
       <?= $f_categorie==='informatique'
-        ? '<i class="ph-duotone ph-monitor" style="color:var(--primary)"></i> Équipements Informatique'
-        : '<i class="ph-duotone ph-wrench" style="color:var(--primary)"></i> Équipements Opérationnel' ?>
+        ? '<i class="ph-duotone ph-monitor" style="color:var(--primary-d)"></i> Équipements Informatique'
+        : '<i class="ph-duotone ph-wrench" style="color:var(--primary-d)"></i> Équipements Opérationnel' ?>
       <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= $nb_total ?>)</span>
       <?php if($f_type): ?>
-        <span style="font-size:12px;font-weight:600;color:var(--primary);background:var(--primary-l);padding:2px 10px;border-radius:20px;margin-left:8px">
+        <span style="font-size:12px;font-weight:600;color:var(--primary-d);background:var(--primary-l);padding:2px 10px;border-radius:20px;margin-left:8px">
           <?= h(current(array_filter($nomenclatures, fn($n)=>$n['id']===$f_type))['libelle'] ?? '') ?>
         </span>
       <?php endif; ?>
@@ -347,7 +347,7 @@ include __DIR__ . '/../templates/header.php';
           </td>
           <td style="text-align:center;font-size:12px">
             <?php if($days_left !== null): ?>
-            <span style="color:<?= $days_left<0?'var(--danger)':($days_left<30?'#f39c12':'var(--success)') ?>;font-weight:700">
+            <span style="color:<?= $days_left<0?'var(--danger-d)':($days_left<30?'#f39c12':'var(--success-d)') ?>;font-weight:700">
               <?= $days_left < 0 ? 'Dépassé' : "$days_left j" ?>
             </span>
             <?php else: ?><span style="color:var(--muted)">—</span><?php endif; ?>

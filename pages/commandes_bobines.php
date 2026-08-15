@@ -353,7 +353,7 @@ include __DIR__ . '/../templates/header.php';
 .detail-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:7px;
   font-size:11.5px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);
   background:white;color:var(--navy);transition:all .15s}
-.detail-btn:hover{background:var(--tertiary);border-color:var(--primary);color:var(--primary)}
+.detail-btn:hover{background:var(--tertiary);border-color:var(--primary);color:var(--primary-d)}
 .st-en_attente{background:#FEF3C7;color:#92400E}
 .st-valide{background:#DBEAFE;color:#1D4ED8}
 .st-en_preparation{background:#FFF7ED;color:#C2410C}
@@ -411,7 +411,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- LISTE -->
 <div class="card">
   <div class="card-header">
-    <h3><i class="ph-duotone ph-film-strip" style="color:var(--primary)"></i> Commandes Bobines
+    <h3><i class="ph-duotone ph-film-strip" style="color:var(--primary-d)"></i> Commandes Bobines
       <span style="font-size:12px;font-weight:400;color:var(--muted)">(<?= count($commandes) ?>)</span>
     </h3>
   </div>
@@ -432,7 +432,7 @@ include __DIR__ . '/../templates/header.php';
         <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">Aucune commande.</td></tr>
       <?php else: foreach($commandes as $cmd): ?>
         <tr>
-          <td style="font-family:monospace;font-weight:700;color:var(--primary);font-size:12px"><?= h($cmd['numero']) ?></td>
+          <td style="font-family:monospace;font-weight:700;color:var(--primary-d);font-size:12px"><?= h($cmd['numero']) ?></td>
           <td>
             <div style="font-weight:700;color:var(--navy)"><?= h($cmd['type_bobine']) ?></div>
             <div style="font-size:11px;color:var(--muted)"><?= h($cmd['libelle_type']) ?></div>
@@ -502,7 +502,7 @@ include __DIR__ . '/../templates/header.php';
 
     <div class="form-group" style="margin-bottom:16px">
       <label style="font-size:13px;font-weight:700;color:var(--navy);display:block;margin-bottom:6px">
-        Type de bobine <span style="color:var(--danger)">*</span>
+        Type de bobine <span style="color:var(--danger-d)">*</span>
       </label>
       <select class="form-control" id="nTypeBobine" onchange="checkDispo()">
         <option value="">— Sélectionner le type —</option>
@@ -537,7 +537,7 @@ include __DIR__ . '/../templates/header.php';
     <input type="hidden" id="vCmdId">
     <input type="hidden" id="vDecision">
     <div id="motifGrp" style="display:none;margin-bottom:14px">
-      <label style="font-size:13px;font-weight:700;color:var(--danger);display:block;margin-bottom:6px">Motif de rejet *</label>
+      <label style="font-size:13px;font-weight:700;color:var(--danger-d);display:block;margin-bottom:6px">Motif de rejet *</label>
       <textarea class="form-control" id="vMotif" rows="2" placeholder="Raison du rejet…"></textarea>
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px">
@@ -785,7 +785,7 @@ async function ouvrirPreparation(cmdId, num, type, siteId){
   const d = await ap({action:'get_bobines_dispo',type_bobine:type});
   const bobines = d.data || [];
   if(bobines.length===0){
-    document.getElementById('listeBobinesDispo').innerHTML='<div style="padding:20px;text-align:center;color:var(--danger)">❌ Aucune bobine disponible en entrepôt pour ce type.</div>';
+    document.getElementById('listeBobinesDispo').innerHTML='<div style="padding:20px;text-align:center;color:var(--danger-d)">❌ Aucune bobine disponible en entrepôt pour ce type.</div>';
     return;
   }
   let html='<table style="width:100%;border-collapse:collapse">';

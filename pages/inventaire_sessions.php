@@ -235,7 +235,7 @@ include __DIR__ . '/../templates/header.php';
   <div class="ses-kpi">
     <div class="ses-k"><div class="ses-k-val"><?= $nb_total ?></div><div class="ses-k-lbl">Sites concernés</div></div>
     <div class="ses-k orange"><div class="ses-k-val" style="color:#f39c12"><?= $nb_en_cours + $nb_attente ?></div><div class="ses-k-lbl">En cours / non commencés</div></div>
-    <div class="ses-k green"><div class="ses-k-val" style="color:var(--success)"><?= $nb_clotures ?></div><div class="ses-k-lbl">Clôturés</div></div>
+    <div class="ses-k green"><div class="ses-k-val" style="color:var(--success-d)"><?= $nb_clotures ?></div><div class="ses-k-lbl">Clôturés</div></div>
   </div>
 
   <div class="card">

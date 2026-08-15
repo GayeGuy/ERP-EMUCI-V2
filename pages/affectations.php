@@ -282,12 +282,12 @@ include __DIR__ . '/../templates/header.php';
         <!-- BON DE LIVRAISON OBLIGATOIRE pour transfert vers site -->
         <div id="affBLWrap" style="display:none;background:#fff8e7;border:2px dashed #f39c12;border-radius:10px;padding:14px;margin-bottom:14px">
           <label style="font-size:13px;font-weight:700;color:#b7791f;display:block;margin-bottom:6px">
-            📎 Bon de livraison <span style="color:var(--danger)">*</span>
+            📎 Bon de livraison <span style="color:var(--danger-d)">*</span>
             <span style="font-size:11px;font-weight:400;color:var(--muted)"> — obligatoire pour tout transfert vers un site</span>
           </label>
           <input type="file" id="affFichierBL" accept=".pdf,.jpg,.jpeg,.png,.webp"
                  style="width:100%;padding:8px;border:1.5px solid #f39c12;border-radius:8px;font-size:13px;background:white">
-          <div id="affBLPreview" style="display:none;margin-top:6px;font-size:12px;color:var(--success);font-weight:600"></div>
+          <div id="affBLPreview" style="display:none;margin-top:6px;font-size:12px;color:var(--success-d);font-weight:600"></div>
         </div>
 
         <div style="display:flex;gap:8px;justify-content:flex-end">

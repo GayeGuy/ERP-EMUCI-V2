@@ -139,7 +139,7 @@ include __DIR__ . '/../templates/header.php';
   font-size: 12.5px;
 }
 .profil-meta:last-child { border-bottom: none; }
-.profil-meta i { font-size: 16px; color: var(--primary); flex-shrink: 0; margin-top: 2px; }
+.profil-meta i { font-size: 16px; color: var(--primary-d); flex-shrink: 0; margin-top: 2px; }
 .profil-meta-val { color: var(--text); font-weight: 600; word-break: break-all; line-height: 1.3; }
 .profil-meta-lbl { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
 
@@ -269,7 +269,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="card">
       <div class="card-header">
         <h3>
-          <i class="ph-duotone ph-user-circle" style="margin-right:8px;color:var(--primary)"></i>
+          <i class="ph-duotone ph-user-circle" style="margin-right:8px;color:var(--primary-d)"></i>
           Informations personnelles
         </h3>
       </div>
@@ -321,7 +321,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="card">
       <div class="card-header">
         <h3>
-          <i class="ph-duotone ph-lock-key" style="margin-right:8px;color:var(--primary)"></i>
+          <i class="ph-duotone ph-lock-key" style="margin-right:8px;color:var(--primary-d)"></i>
           Changer le mot de passe
         </h3>
       </div>
@@ -363,7 +363,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="card">
       <div class="card-header">
         <h3>
-          <i class="ph-duotone ph-paint-bucket" style="margin-right:8px;color:var(--primary)"></i>
+          <i class="ph-duotone ph-paint-bucket" style="margin-right:8px;color:var(--primary-d)"></i>
           Préférences d'affichage
         </h3>
       </div>
@@ -388,7 +388,7 @@ include __DIR__ . '/../templates/header.php';
             <span class="t-sub">Suit les réglages de l'OS</span>
           </div>
         </div>
-        <div id="theme-fb" style="margin-top:14px;font-size:12.5px;color:var(--primary);font-weight:600;min-height:20px"></div>
+        <div id="theme-fb" style="margin-top:14px;font-size:12.5px;color:var(--primary-d);font-weight:600;min-height:20px"></div>
       </div>
     </div>
 
@@ -396,7 +396,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="card">
       <div class="card-header">
         <h3>
-          <i class="ph-duotone ph-pen-nib" style="margin-right:8px;color:var(--primary)"></i>
+          <i class="ph-duotone ph-pen-nib" style="margin-right:8px;color:var(--primary-d)"></i>
           Signature électronique
         </h3>
       </div>

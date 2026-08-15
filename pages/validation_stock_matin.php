@@ -1340,7 +1340,7 @@ $nb_avec_ecart  = count(array_filter($validations_jour, fn($v) => $v['statut'] !
 .btn-vsm-revise{background:#1B75BC;color:white;border:none;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .btn-vsm-revise:hover{background:#1565a8}
 .detail-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:white;color:var(--navy);transition:all .15s;text-decoration:none}
-.detail-btn:hover{background:var(--tertiary);border-color:var(--primary);color:var(--primary)}
+.detail-btn:hover{background:var(--tertiary);border-color:var(--primary);color:var(--primary-d)}
 /* ── ONGLETS ── */
 .vsm-tabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px}
 .vsm-tab{padding:10px 22px;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;display:flex;align-items:center;gap:7px;transition:color .15s,border-color .15s;background:none;border-top:none;border-left:none;border-right:none}
@@ -2662,7 +2662,7 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
         <td style="padding:9px 12px;text-align:center;font-weight:600;color:#1B75BC">${b.stock_systeme}</td>` : ''}
         <td style="padding:9px 12px;text-align:center;font-weight:700;color:${b.films_restants<=0?'#DC2626':b.films_restants<50?'#D97706':'#065F46'};font-size:14px">${b.films_restants}</td>
         ${hasImport ? `
-        <td style="padding:9px 12px;text-align:center;font-weight:800;color:${hasEcart?ecartColor:'var(--success)'}">
+        <td style="padding:9px 12px;text-align:center;font-weight:800;color:${hasEcart?ecartColor:'var(--success-d)'}">
           ${hasEcart ? (b.ecart>0?'+':'')+b.ecart : '✓'}
         </td>` : ''}
         <td style="padding:9px 12px;text-align:center">

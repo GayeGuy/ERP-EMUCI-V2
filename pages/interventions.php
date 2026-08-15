@@ -185,7 +185,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- KPIs -->
 <div class="int-kpis">
   <div class="ik"><div class="ik-val"><?= $nb_preventive ?></div><div class="ik-lbl">🗓️ Préventives</div></div>
-  <div class="ik red"><div class="ik-val" style="color:var(--danger)"><?= $nb_curative ?></div><div class="ik-lbl">🔧 Curatives</div></div>
+  <div class="ik red"><div class="ik-val" style="color:var(--danger-d)"><?= $nb_curative ?></div><div class="ik-lbl">🔧 Curatives</div></div>
   <div class="ik orange"><div class="ik-val" style="color:#f39c12"><?= $nb_demandees ?></div><div class="ik-lbl">📬 Demandes en attente</div></div>
   <div class="ik green"><div class="ik-val" style="color:#f39c12"><?= $nb_en_cours ?></div><div class="ik-lbl">⚙️ En cours</div></div>
 </div>

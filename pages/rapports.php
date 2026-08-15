@@ -302,9 +302,9 @@ include __DIR__ . '/../templates/header.php';
 .rkpi{background:white;border:1px solid var(--border);border-radius:12px;padding:16px 18px;text-align:center}
 .rkpi .rv{font-family:'Montserrat',sans-serif;font-size:28px;font-weight:800;color:var(--navy)}
 .rkpi .rl{font-size:11.5px;color:var(--muted);margin-top:4px}
-.rkpi.danger .rv{color:var(--danger)}
-.rkpi.warning .rv{color:var(--warning)}
-.rkpi.success .rv{color:var(--success)}
+.rkpi.danger .rv{color:var(--danger-d)}
+.rkpi.warning .rv{color:var(--warning-d)}
+.rkpi.success .rv{color:var(--success-d)}
 
 .rapport-grid{display:grid;gap:20px;margin-bottom:20px}
 .rapport-grid.c2{grid-template-columns:1fr 1fr}
@@ -327,9 +327,9 @@ include __DIR__ . '/../templates/header.php';
 .fc-row:last-child{border-bottom:none}
 .fc-row-wide{padding:12px 0;font-size:13.5px}
 .fc-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;flex-shrink:0}
-.fc-badge.exp{background:#fdf0ef;color:var(--danger)}
-.fc-badge.soon{background:#fef9e7;color:var(--warning)}
-.fc-badge.ok{background:#eafaf1;color:var(--success)}
+.fc-badge.exp{background:#fdf0ef;color:var(--danger-d)}
+.fc-badge.soon{background:#fef9e7;color:var(--warning-d)}
+.fc-badge.ok{background:#eafaf1;color:var(--success-d)}
 
 /* ── COÛTS FCFA ── */
 .cout-kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
@@ -511,10 +511,10 @@ include __DIR__ . '/../templates/header.php';
       ?>
         <tr>
           <td style="font-size:13px;font-weight:500"><?= h($s['site']) ?></td>
-          <td style="text-align:center;color:var(--success);font-weight:700"><?= $s['neuf'] ?></td>
-          <td style="text-align:center;color:var(--info);font-weight:700"><?= $s['bon'] ?></td>
-          <td style="text-align:center;color:var(--warning);font-weight:700"><?= $s['usage_count'] ?></td>
-          <td style="text-align:center;color:var(--danger);font-weight:700"><?= $s['hs'] ?></td>
+          <td style="text-align:center;color:var(--success-d);font-weight:700"><?= $s['neuf'] ?></td>
+          <td style="text-align:center;color:var(--primary-d);font-weight:700"><?= $s['bon'] ?></td>
+          <td style="text-align:center;color:var(--warning-d);font-weight:700"><?= $s['usage_count'] ?></td>
+          <td style="text-align:center;color:var(--danger-d);font-weight:700"><?= $s['hs'] ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:16px"><?= $s['total'] ?></td>
           <td style="width:150px">
             <div style="display:flex;height:8px;border-radius:4px;overflow:hidden">
@@ -542,7 +542,7 @@ include __DIR__ . '/../templates/header.php';
     </div>
     <div class="r-card-body" style="padding:10px 18px">
       <?php if(empty($fin_cycle_soon)): ?>
-      <div style="text-align:center;padding:30px;color:var(--success)">✅ Aucun équipement en fin de cycle dans les 90 prochains jours.</div>
+      <div style="text-align:center;padding:30px;color:var(--success-d)">✅ Aucun équipement en fin de cycle dans les 90 prochains jours.</div>
       <?php else: foreach($fin_cycle_soon as $f):
         $j=(int)$f['jours'];
         $cls=$j<0?'exp':($j<=30?'soon':'ok');

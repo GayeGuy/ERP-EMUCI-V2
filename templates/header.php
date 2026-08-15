@@ -37,7 +37,14 @@ $unread = count($notifs);
     :root {
       /* Brand */
       --primary:    #7C92FF;
-      --primary-d:  #5B76FF;
+      /* -d = variante « texte lisible » : marque et texte ont des exigences de
+         contraste différentes (AA texte = 4.5:1 sur fond clair), donc deux
+         rôles distincts plutôt qu'une seule teinte réutilisée partout.
+         #7C92FF ne passe pas (2.83:1) ; #3D4FD1 passe (6.49:1) en gardant la
+         même teinte. Ne remplace jamais --primary : l'icône active de la
+         sidebar (fond sombre) a besoin de la teinte claire, qui y passe déjà
+         (4.94:1) — la foncer inverserait le problème. */
+      --primary-d:  #3D4FD1;
       --primary-l:  #E8ECFF;
       --secondary:  #A5D8FF;
       --secondary-l:#E8F5FF;
@@ -63,6 +70,15 @@ $unread = count($notifs);
       --success:    #34D399;
       --warning:    #FBBF24;
       --info:       #7C92FF;
+      /* Variantes « texte lisible » des couleurs d'état, même logique que
+         --primary-d ci-dessus : #F87171/#34D399/#FBBF24 ne passent pas AA en
+         texte sur fond clair (2.77 / 1.92 / 1.67:1). À utiliser pour tout
+         color: sur fond clair, ou tout fond plein avec texte blanc dessus
+         (bouton, pastille) ; --danger/--success/--warning restent la couleur
+         « marque » (bordures, puces, fonds décoratifs pâles). */
+      --danger-d:   #C0392B;
+      --success-d:  #0A7A52;
+      --warning-d:  #8A5A00;
       --sidebar-w:  252px;
       --topbar-h:   64px;
       --radius:     16px;
@@ -141,7 +157,7 @@ $unread = count($notifs);
       font-weight: 700;
       box-shadow: 0 2px 12px rgba(0,0,0,.12);
     }
-    .nav-item.active i { color: var(--primary); }
+    .nav-item.active i { color: var(--primary-d); }
     .nav-item .nav-icon {
       width: 34px; height: 34px;
       display: flex; align-items: center; justify-content: center;
@@ -152,7 +168,7 @@ $unread = count($notifs);
     }
     .nav-item .nav-icon i { font-size: 17px; line-height: 1; color: white; transition: color .18s; }
     .nav-item:hover .nav-icon { background: rgba(255,255,255,.18); }
-    .nav-item.active .nav-icon { background: var(--primary); box-shadow: 0 4px 12px rgba(124,146,255,.5); }
+    .nav-item.active .nav-icon { background: var(--primary-d); box-shadow: 0 4px 12px rgba(124,146,255,.5); }
     .nav-item.active .nav-icon i { color: white; }
     .nav-item.nav-equip.active .nav-icon { background: rgba(124,146,255,.3); box-shadow: none; }
     .nav-item.nav-equip.active {
@@ -160,10 +176,10 @@ $unread = count($notifs);
       background: rgba(255,255,255,.12);
       box-shadow: none;
     }
-    .nav-item.nav-equip.active i { color: var(--primary); }
+    .nav-item.nav-equip.active i { color: var(--primary-d); }
     .nav-badge {
       margin-left: auto;
-      background: var(--primary);
+      background: var(--primary-d);
       color: white; font-size: 10px; font-weight: 700;
       padding: 2px 7px; border-radius: 20px;
     }
@@ -246,10 +262,10 @@ $unread = count($notifs);
       cursor: pointer; font-size: 18px;
       transition: all .15s;
     }
-    .notif-btn:hover { background: var(--primary-l); border-color: var(--primary); }
+    .notif-btn:hover { background: var(--primary-l); border-color: var(--primary-d); }
     .notif-count {
       position: absolute; top: -5px; right: -5px;
-      background: var(--danger); color: white;
+      background: var(--danger-d); color: white;
       font-size: 10px; font-weight: 700;
       width: 18px; height: 18px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
@@ -274,7 +290,7 @@ $unread = count($notifs);
       display: flex; align-items: center; justify-content: space-between;
     }
     .notif-header h4 { font-size: 14px; font-weight: 700; color: var(--navy); font-family: 'Plus Jakarta Sans',sans-serif; }
-    .notif-header a  { font-size: 12px; color: var(--primary); text-decoration: none; font-weight: 600; }
+    .notif-header a  { font-size: 12px; color: var(--primary-d); text-decoration: none; font-weight: 600; }
     .notif-list { max-height: 320px; overflow-y: auto; }
     .notif-item { padding: 12px 18px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .15s; }
     .notif-item:hover { background: var(--tertiary); }
@@ -349,14 +365,14 @@ $unread = count($notifs);
       transition: all .18s cubic-bezier(.4,0,.2,1);
       letter-spacing: .1px;
     }
-    .btn-primary   { background: var(--primary); color: white; box-shadow: 0 2px 12px rgba(124,146,255,.35); }
+    .btn-primary   { background: var(--primary-d); color: white; box-shadow: 0 2px 12px rgba(124,146,255,.35); }
     .btn-primary:hover { background: var(--primary-d); box-shadow: 0 4px 16px rgba(124,146,255,.45); transform: translateY(-1px); }
     .btn-secondary { background: white; color: var(--navy); border: 1.5px solid var(--border); }
-    .btn-secondary:hover { background: var(--tertiary); border-color: var(--primary); color: var(--primary-d); }
+    .btn-secondary:hover { background: var(--tertiary); border-color: var(--primary-d); color: var(--primary-d); }
     .btn-danger    { background: #FEE2E2; color: #991B1B; border: 1.5px solid #FCA5A5; }
-    .btn-danger:hover  { background: var(--danger); color: white; border-color: var(--danger); }
+    .btn-danger:hover  { background: var(--danger-d); color: white; border-color: var(--danger-d); }
     .btn-success   { background: #D1FAE5; color: #065F46; border: 1.5px solid #6EE7B7; }
-    .btn-success:hover { background: var(--success); color: white; border-color: var(--success); }
+    .btn-success:hover { background: var(--success-d); color: white; border-color: var(--success-d); }
     .btn-sm { padding: 6px 13px; font-size: 12px; border-radius: 8px; }
 
     /* ===== FORMS ===== */
@@ -377,7 +393,7 @@ $unread = count($notifs);
       transition: border-color .15s, box-shadow .15s;
     }
     .form-control:focus {
-      border-color: var(--primary);
+      border-color: var(--primary-d);
       box-shadow: 0 0 0 3px rgba(124,146,255,.15);
     }
     select.form-control { cursor: pointer; }
@@ -392,8 +408,8 @@ $unread = count($notifs);
       text-decoration: none; transition: all .15s;
       font-weight: 500;
     }
-    .page-btn:hover { background: var(--primary-l); border-color: var(--primary); color: var(--primary-d); }
-    .page-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+    .page-btn:hover { background: var(--primary-l); border-color: var(--primary-d); color: var(--primary-d); }
+    .page-btn.active { background: var(--primary-d); color: white; border-color: var(--primary-d); }
     .page-info { margin-left: auto; font-size: 12px; color: var(--muted); }
 
     /* ===== ALERTS ===== */
@@ -505,7 +521,7 @@ $unread = count($notifs);
   /* 8 — Pagination */
   [data-theme="dark"] .page-btn        { background: #1E293B; color: #CBD5E1; border-color: #334155; }
   [data-theme="dark"] .page-btn:hover  { background: #253349; border-color: var(--primary); color: #93C5FD; }
-  [data-theme="dark"] .page-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+  [data-theme="dark"] .page-btn.active { background: var(--primary-d); color: white; border-color: var(--primary-d); }
   [data-theme="dark"] .page-info       { color: #7A99BE; }
 
   /* 9 — Notifications dropdown */
@@ -599,7 +615,7 @@ $unread = count($notifs);
   /* ═══ TAB BUTTONS ═══ */
   [data-theme="dark"] .tab-btn       { color: #94A3B8 !important; background: transparent; border-color: #334155 !important; }
   [data-theme="dark"] .tab-btn:hover { color: #E2E8F0 !important; }
-  [data-theme="dark"] .tab-btn.active { color: var(--primary) !important; border-color: var(--primary) !important; }
+  [data-theme="dark"] .tab-btn.active { color: var(--primary-d) !important; border-color: var(--primary) !important; }
 
   /* ═══ COMMANDES BOBINES — statuts pills ═══ */
   [data-theme="dark"] .s-attente        { background: #451A03 !important; }
@@ -755,7 +771,7 @@ $unread = count($notifs);
           <a href="<?= APP_URL ?>/pages/mon_profil.php" class="um-item"
              style="display:flex;align-items:center;gap:10px;padding:12px 16px;text-decoration:none;font-size:13px;font-weight:500;transition:background .12s;color:var(--text)"
              onmouseover="this.style.background='var(--tertiary)'" onmouseout="this.style.background=''">
-            <i class="ph-duotone ph-user-circle" style="font-size:18px;color:var(--primary)"></i>
+            <i class="ph-duotone ph-user-circle" style="font-size:18px;color:var(--primary-d)"></i>
             Mon profil
           </a>
           <div style="height:1px;background:var(--border)"></div>
@@ -774,7 +790,7 @@ $unread = count($notifs);
   <!-- NOTIFICATION DROPDOWN -->
   <div class="notif-dropdown" id="notif-dropdown">
     <div class="notif-header">
-      <h4>Notifications <?php if ($unread): ?><span style="color:var(--danger)">(<?= $unread ?>)</span><?php endif; ?></h4>
+      <h4>Notifications <?php if ($unread): ?><span style="color:var(--danger-d)">(<?= $unread ?>)</span><?php endif; ?></h4>
       <a href="javascript:void(0)" onclick="markAllRead()">Tout marquer lu</a>
     </div>
     <div class="notif-list">

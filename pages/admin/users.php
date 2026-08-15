@@ -167,8 +167,8 @@ include __DIR__ . '/../../templates/header.php';
 <style>
 .user-avatar-sm{width:38px;height:38px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:700;flex-shrink:0}
 .role-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.5px}
-.role-badge.superadmin{background:#fdf0ef;color:var(--danger)}
-.role-badge.admin{background:#fef9e7;color:var(--warning)}
+.role-badge.superadmin{background:#fdf0ef;color:var(--danger-d)}
+.role-badge.admin{background:#fef9e7;color:var(--warning-d)}
 .role-badge.gestionnaire{background:#d6eaf8;color:#1a5276}
 .role-badge.lecteur{background:#eaecee;color:#424949}
 .status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}

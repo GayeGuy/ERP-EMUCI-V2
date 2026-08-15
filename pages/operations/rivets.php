@@ -335,7 +335,7 @@ $nb_bas     = count(array_filter($stocks, fn($r) => (int)$r['quantite'] < 200));
   </div>
   <?php if ($nb_bas > 0): ?>
   <div class="kpi" style="border-color:#fca5a5;background:#fff5f5">
-    <div class="kpi-val" style="color:var(--danger)"><?= $nb_bas ?></div>
+    <div class="kpi-val" style="color:var(--danger-d)"><?= $nb_bas ?></div>
     <div class="kpi-lbl">Type(s) en stock bas</div>
   </div>
   <?php endif; ?>
@@ -362,7 +362,7 @@ foreach ($stocks as $r) {
       $lbl     = $item['type_rivet'] === 'gonflable' ? 'Gonflables' : 'Éclatés';
       $qty     = (int)$item['quantite'];
       $low     = $qty < 200;
-      $clr     = $low ? 'var(--danger)' : 'var(--blue)';
+      $clr     = $low ? 'var(--danger-d)' : 'var(--blue)';
     ?>
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
       <div>
@@ -414,7 +414,7 @@ foreach ($stocks as $r) {
           <td style="text-align:center;font-weight:700"><?= $r['total_engins'] ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:700;color:#1565c0"><?= $r['rivets_gonflables'] ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:700;color:#880e4f"><?= $r['rivets_eclates'] ?></td>
-          <td style="text-align:center;color:<?= $r['rivets_endommages']>0 ? 'var(--danger)' : 'var(--muted)' ?>;font-weight:600"><?= $r['rivets_endommages']?:0 ?></td>
+          <td style="text-align:center;color:<?= $r['rivets_endommages']>0 ? 'var(--danger-d)' : 'var(--muted)' ?>;font-weight:600"><?= $r['rivets_endommages']?:0 ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px"><?= $r['total_sortis'] ?></td>
         </tr>
       <?php endforeach; ?>
@@ -422,7 +422,7 @@ foreach ($stocks as $r) {
           <td colspan="<?= $site_force_r ? 2 : 3 ?>" style="font-weight:700;color:var(--navy)">TOTAL PÉRIODE</td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;color:#1565c0"><?= $total_gonfl ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;color:#880e4f"><?= $total_eclat ?></td>
-          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;color:var(--danger)"><?= $total_endom ?></td>
+          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;color:var(--danger-d)"><?= $total_endom ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;font-size:16px;color:var(--navy)"><?= $grand_total_sortis ?></td>
         </tr>
       <?php endif; ?>

@@ -109,7 +109,7 @@ include __DIR__ . '/../templates/header.php';
 .toggle-thumb{position:absolute;top:3px;left:3px;width:18px;height:18px;background:white;border-radius:50%;transition:.2s;box-shadow:0 1px 4px rgba(0,0,0,.2)}
 .toggle-wrap input:checked ~ .toggle-track{background:var(--blue)}
 .toggle-wrap input:checked ~ .toggle-thumb{transform:translateX(20px)}
-.badge-sr{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:var(--primary-l);color:var(--primary)}
+.badge-sr{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:var(--primary-l);color:var(--primary-d)}
 </style>
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:10px">

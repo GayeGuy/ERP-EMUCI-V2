@@ -289,8 +289,8 @@ include __DIR__ . '/../templates/header.php';
 .alerte-info .a-titre { font-size: 13px; font-weight: 500; }
 .alerte-info .a-sub   { font-size: 11px; color: var(--muted); }
 .alerte-badge { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
-.alerte-badge.danger  { background: #fdf0ef; color: var(--danger); }
-.alerte-badge.warning { background: #fef9e7; color: var(--warning); }
+.alerte-badge.danger  { background: #fdf0ef; color: var(--danger-d); }
+.alerte-badge.warning { background: #fef9e7; color: var(--warning-d); }
 
 /* STOCK BAR */
 .stock-item { margin-bottom: 14px; }
@@ -490,10 +490,10 @@ include __DIR__ . '/../templates/header.php';
       <tbody>
       <?php foreach($stock_conso_site as $sc):
         $pct = $sc['seuil_alerte']>0?min(100,round($sc['quantite']/$sc['seuil_alerte']*100)):100;
-        $col = $sc['quantite']<=$sc['seuil_alerte']?'var(--danger)':($pct<150?'var(--warning)':'var(--success)');
+        $col = $sc['quantite']<=$sc['seuil_alerte']?'var(--danger-d)':($pct<150?'var(--warning-d)':'var(--success-d)');
       ?>
       <tr>
-        <td style="font-size:13px;font-weight:<?= $sc['quantite']<=$sc['seuil_alerte']?'700':'400' ?>;color:<?= $sc['quantite']<=$sc['seuil_alerte']?'var(--danger)':'var(--text)' ?>"><?= h($sc['libelle']) ?><?= $sc['quantite']<=$sc['seuil_alerte']?' ⚠️':'' ?></td>
+        <td style="font-size:13px;font-weight:<?= $sc['quantite']<=$sc['seuil_alerte']?'700':'400' ?>;color:<?= $sc['quantite']<=$sc['seuil_alerte']?'var(--danger-d)':'var(--text)' ?>"><?= h($sc['libelle']) ?><?= $sc['quantite']<=$sc['seuil_alerte']?' ⚠️':'' ?></td>
         <td style="color:var(--muted);font-size:12px"><?= $sc['unite'] ?></td>
         <td style="text-align:right;font-weight:700;color:<?= $col ?>"><?= fmt_number($sc['quantite'],1) ?></td>
         <td style="text-align:right;color:var(--muted);font-size:12px"><?= fmt_number($sc['seuil_alerte'],1) ?></td>
@@ -725,7 +725,7 @@ include __DIR__ . '/../templates/header.php';
           <span style="color:var(--muted)">🔩 <?= $pj['rivets_utilises'] ?></span>
           <?php endif; ?>
           <?php if($pj['rivets_endommages']>0): ?>
-          <span style="color:var(--warning)">⚠️ <?= $pj['rivets_endommages'] ?></span>
+          <span style="color:var(--warning-d)">⚠️ <?= $pj['rivets_endommages'] ?></span>
           <?php endif; ?>
         </div>
       </div>
@@ -740,7 +740,7 @@ include __DIR__ . '/../templates/header.php';
       <?php else: ?>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px">
         <?php foreach($rivets_par_site as $rs):
-          $col = $rs['stock_rivets'] < 100 ? '#e74c3c' : ($rs['stock_rivets'] < 500 ? '#f39c12' : 'var(--success)');
+          $col = $rs['stock_rivets'] < 100 ? '#e74c3c' : ($rs['stock_rivets'] < 500 ? '#f39c12' : 'var(--success-d)');
           $bg  = $rs['stock_rivets'] < 100 ? '#FEE2E2' : ($rs['stock_rivets'] < 500 ? '#FEF3C7' : '#D1FAE5');
         ?>
         <div style="background:<?= $bg ?>;border-radius:12px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between">
@@ -757,7 +757,7 @@ include __DIR__ . '/../templates/header.php';
         <div style="text-align:center;color:var(--muted);padding:30px;font-size:13px">Aucune donnée</div>
       <?php else: ?>
       <?php foreach($rivets_par_site as $rs):
-        $col = $rs['stock_rivets'] < 100 ? '#e74c3c' : ($rs['stock_rivets'] < 500 ? '#f39c12' : 'var(--success)');
+        $col = $rs['stock_rivets'] < 100 ? '#e74c3c' : ($rs['stock_rivets'] < 500 ? '#f39c12' : 'var(--success-d)');
       ?>
       <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--border)">
         <div style="font-size:13px;font-weight:600;color:var(--navy)"><?= h($rs['site_nom']) ?></div>
@@ -782,7 +782,7 @@ include __DIR__ . '/../templates/header.php';
     </div>
     <div class="dash-card-body" style="padding:12px 20px">
       <?php if (empty($fin_cycle_list)): ?>
-        <div style="text-align:center;color:var(--success);padding:32px 0;font-size:13px">✅ Aucun équipement en fin de cycle</div>
+        <div style="text-align:center;color:var(--success-d);padding:32px 0;font-size:13px">✅ Aucun équipement en fin de cycle</div>
       <?php else: ?>
         <?php foreach($fin_cycle_list as $fc):
           $j = (int)$fc['jours_restants'];
@@ -813,7 +813,7 @@ include __DIR__ . '/../templates/header.php';
     </div>
     <div class="dash-card-body">
       <?php if (empty($stock_bas_list)): ?>
-        <div style="text-align:center;color:var(--success);padding:32px 0;font-size:13px">✅ Tous les stocks sont suffisants</div>
+        <div style="text-align:center;color:var(--success-d);padding:32px 0;font-size:13px">✅ Tous les stocks sont suffisants</div>
       <?php else: ?>
         <?php foreach($stock_bas_list as $sb):
           $ratio = $sb['seuil_alerte'] > 0 ? min(100, ($sb['stock_global'] / $sb['seuil_alerte']) * 100) : 0;

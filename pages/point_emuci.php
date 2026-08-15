@@ -139,7 +139,7 @@ include __DIR__ . '/../templates/header.php';
 .emuci-card{background:#fff;border-radius:14px;box-shadow:0 2px 10px rgba(0,0,0,.07);padding:20px 24px;display:flex;flex-direction:column;gap:4px}
 .emuci-card .label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
 .emuci-card .value{font-size:28px;font-weight:700;color:var(--text)}
-.emuci-card.accent .value{color:var(--primary)}
+.emuci-card.accent .value{color:var(--primary-d)}
 .emuci-card.green  .value{color:#2e7d32}
 .emuci-card.orange .value{color:#e65100}
 .emuci-card.red    .value{color:#c62828}

@@ -239,9 +239,9 @@ include __DIR__ . '/../templates/header.php';
 .rk-icon{font-size:26px;flex-shrink:0}
 .rk-val{font-family:'Montserrat',sans-serif;font-size:26px;font-weight:800;color:var(--navy)}
 .rk-label{font-size:11.5px;color:var(--muted);margin-top:2px}
-.rk.warning .rk-val{color:var(--warning)}
-.rk.danger .rk-val{color:var(--danger)}
-.rk.success .rk-val{color:var(--success)}
+.rk.warning .rk-val{color:var(--warning-d)}
+.rk.danger .rk-val{color:var(--danger-d)}
+.rk.success .rk-val{color:var(--success-d)}
 
 .statut-badge{display:inline-block;padding:3px 10px;border-radius:6px;font-size:11.5px;font-weight:700}
 .statut-badge.en_attente{background:#fff8e7;color:#b7791f}
@@ -364,10 +364,10 @@ include __DIR__ . '/../templates/header.php';
               <button class="btn btn-sm" style="background:#fff3cd;color:#856404;border:1px solid #ffc107;padding:5px 10px;border-radius:6px;cursor:pointer;margin-left:4px;font-weight:600" onclick="openTraiterLitige(<?= $r['id'] ?>)">🔧 Traiter litige</button>
 
             <?php elseif($r['statut']==='receptionnee'): ?>
-              <span style="font-size:12px;color:var(--success);margin-left:4px">✔ Validé</span>
+              <span style="font-size:12px;color:var(--success-d);margin-left:4px">✔ Validé</span>
 
             <?php elseif($r['statut']==='litige' && $is_coord): ?>
-              <span style="font-size:12px;color:var(--danger);margin-left:4px">⚠ En cours de traitement</span>
+              <span style="font-size:12px;color:var(--danger-d);margin-left:4px">⚠ En cours de traitement</span>
 
             <?php elseif($r['statut']==='en_attente' && !$is_coord): ?>
               <span style="font-size:12px;color:var(--muted);margin-left:4px">⏳ Attente coordinateur</span>
@@ -390,12 +390,12 @@ include __DIR__ . '/../templates/header.php';
 
     <div class="form-group" style="margin-bottom:14px">
       <label style="font-size:13px;font-weight:600;color:var(--text);display:block;margin-bottom:6px">
-        📎 Fiche signée <span style="color:var(--danger)">*</span>
+        📎 Fiche signée <span style="color:var(--danger-d)">*</span>
         <span style="font-size:11px;font-weight:400;color:var(--muted)">(PDF ou image — obligatoire)</span>
       </label>
       <input type="file" id="recFiche" accept=".pdf,.jpg,.jpeg,.png,.webp"
              style="width:100%;padding:8px;border:2px dashed var(--border);border-radius:8px;font-size:13px;cursor:pointer;background:var(--lighter)">
-      <div id="recFichePreview" style="display:none;margin-top:8px;font-size:12px;color:var(--success)"></div>
+      <div id="recFichePreview" style="display:none;margin-top:8px;font-size:12px;color:var(--success-d)"></div>
     </div>
 
     <div class="form-group" style="margin-bottom:18px">
@@ -413,12 +413,12 @@ include __DIR__ . '/../templates/header.php';
 <!-- MODAL LITIGE -->
 <div id="modalLitige" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:28px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-    <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--danger);margin-bottom:18px">
+    <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--danger-d);margin-bottom:18px">
       ⚠️ Signaler un litige
     </h3>
     <input type="hidden" id="litId">
     <div class="form-group">
-      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">Motif du litige <span style="color:var(--danger)">*</span></label>
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">Motif du litige <span style="color:var(--danger-d)">*</span></label>
       <textarea id="litNotes" rows="4" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;resize:vertical" placeholder="Décrivez le problème constaté (manque, dommage, erreur...)"></textarea>
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
@@ -468,7 +468,7 @@ include __DIR__ . '/../templates/header.php';
       </div>
     </div>
     <div class="form-group" style="margin-bottom:18px">
-      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">Notes / Actions effectuées <span style="color:var(--danger)">*</span></label>
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">Notes / Actions effectuées <span style="color:var(--danger-d)">*</span></label>
       <textarea id="traitNotes" rows="4" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;resize:vertical" placeholder="Ex: Commande renvoyée le 19/04, manque de 5 unités compensé…"></textarea>
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end">
@@ -495,7 +495,7 @@ function openDetail(id){
   fd.append('action','get_detail'); fd.append('id',id);
   fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd})
     .then(r=>r.json()).then(d=>{
-      if(!d.success){document.getElementById('detailContent').innerHTML='<div style="color:var(--danger)">Erreur.</div>';return;}
+      if(!d.success){document.getElementById('detailContent').innerHTML='<div style="color:var(--danger-d)">Erreur.</div>';return;}
       const rec = d.data.rec;
       const statutColor = rec.statut==='receptionnee'?'#1e8449':rec.statut==='litige'?'#c0392b':'#b7791f';
       const statutBg    = rec.statut==='receptionnee'?'#eafaf1':rec.statut==='litige'?'#fdf0ef':'#fff8e7';

@@ -300,8 +300,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
       animation: fadeIn .3s ease;
     }
     .alert.show { display: flex; align-items: center; gap: 10px; }
-    .alert-danger  { background: #fdf0ef; color: var(--danger);  border-left: 3px solid var(--danger); }
-    .alert-success { background: #eafaf1; color: var(--success); border-left: 3px solid var(--success); }
+    .alert-danger  { background: #fdf0ef; color: var(--danger-d);  border-left: 3px solid var(--danger); }
+    .alert-success { background: #eafaf1; color: var(--success-d); border-left: 3px solid var(--success); }
     .alert-warning { background: #fef9e7; color: #e67e22;        border-left: 3px solid #e67e22; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
 

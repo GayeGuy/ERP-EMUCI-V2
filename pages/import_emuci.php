@@ -678,7 +678,7 @@ include __DIR__ . '/../templates/header.php';
 .tab-btn{padding:12px 28px;font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:600;
   border:none;background:none;cursor:pointer;color:var(--muted);border-bottom:3px solid transparent;
   margin-bottom:-2px;transition:all .15s}
-.tab-btn.active{color:var(--primary);border-bottom-color:var(--primary)}
+.tab-btn.active{color:var(--primary-d);border-bottom-color:var(--primary)}
 .tab-btn:hover{color:var(--navy)}
 .tab-pane{display:none}.tab-pane.active{display:block}
 
@@ -689,7 +689,7 @@ include __DIR__ . '/../templates/header.php';
 .upload-icon{font-size:48px;margin-bottom:12px}
 .upload-label{font-size:15px;font-weight:600;color:var(--navy);margin-bottom:4px}
 .upload-sub{font-size:12px;color:var(--muted)}
-.upload-selected{margin-top:12px;font-size:13px;font-weight:600;color:var(--primary)}
+.upload-selected{margin-top:12px;font-size:13px;font-weight:600;color:var(--primary-d)}
 
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px}
 .stat-card{background:white;border:1px solid var(--border);border-radius:12px;padding:14px 18px;border-left:4px solid var(--primary)}
@@ -701,7 +701,7 @@ include __DIR__ . '/../templates/header.php';
 
 .ecart-pos{color:#e74c3c;font-weight:700}
 .ecart-neg{color:#f39c12;font-weight:700}
-.ecart-zero{color:var(--success);font-weight:700}
+.ecart-zero{color:var(--success-d);font-weight:700}
 
 .statut-badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700}
 .s-in_use{background:#d1fae5;color:#065f46}
@@ -1045,9 +1045,9 @@ include __DIR__ . '/../templates/header.php';
         <tr>
           <td style="font-weight:600"><?= h($st['site_nom_emuci'] ?: '— non mappé —') ?></td>
           <td style="text-align:center;font-weight:700"><?= $st['nb_bobines'] ?></td>
-          <td style="text-align:center;color:var(--success);font-weight:700"><?= fmt_number($st['total_films_restants']) ?></td>
+          <td style="text-align:center;color:var(--success-d);font-weight:700"><?= fmt_number($st['total_films_restants']) ?></td>
           <td style="text-align:center;color:var(--muted)"><?= $st['nb_retirees'] ?></td>
-          <td style="text-align:center;color:var(--danger)"><?= $st['nb_epuisees'] ?></td>
+          <td style="text-align:center;color:var(--danger-d)"><?= $st['nb_epuisees'] ?></td>
         </tr>
         <?php endforeach; ?>
         </tbody>
@@ -1082,10 +1082,10 @@ include __DIR__ . '/../templates/header.php';
           <td style="font-family:monospace;font-weight:700;color:var(--navy)"><?= h($b['keyname']) ?></td>
           <td style="font-size:12px"><?= h($b['format']) ?></td>
           <td style="font-size:12px"><?= h($b['site_nom_emuci']) ?></td>
-          <td style="text-align:center;font-weight:700;color:var(--success)"><?= fmt_number($b['qty_optotrace']) ?></td>
+          <td style="text-align:center;font-weight:700;color:var(--success-d)"><?= fmt_number($b['qty_optotrace']) ?></td>
           <td style="text-align:center;font-weight:700"><?= $b['bobine_id'] ? fmt_number($b['qty_digistock']) : '<span style="color:var(--muted)">—</span>' ?></td>
           <td style="text-align:center" class="<?= $ecart_cls ?>">
-            <?= $b['bobine_id'] ? ($ecart > 0 ? '+' : '') . $ecart : '<span style="color:var(--warning)">Inconnue</span>' ?>
+            <?= $b['bobine_id'] ? ($ecart > 0 ? '+' : '') . $ecart : '<span style="color:var(--warning-d)">Inconnue</span>' ?>
           </td>
           <td style="text-align:center;font-size:11px">
             <?php
@@ -1139,9 +1139,9 @@ include __DIR__ . '/../templates/header.php';
         ?>
         <tr>
           <td style="font-weight:600;color:var(--navy)"><?= h($c['site_nom']) ?></td>
-          <td style="text-align:center;font-weight:700;color:var(--success)"><?= fmt_number($c['plaques_in_use_emuci']) ?></td>
+          <td style="text-align:center;font-weight:700;color:var(--success-d)"><?= fmt_number($c['plaques_in_use_emuci']) ?></td>
           <td style="text-align:center;color:var(--blue)"><?= fmt_number($c['plaques_reserved_emuci']) ?></td>
-          <td style="text-align:center;color:var(--danger)"><?= fmt_number($c['plaques_broken_emuci']) ?></td>
+          <td style="text-align:center;color:var(--danger-d)"><?= fmt_number($c['plaques_broken_emuci']) ?></td>
           <td style="text-align:center;font-weight:700"><?= fmt_number($c['plaques_digi']) ?></td>
           <td style="text-align:center" class="<?= $ecart_cls ?>"><?= $ecart>0?'+':'' ?><?= $ecart ?></td>
           <td style="text-align:center;font-size:12px;font-weight:600"><?= $statut_icon ?></td>
@@ -1180,10 +1180,10 @@ include __DIR__ . '/../templates/header.php';
         <?php else: foreach($historique as $h): ?>
         <tr>
           <td style="font-weight:700"><?= fmt_date($h['date_import'],'d/m/Y') ?></td>
-          <td><span style="padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700;background:var(--primary-l);color:var(--primary)"><?= h($h['type_import']) ?></span></td>
+          <td><span style="padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700;background:var(--primary-l);color:var(--primary-d)"><?= h($h['type_import']) ?></span></td>
           <td style="text-align:center"><?= $h['nb_lignes_optoplate']>0?fmt_number($h['nb_lignes_optoplate']):'—' ?></td>
           <td style="text-align:center"><?= $h['nb_lignes_optotrace']>0?fmt_number($h['nb_lignes_optotrace']):'—' ?></td>
-          <td style="text-align:center;color:<?= $h['nb_erreurs']>0?'var(--danger)':'var(--muted)' ?>"><?= $h['nb_erreurs'] ?></td>
+          <td style="text-align:center;color:<?= $h['nb_erreurs']>0?'var(--danger-d)':'var(--muted)' ?>"><?= $h['nb_erreurs'] ?></td>
           <td><span style="padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700;background:<?= $h['statut']==='termine'?'#d1fae5':'#fee2e2' ?>;color:<?= $h['statut']==='termine'?'#065f46':'#991b1b' ?>"><?= $h['statut']==='termine'?'✅ Terminé':'❌ Erreur' ?></span></td>
           <td style="font-size:12px;color:var(--muted)"><?= h($h['importeur']??'—') ?></td>
           <td style="font-size:12px;color:var(--muted)"><?= fmt_datetime($h['created_at']) ?></td>

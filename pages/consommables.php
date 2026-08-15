@@ -425,7 +425,7 @@ include __DIR__ . '/../templates/header.php';
     </div>
     <div class="cc-stock">
       <div>
-        <div class="cc-stock-num" style="color:<?= $ratio<=0?'var(--danger)':($ratio<=1?'var(--warning)':'var(--navy)') ?>">
+        <div class="cc-stock-num" style="color:<?= $ratio<=0?'var(--danger-d)':($ratio<=1?'var(--warning-d)':'var(--navy)') ?>">
           <?= fmt_number($c['stock_global'],1) ?>
         </div>
         <div style="font-size:11px;color:var(--muted)"><?= $unites[$c['unite']]??$c['unite'] ?></div>
@@ -433,7 +433,7 @@ include __DIR__ . '/../templates/header.php';
       <div style="flex:1">
         <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px">
           <span style="color:var(--muted)">Seuil : <?= $c['seuil_alerte'] ?></span>
-          <span style="color:<?= $cls?'var(--danger)':'var(--success)' ?>;font-weight:600"><?= round($pct) ?>%</span>
+          <span style="color:<?= $cls?'var(--danger-d)':'var(--success-d)' ?>;font-weight:600"><?= round($pct) ?>%</span>
         </div>
         <div class="stock-bar"><div class="stock-fill" style="width:<?= $pct ?>%;background:<?= $fill ?>"></div></div>
         <div style="font-size:10.5px;color:var(--muted);margin-top:4px;display:flex;gap:8px">
@@ -606,12 +606,12 @@ include __DIR__ . '/../templates/header.php';
         <!-- BON DE LIVRAISON OBLIGATOIRE -->
         <div class="form-group" style="background:#fff8e7;border:2px dashed #f39c12;border-radius:10px;padding:14px;margin-bottom:14px">
           <label style="font-size:13px;font-weight:700;color:#b7791f;display:block;margin-bottom:6px">
-            📎 Bon de livraison <span style="color:var(--danger)">*</span>
+            📎 Bon de livraison <span style="color:var(--danger-d)">*</span>
             <span style="font-size:11px;font-weight:400;color:var(--muted)"> — PDF ou image obligatoire pour valider la livraison</span>
           </label>
           <input type="file" id="distFichierBL" accept=".pdf,.jpg,.jpeg,.png,.webp"
                  style="width:100%;padding:8px;border:1.5px solid #f39c12;border-radius:8px;font-size:13px;cursor:pointer;background:white">
-          <div id="distBLPreview" style="display:none;margin-top:6px;font-size:12px;color:var(--success);font-weight:600"></div>
+          <div id="distBLPreview" style="display:none;margin-top:6px;font-size:12px;color:var(--success-d);font-weight:600"></div>
         </div>
 
         <div class="form-group"><label>Notes</label>
@@ -658,7 +658,7 @@ include __DIR__ . '/../templates/header.php';
             <td style="white-space:nowrap;font-size:12.5px"><?= fmt_date($h['date_op']) ?></td>
             <td><span class="flux-badge <?= $h['type_op'] ?>"><?= $h['type_op']==='reception'?'📥 Réception':'📤 Distribution' ?></span></td>
             <td><span style="font-family:monospace;font-size:11.5px;font-weight:700;color:var(--navy)"><?= h($h['conso_code']) ?></span> <?= h($h['conso_lib']) ?></td>
-            <td style="text-align:right;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;color:<?= $h['type_op']==='reception'?'var(--success)':'var(--blue-mid,#1a56a0)' ?>">
+            <td style="text-align:right;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;color:<?= $h['type_op']==='reception'?'var(--success-d)':'var(--blue-mid,#1a56a0)' ?>">
               <?= $h['type_op']==='reception'?'+':'-' ?><?= fmt_number($h['quantite'],1) ?>
               <span style="font-size:11px;font-weight:400;color:var(--muted)"><?= $h['unite'] ?></span>
             </td>
@@ -921,7 +921,7 @@ function viewConso(id){
           <span>${s.site_nom}</span><strong>${s.quantite} ${r.unite}</strong>
         </div>
         <div style="height:5px;background:var(--border);border-radius:3px">
-          <div style="width:${pct}%;height:100%;background:${pct<=50?'var(--danger)':pct<=100?'var(--warning)':'var(--success)'};border-radius:3px"></div>
+          <div style="width:${pct}%;height:100%;background:${pct<=50?'var(--danger-d)':pct<=100?'var(--warning-d)':'var(--success-d)'};border-radius:3px"></div>
         </div>
       </div>`;}).join('')||'<p style="color:var(--muted);font-size:13px">Aucun stock par site.</p>';
     const recs=r.receptions.map(rc=>`

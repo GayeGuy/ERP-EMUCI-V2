@@ -178,7 +178,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="kpi-lbl">Équipements informatiques</div>
   </div>
   <div class="kpi ok">
-    <div class="kpi-val" style="color:var(--success)"><?= $kpi_total - $kpi_hs - $kpi_maint ?></div>
+    <div class="kpi-val" style="color:var(--success-d)"><?= $kpi_total - $kpi_hs - $kpi_maint ?></div>
     <div class="kpi-lbl">Opérationnels</div>
   </div>
   <div class="kpi warn">
@@ -241,7 +241,7 @@ include __DIR__ . '/../templates/header.php';
         <tr>
           <td style="font-weight:700;white-space:nowrap"><?= fmt_date($r['date_rapport'],'d/m/Y') ?></td>
           <td><?= h($r['site_nom']) ?></td>
-          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;color:var(--success)"><?= $r['nb_equip_ok'] ?></td>
+          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;color:var(--success-d)"><?= $r['nb_equip_ok'] ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;color:<?= $r['nb_equip_hs']>0?'#e74c3c':'var(--muted)' ?>"><?= $r['nb_equip_hs'] ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;color:<?= $r['nb_equip_maintenance']>0?'#f39c12':'var(--muted)' ?>"><?= $r['nb_equip_maintenance'] ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:700;color:var(--blue)"><?= $r['nb_interventions'] ?></td>
@@ -277,7 +277,7 @@ include __DIR__ . '/../templates/header.php';
       <div style="font-weight:700;color:var(--navy);margin-bottom:6px">📊 État actuel des équipements informatiques</div>
       <div style="display:flex;gap:20px;flex-wrap:wrap">
         <span>Total : <strong id="sTotal" style="color:var(--navy)">—</strong></span>
-        <span style="color:var(--success)">OK : <strong id="sOk">—</strong></span>
+        <span style="color:var(--success-d)">OK : <strong id="sOk">—</strong></span>
         <span style="color:#e74c3c">H.S : <strong id="sHs">—</strong></span>
         <span style="color:#f39c12">Maintenance : <strong id="sMaint">—</strong></span>
       </div>

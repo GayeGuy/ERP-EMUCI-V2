@@ -1090,7 +1090,7 @@ include __DIR__ . '/../templates/header.php';
         <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">Aucune commande.</td></tr>
       <?php else: foreach($commandes as $cmd): ?>
         <tr>
-          <td style="font-family:monospace;font-weight:700;color:var(--primary)"><?= h($cmd['numero_commande']) ?></td>
+          <td style="font-family:monospace;font-weight:700;color:var(--primary-d)"><?= h($cmd['numero_commande']) ?></td>
           <td style="font-size:13px"><?= h($cmd['site_nom']??'—') ?></td>
           <td style="font-size:12px;white-space:nowrap"><?= fmt_date($cmd['created_at'],'d/m/Y') ?></td>
           <td style="text-align:center;font-weight:700">
@@ -1268,10 +1268,10 @@ include __DIR__ . '/../templates/header.php';
 <!-- Modal rejet global -->
 <div id="modalRejet" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.55);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:18px;padding:26px;width:480px;max-width:96vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--danger);margin-bottom:16px" id="titleRejet">Rejeter la commande</h3>
+    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--danger-d);margin-bottom:16px" id="titleRejet">Rejeter la commande</h3>
     <div id="alertRejet"></div>
     <div class="form-group">
-      <label>Motif de rejet <span style="color:var(--danger)">*</span></label>
+      <label>Motif de rejet <span style="color:var(--danger-d)">*</span></label>
       <textarea class="form-control" id="motifRejet" rows="3" placeholder="Expliquez pourquoi cette commande est rejetée…"></textarea>
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px">
@@ -1674,7 +1674,7 @@ async function ouvrirValidation(cmdId,numCmd){
           </select>
         </div>
         <div id="motifLigne${i}" style="display:none">
-          <label style="font-size:11px;font-weight:700;color:var(--danger);display:block;margin-bottom:4px">Motif rejet *</label>
+          <label style="font-size:11px;font-weight:700;color:var(--danger-d);display:block;margin-bottom:4px">Motif rejet *</label>
           <input type="text" class="form-control motif-ligne" data-idx="${i}"
             placeholder="Raison du rejet…" style="padding:7px;border-radius:8px;font-size:12px;border-color:var(--danger)">
         </div>
@@ -1738,11 +1738,11 @@ async function ouvrirLivraison(cmdId,numCmd){
             ${l.statut_ligne==='rejete'?'disabled value="0"':''}>
         </div>
         <div id="motifGrp${i}" style="display:none">
-          <label style="font-size:11px;font-weight:700;color:var(--warning);display:block;margin-bottom:4px">Motif écart *</label>
+          <label style="font-size:11px;font-weight:700;color:var(--warning-d);display:block;margin-bottom:4px">Motif écart *</label>
           <input type="text" class="form-control motif-ecart" data-idx="${i}"
             placeholder="Justification…" style="border-radius:8px;font-size:12px;border-color:var(--warning)">
         </div>
-        <div id="okLabel${i}" style="display:none;font-size:13px;color:var(--success);font-weight:600;padding-top:20px">✅ OK</div>
+        <div id="okLabel${i}" style="display:none;font-size:13px;color:var(--success-d);font-weight:600;padding-top:20px">✅ OK</div>
       </div>
     </div>`).join('');
   document.getElementById('modalLivraison').style.display='flex';
@@ -1765,7 +1765,7 @@ async function confirmerLivraison(){
     const qteCmd=parseInt(inp.dataset.qte)||0;
     const motifEl=document.querySelector(`.motif-ecart[data-idx="${i}"]`);
     const motif=motifEl?motifEl.value.trim():'';
-    if(qteLiv!==qteCmd&&!motif){inp.style.borderColor='var(--danger)';valid=false;}
+    if(qteLiv!==qteCmd&&!motif){inp.style.borderColor='var(--danger-d)';valid=false;}
     lignesData.push({
       ligne_id:lignesCmd[i]?.id,
       article_id:lignesCmd[i]?.article_id||null,

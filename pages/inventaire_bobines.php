@@ -261,7 +261,7 @@ include __DIR__ . '/../templates/header.php';
 <div class="inv-kpi">
   <div class="ik"><div class="ik-val"><?= $nb_journalier ?></div><div class="ik-lbl">Journaliers</div></div>
   <div class="ik purple"><div class="ik-val" style="color:#6b21a8"><?= $nb_mensuel ?></div><div class="ik-lbl">Mensuels</div></div>
-  <div class="ik green"><div class="ik-val" style="color:var(--success)"><?= $nb_valides ?></div><div class="ik-lbl">Validés</div></div>
+  <div class="ik green"><div class="ik-val" style="color:var(--success-d)"><?= $nb_valides ?></div><div class="ik-lbl">Validés</div></div>
   <div class="ik orange"><div class="ik-val" style="color:#f39c12"><?= $nb_brouillon ?></div><div class="ik-lbl">En cours</div></div>
 </div>
 
@@ -274,7 +274,7 @@ include __DIR__ . '/../templates/header.php';
   </div>
   <?php if ($session_active['inv_id']): ?>
     <?php if ($session_active['inv_statut'] === 'valide'): ?>
-    <span style="font-size:13px;color:var(--success);font-weight:700;margin-right:10px">✅ Clôturé</span>
+    <span style="font-size:13px;color:var(--success-d);font-weight:700;margin-right:10px">✅ Clôturé</span>
     <?php elseif ($session_active['inv_complet']): ?>
     <span style="font-size:13px;color:#1565c0;font-weight:700;margin-right:10px">📤 Complet — en attente de validation</span>
     <?php endif; ?>
@@ -339,7 +339,7 @@ include __DIR__ . '/../templates/header.php';
           <td style="font-weight:600"><?= h($inv['site_nom']??'Global') ?></td>
           <td style="text-align:center;font-weight:700"><?= $inv['nb_bobines'] ?></td>
           <td style="text-align:center;font-weight:700"><?= fmt_number($inv['total_films_systeme']??0) ?></td>
-          <td style="text-align:center;font-weight:700;color:<?= ($inv['total_films_physique']??0)>0?'var(--success)':'var(--muted)' ?>">
+          <td style="text-align:center;font-weight:700;color:<?= ($inv['total_films_physique']??0)>0?'var(--success-d)':'var(--muted)' ?>">
             <?= ($inv['total_films_physique']??0)>0 ? fmt_number($inv['total_films_physique']) : '—' ?>
           </td>
           <td style="text-align:center">

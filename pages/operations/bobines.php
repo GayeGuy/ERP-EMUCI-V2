@@ -471,7 +471,7 @@ $coord_types = db_fetch_all("SELECT DISTINCT type_code FROM op_bobines WHERE sit
 <!-- Tableau bobines du site -->
 <div class="card">
   <div class="card-header">
-    <h3><i class="ph-duotone ph-film-strip" style="color:var(--primary)"></i> Bobines de votre site</h3>
+    <h3><i class="ph-duotone ph-film-strip" style="color:var(--primary-d)"></i> Bobines de votre site</h3>
     <span style="font-size:12px;color:var(--muted)"><?= count($bobines) ?> bobine(s)</span>
   </div>
   <?php if(empty($bobines)): ?>
@@ -586,14 +586,14 @@ endif;
 <!-- KPIs -->
 <div class="bob-kpi" style="grid-template-columns:repeat(6,1fr)">
   <div class="bk" style="border-left:3px solid var(--blue)"><div class="bk-icon">▶️</div><div><div class="bk-val" style="color:var(--blue)"><?= $stats_map['en_cours']['n']??0 ?></div><div class="bk-label">En utilisation</div></div></div>
-  <div class="bk" style="border-left:3px solid var(--success)"><div class="bk-icon">📦</div><div><div class="bk-val" style="color:var(--success)"><?= $stats_map['en_stock']['n']??0 ?></div><div class="bk-label">En stock</div></div></div>
+  <div class="bk" style="border-left:3px solid var(--success)"><div class="bk-icon">📦</div><div><div class="bk-val" style="color:var(--success-d)"><?= $stats_map['en_stock']['n']??0 ?></div><div class="bk-label">En stock</div></div></div>
   <div class="bk" style="border-left:3px solid #9e9e9e"><div class="bk-icon">🔄</div><div><div class="bk-val" style="color:#9e9e9e"><?= $stats_map['retiree']['n']??0 ?></div><div class="bk-label">Retirées</div></div></div>
   <div class="bk" style="border-left:3px solid #e65100"><div class="bk-icon">❌</div><div><div class="bk-val" style="color:#e65100"><?= $stats_map['perdue']['n']??0 ?></div><div class="bk-label">Perdues</div></div></div>
-  <div class="bk"><div class="bk-icon">📉</div><div><div class="bk-val" style="color:var(--danger)"><?= $conso_today ?></div><div class="bk-label">Films conso. aujourd'hui</div></div></div>
+  <div class="bk"><div class="bk-icon">📉</div><div><div class="bk-val" style="color:var(--danger-d)"><?= $conso_today ?></div><div class="bk-label">Films conso. aujourd'hui</div></div></div>
   <div class="bk" style="<?= $nb_ecarts_ouverts>0?'border-color:var(--danger)':'' ?>">
     <div class="bk-icon">⚠️</div>
     <div>
-      <div class="bk-val" style="color:<?= $nb_ecarts_ouverts>0?'var(--danger)':'var(--muted)' ?>"><?= $nb_ecarts_ouverts ?></div>
+      <div class="bk-val" style="color:<?= $nb_ecarts_ouverts>0?'var(--danger-d)':'var(--muted)' ?>"><?= $nb_ecarts_ouverts ?></div>
       <div class="bk-label">Écarts ouverts</div>
     </div>
   </div>
@@ -697,7 +697,7 @@ endif;
           $consomme  = max(0, $qte_init - $restants);
           $pct       = round($restants/$qte_init*100);
           $pct_conso = round($consomme/$qte_init*100);
-          $bar_color = $pct>50?'var(--success)':($pct>20?'var(--warning)':'var(--danger)');
+          $bar_color = $pct>50?'var(--success-d)':($pct>20?'var(--warning-d)':'var(--danger-d)');
         ?>
           <tr>
             <td><span style="font-family:monospace;font-weight:700;font-size:13px;color:var(--navy)"><?= h($b['numero']) ?></span></td>
@@ -759,7 +759,7 @@ endif;
         <div class="form-group">
           <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">Quantité consommée *</label>
           <input type="number" class="form-control" id="consoQte" min="1" placeholder="0" oninput="checkConsoQte()">
-          <div id="consoQteWarn" style="display:none;color:var(--danger);font-size:12px;margin-top:4px">Quantité > stock disponible !</div>
+          <div id="consoQteWarn" style="display:none;color:var(--danger-d);font-size:12px;margin-top:4px">Quantité > stock disponible !</div>
         </div>
         <div class="form-group">
           <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">Date *</label>
@@ -871,7 +871,7 @@ endif;
           <tr><td colspan="6" style="text-align:center;padding:30px;color:var(--muted)">Aucune bobine en utilisation.</td></tr>
         <?php else: foreach($bobines_en_cours as $b):
           $pct = $b['qte_initiale']>0 ? round($b['films_restants']/$b['qte_initiale']*100) : 0;
-          $col = $pct<20?'var(--danger)':($pct<50?'#f39c12':'var(--success)');
+          $col = $pct<20?'var(--danger-d)':($pct<50?'#f39c12':'var(--success-d)');
         ?>
           <tr>
             <td style="font-family:monospace;font-weight:700"><?= h($b['numero']) ?></td>
@@ -1337,7 +1337,7 @@ async function viewBobine(id){
   document.getElementById('detailContent').innerHTML='<div style="text-align:center;color:var(--muted);padding:30px">Chargement…</div>';
   openModal('modalDetail');
   const d=await ap({action:'get_detail',id});
-  if(!d.success){document.getElementById('detailContent').innerHTML='<div style="color:var(--danger)">Erreur.</div>';return;}
+  if(!d.success){document.getElementById('detailContent').innerHTML='<div style="color:var(--danger-d)">Erreur.</div>';return;}
   const b=d.data.bob;
   const statuts={'en_stock':'📦 En stock','en_cours':'🎞️ En cours','epuisee':'❌ Épuisée','retiree':'⚫ Retirée'};
   const qteInit=Math.max(1,parseInt(b.qte_initiale)||500);

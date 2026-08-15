@@ -302,7 +302,7 @@ include __DIR__ . '/../templates/header.php';
 
   <div class="stat-grid">
     <div class="stat-box"><div class="stat-val"><?= $preview['total'] ?></div><div class="stat-lbl">Total bobines</div></div>
-    <div class="stat-box"><div class="stat-val" style="color:var(--success)"><?= $preview['avec_films'] ?></div><div class="stat-lbl">Avec films restants</div></div>
+    <div class="stat-box"><div class="stat-val" style="color:var(--success-d)"><?= $preview['avec_films'] ?></div><div class="stat-lbl">Avec films restants</div></div>
     <div class="stat-box"><div class="stat-val" style="color:var(--muted)"><?= $preview['retirees'] ?></div><div class="stat-lbl">Retirées (state=7)</div></div>
     <div class="stat-box"><div class="stat-val" style="color:var(--blue-mid,#1a56a0)"><?= count($preview['formats']) ?></div><div class="stat-lbl">Types de format</div></div>
   </div>
@@ -347,7 +347,7 @@ include __DIR__ . '/../templates/header.php';
         </select>
       </div>
       <?php if($auto_id): ?>
-      <span style="font-size:11px;color:var(--success);font-weight:600;white-space:nowrap">✅ Auto-mappé</span>
+      <span style="font-size:11px;color:var(--success-d);font-weight:600;white-space:nowrap">✅ Auto-mappé</span>
       <?php endif; ?>
     </div>
     <?php endforeach; ?>

@@ -1505,12 +1505,12 @@ function recalcule(){
   const ig=document.getElementById('info-gonfl');
   if(ig){
     ig.textContent=`Stock: ${stockGonfl.toLocaleString('fr-FR')} | Sortis: ${totalGonfl}`;
-    ig.style.color=totalGonfl>stockGonfl?'var(--danger)':'#1565c0';
+    ig.style.color=totalGonfl>stockGonfl?'var(--danger-d)':'#1565c0';
   }
   const ie=document.getElementById('info-eclate');
   if(ie){
     ie.textContent=`Stock: ${stockEclate.toLocaleString('fr-FR')} | Sortis: ${totalEclate}`;
-    ie.style.color=totalEclate>stockEclate?'var(--danger)':'#880e4f';
+    ie.style.color=totalEclate>stockEclate?'var(--danger-d)':'#880e4f';
   }
 
   const rw=document.getElementById('c-rivets-wrap');
@@ -1532,7 +1532,7 @@ function loadStockRivets(){
     stockRivets = stockGonfl + stockEclate;
     document.getElementById('p-stock-rivets').value=
       `🔵 ${stockGonfl.toLocaleString('fr-FR')} gonfl. | 🔴 ${stockEclate.toLocaleString('fr-FR')} écl.`;
-    document.getElementById('p-stock-rivets').style.color=stockRivets<200?'var(--danger)':stockRivets<1000?'var(--warning)':'var(--navy)';
+    document.getElementById('p-stock-rivets').style.color=stockRivets<200?'var(--danger-d)':stockRivets<1000?'var(--warning-d)':'var(--navy)';
     recalcule();
   });
 }
@@ -1721,7 +1721,7 @@ function renderBobinesRows(selectedIds){
     <div id="bobine-rows">${rows}</div>
     <button type="button" onclick="addBobineRow()"
       style="margin-top:10px;width:100%;padding:10px;border:2px dashed var(--border);border-radius:10px;
-             background:none;color:var(--primary);font-weight:600;font-size:13px;cursor:pointer">
+             background:none;color:var(--primary-d);font-weight:600;font-size:13px;cursor:pointer">
       + Ajouter une bobine
     </button>`;
 }
@@ -1752,14 +1752,14 @@ function buildBobineRow(selectedBobineId, idx){
                oninput="updateBobineRestants(${idx})" style="margin-top:4px;text-align:center;font-size:16px;font-weight:700">
       </div>
       <div>
-        <label style="font-size:11px;font-weight:700;color:var(--danger);text-transform:uppercase;letter-spacing:.5px">Endommagés</label>
+        <label style="font-size:11px;font-weight:700;color:var(--danger-d);text-transform:uppercase;letter-spacing:.5px">Endommagés</label>
         <input type="number" class="form-control" id="bendomm-${idx}" min="0" value="0"
                oninput="updateBobineRestants(${idx})"
                style="margin-top:4px;text-align:center;border-color:var(--danger)">
       </div>
       <div style="text-align:center;margin-top:18px">
         ${idx>0?`<button type="button" onclick="removeBobineRow(${idx})"
-          style="background:none;border:none;color:var(--danger);font-size:20px;cursor:pointer;padding:4px">✕</button>`:''}
+          style="background:none;border:none;color:var(--danger-d);font-size:20px;cursor:pointer;padding:4px">✕</button>`:''}
       </div>
     </div>`;
 }
@@ -1800,7 +1800,7 @@ function updateBobineRestants(idx){
   const info=document.getElementById('binfo-'+idx);
   if(info){
     info.textContent=`${Math.max(0,restants)} films restants · ${b.type_code||''}`;
-    info.style.color=restants<0?'var(--danger)':restants<50?'var(--warning)':'var(--muted)';
+    info.style.color=restants<0?'var(--danger-d)':restants<50?'var(--warning-d)':'var(--muted)';
   }
   recalcule();
 }
@@ -1833,7 +1833,7 @@ function checkBobineStock(bid){
   if(!bobine) return;
   const restants=bobine.films_restants-(util+endomm);
   const el=document.getElementById('brest-'+bid);
-  if(el){ el.textContent=Math.max(0,restants); el.style.color=restants<0?'var(--danger)':restants<50?'var(--warning)':'var(--navy)'; }
+  if(el){ el.textContent=Math.max(0,restants); el.style.color=restants<0?'var(--danger-d)':restants<50?'var(--warning-d)':'var(--navy)'; }
 }
 
 // ── AUTO-REMPLIR FILMS selon nb véhicules

@@ -274,7 +274,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- KPIs JOUR -->
 <div class="kpi-row">
   <div class="kk green">
-    <div class="kk-val" style="color:var(--success)"><?= fmt_number($kpi['plaques_jour']) ?></div>
+    <div class="kk-val" style="color:var(--success-d)"><?= fmt_number($kpi['plaques_jour']) ?></div>
     <div class="kk-lbl">Plaques posées (PJ)</div>
   </div>
   <div class="kk">
@@ -286,7 +286,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="kk-lbl">In Use EMUCI</div>
   </div>
   <div class="kk <?= $kpi['ecart_jour']!=0?'red':'green' ?>">
-    <div class="kk-val" style="color:<?= $kpi['ecart_jour']!=0?'var(--danger)':'var(--success)' ?>"><?= $kpi['ecart_jour']>0?'+':'' ?><?= $kpi['ecart_jour'] ?></div>
+    <div class="kk-val" style="color:<?= $kpi['ecart_jour']!=0?'var(--danger-d)':'var(--success-d)' ?>"><?= $kpi['ecart_jour']>0?'+':'' ?><?= $kpi['ecart_jour'] ?></div>
     <div class="kk-lbl">Écart EMUCI vs PJ</div>
   </div>
   <div class="kk orange">
@@ -387,7 +387,7 @@ include __DIR__ . '/../templates/header.php';
           <td style="font-weight:600;color:var(--navy)"><?= h($p['site_nom']) ?></td>
           <td style="text-align:center"><?= $p['nb_points'] ?></td>
           <td style="text-align:center">
-            <span style="color:<?= $p['points_valides']>=$p['nb_points']?'var(--success)':'#f39c12' ?>;font-weight:700"><?= $p['points_valides'] ?></span>
+            <span style="color:<?= $p['points_valides']>=$p['nb_points']?'var(--success-d)':'#f39c12' ?>;font-weight:700"><?= $p['points_valides'] ?></span>
             / <?= $p['nb_points'] ?>
           </td>
           <td style="text-align:center;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:16px;color:var(--blue)"><?= fmt_number($p['total_plaques']) ?></td>

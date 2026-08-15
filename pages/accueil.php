@@ -202,7 +202,7 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
       transition: background .15s;
     }
     .uc-item:hover { background: var(--primary-l); }
-    .uc-item i { font-size: 18px; color: var(--primary); }
+    .uc-item i { font-size: 18px; color: var(--primary-d); }
     .uc-item.logout { color: #B91C1C; }
     .uc-item.logout i { color: #B91C1C; }
     .uc-item.logout:hover { background: #FEE2E2; }
