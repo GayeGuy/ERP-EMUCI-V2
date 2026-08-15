@@ -412,7 +412,10 @@ $unread = count($notifs);
     .form-group:has(> .form-control:required) > label::after,
     .form-group:has(> input:required) > label::after,
     .form-group:has(> select:required) > label::after,
-    .form-group:has(> textarea:required) > label::after {
+    .form-group:has(> textarea:required) > label::after,
+    .ach-fg:has(> input:required) > label::after,
+    .ach-fg:has(> select:required) > label::after,
+    .ach-fg:has(> textarea:required) > label::after {
       content: " *";
       color: var(--danger-d);
     }

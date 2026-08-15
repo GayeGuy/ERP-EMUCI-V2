@@ -1,0 +1,266 @@
+<?php
+// ============================================================
+//  pages/achats/param_fournisseurs.php — Référentiel fournisseurs
+// ============================================================
+require_once __DIR__ . '/../../includes/db.php';
+require_once __DIR__ . '/../../includes/session.php';
+require_once __DIR__ . '/../../includes/helpers.php';
+require_once __DIR__ . '/../../includes/notifications.php';
+require_once __DIR__ . '/../../includes/audit.php';
+require_once __DIR__ . '/../../includes/achats.php';
+
+require_auth();
+$user = current_user();
+require_permission('achats_param', 'can_read');
+$can_edit = can('achats_param', 'can_update');
+$_SESSION['groupe_actif'] = 'ACHATS';
+$page_title  = 'Fournisseurs';
+$active_page = 'achats_param_fournisseurs';
+
+// ── AJAX ────────────────────────────────────────────────────
+if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    header('Content-Type: application/json');
+    if (!$can_edit) json_response(false, 'Action réservée.');
+    $action = $_POST['action'] ?? '';
+
+    if ($action === 'create') {
+        $raison = trim($_POST['raison_sociale'] ?? '');
+        if (!$raison) json_response(false, 'La raison sociale est obligatoire.');
+        db_query(
+            "INSERT INTO fournisseurs (raison_sociale, contact_nom, telephone, email, adresse, conditions_paiement, cree_par)
+             VALUES (?,?,?,?,?,?,?)",
+            [$raison, trim($_POST['contact_nom'] ?? ''), trim($_POST['telephone'] ?? ''),
+             trim($_POST['email'] ?? ''), trim($_POST['adresse'] ?? ''), trim($_POST['conditions_paiement'] ?? ''), $user['id']]
+        );
+        $id = (int)db_last_id('fournisseurs_id_seq');
+        audit_log($user['id'], 'CREATE', 'achats_param', $id, "Création fournisseur : $raison");
+        json_response(true, 'Fournisseur créé.', ['id' => $id]);
+    }
+
+    if ($action === 'update') {
+        $id     = (int)($_POST['id'] ?? 0);
+        $raison = trim($_POST['raison_sociale'] ?? '');
+        if (!$id || !$raison) json_response(false, 'Données invalides.');
+        db_query(
+            "UPDATE fournisseurs SET raison_sociale=?, contact_nom=?, telephone=?, email=?, adresse=?, conditions_paiement=?, modifie_le=NOW()
+             WHERE id=?",
+            [$raison, trim($_POST['contact_nom'] ?? ''), trim($_POST['telephone'] ?? ''),
+             trim($_POST['email'] ?? ''), trim($_POST['adresse'] ?? ''), trim($_POST['conditions_paiement'] ?? ''), $id]
+        );
+        audit_log($user['id'], 'UPDATE', 'achats_param', $id, "Modification fournisseur : $raison");
+        json_response(true, 'Fournisseur mis à jour.');
+    }
+
+    if ($action === 'toggle') {
+        $id  = (int)($_POST['id'] ?? 0);
+        $nv  = (int)($_POST['actif'] ?? 0) ? 1 : 0;
+        if (!$id) json_response(false, 'Identifiant manquant.');
+        db_query("UPDATE fournisseurs SET actif=?, modifie_le=NOW() WHERE id=?", [$nv, $id]);
+        audit_log($user['id'], 'UPDATE', 'achats_param', $id, $nv ? 'Réactivation fournisseur' : 'Désactivation fournisseur');
+        json_response(true, $nv ? 'Fournisseur réactivé.' : 'Fournisseur désactivé.');
+    }
+
+    json_response(false, 'Action inconnue.');
+}
+
+// ── PAGE PHP ─────────────────────────────────────────────────
+$q       = trim($_GET['q'] ?? '');
+$page    = max(1, (int)($_GET['page'] ?? 1));
+$perPage = 20;
+$where   = [];
+$params  = [];
+if ($q !== '') {
+    $where[]  = '(raison_sociale ILIKE ? OR contact_nom ILIKE ?)';
+    $params[] = "%$q%"; $params[] = "%$q%";
+}
+$whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
+
+$total = (int)db_fetch_value("SELECT COUNT(*) FROM fournisseurs $whereSql", $params);
+$fournisseurs = db_fetch_all(
+    "SELECT * FROM fournisseurs $whereSql ORDER BY raison_sociale ASC LIMIT ? OFFSET ?",
+    [...$params, $perPage, ($page - 1) * $perPage]
+);
+
+include __DIR__ . '/../../templates/header.php';
+?>
+<style>
+.ach-toolbar{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap;margin-bottom:18px}
+.ach-search{display:flex;gap:8px;align-items:center;flex:1;min-width:0;max-width:360px}
+.ach-search input{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box}
+.ach-table-wrap{background:white;border:1px solid var(--border);border-radius:16px;overflow:hidden}
+.ach-table{width:100%;border-collapse:collapse;font-size:13px}
+.ach-table th{background:#f8fafc;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:11px 16px;text-align:left;border-bottom:1px solid var(--border)}
+.ach-table td{padding:11px 16px;border-bottom:1px solid var(--border);vertical-align:middle}
+.ach-table tr:last-child td{border-bottom:none}
+.ach-badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
+.ach-badge.on{background:#D1FAE5;color:#065F46}
+.ach-badge.off{background:#F1F5F9;color:#475569}
+.ach-empty{padding:40px 20px;text-align:center;color:var(--muted);font-size:13px}
+.ach-modal-bg{display:none;position:fixed;inset:0;background:rgba(6,3,58,.45);z-index:2000;align-items:center;justify-content:center;padding:20px}
+.ach-modal-bg.open{display:flex}
+.ach-modal{background:white;border-radius:16px;padding:26px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.ach-modal h3{margin:0 0 16px;font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)}
+.ach-fg{margin-bottom:14px}
+.ach-fg label{display:block;font-size:12px;font-weight:700;color:#374151;margin-bottom:5px}
+.ach-fg input,.ach-fg textarea{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;font-family:inherit;box-sizing:border-box}
+.ach-fg textarea{resize:vertical;min-height:60px}
+.ach-modal-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px}
+.ach-err{color:#dc2626;font-size:12px;margin-top:4px;display:none}
+@media (max-width:768px) {
+  .ach-search input, .ach-fg input, .ach-fg textarea { min-height:44px; }
+}
+</style>
+
+<div class="ach-toolbar">
+  <form class="ach-search" method="GET">
+    <label for="ach-q" style="position:absolute;left:-9999px">Rechercher un fournisseur</label>
+    <input type="text" id="ach-q" name="q" value="<?= h($q) ?>" placeholder="Raison sociale, contact…">
+    <button type="submit" class="btn btn-secondary">Rechercher</button>
+  </form>
+  <?php if ($can_edit): ?>
+  <button type="button" class="btn btn-primary" onclick="achOpenCreate()">
+    <i class="ph ph-plus" aria-hidden="true"></i> Nouveau fournisseur
+  </button>
+  <?php endif; ?>
+</div>
+
+<div class="ach-table-wrap">
+  <?php if (empty($fournisseurs)): ?>
+    <div class="ach-empty">Aucun fournisseur trouvé.</div>
+  <?php else: ?>
+  <div style="overflow-x:auto">
+  <table class="ach-table">
+    <thead><tr>
+      <th>Raison sociale</th><th>Contact</th><th>Téléphone</th><th>Email</th><th>Statut</th>
+      <?php if ($can_edit): ?><th>Actions</th><?php endif; ?>
+    </tr></thead>
+    <tbody>
+      <?php foreach ($fournisseurs as $f): ?>
+      <tr id="frow-<?= $f['id'] ?>">
+        <td style="font-weight:700;color:var(--navy)"><?= h($f['raison_sociale']) ?></td>
+        <td><?= h($f['contact_nom'] ?: '—') ?></td>
+        <td><?= h($f['telephone'] ?: '—') ?></td>
+        <td><?= h($f['email'] ?: '—') ?></td>
+        <td><span class="ach-badge <?= $f['actif'] ? 'on' : 'off' ?>"><?= $f['actif'] ? 'Actif' : 'Inactif' ?></span></td>
+        <?php if ($can_edit): ?>
+        <td style="display:flex;gap:8px">
+          <button type="button" class="btn btn-secondary btn-sm" title="Modifier" aria-label="Modifier <?= h($f['raison_sociale']) ?>"
+                  onclick='achOpenEdit(<?= json_encode($f, JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
+            <i class="ph ph-pencil-simple" aria-hidden="true"></i>
+          </button>
+          <button type="button" class="btn btn-secondary btn-sm" title="<?= $f['actif'] ? 'Désactiver' : 'Réactiver' ?>"
+                  aria-label="<?= $f['actif'] ? 'Désactiver' : 'Réactiver' ?> <?= h($f['raison_sociale']) ?>"
+                  onclick="achToggle(<?= $f['id'] ?>, <?= $f['actif'] ? 0 : 1 ?>)">
+            <i class="ph <?= $f['actif'] ? 'ph-prohibit' : 'ph-check-circle' ?>" aria-hidden="true"></i>
+          </button>
+        </td>
+        <?php endif; ?>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table>
+  </div>
+  <?php endif; ?>
+  <?= pagination($total, $perPage, $page, strtok($_SERVER['REQUEST_URI'], '?') . ($q !== '' ? '?q=' . urlencode($q) : '')) ?>
+</div>
+
+<!-- MODALE création/édition -->
+<div class="ach-modal-bg" id="ach-modal">
+  <div class="ach-modal" role="dialog" aria-labelledby="ach-modal-title">
+    <h3 id="ach-modal-title"><i class="ph ph-storefront" aria-hidden="true"></i> <span id="ach-modal-ttl-txt">Nouveau fournisseur</span></h3>
+    <input type="hidden" id="f-id" value="">
+    <div class="ach-fg">
+      <label for="f-raison">Raison sociale</label>
+      <input type="text" id="f-raison" required>
+    </div>
+    <div class="ach-fg">
+      <label for="f-contact">Contact</label>
+      <input type="text" id="f-contact">
+    </div>
+    <div class="ach-fg">
+      <label for="f-tel">Téléphone</label>
+      <input type="text" id="f-tel">
+    </div>
+    <div class="ach-fg">
+      <label for="f-email">Email</label>
+      <input type="email" id="f-email">
+    </div>
+    <div class="ach-fg">
+      <label for="f-adresse">Adresse</label>
+      <textarea id="f-adresse"></textarea>
+    </div>
+    <div class="ach-fg">
+      <label for="f-cond">Conditions de paiement</label>
+      <input type="text" id="f-cond" placeholder="ex : 30 jours net">
+    </div>
+    <div class="ach-err" id="ach-err"></div>
+    <div class="ach-modal-actions">
+      <button type="button" class="btn btn-secondary" onclick="achCloseModal()">Annuler</button>
+      <button type="button" class="btn btn-primary" onclick="achSave()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function achOpenCreate() {
+  document.getElementById('f-id').value = '';
+  document.getElementById('ach-modal-ttl-txt').textContent = 'Nouveau fournisseur';
+  ['f-raison','f-contact','f-tel','f-email','f-adresse','f-cond'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('ach-err').style.display = 'none';
+  document.getElementById('ach-modal').classList.add('open');
+  setTimeout(() => document.getElementById('f-raison').focus(), 80);
+}
+function achOpenEdit(f) {
+  document.getElementById('f-id').value = f.id;
+  document.getElementById('ach-modal-ttl-txt').textContent = 'Modifier le fournisseur';
+  document.getElementById('f-raison').value  = f.raison_sociale || '';
+  document.getElementById('f-contact').value = f.contact_nom || '';
+  document.getElementById('f-tel').value     = f.telephone || '';
+  document.getElementById('f-email').value   = f.email || '';
+  document.getElementById('f-adresse').value = f.adresse || '';
+  document.getElementById('f-cond').value    = f.conditions_paiement || '';
+  document.getElementById('ach-err').style.display = 'none';
+  document.getElementById('ach-modal').classList.add('open');
+}
+function achCloseModal() { document.getElementById('ach-modal').classList.remove('open'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') achCloseModal(); });
+document.getElementById('ach-modal').addEventListener('click', e => { if (e.target === e.currentTarget) achCloseModal(); });
+
+function achPost(data) {
+  const fd = new FormData();
+  Object.entries(data).forEach(([k, v]) => fd.append(k, v));
+  return fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd }).then(r => r.json());
+}
+
+function achSave() {
+  const id = document.getElementById('f-id').value;
+  const raison = document.getElementById('f-raison').value.trim();
+  const err = document.getElementById('ach-err');
+  if (!raison) { err.textContent = 'La raison sociale est obligatoire.'; err.style.display = 'block'; return; }
+  achPost({
+    action: id ? 'update' : 'create',
+    id: id,
+    raison_sociale: raison,
+    contact_nom: document.getElementById('f-contact').value.trim(),
+    telephone: document.getElementById('f-tel').value.trim(),
+    email: document.getElementById('f-email').value.trim(),
+    adresse: document.getElementById('f-adresse').value.trim(),
+    conditions_paiement: document.getElementById('f-cond').value.trim(),
+  }).then(res => {
+    if (!res.success) { err.textContent = res.message; err.style.display = 'block'; return; }
+    toast(res.message, 'success');
+    achCloseModal();
+    setTimeout(() => location.reload(), 500);
+  });
+}
+
+function achToggle(id, actif) {
+  if (!confirm(actif ? 'Réactiver ce fournisseur ?' : 'Désactiver ce fournisseur ?')) return;
+  achPost({ action: 'toggle', id, actif }).then(res => {
+    toast(res.message, res.success ? 'success' : 'danger');
+    if (res.success) setTimeout(() => location.reload(), 500);
+  });
+}
+</script>
+
+<?php include __DIR__ . '/../../templates/footer.php'; ?>
