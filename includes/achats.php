@@ -947,6 +947,11 @@ function ach_viser(int $feb_id, array $user, bool $accepte, string $commentaire 
                 [$now, $sigJson, $histJson, $feb_id, $cur]
             );
             if ($stmt->rowCount() === 0) { db_rollback(); return false; }
+            // Bloc 1 (J6) : l'éclatement en lignes de suivi Sage a lieu ici,
+            // dans la même transaction que le passage à confirmee — jamais en
+            // dehors, sinon une FEB confirmée pourrait rester sans suivi si
+            // l'appel suivant échouait.
+            ach_eclater_suivi($feb_id);
             db_commit();
         } catch (Exception $e) {
             db_rollback();
@@ -1037,4 +1042,137 @@ function ach_a_viser(array $user): array {
         }
     }
     return $out;
+}
+
+// ── Éclatement en lignes de suivi Sage, à la confirmation d'une FEB
+//    (Bloc 1, J6). Appelée par ach_viser() dans la même transaction que le
+//    passage à confirmee — jamais en dehors.
+//    Une ligne feb_suivi par ligne arbitrée 'achat' : les lignes servies sur
+//    stock sont closes depuis J3 (ach_basculer_vers_commande), elles
+//    n'entrent jamais dans le suivi Sage.
+function ach_eclater_suivi(int $feb_id): void {
+    $feb = db_fetch_one("SELECT numero, site_id, acheteur_id, date_confirmation FROM feb WHERE id=?", [$feb_id]);
+    if (!$feb) return;
+
+    // date_livraison_prevue n'est jamais laissée vide : estimée au délai
+    // standard (paramètre, jamais codé en dur) faute de date réelle
+    // communiquée par le fournisseur — remplaçable au moment du BC (Bloc 2).
+    $delai = (int) ach_param('delai_livraison_standard_jours', 15);
+    $date_confirmation = $feb['date_confirmation'] ?: date('Y-m-d H:i:s');
+    $date_prevue = (new DateTime($date_confirmation))->modify("+$delai days")->format('Y-m-d');
+
+    $lignes = db_fetch_all("SELECT id, quantite FROM feb_lignes WHERE feb_id=? AND arbitrage='achat'", [$feb_id]);
+    foreach ($lignes as $l) {
+        db_query(
+            "INSERT INTO feb_suivi (feb_id, feb_ligne_id, quantite_commandee, statut, site_id, date_livraison_prevue)
+             VALUES (?,?,?,'en_attente',?,?)",
+            [$feb_id, $l['id'], $l['quantite'], $feb['site_id'], $date_prevue]
+        );
+    }
+
+    if ($feb['acheteur_id'] && $lignes) {
+        $n = count($lignes);
+        db_query(
+            "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','FEB en suivi',?,?)",
+            [(int)$feb['acheteur_id'], "FEB {$feb['numero']} confirmée — $n ligne(s) passée(s) en suivi Sage.", '/pages/achats/suivi_achats.php']
+        );
+    }
+}
+
+// ── Statut d'une ligne de suivi — jamais stocké, toujours recalculé à la
+//    lecture (Bloc 3). $ligne : une ligne feb_suivi (tableau associatif brut).
+//    livree/receptionnee sont posés maintenant mais ne seront vraiment
+//    alimentés qu'en J8 (écran de réception) : provisoirement, une ligne est
+//    considérée receptionnee si une quantité a été reçue, livree si la date
+//    réelle est connue mais qu'aucune quantité n'a encore été enregistrée —
+//    à affiner en J8 si l'écran de réception impose une autre distinction.
+function ach_statut_suivi_calcule(array $ligne): string {
+    if (!empty($ligne['date_livraison_reelle'])) {
+        return (int)($ligne['quantite_recue'] ?? 0) > 0 ? 'receptionnee' : 'livree';
+    }
+    if (empty($ligne['numero_da'])) return 'en_attente';
+    if (!empty($ligne['date_livraison_prevue'])) {
+        $seuil  = (int) ach_param('seuil_retard_jours', 5);
+        $limite = (new DateTime($ligne['date_livraison_prevue']))->modify("+$seuil days");
+        if (new DateTime() > $limite) return 'en_retard';
+    }
+    return 'commande';
+}
+
+// ── Saisie du N° DA (Bloc 2). date_da horodatée à la première saisie
+//    seulement — une correction ultérieure par un administrateur change le
+//    numéro sans réécrire la date d'origine. Toute saisie ou modification
+//    est tracée à l'audit.
+function ach_saisir_da(int $suivi_id, string $numero_da, array $user): void {
+    $uid       = (int)$user['id'];
+    $numero_da = trim($numero_da);
+    if ($numero_da === '') throw new AchValidationException('Le numéro de DA est obligatoire.');
+
+    $ligne = db_fetch_one("SELECT * FROM feb_suivi WHERE id=?", [$suivi_id]);
+    if (!$ligne) throw new AchValidationException('Ligne de suivi introuvable.');
+
+    $premiere_saisie = empty($ligne['numero_da']);
+    $is_admin = in_array($user['role_slug'] ?? '', ['admin', 'superadmin'], true);
+    if (!$premiere_saisie && !$is_admin) {
+        throw new AchValidationException('Le N° DA est déjà saisi — seul un administrateur peut le modifier.');
+    }
+
+    if ($premiere_saisie) {
+        db_query("UPDATE feb_suivi SET numero_da=?, date_da=CURRENT_DATE WHERE id=?", [$numero_da, $suivi_id]);
+    } else {
+        db_query("UPDATE feb_suivi SET numero_da=? WHERE id=?", [$numero_da, $suivi_id]);
+    }
+    audit_log($uid, 'UPDATE', 'achats_suivi', $suivi_id, $premiere_saisie
+        ? "Saisie N° DA : $numero_da"
+        : "Modification N° DA (administrateur) : {$ligne['numero_da']} → $numero_da");
+}
+
+// ── Saisie du N° BC (Bloc 2) — refuse tant qu'aucun N° DA n'existe (règle
+//    d'ordre confirmée en Bloc 0). $date_livraison_prevue : remplace
+//    l'estimation à J+délai standard par la date réelle communiquée par le
+//    fournisseur, si l'acheteur la renseigne (confirmé en recette).
+function ach_saisir_bc(int $suivi_id, string $numero_bc, array $user, ?string $date_livraison_prevue = null): void {
+    $uid       = (int)$user['id'];
+    $numero_bc = trim($numero_bc);
+    if ($numero_bc === '') throw new AchValidationException('Le numéro de BC est obligatoire.');
+
+    $ligne = db_fetch_one("SELECT * FROM feb_suivi WHERE id=?", [$suivi_id]);
+    if (!$ligne) throw new AchValidationException('Ligne de suivi introuvable.');
+    if (empty($ligne['numero_da'])) {
+        throw new AchValidationException('Le N° DA doit être saisi avant le N° BC.');
+    }
+
+    if ($date_livraison_prevue) {
+        db_query("UPDATE feb_suivi SET numero_bc=?, date_bc=CURRENT_DATE, date_livraison_prevue=? WHERE id=?",
+            [$numero_bc, $date_livraison_prevue, $suivi_id]);
+    } else {
+        db_query("UPDATE feb_suivi SET numero_bc=?, date_bc=CURRENT_DATE WHERE id=?", [$numero_bc, $suivi_id]);
+    }
+    audit_log($uid, 'UPDATE', 'achats_suivi', $suivi_id, "Saisie N° BC : $numero_bc"
+        . ($date_livraison_prevue ? " — date de livraison prévue ajustée au $date_livraison_prevue" : ''));
+}
+
+// ── Saisie par lot (Bloc 2) : une même référence pour toutes les lignes
+//    d'un lot. Ne touche que les lignes du lot sans référence — une ligne
+//    déjà pourvue n'est jamais écrasée (filtrée avant même d'être tentée,
+//    donc jamais bloquée par le verrou administrateur de ach_saisir_da() sur
+//    ce chemin). Retourne le nombre de lignes effectivement mises à jour.
+function ach_saisir_da_lot(int $feb_id, string $lot, string $numero_da, array $user): int {
+    $lignes = db_fetch_all(
+        "SELECT fs.id FROM feb_suivi fs JOIN feb_lignes fl ON fl.id = fs.feb_ligne_id
+          WHERE fs.feb_id=? AND fl.lot=? AND (fs.numero_da IS NULL OR fs.numero_da = '')",
+        [$feb_id, $lot]
+    );
+    foreach ($lignes as $l) ach_saisir_da((int)$l['id'], $numero_da, $user);
+    return count($lignes);
+}
+function ach_saisir_bc_lot(int $feb_id, string $lot, string $numero_bc, array $user, ?string $date_livraison_prevue = null): int {
+    $lignes = db_fetch_all(
+        "SELECT fs.id FROM feb_suivi fs JOIN feb_lignes fl ON fl.id = fs.feb_ligne_id
+          WHERE fs.feb_id=? AND fl.lot=? AND (fs.numero_bc IS NULL OR fs.numero_bc = '')
+            AND fs.numero_da IS NOT NULL AND fs.numero_da <> ''",
+        [$feb_id, $lot]
+    );
+    foreach ($lignes as $l) ach_saisir_bc((int)$l['id'], $numero_bc, $user, $date_livraison_prevue);
+    return count($lignes);
 }
