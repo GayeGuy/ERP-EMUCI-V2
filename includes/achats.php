@@ -3,6 +3,11 @@
 //  includes/achats.php — Helpers du module Achats
 // ============================================================
 
+// ach_creer_feb() appelle audit_log() : on ne compte pas sur l'appelant
+// pour l'avoir inclus, sinon tout nouveau point d'entrée (script, tâche
+// planifiée, test) tombe sur un fatal « undefined function ».
+require_once __DIR__ . '/audit.php';
+
 // ── Libellés et couleurs de statuts ──────────────────────────
 // Préparés pour les écrans FEB (lot suivant, pas encore créés) — aucun
 // écran de ce lot n'en dépend, mais les futurs écrans réutiliseront ces
