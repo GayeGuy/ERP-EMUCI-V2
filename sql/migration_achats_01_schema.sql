@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS achat_paliers (
     id          SERIAL PRIMARY KEY,
     borne_min   integer NOT NULL DEFAULT 0,
     borne_max   integer DEFAULT NULL,  -- NULL = pas de plafond
-    libelle     varchar(150) NOT NULL,
+    libelle     varchar(150) NOT NULL UNIQUE,
     signataires jsonb NOT NULL DEFAULT '[]',  -- liste ordonnée de slugs de rôles
     ordre       integer NOT NULL DEFAULT 0,
     actif       smallint NOT NULL DEFAULT 1

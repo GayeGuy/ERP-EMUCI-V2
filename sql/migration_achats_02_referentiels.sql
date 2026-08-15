@@ -23,7 +23,7 @@ INSERT INTO achat_paliers (borne_min, borne_max, libelle, signataires, ordre, ac
     (0,       500000,  'RAF seul',              '["raf"]'::jsonb,               1, 1),
     (500001,  5000000, 'RAF + DAF',             '["raf","daf"]'::jsonb,         2, 1),
     (5000001, NULL,    'RAF + DAF + PDG',       '["raf","daf","lecteur"]'::jsonb, 3, 1)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (libelle) DO NOTHING;
 
 -- ══════════════════════════════════════════════════════════════
 --  Types d'achat — DAF / DAI / DAH
