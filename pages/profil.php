@@ -64,7 +64,7 @@ include __DIR__ . '/../templates/header.php';
 }
 .big-avatar {
   width: 80px; height: 80px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--blue-mid, #1a56a0), var(--accent-d));
+  background: var(--primary-d);
   display: flex; align-items: center; justify-content: center;
   font-size: 32px; font-weight: 700; margin: 0 auto 12px;
   border: 3px solid rgba(255,255,255,.3);
@@ -86,7 +86,7 @@ include __DIR__ . '/../templates/header.php';
   padding: 14px 24px; font-size: 13.5px; font-weight: 500;
   color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent;
   background: none; border-top: none; border-left: none; border-right: none;
-  transition: all .15s; font-family: 'DM Sans', sans-serif;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s; font-family: 'DM Sans', sans-serif;
 }
 .tab-btn.active { color: var(--blue-mid, #1a56a0); border-bottom-color: var(--blue-mid, #1a56a0); }
 .tab-pane { display: none; padding: 24px; }

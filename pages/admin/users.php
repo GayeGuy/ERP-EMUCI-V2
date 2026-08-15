@@ -187,7 +187,7 @@ include __DIR__ . '/../../templates/header.php';
 .fsel:focus{border-color:var(--blue-mid, #1a56a0)}
 /* Tabs */
 .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px}
-.tab-btn{padding:12px 20px;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition:all .15s;font-family:'Manrope',sans-serif}
+.tab-btn{padding:12px 20px;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;font-family:'Manrope',sans-serif}
 .tab-btn.active{color:var(--blue-mid, #1a56a0);border-bottom-color:var(--blue-mid, #1a56a0)}
 .tab-pane{display:none}
 .tab-pane.active{display:block}

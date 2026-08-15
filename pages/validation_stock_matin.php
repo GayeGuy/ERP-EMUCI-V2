@@ -1335,11 +1335,11 @@ $nb_avec_ecart  = count(array_filter($validations_jour, fn($v) => $v['statut'] !
 .vsm-actions{display:flex;gap:6px;align-items:center;justify-content:center;flex-wrap:nowrap}
 .btn-traiter{background:#DC2626;color:white;border:none;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;transition:background .15s}
 .btn-traiter:hover{background:#b91c1c}
-.btn-vsm-detail{background:white;color:var(--navy);border:1.5px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;transition:all .15s}
+.btn-vsm-detail{background:white;color:var(--navy);border:1.5px solid var(--border);padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;}
 .btn-vsm-detail:hover{background:#f0f4ff;border-color:#1B75BC;color:#1B75BC}
 .btn-vsm-revise{background:#1B75BC;color:white;border:none;padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .btn-vsm-revise:hover{background:#1565a8}
-.detail-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:white;color:var(--navy);transition:all .15s;text-decoration:none}
+.detail-btn{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:white;color:var(--navy);transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;text-decoration:none}
 .detail-btn:hover{background:var(--tertiary);border-color:var(--primary);color:var(--primary-d)}
 /* ── ONGLETS ── */
 .vsm-tabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px}
@@ -2282,11 +2282,11 @@ async function verifierSite(siteId, siteNom) {
             <td style="padding:9px 12px;text-align:center;white-space:nowrap">
               <div style="display:flex;gap:6px;justify-content:center">
                 <button id="cc-btn-ok-${i}" onclick="setCoordDec(${i},${c.bobine_id},'valider',${total})"
-                        style="padding:6px 12px;background:#D1FAE5;color:#065F46;border:1.5px solid #34D399;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s">
+                        style="padding:6px 12px;background:#D1FAE5;color:#065F46;border:1.5px solid #34D399;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;">
                   ✅ Valider
                 </button>
                 <button id="cc-btn-ref-${i}" onclick="setCoordDec(${i},${c.bobine_id},'refuser',${total})"
-                        style="padding:6px 12px;background:#FEE2E2;color:#991B1B;border:1.5px solid #F87171;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition:all .15s">
+                        style="padding:6px 12px;background:#FEE2E2;color:#991B1B;border:1.5px solid #F87171;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;">
                   ❌ Refuser
                 </button>
               </div>
@@ -2327,7 +2327,7 @@ async function verifierSite(siteId, siteNom) {
                 0 / ${total} bobine(s) décidée(s)
               </span>
               <button id="cc-confirm-btn" disabled onclick="confirmerDecisionsCoord(${siteId},${total})"
-                      style="padding:11px 24px;background:#06033A;color:white;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:not-allowed;opacity:.5;transition:all .2s;white-space:nowrap">
+                      style="padding:11px 24px;background:#06033A;color:white;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:not-allowed;opacity:.5;transition: background-color .2s, border-color .2s, color .2s, box-shadow .2s, transform .2s, opacity .2s;white-space:nowrap">
                 Confirmer les décisions
               </button>
             </div>` : ''}

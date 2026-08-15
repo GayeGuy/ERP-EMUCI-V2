@@ -427,7 +427,7 @@ $type_colors = [
 .resp-avatar{width:38px;height:38px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:700;flex-shrink:0;letter-spacing:.3px}
 /* #15568B et non #1B75BC : sur le fond #EFF6FF ce dernier ne donnait que
    4,47:1, sous le seuil AA de 4,5. Le nouveau donne 7,05:1. */
-.action-btn{width:32px;height:32px;border-radius:8px;border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;transition:all .15s;background:#EFF6FF;color:#15568B}
+.action-btn{width:32px;height:32px;border-radius:8px;border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;background:#EFF6FF;color:#15568B}
 .action-btn:hover{background:#15568B;color:white;transform:scale(1.08)}
 .action-btn.edit-btn{background:#F0FDF4;color:#166534}
 .action-btn.edit-btn:hover{background:#166534;color:white}
@@ -456,7 +456,7 @@ $type_colors = [
 .capa-fill{height:100%;border-radius:3px}
 /* Config */
 .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:18px}
-.tab-btn{padding:10px 18px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition:all .15s;font-family:'Manrope',sans-serif}
+.tab-btn{padding:10px 18px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;font-family:'Manrope',sans-serif}
 .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue)}
 .tab-pane{display:none}
 .tab-pane.active{display:block}

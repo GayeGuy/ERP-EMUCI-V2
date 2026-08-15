@@ -237,7 +237,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
       font-size: 14px;
       color: var(--text);
       background: var(--light);
-      transition: all .2s;
+      transition: background-color .2s, border-color .2s, color .2s, box-shadow .2s, transform .2s, opacity .2s;
       outline: none;
     }
     .input-wrap input:focus {
@@ -271,7 +271,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
       font-size: 15px; font-weight: 700;
       letter-spacing: .3px;
       cursor: pointer;
-      transition: all .2s;
+      transition: background-color .2s, border-color .2s, color .2s, box-shadow .2s, transform .2s, opacity .2s;
       position: relative; overflow: hidden;
     }
     .btn-login:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(41,128,212,.4); }

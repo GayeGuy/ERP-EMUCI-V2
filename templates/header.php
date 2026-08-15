@@ -145,7 +145,7 @@ $unread = count($notifs);
       font-size: 13.5px; font-weight: 500;
       border-radius: 12px;
       border-left: none;
-      transition: all .18s cubic-bezier(.4,0,.2,1);
+      transition: background-color .18s cubic-bezier(.4,0,.2,1), border-color .18s cubic-bezier(.4,0,.2,1), color .18s cubic-bezier(.4,0,.2,1), box-shadow .18s cubic-bezier(.4,0,.2,1), transform .18s cubic-bezier(.4,0,.2,1), opacity .18s cubic-bezier(.4,0,.2,1);
     }
     .nav-item:hover {
       color: white;
@@ -164,7 +164,7 @@ $unread = count($notifs);
       flex-shrink: 0;
       border-radius: 10px;
       background: rgba(255,255,255,.1);
-      transition: all .18s;
+      transition: background-color .18s, border-color .18s, color .18s, box-shadow .18s, transform .18s, opacity .18s;
     }
     .nav-item .nav-icon i { font-size: 17px; line-height: 1; color: white; transition: color .18s; }
     .nav-item:hover .nav-icon { background: rgba(255,255,255,.18); }
@@ -205,7 +205,7 @@ $unread = count($notifs);
     .user-card-link:hover { background: rgba(255,255,255,.10); }
     .user-avatar {
       width: 36px; height: 36px; border-radius: 10px;
-      background: linear-gradient(135deg, var(--primary), #A5D8FF);
+      background: var(--primary-d);
       display: flex; align-items: center; justify-content: center;
       color: white; font-size: 13px; font-weight: 700; flex-shrink: 0;
     }
@@ -266,7 +266,7 @@ $unread = count($notifs);
       background: var(--tertiary);
       display: flex; align-items: center; justify-content: center;
       cursor: pointer; font-size: 18px;
-      transition: all .15s;
+      transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
     }
     .notif-btn:hover { background: var(--primary-l); border-color: var(--primary-d); }
     .notif-count {
@@ -375,7 +375,7 @@ $unread = count($notifs);
       font-family: 'Manrope', sans-serif;
       font-size: 13px; font-weight: 700;
       cursor: pointer; border: none; text-decoration: none;
-      transition: all .18s cubic-bezier(.4,0,.2,1);
+      transition: background-color .18s cubic-bezier(.4,0,.2,1), border-color .18s cubic-bezier(.4,0,.2,1), color .18s cubic-bezier(.4,0,.2,1), box-shadow .18s cubic-bezier(.4,0,.2,1), transform .18s cubic-bezier(.4,0,.2,1), opacity .18s cubic-bezier(.4,0,.2,1);
       letter-spacing: .1px;
     }
     .btn-primary   { background: var(--primary-d); color: white; box-shadow: 0 2px 12px rgba(124,146,255,.35); }
@@ -439,7 +439,7 @@ $unread = count($notifs);
       border-radius: 10px;
       border: 1.5px solid var(--border);
       font-size: 13px; color: var(--text);
-      text-decoration: none; transition: all .15s;
+      text-decoration: none; transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
       font-weight: 500;
     }
     .page-btn:hover { background: var(--primary-l); border-color: var(--primary-d); color: var(--primary-d); }
@@ -800,7 +800,7 @@ $unread = count($notifs);
       <!-- User menu -->
       <div style="position:relative" id="user-menu-wrap">
         <button type="button" onclick="toggleUserMenu(event)" id="user-chip"
-                style="display:flex;align-items:center;gap:10px;padding:6px 12px 6px 6px;background:var(--tertiary);border-radius:40px;border:1.5px solid var(--border);cursor:pointer;transition:all .15s;font-family:inherit">
+                style="display:flex;align-items:center;gap:10px;padding:6px 12px 6px 6px;background:var(--tertiary);border-radius:40px;border:1.5px solid var(--border);cursor:pointer;transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;font-family:inherit">
           <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:700;font-family:'Plus Jakarta Sans',sans-serif;flex-shrink:0">
             <?= strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',0,1)) ?>
           </div>

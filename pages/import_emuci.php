@@ -677,13 +677,13 @@ include __DIR__ . '/../templates/header.php';
 .tab-nav{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:24px}
 .tab-btn{padding:12px 28px;font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:600;
   border:none;background:none;cursor:pointer;color:var(--muted);border-bottom:3px solid transparent;
-  margin-bottom:-2px;transition:all .15s}
+  margin-bottom:-2px;transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;}
 .tab-btn.active{color:var(--primary-d);border-bottom-color:var(--primary)}
 .tab-btn:hover{color:var(--navy)}
 .tab-pane{display:none}.tab-pane.active{display:block}
 
 .upload-zone{border:2px dashed var(--border);border-radius:16px;padding:40px;text-align:center;
-  background:var(--tertiary);transition:all .2s;cursor:pointer}
+  background:var(--tertiary);transition: background-color .2s, border-color .2s, color .2s, box-shadow .2s, transform .2s, opacity .2s;cursor:pointer}
 .upload-zone:hover,.upload-zone.drag{border-color:var(--primary);background:var(--primary-l)}
 .upload-zone input[type=file]{display:none}
 .upload-icon{font-size:48px;margin-bottom:12px}

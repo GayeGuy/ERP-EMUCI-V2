@@ -363,7 +363,7 @@ include __DIR__ . '/../templates/header.php';
 .stock-fill{height:100%;border-radius:3px}
 .ac-footer{padding:8px 15px;background:var(--tertiary);display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);font-size:11.5px}
 .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px;overflow-x:auto;gap:0}
-.tab-btn{padding:11px 18px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition:all .15s;white-space:nowrap;font-family:'Manrope',sans-serif}
+.tab-btn{padding:11px 18px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;white-space:nowrap;font-family:'Manrope',sans-serif}
 .tab-btn.active{color:var(--primary-d);border-bottom-color:var(--primary-d)}
 .tab-pane{display:none}.tab-pane.active{display:block}
 .modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(10,22,40,.5);backdrop-filter:blur(4px);align-items:center;justify-content:center}

@@ -352,7 +352,7 @@ include __DIR__ . '/../templates/header.php';
 .st-badge{padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap}
 .detail-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:7px;
   font-size:11.5px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);
-  background:white;color:var(--navy);transition:all .15s}
+  background:white;color:var(--navy);transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;}
 .detail-btn:hover{background:var(--tertiary);border-color:var(--primary);color:var(--primary-d)}
 .st-en_attente{background:#FEF3C7;color:#92400E}
 .st-valide{background:#DBEAFE;color:#1D4ED8}

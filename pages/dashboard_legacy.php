@@ -380,7 +380,7 @@ include __DIR__ . '/../templates/header.php';
 .wb-btn {
   padding: 10px 20px; border-radius: 12px; font-size: 13px; font-weight: 700;
   text-decoration: none; cursor: pointer; border: none;
-  transition: all .18s cubic-bezier(.4,0,.2,1);
+  transition: background-color .18s cubic-bezier(.4,0,.2,1), border-color .18s cubic-bezier(.4,0,.2,1), color .18s cubic-bezier(.4,0,.2,1), box-shadow .18s cubic-bezier(.4,0,.2,1), transform .18s cubic-bezier(.4,0,.2,1), opacity .18s cubic-bezier(.4,0,.2,1);
   font-family: 'Manrope', sans-serif;
 }
 .wb-btn.primary { background: var(--primary); color: white; box-shadow: 0 4px 16px rgba(124,146,255,.4); }

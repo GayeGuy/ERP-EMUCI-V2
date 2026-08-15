@@ -119,7 +119,7 @@ function toast(msg, type = 'success') {
   font-size: 13.5px; font-weight: 500;
   box-shadow: 0 8px 24px rgba(0,0,0,.15);
   opacity: 0; transform: translateY(10px);
-  transition: all .3s ease;
+  transition: background-color .3s ease, border-color .3s ease, color .3s ease, box-shadow .3s ease, transform .3s ease, opacity .3s ease;
   max-width: 360px;
 }
 .toast.show { opacity: 1; transform: translateY(0); }

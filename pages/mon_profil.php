@@ -118,7 +118,7 @@ include __DIR__ . '/../templates/header.php';
 /* ── Carte résumé ──────────────────────────────────────────── */
 .profil-avatar {
   width: 88px; height: 88px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  background: var(--primary-d);
   display: flex; align-items: center; justify-content: center;
   font-size: 32px; font-weight: 800; color: #fff;
   font-family: 'Plus Jakarta Sans', sans-serif;
@@ -150,7 +150,7 @@ include __DIR__ . '/../templates/header.php';
   border: 2px solid var(--border);
   border-radius: 14px; padding: 18px 14px;
   text-align: center; cursor: pointer;
-  transition: all .18s; background: white;
+  transition: background-color .18s, border-color .18s, color .18s, box-shadow .18s, transform .18s, opacity .18s; background: white;
   user-select: none;
 }
 .theme-opt:hover { border-color: var(--primary); background: var(--primary-l); }

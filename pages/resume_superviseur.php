@@ -227,7 +227,7 @@ include __DIR__ . '/../templates/header.php';
 ?>
 <style>
 .vue-tabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:24px}
-.vue-tab{padding:12px 28px;font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .15s}
+.vue-tab{padding:12px 28px;font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-2px;transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;}
 .vue-tab.active{color:var(--primary,var(--blue));border-bottom-color:var(--primary,var(--blue))}
 .kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:22px}
 .kk{background:white;border:1px solid var(--border);border-radius:14px;padding:16px 18px;border-left:4px solid var(--blue)}

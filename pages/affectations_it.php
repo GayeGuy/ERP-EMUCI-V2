@@ -94,7 +94,7 @@ include __DIR__ . '/../templates/header.php';
 .sit-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:20px}
 .sit-card{background:white;border-radius:16px;border:1px solid var(--border);overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.06)}
 .sit-head{background:var(--navy);padding:16px 20px;display:flex;align-items:center;gap:12px}
-.sit-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#1b75bc,#00aeef);display:flex;align-items:center;justify-content:center;font-weight:800;color:white;font-size:15px;flex-shrink:0}
+.sit-avatar{width:40px;height:40px;border-radius:50%;background:var(--primary-d);display:flex;align-items:center;justify-content:center;font-weight:800;color:white;font-size:15px;flex-shrink:0}
 .sit-name{color:white;font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700}
 .sit-sub{color:#94c2d4;font-size:12px;margin-top:2px}
 .sit-body{padding:16px 20px}

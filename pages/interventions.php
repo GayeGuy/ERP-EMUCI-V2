@@ -178,7 +178,7 @@ include __DIR__ . '/../templates/header.php';
 .prio-urgente{background:#fee2e2;color:#991b1b;font-weight:700} .prio-haute{background:#fef3c7;color:#92400e}
 .prio-normale{background:#f1f5f9;color:#475569}
 .tab-nav{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px}
-.tab-btn{padding:11px 22px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .15s}
+.tab-btn{padding:11px 22px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-2px;transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;}
 .tab-btn.active{color:var(--primary,var(--blue));border-bottom-color:var(--primary,var(--blue))}
 </style>
 

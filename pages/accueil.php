@@ -171,7 +171,7 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
     .uc-btn:hover { border-color: var(--primary); background: #E0E7FF; }
     .uc-avatar {
       width: 30px; height: 30px; border-radius: 8px;
-      background: linear-gradient(135deg, var(--primary), #A5D8FF);
+      background: var(--primary-d);
       display: flex; align-items: center; justify-content: center;
       color: white; font-size: 12px; font-weight: 800;
       font-family: 'Plus Jakarta Sans', sans-serif;
@@ -247,7 +247,7 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
       border-radius: 18px; border: 1.5px solid var(--border);
       box-shadow: 0 2px 10px rgba(6,3,58,.05);
       text-decoration: none; color: inherit;
-      transition: all .2s cubic-bezier(.4,0,.2,1);
+      transition: background-color .2s cubic-bezier(.4,0,.2,1), border-color .2s cubic-bezier(.4,0,.2,1), color .2s cubic-bezier(.4,0,.2,1), box-shadow .2s cubic-bezier(.4,0,.2,1), transform .2s cubic-bezier(.4,0,.2,1), opacity .2s cubic-bezier(.4,0,.2,1);
       position: relative; overflow: hidden; text-align: center;
     }
     .groupe-bloc::after {
