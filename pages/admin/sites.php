@@ -193,7 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     COUNT(e.id) AS stock_disponible
              FROM configurations_site cs JOIN nomenclatures n ON n.id=cs.nomenclature_id
              LEFT JOIN equipements e ON e.nomenclature_id=cs.nomenclature_id AND e.actif=1 AND e.site_id IS NULL AND e.etat IN ('neuf','bon')
-             WHERE cs.type_site=? GROUP BY cs.nomenclature_id", [$type_site]
+             WHERE cs.type_site=? GROUP BY cs.nomenclature_id, cs.quantite, cs.optionnel, n.code, n.libelle", [$type_site]
         );
         if (empty($besoins)) json_response(false, "Aucune configuration définie pour «$type_site».");
         $nb_sites = PHP_INT_MAX;
@@ -732,7 +732,11 @@ $type_colors = [
     <div class="mbody">
       <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Combien de sites de ce type puis-je créer avec le stock disponible ?</p>
       <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap">
-        <?php foreach ($types_labels as $k => $l): ?>
+        <?php
+        // Entrepôt et Siège n'ont pas de kit d'équipements type à respecter :
+        // le calculateur ne s'applique qu'aux types de site opérationnels.
+        $types_calculables = array_diff_key($types_labels, ['entrepot'=>1,'siege'=>1]);
+        foreach ($types_calculables as $k => $l): ?>
         <button class="btn btn-secondary" onclick="calcCapa('<?= $k ?>')" id="cb-<?= $k ?>"><?= $l ?></button>
         <?php endforeach; ?>
       </div>
@@ -747,11 +751,11 @@ $type_colors = [
     <div class="mhdr"><h3>Configuration des besoins par type</h3><button class="mclose" onclick="closeMX('mCfg')">✕</button></div>
     <div class="mbody">
       <div class="tabs" id="cfgTabs">
-        <?php foreach ($types_labels as $k => $l): ?>
+        <?php foreach ($types_calculables as $k => $l): ?>
         <button class="tab-btn <?= $k==='saisie'?'active':'' ?>" onclick="showCfgTab('<?= $k ?>',this)"><?= $l ?></button>
         <?php endforeach; ?>
       </div>
-      <?php foreach ($types_labels as $k => $l): ?>
+      <?php foreach ($types_calculables as $k => $l): ?>
       <div class="tab-pane <?= $k==='saisie'?'active':'' ?>" id="cfg-<?= $k ?>">
         <div id="cfg-rows-<?= $k ?>"></div>
         <div style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
@@ -780,7 +784,7 @@ $type_colors = [
 const NOMS = <?= json_encode(array_map(fn($n)=>['id'=>$n['id'],'code'=>$n['code'],'libelle'=>$n['libelle']],$nomenclatures)) ?>;
 const STOCK_DISPO = <?= json_encode(array_column($stock_dispo,'dispo','id')) ?>;
 const cfgData = {};
-<?php foreach ($types_labels as $k => $l):
+<?php foreach ($types_calculables as $k => $l):
   $cfg = db_fetch_all("SELECT cs.*,n.code,n.libelle FROM configurations_site cs JOIN nomenclatures n ON n.id=cs.nomenclature_id WHERE cs.type_site=?",[$k]);
 ?>
 cfgData['<?= $k ?>'] = <?= json_encode($cfg) ?>;
