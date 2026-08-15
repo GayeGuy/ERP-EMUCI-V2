@@ -17,8 +17,6 @@ $_SESSION['groupe_actif'] = 'ACHATS';
 $page_title  = 'Paliers de validation';
 $active_page = 'achats_param_paliers';
 
-const ACH_INF = 2147483647; // infini pratique pour le controle de chevauchement (borne_max NULL)
-
 // ── AJAX ────────────────────────────────────────────────────
 if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
@@ -39,20 +37,24 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if (count($signataires) > 3) json_response(false, 'Trois signataires maximum.');
         if (empty($signataires)) json_response(false, 'Au moins un signataire est requis.');
 
-        // Contrôle de non-chevauchement avec les autres paliers actifs
-        // Cast explicite (::integer) sur les paramètres potentiellement NULL dans
-        // COALESCE : sans lui, PDO/pgsql ne peut pas déduire leur type et Postgres
-        // rejette la comparaison (« operator does not exist: integer <= text »).
-        $chevauche = db_fetch_all(
-            "SELECT id, libelle FROM achat_paliers
-              WHERE actif = 1 AND id != ?
-                AND ? <= COALESCE(borne_max, ?::integer)
-                AND borne_min <= COALESCE(?::integer, ?::integer)",
-            [$id, $bmin, ACH_INF, $bmax, ACH_INF]
-        );
-        if ($chevauche) {
-            json_response(false, 'Cette plage chevauche le palier « ' . $chevauche[0]['libelle'] . ' ».');
+        // Tout signataire doit exister comme code d'étape di_roles (n1, raf,
+        // daf, dg, it, gestionnaire) — jamais un slug de rôle ERP. Écran en
+        // liste fermée (cf. plus bas), contrôle serveur redondant ici.
+        $codes_valides = array_column(db_fetch_all("SELECT code FROM di_roles"), 'code');
+        foreach ($signataires as $s) {
+            if (!in_array($s, $codes_valides, true)) {
+                json_response(false, "« $s » n'est pas un code d'étape valide (référentiel di_roles).");
+            }
         }
+
+        // RG-13 : la grille des paliers actifs doit rester complète, sans
+        // trou ni chevauchement — contrôlée sur l'ensemble de la grille
+        // simulée avec ce palier, pas seulement contre les autres pris un
+        // par un.
+        $verif = ach_paliers_couvrent_tout($id ?: null, [
+            'id' => $id, 'borne_min' => $bmin, 'borne_max' => $bmax, 'libelle' => $lib, 'actif' => 1,
+        ]);
+        if (!$verif['ok']) json_response(false, $verif['message']);
 
         $sigJson = json_encode($signataires);
         if ($id) {
@@ -76,6 +78,19 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'toggle') {
         $id = (int)($_POST['id'] ?? 0);
         $nv = (int)($_POST['actif'] ?? 0) ? 1 : 0;
+        $palier = db_fetch_one("SELECT * FROM achat_paliers WHERE id=?", [$id]);
+        if (!$palier) json_response(false, 'Palier introuvable.');
+
+        // RG-13 : activer ou désactiver un palier peut tout autant ouvrir un
+        // trou ou créer un chevauchement — même contrôle que l'enregistrement,
+        // simulé avec le nouvel état demandé.
+        $verif = ach_paliers_couvrent_tout($id, [
+            'id' => $id, 'borne_min' => (int)$palier['borne_min'],
+            'borne_max' => $palier['borne_max'] !== null ? (int)$palier['borne_max'] : null,
+            'libelle' => $palier['libelle'], 'actif' => $nv,
+        ]);
+        if (!$verif['ok']) json_response(false, $verif['message']);
+
         db_query("UPDATE achat_paliers SET actif=? WHERE id=?", [$nv, $id]);
         audit_log($user['id'], 'UPDATE', 'achats_param', $id, $nv ? 'Réactivation palier' : 'Désactivation palier');
         json_response(true, $nv ? 'Palier réactivé.' : 'Palier désactivé.');
@@ -86,8 +101,10 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
 // ── PAGE PHP ─────────────────────────────────────────────────
 $paliers   = db_fetch_all("SELECT * FROM achat_paliers ORDER BY ordre ASC, borne_min ASC");
-$roles     = db_fetch_all("SELECT slug, nom FROM roles ORDER BY nom ASC");
-$roleNames = array_column($roles, 'nom', 'slug');
+// Liste fermée de codes d'étape (di_roles) — jamais les rôles ERP : c'est le
+// vocabulaire que consomme le moteur de circuit (di_can_validate/di_workflow).
+$etapes      = db_fetch_all("SELECT code, label FROM di_roles ORDER BY ordre ASC");
+$etapeLabels = array_column($etapes, 'label', 'code');
 
 include __DIR__ . '/../../templates/header.php';
 ?>
@@ -144,7 +161,7 @@ include __DIR__ . '/../../templates/header.php';
         <td><?= (int)$p['ordre'] ?></td>
         <td style="font-weight:700;color:var(--navy)"><?= h($p['libelle']) ?></td>
         <td><?= h($plage) ?></td>
-        <td><?php foreach ($sig as $s): ?><span class="ach-chip"><?= h($roleNames[$s] ?? $s) ?></span><?php endforeach; ?></td>
+        <td><?php foreach ($sig as $s): ?><span class="ach-chip"><?= h($etapeLabels[$s] ?? $s) ?></span><?php endforeach; ?></td>
         <td><span class="ach-badge <?= $p['actif'] ? 'on' : 'off' ?>"><?= $p['actif'] ? 'Actif' : 'Inactif' ?></span></td>
         <?php if ($can_edit): ?>
         <td style="display:flex;gap:8px">
@@ -190,24 +207,24 @@ include __DIR__ . '/../../templates/header.php';
       <input type="number" id="f-ordre" min="0" step="1" value="0">
     </div>
     <div class="ach-fg">
-      <label for="f-sig1">Signataire 1</label>
+      <label for="f-sig1">Signataire 1 (étape)</label>
       <select id="f-sig1" required>
         <option value="">— Sélectionner —</option>
-        <?php foreach ($roles as $r): ?><option value="<?= h($r['slug']) ?>"><?= h($r['nom']) ?></option><?php endforeach; ?>
+        <?php foreach ($etapes as $e): ?><option value="<?= h($e['code']) ?>"><?= h($e['label']) ?></option><?php endforeach; ?>
       </select>
     </div>
     <div class="ach-fg">
-      <label for="f-sig2">Signataire 2</label>
+      <label for="f-sig2">Signataire 2 (étape)</label>
       <select id="f-sig2">
         <option value="">— Aucun —</option>
-        <?php foreach ($roles as $r): ?><option value="<?= h($r['slug']) ?>"><?= h($r['nom']) ?></option><?php endforeach; ?>
+        <?php foreach ($etapes as $e): ?><option value="<?= h($e['code']) ?>"><?= h($e['label']) ?></option><?php endforeach; ?>
       </select>
     </div>
     <div class="ach-fg">
-      <label for="f-sig3">Signataire 3</label>
+      <label for="f-sig3">Signataire 3 (étape)</label>
       <select id="f-sig3">
         <option value="">— Aucun —</option>
-        <?php foreach ($roles as $r): ?><option value="<?= h($r['slug']) ?>"><?= h($r['nom']) ?></option><?php endforeach; ?>
+        <?php foreach ($etapes as $e): ?><option value="<?= h($e['code']) ?>"><?= h($e['label']) ?></option><?php endforeach; ?>
       </select>
     </div>
     <div class="ach-err" id="ach-err"></div>

@@ -8,6 +8,12 @@
 // planifiée, test) tombe sur un fatal « undefined function ».
 require_once __DIR__ . '/audit.php';
 
+// Le circuit de visas FEB (ach_lancer_validation, ach_viser) réutilise tel
+// quel le moteur "Demandes internes" — di_can_validate() porte déjà la
+// règle du département et celle du N+1, di_next_step() l'avancement.
+// Aucune règle de droits n'est réécrite ici.
+require_once __DIR__ . '/demandes.php';
+
 // ── Libellés et couleurs de statuts ──────────────────────────
 // Préparés pour les écrans FEB (lot suivant, pas encore créés) — aucun
 // écran de ce lot n'en dépend, mais les futurs écrans réutiliseront ces
@@ -65,6 +71,51 @@ function ach_palier_pour_montant(int $montant): ?array {
     if (!$row) return null;
     $row['signataires'] = json_decode($row['signataires'], true) ?? [];
     return $row;
+}
+
+// ── RG-13 : la grille des paliers actifs doit couvrir toute la plage de
+//    montants sans trou ni chevauchement, sinon ach_lancer_validation()
+//    pourrait un jour tomber sur un montant que plus aucun palier ne
+//    couvre. Contrôlée à l'enregistrement ET à la désactivation d'un
+//    palier (pages/achats/param_paliers.php) — les deux peuvent ouvrir un
+//    trou. $exclude_id : le palier en cours d'édition/désactivation, à
+//    remplacer par $candidat (sa version modifiée, actif ou non) plutôt
+//    que par la ligne encore en base.
+function ach_paliers_couvrent_tout(?int $exclude_id = null, ?array $candidat = null): array {
+    $paliers = db_fetch_all("SELECT id, borne_min, borne_max, libelle, actif FROM achat_paliers WHERE actif = 1");
+    if ($exclude_id !== null) {
+        $paliers = array_values(array_filter($paliers, fn($p) => (int)$p['id'] !== $exclude_id));
+    }
+    if ($candidat !== null && !empty($candidat['actif'])) {
+        $paliers[] = $candidat;
+    }
+    if (!$paliers) {
+        return ['ok' => false, 'message' => 'La grille des paliers actifs est vide — aucun montant ne serait couvert.'];
+    }
+
+    usort($paliers, fn($a, $b) => $a['borne_min'] <=> $b['borne_min']);
+
+    if ((int)$paliers[0]['borne_min'] !== 0) {
+        return ['ok' => false, 'message' => "La grille doit commencer à 0 (le palier le plus bas commence à {$paliers[0]['borne_min']})."];
+    }
+    for ($i = 1; $i < count($paliers); $i++) {
+        $prec_max = $paliers[$i - 1]['borne_max'];
+        $cur_min  = (int)$paliers[$i]['borne_min'];
+        if ($prec_max === null) {
+            return ['ok' => false, 'message' => "Le palier « {$paliers[$i-1]['libelle']} » n'a pas de plafond : aucun palier ne peut le suivre."];
+        }
+        $prec_max = (int)$prec_max;
+        if ($cur_min > $prec_max + 1) {
+            return ['ok' => false, 'message' => "Trou dans la grille entre " . ($prec_max + 1) . " et " . ($cur_min - 1) . " XOF."];
+        }
+        if ($cur_min <= $prec_max) {
+            return ['ok' => false, 'message' => "Chevauchement entre « {$paliers[$i-1]['libelle']} » et « {$paliers[$i]['libelle']} »."];
+        }
+    }
+    if ($paliers[count($paliers) - 1]['borne_max'] !== null) {
+        return ['ok' => false, 'message' => 'Le dernier palier doit rester sans plafond (borne haute vide) pour couvrir tous les montants.'];
+    }
+    return ['ok' => true, 'message' => 'Grille complète, sans trou ni chevauchement.'];
 }
 
 // ── Numéro de FEB suivant pour un exercice donné ─────────────
