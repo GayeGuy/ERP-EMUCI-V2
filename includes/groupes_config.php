@@ -6,7 +6,7 @@
 
 define('TOUS_LES_GROUPES', [
     'DASHBOARD','OPERATIONS','BOBINES','STOCK',
-    'INFORMATIQUE','RAPPORTS','DEMANDES','ADMINISTRATION'
+    'INFORMATIQUE','RAPPORTS','DEMANDES','ACHATS','ADMINISTRATION'
 ]);
 
 function _groupes_def(): array {
@@ -199,6 +199,36 @@ function _groupes_def(): array {
             ],
         ],
 
+        // ── ACHATS (Jour 1 : écrans de paramétrage seulement — fournisseurs,
+        //    familles/types, paliers, budget, généraux. Les écrans FEB
+        //    (création/suivi/tableau de bord) suivront dans un lot séparé ;
+        //    pas d'entrée nav vers des pages qui n'existent pas encore.)
+        'ACHATS' => [
+            'icon'        => 'ph-shopping-cart',
+            'titre'       => 'Achats',
+            'description' => 'Fournisseurs, paliers de validation et paramétrage budgétaire',
+            'couleur'     => '#B45309',
+            'gradient'    => 'linear-gradient(135deg, #B45309 0%, #F59E0B 100%)',
+            'first_page'  => 'pages/achats/param_fournisseurs.php',
+            'nav' => [
+                ['label'=>'Fournisseurs',          'icon'=>'ph-storefront',
+                 'url'=>'pages/achats/param_fournisseurs.php','active_keys'=>['achats_param_fournisseurs'],
+                 'perm'=>['achats_param','can_read']],
+                ['label'=>'Familles & types',      'icon'=>'ph-tag',
+                 'url'=>'pages/achats/param_familles.php','active_keys'=>['achats_param_familles'],
+                 'perm'=>['achats_param','can_read']],
+                ['label'=>'Paliers de validation',  'icon'=>'ph-stairs',
+                 'url'=>'pages/achats/param_paliers.php','active_keys'=>['achats_param_paliers'],
+                 'perm'=>['achats_param','can_read']],
+                ['label'=>'Lignes budgétaires',     'icon'=>'ph-calculator',
+                 'url'=>'pages/achats/param_budget.php','active_keys'=>['achats_param_budget'],
+                 'perm'=>['achats_param','can_read']],
+                ['label'=>'Paramètres généraux',    'icon'=>'ph-gear',
+                 'url'=>'pages/achats/param_general.php','active_keys'=>['achats_param_general'],
+                 'perm'=>['achats_param','can_read']],
+            ],
+        ],
+
         // ── 8. ADMINISTRATION
         'ADMINISTRATION' => [
             'icon'        => 'ph-shield-check',
@@ -242,7 +272,7 @@ function get_groupes_pour_role(string $role_slug): array {
         'superviseur_it'             => ['DASHBOARD','INFORMATIQUE','STOCK'],
         'support_it'                 => ['DASHBOARD','INFORMATIQUE'],
         // Achat & approvisionnement (accès commandes via OPERATIONS)
-        'superviseur_achat'          => ['DASHBOARD','OPERATIONS','STOCK'],
+        'superviseur_achat'          => ['DASHBOARD','OPERATIONS','STOCK','ACHATS'],
         // Production (ex-PRODUCTION → OPERATIONS)
         'controleur_production'      => ['DASHBOARD','OPERATIONS','BOBINES'],
         // Opérations
