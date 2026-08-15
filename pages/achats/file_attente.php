@@ -170,13 +170,24 @@ $plus_ancienne = db_fetch_value(
 );
 $anciennete_max = $plus_ancienne ? ach_anciennete_heures_ouvrees($plus_ancienne) : 0.0;
 
-foreach ([$a_prendre, $prises_autres, $mes_feb] as &$section) {
-    foreach ($section as &$f) {
-        $f['anciennete_h'] = ach_anciennete_heures_ouvrees($f['date_soumission']);
-    }
-    unset($f);
+// Piège classique : foreach ([$a, $b, $c] as &$x) itère sur le tableau
+// littéral temporaire créé par [...], pas sur $a/$b/$c eux-mêmes — la
+// référence ne remonte jamais aux variables d'origine. D'où trois boucles
+// séparées, chacune sur la vraie variable (J10, recette au clic — le
+// warning "Undefined array key anciennete_h" s'affichait sur les 3
+// sections concernées).
+foreach ($a_prendre as &$f) {
+    $f['anciennete_h'] = ach_anciennete_heures_ouvrees($f['date_soumission']);
 }
-unset($section);
+unset($f);
+foreach ($prises_autres as &$f) {
+    $f['anciennete_h'] = ach_anciennete_heures_ouvrees($f['date_soumission']);
+}
+unset($f);
+foreach ($mes_feb as &$f) {
+    $f['anciennete_h'] = ach_anciennete_heures_ouvrees($f['date_soumission']);
+}
+unset($f);
 foreach ($en_validation as &$f) {
     $f['anciennete_h'] = ach_anciennete_heures_ouvrees($f['date_lancement_validation'] ?? $f['date_soumission']);
 }
