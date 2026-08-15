@@ -701,6 +701,118 @@ function ach_notifier_role(string $roleCode, string $message, ?int $febId = null
     }
 }
 
+// ── Comptes SYSCOHADA connus (classes 60-65 et 24) — seeded par
+//    migration_achats_08_syscohada.sql. Sert uniquement à l'avertissement
+//    (non bloquant) de pages/achats/param_familles.php : un compte hors
+//    liste n'empêche pas l'enregistrement, il est juste signalé.
+function ach_comptes_syscohada_connus(): array {
+    return array_column(db_fetch_all("SELECT DISTINCT compte_comptable FROM familles_achat WHERE compte_comptable IS NOT NULL"), 'compte_comptable');
+}
+
+// ── Situation budgétaire d'un couple département/famille pour un exercice
+//    (Bloc 2). feb.departement_id filtre directement : il est constant sur
+//    la FEB (un seul département, celui du demandeur — Bloc 0, point 1),
+//    aucune jointure supplémentaire n'est nécessaire.
+//    $exclure_feb_id : ignore les lignes de cette FEB dans le total — utile
+//    pour afficher « la place disponible avant cette FEB », notamment sur
+//    mes_visas.php (Bloc 5) où la FEB en cours de visa ne doit pas se
+//    compter elle-même dans l'engagement affiché au signataire.
+function ach_budget_situation(int $departement_id, int $famille_id, int $exercice, ?int $exclure_feb_id = null): array {
+    $params = [$departement_id, $famille_id, $exercice];
+    $exclude_sql = '';
+    if ($exclure_feb_id) { $exclude_sql = ' AND f.id != ?'; $params[] = $exclure_feb_id; }
+
+    $row = db_fetch_one(
+        "SELECT
+            COALESCE(SUM(CASE WHEN f.statut='confirmee'     THEN fl.montant_ttc ELSE 0 END),0) AS engage,
+            COALESCE(SUM(CASE WHEN f.statut='en_validation' THEN fl.montant_ttc ELSE 0 END),0) AS reserve
+         FROM feb_lignes fl
+         JOIN feb f ON f.id = fl.feb_id
+         WHERE f.departement_id=? AND fl.famille_id=? AND f.exercice=? AND fl.arbitrage='achat'
+           AND f.statut IN ('confirmee','en_validation') $exclude_sql",
+        $params
+    );
+    $engage  = (int)$row['engage'];
+    $reserve = (int)$row['reserve'];
+
+    // Rejet ou réouverture (ach_reprendre_feb_rejetee / ach_admin_reouvrir_validation)
+    // font sortir la FEB de ('confirmee','en_validation') : la libération est
+    // gratuite, portée par ce seul filtre de statut — rien d'autre à écrire.
+    $ligne = db_fetch_one(
+        "SELECT * FROM lignes_budgetaires WHERE departement_id=? AND famille_id=? AND exercice=? AND actif=1",
+        [$departement_id, $famille_id, $exercice]
+    );
+    $enveloppe = ($ligne && $ligne['enveloppe'] !== null) ? (int)$ligne['enveloppe'] : null;
+
+    return [
+        'departement_id' => $departement_id, 'famille_id' => $famille_id, 'exercice' => $exercice,
+        'engage' => $engage, 'reserve' => $reserve, 'total_engage' => $engage + $reserve,
+        'ligne_budgetaire' => $ligne, 'enveloppe' => $enveloppe,
+        'disponible' => $enveloppe !== null ? $enveloppe - ($engage + $reserve) : null,
+    ];
+}
+
+// ── Contrôle budgétaire d'une FEB, famille par famille, contre le budget
+//    de SON département (Bloc 3). Appelée à deux points seulement :
+//    lancement de la validation et dernière signature (point 19) — jamais
+//    aux étapes intermédiaires.
+//    Verrou explicite (SELECT ... FOR UPDATE) sur chaque ligne budgétaire
+//    concernée : sans lui, deux FEB lancées au même instant sur la même
+//    enveloppe peuvent toutes deux lire un engagement encore bas et passer
+//    ensemble au-delà du plafond. Le verrou n'a d'effet que tenu dans la
+//    même transaction que le changement de statut — c'est aux appelants
+//    (ach_lancer_validation, ach_viser) de l'ouvrir avant d'appeler cette
+//    fonction et de la fermer juste après l'UPDATE sur feb.
+//    Lève une AchValidationException en cas de dépassement bloquant ;
+//    retourne la liste des avertissements (dépassements en mode "alerte",
+//    ou familles sans ligne budgétaire — point 17) sinon.
+function ach_controle_budget(int $feb_id): array {
+    $feb = db_fetch_one("SELECT departement_id, exercice, numero FROM feb WHERE id=?", [$feb_id]);
+    if (!$feb || !$feb['departement_id']) return ['avertissements' => []];
+    $dept_id  = (int)$feb['departement_id'];
+    $exercice = (int)$feb['exercice'];
+
+    $familles = db_fetch_all(
+        "SELECT famille_id, SUM(montant_ttc) AS montant FROM feb_lignes
+          WHERE feb_id=? AND arbitrage='achat' AND famille_id IS NOT NULL
+          GROUP BY famille_id",
+        [$feb_id]
+    );
+
+    $avertissements = [];
+    foreach ($familles as $f) {
+        $famille_id    = (int)$f['famille_id'];
+        $montant_ligne = (int)$f['montant'];
+
+        $ligne_budget = db_fetch_one(
+            "SELECT * FROM lignes_budgetaires
+              WHERE departement_id=? AND famille_id=? AND exercice=? AND actif=1
+              FOR UPDATE",
+            [$dept_id, $famille_id, $exercice]
+        );
+        if (!$ligne_budget) {
+            $fam_nom = db_fetch_value("SELECT libelle FROM familles_achat WHERE id=?", [$famille_id]);
+            $avertissements[] = "Aucune ligne budgétaire pour « $fam_nom » sur ce département — non contrôlé.";
+            continue;
+        }
+        if ($ligne_budget['enveloppe'] === null || $ligne_budget['comportement'] === 'aucun') continue;
+
+        $situation   = ach_budget_situation($dept_id, $famille_id, $exercice, $feb_id);
+        $total_apres = $situation['total_engage'] + $montant_ligne;
+        if ($total_apres > (int)$ligne_budget['enveloppe']) {
+            $depassement = $total_apres - (int)$ligne_budget['enveloppe'];
+            $dept_code = db_fetch_value("SELECT code FROM departements WHERE id=?", [$dept_id]);
+            $fam_nom   = db_fetch_value("SELECT libelle FROM familles_achat WHERE id=?", [$famille_id]);
+            $msg = "Département $dept_code, famille $fam_nom : dépassement de " . number_format($depassement, 0, ',', ' ') . " XOF.";
+            if ($ligne_budget['comportement'] === 'blocage') {
+                throw new AchValidationException($msg);
+            }
+            $avertissements[] = $msg;
+        }
+    }
+    return ['avertissements' => $avertissements];
+}
+
 // ── Lance la validation d'une FEB — calcule et fige le circuit (Bloc 2).
 //    Réservé à l'acheteur qui détient la FEB, comme le reste du traitement.
 function ach_lancer_validation(int $feb_id, array $user): array {
@@ -740,18 +852,32 @@ function ach_lancer_validation(int $feb_id, array $user): array {
     $historique = [['action' => 'lancement_validation', 'par' => $uid, 'nom' => $nom,
         'commentaire' => "Palier « {$palier['libelle']} » — $montant XOF", 'date' => $now]];
 
-    db_query(
-        "UPDATE feb SET workflow_snapshot=?::jsonb, etape_actuelle=0, statut='en_validation',
-                date_lancement_validation=?, signatures='[]'::jsonb, historique=?::jsonb,
-                etape_rejet=NULL, motif_rejet=NULL
-          WHERE id=?",
-        [json_encode($workflow, JSON_UNESCAPED_UNICODE), $now, json_encode($historique, JSON_UNESCAPED_UNICODE), $feb_id]
-    );
-    audit_log($uid, 'UPDATE', 'achats', $feb_id, "Lancement de la validation — palier « {$palier['libelle']} », $montant XOF, " . count($workflow) . ' étape(s)');
+    // Bloc 3, point 19 : premier des deux points de contrôle budgétaire.
+    // Le verrou posé par ach_controle_budget() (SELECT ... FOR UPDATE) doit
+    // rester tenu jusqu'à l'UPDATE de statut, donc les deux dans la même
+    // transaction.
+    $pdo = get_db();
+    $transaction_locale = !$pdo->inTransaction();
+    if ($transaction_locale) db_begin();
+    try {
+        $controle = ach_controle_budget($feb_id);
+        db_query(
+            "UPDATE feb SET workflow_snapshot=?::jsonb, etape_actuelle=0, statut='en_validation',
+                    date_lancement_validation=?, signatures='[]'::jsonb, historique=?::jsonb,
+                    etape_rejet=NULL, motif_rejet=NULL
+              WHERE id=?",
+            [json_encode($workflow, JSON_UNESCAPED_UNICODE), $now, json_encode($historique, JSON_UNESCAPED_UNICODE), $feb_id]
+        );
+        audit_log($uid, 'UPDATE', 'achats', $feb_id, "Lancement de la validation — palier « {$palier['libelle']} », $montant XOF, " . count($workflow) . ' étape(s)');
+        if ($transaction_locale) db_commit();
+    } catch (Exception $e) {
+        if ($transaction_locale) db_rollback();
+        throw $e;
+    }
 
     ach_notifier_role($workflow[0]['role'], "FEB {$feb['numero']} en attente de votre visa — étape : {$workflow[0]['label']}.", $feb_id);
 
-    return ['etapes' => count($workflow), 'palier' => $palier['libelle']];
+    return ['etapes' => count($workflow), 'palier' => $palier['libelle'], 'avertissements' => $controle['avertissements']];
 }
 
 // ── Vise (accepte ou rejette) l'étape courante d'une FEB en validation.
@@ -808,12 +934,24 @@ function ach_viser(int $feb_id, array $user, bool $accepte, string $commentaire 
 
     $next = di_next_step($wf, $cur);
     if ($next === null) {
-        $stmt = db_query(
-            "UPDATE feb SET statut='confirmee', date_confirmation=?, signatures=?::jsonb, historique=?::jsonb
-              WHERE id=? AND etape_actuelle=?",
-            [$now, $sigJson, $histJson, $feb_id, $cur]
-        );
-        if ($stmt->rowCount() === 0) return false;
+        // Bloc 3, point 19 : second des deux points de contrôle budgétaire —
+        // d'autres FEB sur la même enveloppe ont pu être confirmées entre le
+        // lancement de celle-ci et sa dernière signature. Verrou et UPDATE
+        // dans la même transaction, comme au lancement.
+        db_begin();
+        try {
+            $controle = ach_controle_budget($feb_id);
+            $stmt = db_query(
+                "UPDATE feb SET statut='confirmee', date_confirmation=?, signatures=?::jsonb, historique=?::jsonb
+                  WHERE id=? AND etape_actuelle=?",
+                [$now, $sigJson, $histJson, $feb_id, $cur]
+            );
+            if ($stmt->rowCount() === 0) { db_rollback(); return false; }
+            db_commit();
+        } catch (Exception $e) {
+            db_rollback();
+            throw $e;
+        }
         audit_log($uid, 'UPDATE', 'achats', $feb_id, "Dernière signature obtenue (étape « $etape_label ») — FEB confirmée");
         ach_notifier_demandeur_feb($feb_id, "Votre FEB {$feb['numero']} est entièrement signée.");
         if ($feb['acheteur_id']) db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','FEB confirmée',?,?)",

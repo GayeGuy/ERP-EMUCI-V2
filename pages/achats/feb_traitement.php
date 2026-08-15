@@ -170,7 +170,9 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'lancer_validation') {
         try {
             $res = ach_lancer_validation($post_feb_id, $user);
-            json_response(true, "Validation lancée — {$res['etapes']} étape(s), palier « {$res['palier']} ».", $res);
+            $msg = "Validation lancée — {$res['etapes']} étape(s), palier « {$res['palier']} ».";
+            if ($res['avertissements']) $msg .= ' ' . implode(' ', $res['avertissements']);
+            json_response(true, $msg, $res);
         } catch (AchValidationException $e) {
             json_response(false, $e->getMessage());
         }

@@ -23,25 +23,61 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$can_edit) json_response(false, 'Action réservée.');
     $action = $_POST['action'] ?? '';
 
+    // Format d'un compte SYSCOHADA : que des chiffres, 3 à 6 caractères.
+    // Contrôle de forme seulement — l'appartenance à la liste connue n'est
+    // qu'un avertissement, jamais un blocage (point 7).
+    $valider_format_compte = function (string $compte): ?string {
+        if ($compte === '') return null;
+        if (!preg_match('/^\d{3,6}$/', $compte)) return 'Le compte comptable doit être composé de 3 à 6 chiffres.';
+        return null;
+    };
+
     if ($action === 'create_famille') {
-        $code = strtoupper(trim($_POST['code'] ?? ''));
-        $lib  = trim($_POST['libelle'] ?? '');
+        $code    = strtoupper(trim($_POST['code'] ?? ''));
+        $lib     = trim($_POST['libelle'] ?? '');
+        $compte  = trim($_POST['compte_comptable'] ?? '');
         if (!$code || !$lib) json_response(false, 'Code et libellé obligatoires.');
+        if ($err = $valider_format_compte($compte)) json_response(false, $err);
+
         try {
-            db_query("INSERT INTO familles_achat (code, libelle) VALUES (?,?)", [$code, $lib]);
+            db_query("INSERT INTO familles_achat (code, libelle, compte_comptable) VALUES (?,?,?)", [$code, $lib, $compte ?: null]);
         } catch (Exception $e) { json_response(false, 'Ce code existe déjà.'); }
         $id = (int)db_last_id('familles_achat_id_seq');
-        audit_log($user['id'], 'CREATE', 'achats_param', $id, "Création famille d'achat : $code — $lib");
-        json_response(true, 'Famille créée.', ['id' => $id]);
+        audit_log($user['id'], 'CREATE', 'achats_param', $id, "Création famille d'achat : $code — $lib (compte $compte)");
+
+        $avertissement = ($compte && !in_array($compte, ach_comptes_syscohada_connus(), true))
+            ? " Attention : le compte $compte ne figure pas dans la liste SYSCOHADA connue — vérifiez-le." : '';
+        json_response(true, 'Famille créée.' . $avertissement, ['id' => $id]);
     }
 
     if ($action === 'update_famille') {
-        $id  = (int)($_POST['id'] ?? 0);
-        $lib = trim($_POST['libelle'] ?? '');
-        if (!$id || !$lib) json_response(false, 'Libellé obligatoire.');
-        db_query("UPDATE familles_achat SET libelle=? WHERE id=?", [$lib, $id]);
-        audit_log($user['id'], 'UPDATE', 'achats_param', $id, "Modification famille d'achat : $lib");
-        json_response(true, 'Famille mise à jour.');
+        $id     = (int)($_POST['id'] ?? 0);
+        $code   = strtoupper(trim($_POST['code'] ?? ''));
+        $lib    = trim($_POST['libelle'] ?? '');
+        $compte = trim($_POST['compte_comptable'] ?? '');
+        if (!$id || !$code || !$lib) json_response(false, 'Code et libellé obligatoires.');
+        if ($err = $valider_format_compte($compte)) json_response(false, $err);
+
+        $old = db_fetch_one("SELECT * FROM familles_achat WHERE id=?", [$id]);
+        if (!$old) json_response(false, 'Famille introuvable.');
+
+        try {
+            db_query("UPDATE familles_achat SET code=?, libelle=?, compte_comptable=? WHERE id=?", [$code, $lib, $compte ?: null, $id]);
+        } catch (Exception $e) { json_response(false, 'Ce code existe déjà pour une autre famille.'); }
+
+        // Trace explicite de l'ancien et du nouveau — un changement de code
+        // change le code analytique des FEB futures (jamais des FEB déjà
+        // soumises, dont le code reste figé), un changement de compte change
+        // le rattachement SYSCOHADA : les deux méritent d'être retrouvables.
+        $detail = [];
+        if ($old['code'] !== $code) $detail[] = "code {$old['code']} → $code";
+        if ($old['libelle'] !== $lib) $detail[] = "libellé « {$old['libelle']} » → « $lib »";
+        if (($old['compte_comptable'] ?? '') !== $compte) $detail[] = "compte " . ($old['compte_comptable'] ?: '—') . " → " . ($compte ?: '—');
+        audit_log($user['id'], 'UPDATE', 'achats_param', $id, "Modification famille d'achat : " . ($detail ? implode(', ', $detail) : 'aucun changement'));
+
+        $avertissement = ($compte && !in_array($compte, ach_comptes_syscohada_connus(), true))
+            ? " Attention : le compte $compte ne figure pas dans la liste SYSCOHADA connue — vérifiez-le." : '';
+        json_response(true, 'Famille mise à jour.' . $avertissement);
     }
 
     if ($action === 'toggle_famille') {
@@ -50,6 +86,27 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         db_query("UPDATE familles_achat SET actif=? WHERE id=?", [$nv, $id]);
         audit_log($user['id'], 'UPDATE', 'achats_param', $id, $nv ? 'Réactivation famille' : 'Désactivation famille');
         json_response(true, $nv ? 'Famille réactivée.' : 'Famille désactivée.');
+    }
+
+    // ── Suppression : refusée si la famille est utilisée quelque part —
+    //    désactivation seulement dans ce cas (point 12). Trois emplois
+    //    possibles à vérifier : lignes de FEB, articles rattachés, lignes
+    //    budgétaires.
+    if ($action === 'delete_famille') {
+        $id = (int)($_POST['id'] ?? 0);
+        $famille = db_fetch_one("SELECT * FROM familles_achat WHERE id=?", [$id]);
+        if (!$famille) json_response(false, 'Famille introuvable.');
+
+        $nb_lignes_feb = (int) db_fetch_value("SELECT COUNT(*) FROM feb_lignes WHERE famille_id=?", [$id]);
+        $nb_articles   = (int) db_fetch_value("SELECT COUNT(*) FROM articles WHERE famille_id=?", [$id]);
+        $nb_budget     = (int) db_fetch_value("SELECT COUNT(*) FROM lignes_budgetaires WHERE famille_id=?", [$id]);
+        if ($nb_lignes_feb || $nb_articles || $nb_budget) {
+            json_response(false, "Famille utilisée ($nb_lignes_feb ligne(s) de FEB, $nb_articles article(s), $nb_budget ligne(s) budgétaire(s)) — désactivez-la plutôt que de la supprimer.");
+        }
+
+        db_query("DELETE FROM familles_achat WHERE id=?", [$id]);
+        audit_log($user['id'], 'DELETE', 'achats_param', $id, "Suppression famille d'achat : {$famille['code']} — {$famille['libelle']}");
+        json_response(true, 'Famille supprimée.');
     }
 
     if ($action === 'create_type') {
@@ -132,11 +189,12 @@ include __DIR__ . '/../../templates/header.php';
     <?php else: ?>
     <div style="overflow-x:auto">
     <table class="ach-table">
-      <thead><tr><th>Code</th><th>Libellé</th><th>Statut</th><?php if ($can_edit): ?><th>Actions</th><?php endif; ?></tr></thead>
+      <thead><tr><th>Code</th><th>Compte SYSCOHADA</th><th>Libellé</th><th>Statut</th><?php if ($can_edit): ?><th>Actions</th><?php endif; ?></tr></thead>
       <tbody>
         <?php foreach ($familles as $f): ?>
         <tr>
           <td style="font-family:monospace;font-weight:700"><?= h($f['code']) ?></td>
+          <td style="font-family:monospace"><?= h($f['compte_comptable'] ?: '—') ?></td>
           <td><?= h($f['libelle']) ?></td>
           <td><span class="ach-badge <?= $f['actif'] ? 'on' : 'off' ?>"><?= $f['actif'] ? 'Active' : 'Inactive' ?></span></td>
           <?php if ($can_edit): ?>
@@ -148,6 +206,10 @@ include __DIR__ . '/../../templates/header.php';
             <button type="button" class="btn btn-secondary btn-sm" aria-label="<?= $f['actif'] ? 'Désactiver' : 'Réactiver' ?> <?= h($f['libelle']) ?>"
                     onclick="achToggle('famille', <?= $f['id'] ?>, <?= $f['actif'] ? 0 : 1 ?>)">
               <i class="ph <?= $f['actif'] ? 'ph-prohibit' : 'ph-check-circle' ?>" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" aria-label="Supprimer <?= h($f['libelle']) ?>"
+                    onclick="achSupprimerFamille(<?= $f['id'] ?>, <?= json_encode($f['libelle']) ?>)">
+              <i class="ph ph-trash" aria-hidden="true"></i>
             </button>
           </td>
           <?php endif; ?>
@@ -216,6 +278,11 @@ include __DIR__ . '/../../templates/header.php';
       <label for="f-libelle">Libellé</label>
       <input type="text" id="f-libelle" required>
     </div>
+    <div class="ach-fg" id="f-compte-wrap">
+      <label for="f-compte">Compte comptable SYSCOHADA</label>
+      <input type="text" id="f-compte" style="font-family:monospace" placeholder="ex : 605" maxlength="6">
+      <div style="font-size:11.5px;color:var(--muted);margin-top:4px">3 à 6 chiffres. Un compte hors liste connue est accepté, avec avertissement.</div>
+    </div>
     <div class="ach-err" id="ach-err"></div>
     <div class="ach-modal-actions">
       <button type="button" class="btn btn-secondary" onclick="achCloseModal()">Annuler</button>
@@ -232,6 +299,8 @@ function achOpenCreate(kind) {
   document.getElementById('f-code').value = '';
   document.getElementById('f-code').disabled = false;
   document.getElementById('f-libelle').value = '';
+  document.getElementById('f-compte').value = '';
+  document.getElementById('f-compte-wrap').style.display = kind === 'famille' ? '' : 'none';
   document.getElementById('ach-err').style.display = 'none';
   document.getElementById('ach-modal').classList.add('open');
   setTimeout(() => document.getElementById('f-code').focus(), 80);
@@ -241,8 +310,14 @@ function achOpenEdit(kind, row) {
   document.getElementById('f-id').value = row.id;
   document.getElementById('ach-modal-ttl-txt').textContent = kind === 'famille' ? 'Modifier la famille' : 'Modifier le type';
   document.getElementById('f-code').value = row.code;
-  document.getElementById('f-code').disabled = true; // le code est la cle metier, non modifiable apres creation
+  // Le code d'une famille est désormais modifiable : un changement recompose
+  // le code analytique des FEB futures, jamais des FEB déjà soumises (dont
+  // le code reste figé — cf. ach_creer_feb côté serveur). Le code d'un type
+  // d'achat, lui, reste verrouillé après création.
+  document.getElementById('f-code').disabled = (kind === 'type');
   document.getElementById('f-libelle').value = row.libelle;
+  document.getElementById('f-compte').value = row.compte_comptable || '';
+  document.getElementById('f-compte-wrap').style.display = kind === 'famille' ? '' : 'none';
   document.getElementById('ach-err').style.display = 'none';
   document.getElementById('ach-modal').classList.add('open');
 }
@@ -261,10 +336,11 @@ function achSave() {
   const id = document.getElementById('f-id').value;
   const code = document.getElementById('f-code').value.trim();
   const libelle = document.getElementById('f-libelle').value.trim();
+  const compte_comptable = document.getElementById('f-compte').value.trim();
   const err = document.getElementById('ach-err');
   if (!code || !libelle) { err.textContent = 'Code et libellé obligatoires.'; err.style.display = 'block'; return; }
   const action = (id ? 'update_' : 'create_') + kind;
-  achPost({ action, id, code, libelle }).then(res => {
+  achPost({ action, id, code, libelle, compte_comptable }).then(res => {
     if (!res.success) { err.textContent = res.message; err.style.display = 'block'; return; }
     toast(res.message, 'success');
     achCloseModal();
@@ -275,6 +351,14 @@ function achSave() {
 function achToggle(kind, id, actif) {
   if (!confirm(actif ? 'Réactiver ?' : 'Désactiver ?')) return;
   achPost({ action: 'toggle_' + kind, id, actif }).then(res => {
+    toast(res.message, res.success ? 'success' : 'danger');
+    if (res.success) setTimeout(() => location.reload(), 500);
+  });
+}
+
+function achSupprimerFamille(id, libelle) {
+  if (!confirm(`Supprimer la famille « ${libelle} » ? Impossible si elle est utilisée — désactivez-la dans ce cas.`)) return;
+  achPost({ action: 'delete_famille', id }).then(res => {
     toast(res.message, res.success ? 'success' : 'danger');
     if (res.success) setTimeout(() => location.reload(), 500);
   });
