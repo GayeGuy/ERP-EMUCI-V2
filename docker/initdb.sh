@@ -63,6 +63,7 @@ migration_achats_04_bigint.sql
 migration_achats_05_arbitrage.sql
 migration_achats_06_derogation.sql
 migration_achats_07_visas.sql
+migration_achats_08_syscohada.sql
 "
 
 for f in $FICHIERS; do
