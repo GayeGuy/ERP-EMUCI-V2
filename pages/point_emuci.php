@@ -163,8 +163,8 @@ include __DIR__ . '/../templates/header.php';
     </p>
   </div>
   <form method="GET" style="display:flex;align-items:center;gap:10px">
-    <label style="font-size:13px;color:var(--muted)">Date</label>
-    <input type="date" name="date" value="<?= h($f_date) ?>"
+    <label for="inp-date" style="font-size:13px;color:var(--muted)">Date</label>
+    <input type="date" id="inp-date" name="date" value="<?= h($f_date) ?>"
            style="padding:9px 13px;border:1.5px solid var(--border);border-radius:9px;font-size:13px"
            onchange="this.form.submit()">
   </form>
@@ -330,10 +330,12 @@ function ap(data){
     .then(r=>r.json());
 }
 function toast(msg,ok=true){
-  const t=document.createElement('div');
+  let t=document.getElementById('toast-live');
+  if(!t){t=document.createElement('div');t.id='toast-live';t.setAttribute('role','status');t.setAttribute('aria-live','polite');t.setAttribute('aria-atomic','true');document.body.appendChild(t);}
+  clearTimeout(t._hideTimer);
   t.style.cssText=`position:fixed;bottom:24px;right:24px;padding:12px 20px;border-radius:10px;background:${ok?'#2e7d32':'#c62828'};color:#fff;font-weight:600;z-index:9999;box-shadow:0 4px 16px rgba(0,0,0,.2)`;
-  t.textContent=msg;document.body.appendChild(t);
-  setTimeout(()=>t.remove(),3000);
+  t.textContent=msg;
+  t._hideTimer=setTimeout(()=>{t.style.display='none';},3000);
 }
 
 <?php if ($can_correct): ?>

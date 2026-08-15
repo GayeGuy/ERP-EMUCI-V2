@@ -386,7 +386,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- TOOLBAR -->
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
   <form method="GET" id="frmFiltres" style="display:flex;gap:8px;align-items:center">
-    <select name="statut" id="selStatut" onchange="this.form.submit()"
+    <select name="statut" id="selStatut" onchange="this.form.submit()" aria-label="Filtrer par statut"
       style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
       <option value="">Tous statuts</option>
       <option value="en_attente"  <?= $f_statut==='en_attente'?'selected':'' ?>>⏳ En attente</option>

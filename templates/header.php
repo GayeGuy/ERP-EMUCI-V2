@@ -403,6 +403,19 @@ $unread = count($notifs);
       margin-bottom: 7px; color: var(--navy);
       font-family: 'Manrope', sans-serif; letter-spacing: .1px;
     }
+    /* Marquage automatique des champs obligatoires : un seul endroit à tenir
+       à jour plutôt qu'un <span>*</span> à ajouter à la main dans chaque
+       formulaire (fait dans quelques pages seulement jusqu'ici). Ne s'affiche
+       que pour l'attribut required natif — les champs obligatoires
+       uniquement en JS (upload, motif conditionnel…) gardent leur marquage
+       manuel existant, non concerné par cette règle. */
+    .form-group:has(> .form-control:required) > label::after,
+    .form-group:has(> input:required) > label::after,
+    .form-group:has(> select:required) > label::after,
+    .form-group:has(> textarea:required) > label::after {
+      content: " *";
+      color: var(--danger-d);
+    }
     .form-control {
       width: 100%; padding: 11px 14px;
       border: 1.5px solid var(--border);

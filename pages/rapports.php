@@ -377,19 +377,19 @@ include __DIR__ . '/../templates/header.php';
 <!-- FILTRES -->
 <form method="GET" class="filter-bar">
   <label>Période :</label>
-  <select name="annee" class="fsel" onchange="this.form.submit()">
+  <select name="annee" class="fsel" aria-label="Filtrer par année" onchange="this.form.submit()">
     <?php foreach(array_merge([['a'=>date('Y')],['a'=>date('Y')-1],['a'=>date('Y')-2]],$annees_dispo) as $a):
       $av=(int)$a['a']; if($av<2020)continue; ?>
     <option value="<?= $av ?>" <?= $annee===$av?'selected':'' ?>><?= $av ?></option>
     <?php endforeach; ?>
   </select>
-  <select name="mois" class="fsel" onchange="this.form.submit()">
+  <select name="mois" class="fsel" aria-label="Filtrer par mois" onchange="this.form.submit()">
     <option value="0" <?= !$mois?'selected':'' ?>>Toute l'année</option>
     <?php foreach(['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'] as $i=>$m): ?>
     <option value="<?= $i+1 ?>" <?= $mois===$i+1?'selected':'' ?>><?= $m ?></option>
     <?php endforeach; ?>
   </select>
-  <select name="site" class="fsel" onchange="this.form.submit()">
+  <select name="site" class="fsel" aria-label="Filtrer par site" onchange="this.form.submit()">
     <option value="0">Tous les sites</option>
     <?php foreach($sites_list as $s): ?>
     <option value="<?= $s['id'] ?>" <?= $f_site===$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>

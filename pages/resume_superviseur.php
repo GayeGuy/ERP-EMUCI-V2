@@ -247,22 +247,22 @@ include __DIR__ . '/../templates/header.php';
     <a href="?vue=annuel&annee=<?= $f_annee ?>&site=<?= $f_site ?>" class="vue-tab <?= $f_vue==='annuel'?'active':'' ?>">📊 Annuel</a>
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-    <select class="fsel" onchange="location.href=updateParam('site',this.value)">
+    <select class="fsel" aria-label="Filtrer par site" onchange="location.href=updateParam('site',this.value)">
       <option value="0">Tous les sites</option>
       <?php foreach($sites_list as $s): ?>
       <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
       <?php endforeach; ?>
     </select>
     <?php if($f_vue==='journalier'): ?>
-    <input type="date" value="<?= h($f_date) ?>" onchange="location.href=updateParam('date',this.value)"
+    <input type="date" value="<?= h($f_date) ?>" onchange="location.href=updateParam('date',this.value)" aria-label="Choisir la date"
            style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none">
     <a href="?vue=journalier&date=<?= h($f_date) ?>&site=<?= $f_site ?>&export=journalier" class="btn btn-secondary btn-sm">📥 Excel</a>
     <?php elseif($f_vue==='mensuel'): ?>
-    <input type="month" value="<?= h($f_mois) ?>" onchange="location.href=updateParam('mois',this.value)"
+    <input type="month" value="<?= h($f_mois) ?>" onchange="location.href=updateParam('mois',this.value)" aria-label="Choisir le mois"
            style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none">
     <a href="?vue=mensuel&mois=<?= h($f_mois) ?>&site=<?= $f_site ?>&export=mensuel" class="btn btn-secondary btn-sm">📥 Excel</a>
     <?php else: ?>
-    <select class="fsel" onchange="location.href=updateParam('annee',this.value)">
+    <select class="fsel" aria-label="Filtrer par année" onchange="location.href=updateParam('annee',this.value)">
       <?php for($y=date('Y');$y>=2023;$y--): ?>
       <option value="<?= $y ?>" <?= $f_annee==$y?'selected':'' ?>><?= $y ?></option>
       <?php endfor; ?>

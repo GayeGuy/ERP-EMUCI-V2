@@ -289,16 +289,16 @@ include __DIR__ . '/../../templates/header.php';
 <!-- FILTRE BAR -->
 <div class="filter-bar">
   <div>
-    <label>Du</label>
+    <label for="fFrom">Du</label>
     <input type="date" id="fFrom" value="<?= h($f_from) ?>">
   </div>
   <div>
-    <label>Au</label>
+    <label for="fTo">Au</label>
     <input type="date" id="fTo" value="<?= h($f_to) ?>">
   </div>
   <?php if (!$site_force_r): ?>
   <div>
-    <label>Site</label>
+    <label for="fSite">Site</label>
     <select id="fSite">
       <option value="0">Tous les sites</option>
       <?php foreach ($sites_list as $s): ?>

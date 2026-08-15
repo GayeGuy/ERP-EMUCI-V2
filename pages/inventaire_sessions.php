@@ -370,7 +370,7 @@ function ap(d){
   }
   return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:p}).then(r=>r.json());
 }
-function toast(m,t='success'){const el=document.createElement('div');el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white;box-shadow:0 4px 20px rgba(0,0,0,.15)`;el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),3500);}
+function toast(m,t='success'){let el=document.getElementById('toast-live');if(!el){el=document.createElement('div');el.id='toast-live';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.setAttribute('aria-atomic','true');document.body.appendChild(el);}clearTimeout(el._hideTimer);el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white;box-shadow:0 4px 20px rgba(0,0,0,.15)`;el.textContent=m;el._hideTimer=setTimeout(()=>{el.style.display='none';},3500);}
 
 <?php if (!$detail_id): ?>
 const DUREES_MOIS = {mensuel:1, trimestriel:3, semestriel:6, annuel:12};

@@ -782,7 +782,7 @@ include __DIR__ . '/../../templates/header.php';
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;min-width:0">
       <?php if($role_slug_pj !== 'coordinateur_site'): ?>
-      <select name="site" class="fsel" onchange="this.form.submit()"
+      <select name="site" class="fsel" aria-label="Filtrer par site" onchange="this.form.submit()"
               style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;cursor:pointer;outline:none;font-family:'DM Sans',sans-serif;max-width:100%">
         <option value="0">Tous les sites</option>
         <?php foreach($sites_list as $s): ?>
@@ -794,7 +794,7 @@ include __DIR__ . '/../../templates/header.php';
         📍 <?= h(db_fetch_value("SELECT nom FROM sites WHERE id=?", [$f_site]) ?? 'Mon site') ?>
       </span>
       <?php endif; ?>
-      <input type="month" name="mois" value="<?= h($f_mois) ?>" onchange="this.form.submit()"
+      <input type="month" name="mois" value="<?= h($f_mois) ?>" onchange="this.form.submit()" aria-label="Choisir le mois"
              style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none">
     </form>
   </div>

@@ -195,7 +195,7 @@ include __DIR__ . '/../templates/header.php';
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
   <form method="GET" style="display:flex;gap:8px;align-items:center">
     <?php if(!$site_force): ?>
-    <select name="site" class="fsel" onchange="this.form.submit()">
+    <select name="site" class="fsel" aria-label="Filtrer par site" onchange="this.form.submit()">
       <option value="0">Tous les sites</option>
       <?php foreach($sites_list as $s): ?>
       <option value="<?= $s['id'] ?>" <?= $f_site===$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
@@ -206,7 +206,7 @@ include __DIR__ . '/../templates/header.php';
       📍 <?= h(db_fetch_value("SELECT nom FROM sites WHERE id=?",[$site_force]) ?? '') ?>
     </span>
     <?php endif; ?>
-    <input type="month" name="mois" value="<?= h($f_mois) ?>" onchange="this.form.submit()"
+    <input type="month" name="mois" value="<?= h($f_mois) ?>" onchange="this.form.submit()" aria-label="Choisir le mois"
            style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none">
   </form>
   <?php if(in_array($role_slug,['maintenance_info','admin','superadmin'])): ?>
@@ -355,7 +355,7 @@ include __DIR__ . '/../templates/header.php';
 
 <script>
 function ap(data){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(data)}).then(r=>r.json());}
-function toast(msg,type='success'){const t=document.createElement('div');t.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.15);background:${type==='success'?'#27ae60':'#e74c3c'};color:white;max-width:380px`;t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3500);}
+function toast(msg,type='success'){let t=document.getElementById('toast-live');if(!t){t=document.createElement('div');t.id='toast-live';t.setAttribute('role','status');t.setAttribute('aria-live','polite');t.setAttribute('aria-atomic','true');document.body.appendChild(t);}clearTimeout(t._hideTimer);t.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.15);background:${type==='success'?'#27ae60':'#e74c3c'};color:white;max-width:380px`;t.textContent=msg;t._hideTimer=setTimeout(()=>{t.style.display='none';},3500);}
 
 function getSite(){const el=document.getElementById('fSite');return el.tagName==='SELECT'?el.value:(el.value||el.getAttribute('value'));}
 

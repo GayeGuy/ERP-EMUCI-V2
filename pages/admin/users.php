@@ -210,16 +210,16 @@ include __DIR__ . '/../../templates/header.php';
   <form method="GET" id="usersFilterForm" style="display:flex;gap:8px;flex:1;flex-wrap:wrap">
     <div style="position:relative;flex:1;min-width:200px">
       <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none">🔍</span>
-      <input type="text" name="q" value="<?= h($search) ?>" placeholder="Nom, prénom, email…" autocomplete="off"
+      <input type="text" name="q" value="<?= h($search) ?>" placeholder="Nom, prénom, email…" aria-label="Rechercher un utilisateur" autocomplete="off"
              style="width:100%;padding:10px 14px 10px 38px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;outline:none;font-family:'Manrope',sans-serif">
     </div>
-    <select name="role" class="fsel">
+    <select name="role" class="fsel" aria-label="Filtrer par rôle">
       <option value="0">Tous les rôles</option>
       <?php foreach($roles_list as $r): ?>
       <option value="<?= $r['id'] ?>" <?= $f_role===$r['id']?'selected':'' ?>><?= h($r['nom']) ?></option>
       <?php endforeach; ?>
     </select>
-    <select name="actif" class="fsel">
+    <select name="actif" class="fsel" aria-label="Filtrer par statut actif">
       <option value="">Tous statuts</option>
       <option value="1" <?= $f_actif==='1'?'selected':'' ?>>Actifs</option>
       <option value="0" <?= $f_actif==='0'?'selected':'' ?>>Inactifs</option>

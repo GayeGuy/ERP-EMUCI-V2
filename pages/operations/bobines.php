@@ -458,7 +458,7 @@ $coord_types = db_fetch_all("SELECT DISTINCT type_code FROM op_bobines WHERE sit
 
   <div style="position:relative;flex:1;min-width:160px">
     <i class="ph-duotone ph-magnifying-glass" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none"></i>
-    <input type="text" name="q" value="<?= h($f_search) ?>"
+    <input type="text" name="q" value="<?= h($f_search) ?>" aria-label="Rechercher un numéro de bobine"
            placeholder="N° bobine…" onchange="this.form.submit()"
            style="width:100%;padding:8px 12px 8px 32px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none">
   </div>
@@ -633,7 +633,7 @@ endif;
   ?>
   <form method="GET" class="filter-bar" id="bobFiltreForm">
     <?php if(!$site_force): ?>
-    <select name="site" class="fsel" onchange="bobFiltrer(this.form)">
+    <select name="site" class="fsel" aria-label="Filtrer par site" onchange="bobFiltrer(this.form)">
       <option value="">Tous les sites</option>
       <?php foreach($sites_list as $s): ?>
       <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
@@ -641,7 +641,7 @@ endif;
     </select>
     <?php endif; ?>
 
-    <select name="statut" class="fsel" onchange="bobFiltrer(this.form)">
+    <select name="statut" class="fsel" aria-label="Filtrer par statut" onchange="bobFiltrer(this.form)">
       <option value="">Tous statuts</option>
       <option value="en_stock" <?= $f_statut==='en_stock'?'selected':'' ?>>📦 En stock</option>
       <option value="en_cours" <?= $f_statut==='en_cours'?'selected':'' ?>>🎞️ En cours</option>
@@ -650,7 +650,7 @@ endif;
       <option value="perdue"   <?= $f_statut==='perdue'?'selected':'' ?>>⚠️ Perdues</option>
     </select>
 
-    <select name="type" class="fsel" onchange="bobFiltrer(this.form)">
+    <select name="type" class="fsel" aria-label="Filtrer par type" onchange="bobFiltrer(this.form)">
       <option value="">Tous les types</option>
       <?php foreach($types_bobines_list as $t): ?>
       <option value="<?= h($t['type_code']) ?>" <?= $f_type===$t['type_code']?'selected':'' ?>><?= h($t['type_code']) ?></option>
@@ -659,7 +659,7 @@ endif;
 
     <div style="position:relative">
       <i class="ph-duotone ph-magnifying-glass" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none"></i>
-      <input type="text" name="q" value="<?= h($f_search) ?>"
+      <input type="text" name="q" value="<?= h($f_search) ?>" aria-label="Rechercher un numéro de bobine"
              placeholder="N° bobine…" onchange="bobFiltrer(this.form)"
              style="padding:7px 12px 7px 32px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;outline:none;width:160px">
     </div>
@@ -1264,9 +1264,11 @@ function demanderUtilisation(id, numero) {
 function ap(data){ return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(data)}).then(r=>r.json()); }
 
 function toast(msg,type='success'){
-  const t=document.createElement('div');
+  let t=document.getElementById('toast-live');
+  if(!t){t=document.createElement('div');t.id='toast-live';t.setAttribute('role','status');t.setAttribute('aria-live','polite');t.setAttribute('aria-atomic','true');document.body.appendChild(t);}
+  clearTimeout(t._hideTimer);
   t.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.15);background:${type==='success'?'#27ae60':'#e74c3c'};color:white;max-width:380px`;
-  t.innerHTML=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),3500);
+  t.innerHTML=msg; t._hideTimer=setTimeout(()=>{t.style.display='none';},3500);
 }
 
 // ── CONSOMMATION ONGLET

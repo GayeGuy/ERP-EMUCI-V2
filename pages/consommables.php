@@ -387,7 +387,7 @@ include __DIR__ . '/../templates/header.php';
   <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
     <div style="position:relative;flex:1;min-width:200px">
       <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted)">🔍</span>
-      <input type="text" id="searchQ" value="<?= h($search) ?>" placeholder="Rechercher…"
+      <input type="text" id="searchQ" value="<?= h($search) ?>" placeholder="Rechercher…" aria-label="Rechercher un consommable"
         style="width:100%;padding:10px 14px 10px 38px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;outline:none;font-family:'DM Sans',sans-serif"
         oninput="filterConsos(this.value)">
     </div>

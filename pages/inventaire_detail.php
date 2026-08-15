@@ -1042,9 +1042,11 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
 function ap(data){ return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(data)}).then(r=>r.json()); }
 
 function toast(msg,type='success'){
-  const t=document.createElement('div');
+  let t=document.getElementById('toast-live');
+  if(!t){t=document.createElement('div');t.id='toast-live';t.setAttribute('role','status');t.setAttribute('aria-live','polite');t.setAttribute('aria-atomic','true');document.body.appendChild(t);}
+  clearTimeout(t._hideTimer);
   t.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.15);background:${type==='success'?'#27ae60':'#e74c3c'};color:white;max-width:380px`;
-  t.innerHTML=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),3500);
+  t.innerHTML=msg; t._hideTimer=setTimeout(()=>{t.style.display='none';},3500);
 }
 
 // État de la ligne : rien tant que rien n'est saisi, orange "En cours" tant

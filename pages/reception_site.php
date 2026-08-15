@@ -273,20 +273,20 @@ include __DIR__ . '/../templates/header.php';
 <form method="GET" class="filter-bar">
   <?php if(!$is_coord): ?>
   <label style="font-size:13px;font-weight:500">Site :</label>
-  <select name="site" class="fsel" onchange="this.form.submit()">
+  <select name="site" class="fsel" aria-label="Filtrer par site" onchange="this.form.submit()">
     <option value="0">Tous les sites</option>
     <?php foreach($sites_list as $s): ?>
     <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
     <?php endforeach; ?>
   </select>
   <?php endif; ?>
-  <select name="statut" class="fsel" onchange="this.form.submit()">
+  <select name="statut" class="fsel" aria-label="Filtrer par statut" onchange="this.form.submit()">
     <option value="">Tous les statuts</option>
     <option value="en_attente"  <?= $f_statut==='en_attente'?'selected':'' ?>>⏳ En attente</option>
     <option value="receptionnee" <?= $f_statut==='receptionnee'?'selected':'' ?>>✅ Réceptionnées</option>
     <option value="litige"      <?= $f_statut==='litige'?'selected':'' ?>>⚠️ Litige</option>
   </select>
-  <select name="type" class="fsel" onchange="this.form.submit()">
+  <select name="type" class="fsel" aria-label="Filtrer par type" onchange="this.form.submit()">
     <option value="">Tous les types</option>
     <option value="consommable" <?= $f_type==='consommable'?'selected':'' ?>>🧴 Consommables</option>
     <option value="equipement"  <?= $f_type==='equipement'?'selected':'' ?>>💻 Équipements</option>

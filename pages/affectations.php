@@ -237,7 +237,7 @@ include __DIR__ . '/../templates/header.php';
 
         <!-- Recherche équipement -->
         <div class="form-group">
-          <label>Équipement * <span style="font-size:11px;color:var(--muted)">(tapez le N° série pour rechercher)</span></label>
+          <label for="affSearch">Équipement * <span style="font-size:11px;color:var(--muted)">(tapez le N° série pour rechercher)</span></label>
           <div class="autocomplete-wrap">
             <input type="text" class="form-control" id="affSearch" placeholder="Tapez le numéro série…" autocomplete="off" oninput="searchEquip(this.value)">
             <div class="autocomplete-results" id="affResults"></div>
@@ -249,14 +249,14 @@ include __DIR__ . '/../templates/header.php';
         </div>
 
         <div class="form-row cols-2">
-          <div class="form-group"><label>Type de mouvement</label>
+          <div class="form-group"><label for="affTypeMouv">Type de mouvement</label>
             <select class="form-control" id="affTypeMouv">
               <option value="entree">Entrée en stock</option>
               <option value="transfert" selected>Transfert / Affectation</option>
               <option value="maintenance">Maintenance</option>
             </select>
           </div>
-          <div class="form-group"><label>Site de destination</label>
+          <div class="form-group"><label for="affSite">Site de destination</label>
             <select class="form-control" id="affSite">
               <option value="">— Stock central —</option>
               <?php foreach($sites_list as $s): ?>
@@ -266,7 +266,7 @@ include __DIR__ . '/../templates/header.php';
           </div>
         </div>
 
-        <div class="form-group"><label>Utilisateur assigné</label>
+        <div class="form-group"><label for="affUser">Utilisateur assigné</label>
           <select class="form-control" id="affUser">
             <option value="">— Non assigné —</option>
             <?php foreach($users_list as $u): ?>
@@ -275,7 +275,7 @@ include __DIR__ . '/../templates/header.php';
           </select>
         </div>
 
-        <div class="form-group"><label>Notes</label>
+        <div class="form-group"><label for="affNotes">Notes</label>
           <textarea class="form-control" id="affNotes" rows="2" placeholder="Raison du transfert, remarques…"></textarea>
         </div>
 
@@ -330,13 +330,13 @@ include __DIR__ . '/../templates/header.php';
     <!-- FILTRES MOUVEMENTS -->
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
       <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;flex:1;min-width:0">
-        <select name="site" class="fsel" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;cursor:pointer;outline:none;font-family:'DM Sans',sans-serif;max-width:100%">
+        <select name="site" class="fsel" aria-label="Filtrer par site" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;cursor:pointer;outline:none;font-family:'DM Sans',sans-serif;max-width:100%">
           <option value="">Tous les sites</option>
           <?php foreach($sites_list as $s): ?>
           <option value="<?= $s['id'] ?>" <?= $f_site===$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
           <?php endforeach; ?>
         </select>
-        <select name="type_mouv" class="fsel" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;cursor:pointer;outline:none;font-family:'DM Sans',sans-serif">
+        <select name="type_mouv" class="fsel" aria-label="Filtrer par type de mouvement" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;cursor:pointer;outline:none;font-family:'DM Sans',sans-serif">
           <option value="">Tous types</option>
           <option value="entree"    <?= $f_type==='entree'?'selected':'' ?>>Entrée</option>
           <option value="sortie"    <?= $f_type==='sortie'?'selected':'' ?>>Sortie</option>

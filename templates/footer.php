@@ -89,13 +89,26 @@ setInterval(refreshNotifs, 60000);
 })();
 
 // ===== TOAST NOTIFICATIONS =====
+// Région aria-live unique et réutilisée (pas un <div> recréé à chaque appel) :
+// un lecteur d'écran surveille un nœud stable de façon fiable, alors que
+// détecter l'insertion répétée de nouveaux nœuds porteurs de role="status"
+// est moins constant d'un lecteur d'écran à l'autre.
 function toast(msg, type = 'success') {
-  const t = document.createElement('div');
+  let t = document.getElementById('toast-live');
+  const neuf = !t;
+  if (neuf) {
+    t = document.createElement('div');
+    t.id = 'toast-live';
+    t.setAttribute('role', 'status');
+    t.setAttribute('aria-live', 'polite');
+    t.setAttribute('aria-atomic', 'true');
+    document.body.appendChild(t);
+  }
+  clearTimeout(t._hideTimer);
   t.className = `toast toast-${type}`;
   t.innerHTML = msg;
-  document.body.appendChild(t);
-  setTimeout(() => t.classList.add('show'), 10);
-  setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3500);
+  setTimeout(() => t.classList.add('show'), neuf ? 10 : 0);
+  t._hideTimer = setTimeout(() => t.classList.remove('show'), 3500);
 }
 </script>
 

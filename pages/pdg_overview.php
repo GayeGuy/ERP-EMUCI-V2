@@ -746,7 +746,7 @@ include __DIR__ . '/../templates/header.php';
         <?php endfor; ?>
       </select>
       <?php else: ?>
-      <input type="month" name="mois" value="<?= h($mois) ?>" class="month-inp" onchange="this.form.submit()">
+      <input type="month" name="mois" value="<?= h($mois) ?>" class="month-inp" onchange="this.form.submit()" aria-label="Choisir le mois">
       <?php endif; ?>
     </form>
   </div>
@@ -1030,7 +1030,7 @@ include __DIR__ . '/../templates/header.php';
     <div>
       <div class="pfw-site-lbl">Performance mensuelle par site</div>
       <div class="pfw-site-sel">
-        <select id="pfwSiteSelect" onchange="pfwChangeSite(+this.value)">
+        <select id="pfwSiteSelect" onchange="pfwChangeSite(+this.value)" aria-label="Choisir le site à afficher">
           <?php foreach ($pfw_sites_json ? json_decode($js_pfw_sites, true) : [] as $i => $sj): ?>
           <option value="<?= $i ?>"><?= h($sj['name']) ?></option>
           <?php endforeach; ?>

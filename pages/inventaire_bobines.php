@@ -290,19 +290,19 @@ include __DIR__ . '/../templates/header.php';
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
   <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
     <?php if(!$site_force): ?>
-    <select name="site" class="fsel" onchange="this.form.submit()">
+    <select name="site" class="fsel" aria-label="Filtrer par site" onchange="this.form.submit()">
       <option value="">Tous les sites</option>
       <?php foreach($sites_list as $s): ?>
       <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
       <?php endforeach; ?>
     </select>
     <?php endif; ?>
-    <select name="type" class="fsel" onchange="this.form.submit()">
+    <select name="type" class="fsel" aria-label="Filtrer par type" onchange="this.form.submit()">
       <option value="">Tous types</option>
       <option value="journalier" <?= $f_type==='journalier'?'selected':'' ?>>📅 Journalier</option>
       <option value="mensuel"    <?= $f_type==='mensuel'?'selected':'' ?>>📆 Mensuel</option>
     </select>
-    <input type="month" name="mois" value="<?= h($f_mois) ?>" onchange="this.form.submit()"
+    <input type="month" name="mois" value="<?= h($f_mois) ?>" onchange="this.form.submit()" aria-label="Choisir le mois"
            style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none">
   </form>
   <?php // Le coordinateur de site dépend désormais entièrement de la session
@@ -406,7 +406,7 @@ include __DIR__ . '/../templates/header.php';
 
 <script>
 function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
-function toast(m,t='success'){const el=document.createElement('div');el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white`;el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),3500);}
+function toast(m,t='success'){let el=document.getElementById('toast-live');if(!el){el=document.createElement('div');el.id='toast-live';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.setAttribute('aria-atomic','true');document.body.appendChild(el);}clearTimeout(el._hideTimer);el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white`;el.textContent=m;el._hideTimer=setTimeout(()=>{el.style.display='none';},3500);}
 function ouvrirModal(){document.getElementById('fDate').value='<?= date('Y-m-d') ?>';document.getElementById('fNotes').value='';document.getElementById('mAlert').innerHTML='';document.getElementById('modal').style.display='flex';}
 function fermer(){document.getElementById('modal').style.display='none';}
 document.getElementById('modal').addEventListener('click',e=>{if(e.target===document.getElementById('modal'))fermer();});

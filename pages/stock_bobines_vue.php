@@ -813,19 +813,19 @@ include __DIR__ . '/../templates/header.php';
 <!-- FILTRES -->
 <div class="filter-bar">
   <form method="GET" style="display:contents">
-    <select name="site" class="fsel" onchange="this.form.submit()">
+    <select name="site" class="fsel" aria-label="Filtrer par site" onchange="this.form.submit()">
       <option value="">🏢 Tous les sites</option>
       <?php foreach ($sites_list as $s): ?>
       <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
       <?php endforeach; ?>
     </select>
-    <select name="type" class="fsel" onchange="this.form.submit()">
+    <select name="type" class="fsel" aria-label="Filtrer par type" onchange="this.form.submit()">
       <option value="">🎞️ Tous les types</option>
       <?php foreach ($types_list as $t): ?>
       <option value="<?= h($t['type_code']) ?>" <?= $f_type===$t['type_code']?'selected':'' ?>><?= h($t['type_code']) ?></option>
       <?php endforeach; ?>
     </select>
-    <select name="statut" class="fsel" onchange="this.form.submit()">
+    <select name="statut" class="fsel" aria-label="Filtrer par statut" onchange="this.form.submit()">
       <option value="">⚡ Tous statuts</option>
       <option value="en_cours" <?= $f_statut==='en_cours'?'selected':'' ?>>En cours</option>
       <option value="en_stock" <?= $f_statut==='en_stock'?'selected':'' ?>>En stock</option>

@@ -250,7 +250,7 @@ include __DIR__ . '/../templates/header.php';
   <input type="hidden" name="categorie" value="<?= h($f_categorie) ?>">
 
   <?php if($role_slug !== 'coordinateur_site'): ?>
-  <select name="site" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
+  <select name="site" onchange="this.form.submit()" aria-label="Filtrer par site" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
     <option value="">Tous les sites</option>
     <?php foreach($sites_list as $s): ?>
     <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
@@ -258,7 +258,7 @@ include __DIR__ . '/../templates/header.php';
   </select>
   <?php endif; ?>
 
-  <select name="etat" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
+  <select name="etat" onchange="this.form.submit()" aria-label="Filtrer par état" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
     <option value="">Tous états</option>
     <option value="neuf"      <?= $f_etat==='neuf'?'selected':''      ?>>Neuf</option>
     <option value="bon"       <?= $f_etat==='bon'?'selected':''       ?>>Bon état</option>
@@ -267,7 +267,7 @@ include __DIR__ . '/../templates/header.php';
     <option value="hs"        <?= $f_etat==='hs'?'selected':''        ?>>H.S.</option>
   </select>
 
-  <select name="type" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
+  <select name="type" onchange="this.form.submit()" aria-label="Filtrer par type d'équipement" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
     <option value="">Tous les types</option>
     <?php foreach($nomenclatures as $n): ?>
     <option value="<?= $n['id'] ?>" <?= $f_type===$n['id']?'selected':'' ?>><?= h($n['libelle']) ?></option>
@@ -276,7 +276,7 @@ include __DIR__ . '/../templates/header.php';
 
   <div style="position:relative;flex:1;min-width:180px">
     <i class="ph-duotone ph-magnifying-glass" style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px;pointer-events:none"></i>
-    <input type="text" name="q" value="<?= h($f_search) ?>" placeholder="Rechercher..."
+    <input type="text" name="q" value="<?= h($f_search) ?>" placeholder="Rechercher..." aria-label="Rechercher un équipement"
            onchange="this.form.submit()"
            style="width:100%;padding:9px 12px 9px 34px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none">
   </div>
@@ -454,7 +454,7 @@ include __DIR__ . '/../templates/header.php';
 
 <script>
 function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
-function toast(m,t='success'){const el=document.createElement('div');el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white`;el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),3500);}
+function toast(m,t='success'){let el=document.getElementById('toast-live');if(!el){el=document.createElement('div');el.id='toast-live';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.setAttribute('aria-atomic','true');document.body.appendChild(el);}clearTimeout(el._hideTimer);el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white`;el.textContent=m;el._hideTimer=setTimeout(()=>{el.style.display='none';},3500);}
 
 function ouvrirCreation(){
   document.getElementById('titleModal').textContent='Nouvel équipement';

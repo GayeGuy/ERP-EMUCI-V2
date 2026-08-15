@@ -203,23 +203,23 @@ include __DIR__ . '/../../templates/header.php';
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
     <div style="position:relative;flex:1;min-width:200px">
       <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted)">🔍</span>
-      <input type="text" name="q" value="<?= h($search) ?>"
+      <input type="text" name="q" value="<?= h($search) ?>" aria-label="Rechercher dans les descriptions"
              placeholder="Rechercher dans les descriptions…"
              style="width:100%;padding:9px 14px 9px 36px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none;font-family:'Manrope',sans-serif">
     </div>
-    <select name="user_id" class="fsel" onchange="this.form.submit()">
+    <select name="user_id" class="fsel" aria-label="Filtrer par utilisateur" onchange="this.form.submit()">
       <option value="0">Tous les utilisateurs</option>
       <?php foreach($users_list as $u): ?>
       <option value="<?= $u['id'] ?>" <?= $f_user===$u['id']?'selected':'' ?>><?= h($u['prenom'].' '.$u['nom']) ?></option>
       <?php endforeach; ?>
     </select>
-    <select name="module" class="fsel" onchange="this.form.submit()">
+    <select name="module" class="fsel" aria-label="Filtrer par module" onchange="this.form.submit()">
       <option value="">Tous modules</option>
       <?php foreach($modules_list as $m): ?>
       <option value="<?= h($m['module']) ?>" <?= $f_module===$m['module']?'selected':'' ?>><?= h(audit_module_label($m['module'])) ?></option>
       <?php endforeach; ?>
     </select>
-    <select name="action_type" class="fsel" onchange="this.form.submit()">
+    <select name="action_type" class="fsel" aria-label="Filtrer par type d'action" onchange="this.form.submit()">
       <option value="">Toutes actions</option>
       <?php foreach($actions_list as $a): ?>
       <option value="<?= $a ?>" <?= $f_action===$a?'selected':'' ?>><?= h(audit_action_label($a)) ?></option>

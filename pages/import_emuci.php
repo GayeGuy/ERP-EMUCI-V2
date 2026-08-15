@@ -845,11 +845,11 @@ include __DIR__ . '/../templates/header.php';
 <!-- FILTRE DATE + SITE -->
 <form method="GET" style="display:flex;gap:10px;align-items:center;margin-bottom:20px;flex-wrap:wrap">
   <input type="hidden" name="tab" id="tabInput" value="<?= h($onglet) ?>">
-  <label style="font-size:13px;font-weight:600;color:var(--navy)">Date :</label>
-  <input type="date" name="date" value="<?= h($f_date) ?>" onchange="this.form.submit()"
+  <label for="inp-date-emuci" style="font-size:13px;font-weight:600;color:var(--navy)">Date :</label>
+  <input type="date" id="inp-date-emuci" name="date" value="<?= h($f_date) ?>" onchange="this.form.submit()"
          style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none">
   <label style="font-size:13px;font-weight:600;color:var(--navy)">Site :</label>
-  <select name="site" class="fsel" onchange="this.form.submit()">
+  <select name="site" class="fsel" aria-label="Filtrer par site" onchange="this.form.submit()">
     <option value="0">Tous les sites</option>
     <?php foreach($sites_list as $s): ?>
     <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
@@ -878,8 +878,8 @@ include __DIR__ . '/../templates/header.php';
         <input type="hidden" name="action" value="import_optoplate">
         <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start">
           <div>
-            <label style="font-size:13px;font-weight:600;color:var(--navy);display:block;margin-bottom:6px">Date du fichier</label>
-            <input type="date" name="date_import" value="<?= date('Y-m-d') ?>"
+            <label for="inp-date-fichier" style="font-size:13px;font-weight:600;color:var(--navy);display:block;margin-bottom:6px">Date du fichier</label>
+            <input type="date" id="inp-date-fichier" name="date_import" value="<?= date('Y-m-d') ?>"
                    style="padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;outline:none">
           </div>
           <div>

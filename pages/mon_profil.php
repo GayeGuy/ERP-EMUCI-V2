@@ -278,13 +278,13 @@ include __DIR__ . '/../templates/header.php';
         <form id="form-profil" autocomplete="off">
           <div class="form-row cols-2">
             <div class="form-group">
-              <label>Prénom</label>
-              <input type="text" class="form-control" name="prenom"
+              <label for="inp-prenom">Prénom</label>
+              <input type="text" class="form-control" name="prenom" id="inp-prenom"
                      value="<?= h($user['prenom']) ?>" required maxlength="80">
             </div>
             <div class="form-group">
-              <label>Nom</label>
-              <input type="text" class="form-control" name="nom"
+              <label for="inp-nom">Nom</label>
+              <input type="text" class="form-control" name="nom" id="inp-nom"
                      value="<?= h($user['nom']) ?>" required maxlength="80">
             </div>
           </div>
@@ -303,10 +303,10 @@ include __DIR__ . '/../templates/header.php';
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Téléphone
+              <label for="inp-telephone">Téléphone
                 <span style="font-weight:400;color:var(--muted)">(optionnel)</span>
               </label>
-              <input type="tel" class="form-control" name="telephone"
+              <input type="tel" class="form-control" name="telephone" id="inp-telephone"
                      value="<?= h($user['telephone'] ?? '') ?>" maxlength="20">
             </div>
           </div>
@@ -330,14 +330,14 @@ include __DIR__ . '/../templates/header.php';
         <form id="form-pwd" autocomplete="off">
           <div class="form-row">
             <div class="form-group">
-              <label>Mot de passe actuel</label>
-              <input type="password" class="form-control" name="old_password"
+              <label for="inp-old-pw">Mot de passe actuel</label>
+              <input type="password" class="form-control" name="old_password" id="inp-old-pw"
                      required autocomplete="current-password">
             </div>
           </div>
           <div class="form-row cols-2">
             <div class="form-group">
-              <label>Nouveau mot de passe</label>
+              <label for="inp-npw">Nouveau mot de passe</label>
               <input type="password" class="form-control" name="new_password"
                      id="inp-npw" required minlength="8" autocomplete="new-password">
               <div class="pw-track"><div class="pw-fill" id="pw-bar"></div></div>
@@ -345,7 +345,7 @@ include __DIR__ . '/../templates/header.php';
                    id="pw-strength-lbl"></div>
             </div>
             <div class="form-group">
-              <label>Confirmer le nouveau mot de passe</label>
+              <label for="inp-cpw">Confirmer le nouveau mot de passe</label>
               <input type="password" class="form-control" name="confirm_password"
                      id="inp-cpw" required autocomplete="new-password">
               <div style="font-size:11px;margin-top:4px;font-weight:600;min-height:16px"

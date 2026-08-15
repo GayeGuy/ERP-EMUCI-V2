@@ -415,11 +415,11 @@ include __DIR__ . '/../templates/header.php';
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
     <div style="position:relative;flex:1;min-width:200px">
       <i class="ph-duotone ph-magnifying-glass" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted)"></i>
-      <input type="text" id="searchQ" value="<?= h($search) ?>" placeholder="Rechercher un article…"
+      <input type="text" id="searchQ" value="<?= h($search) ?>" placeholder="Rechercher un article…" aria-label="Rechercher un article"
         style="width:100%;padding:10px 14px 10px 38px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;outline:none;font-family:'Manrope',sans-serif"
         oninput="filterArticles(this.value)">
     </div>
-    <select id="filterType" onchange="filterArticles()"
+    <select id="filterType" onchange="filterArticles()" aria-label="Filtrer par type d'article"
       style="padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none;font-family:'Manrope',sans-serif">
       <option value="">Tous les types</option>
       <?php foreach($TYPES_ARTICLE as $k=>$l): ?>

@@ -1379,7 +1379,7 @@ $nb_avec_ecart  = count(array_filter($validations_jour, fn($v) => $v['statut'] !
     <p><?= $is_coord ? 'Statut du stock bobines de votre site pour la journée' : 'Vérification et validation des stocks bobines avant démarrage' ?></p>
   </div>
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-    <input type="date" id="fDate" value="<?= h($f_date) ?>" onchange="location.href='?date='+this.value"
+    <input type="date" id="fDate" value="<?= h($f_date) ?>" onchange="location.href='?date='+this.value" aria-label="Choisir la date"
            style="padding:8px 14px;border:1.5px solid rgba(255,255,255,.35);background:rgba(255,255,255,.15);border-radius:10px;font-size:13px;outline:none;color:white;cursor:pointer">
     <?php if($can_valider): ?>
     <button class="btn btn-secondary" onclick="verifierTousSites()"
@@ -2012,7 +2012,7 @@ $nb_total_bobines = count($coord_reajust_details);
 
 <script>
 function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
-function toast(m,t='success'){const bg={success:'#27ae60',error:'#e74c3c',info:'#1B75BC'}[t]||'#27ae60';const el=document.createElement('div');el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${bg};color:white;max-width:320px`;el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),4000);}
+function toast(m,t='success'){const bg={success:'#27ae60',error:'#e74c3c',info:'#1B75BC'}[t]||'#27ae60';let el=document.getElementById('toast-live');if(!el){el=document.createElement('div');el.id='toast-live';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.setAttribute('aria-atomic','true');document.body.appendChild(el);}clearTimeout(el._hideTimer);el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${bg};color:white;max-width:320px`;el.textContent=m;el._hideTimer=setTimeout(()=>{el.style.display='none';},4000);}
 
 // ── ONGLETS
 function switchTab(tab) {

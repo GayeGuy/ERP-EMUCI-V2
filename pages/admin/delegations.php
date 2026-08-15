@@ -210,7 +210,7 @@ include __DIR__ . '/../../templates/header.php';
   <div class="card-body">
     <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:18px;flex-wrap:wrap">
       <div class="form-group" style="flex:1;min-width:220px;margin-bottom:0">
-        <label>Ajouter un responsable</label>
+        <label for="selResponsable">Ajouter un responsable</label>
         <select class="form-control" id="selResponsable">
           <option value="">— Choisir un utilisateur —</option>
           <?php foreach ($utilisateurs_delegables as $u): ?>
@@ -249,7 +249,7 @@ include __DIR__ . '/../../templates/header.php';
 
 <script>
 function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
-function toast(m,t='success'){const el=document.createElement('div');el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white;box-shadow:0 4px 20px rgba(0,0,0,.15)`;el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),3000);}
+function toast(m,t='success'){let el=document.getElementById('toast-live');if(!el){el=document.createElement('div');el.id='toast-live';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.setAttribute('aria-atomic','true');document.body.appendChild(el);}clearTimeout(el._hideTimer);el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white;box-shadow:0 4px 20px rgba(0,0,0,.15)`;el.textContent=m;el._hideTimer=setTimeout(()=>{el.style.display='none';},3000);}
 
 function toggle(gestId, module, actif) {
   ap({action:'toggle', gestionnaire_id:gestId, module, actif:actif?1:0}).then(d=>{

@@ -1048,14 +1048,14 @@ include __DIR__ . '/../templates/header.php';
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
   <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center" id="frmFiltres">
     <?php if(!$site_force): ?>
-    <select name="site" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
+    <select name="site" onchange="this.form.submit()" aria-label="Filtrer par site" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
       <option value="">Tous les sites</option>
       <?php foreach($sites_list as $s): ?>
       <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
       <?php endforeach; ?>
     </select>
     <?php endif; ?>
-    <select name="statut" id="selStatut" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
+    <select name="statut" id="selStatut" onchange="this.form.submit()" aria-label="Filtrer par statut" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
       <option value="">Tous statuts</option>
       <option value="en_attente" <?= $f_statut==='en_attente'?'selected':'' ?>>⏳ En attente validation</option>
       <option value="en_attente_livraison" <?= $f_statut==='en_attente_livraison'?'selected':'' ?>>📋 À préparer</option>
