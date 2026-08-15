@@ -58,6 +58,7 @@ migration_lot5_corrections_inventaire.sql
 migration_lot6_autorisation_modif_inventaire.sql
 migration_achats_01_schema.sql
 migration_achats_02_referentiels.sql
+migration_achats_03_permissions.sql
 "
 
 for f in $FICHIERS; do
