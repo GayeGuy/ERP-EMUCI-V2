@@ -5,9 +5,11 @@
 /uploads/fiches/*
 /uploads/bl/*
 /uploads/feb/*
+/uploads/validation/*
 !/uploads/fiches/.gitkeep
 !/uploads/bl/.gitkeep
 !/uploads/feb/.gitkeep
+!/uploads/validation/.gitkeep
 
 # includes/db.php ne contient PLUS de secrets (config via variables
 # d'environnement) : il DOIT être versionné pour le déploiement Render.

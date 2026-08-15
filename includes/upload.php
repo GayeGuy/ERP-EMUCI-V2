@@ -7,6 +7,7 @@ define('UPLOAD_DIR',       __DIR__ . '/../uploads/');
 define('UPLOAD_BL_DIR',    UPLOAD_DIR . 'bl/');
 define('UPLOAD_FICHE_DIR', UPLOAD_DIR . 'fiches/');
 define('UPLOAD_FEB_DIR',   UPLOAD_DIR . 'feb/');
+define('UPLOAD_VALIDATION_DIR', UPLOAD_DIR . 'validation/');
 define('UPLOAD_MAX_SIZE',  10 * 1024 * 1024);  // 10 Mo
 define('UPLOAD_URL',       APP_URL . '/uploads/');
 
@@ -25,7 +26,7 @@ const UPLOAD_ALLOWED_TYPES = [
  * S'assure que les dossiers d'upload existent.
  */
 function upload_ensure_dirs(): void {
-    foreach ([UPLOAD_BL_DIR, UPLOAD_FICHE_DIR, UPLOAD_FEB_DIR] as $dir) {
+    foreach ([UPLOAD_BL_DIR, UPLOAD_FICHE_DIR, UPLOAD_FEB_DIR, UPLOAD_VALIDATION_DIR] as $dir) {
         if (!is_dir($dir)) {
             mkdir($dir, 0775, true);
         }
@@ -110,9 +111,10 @@ function upload_document(string $field_name, string $type, string $prefix, bool 
  */
 function upload_delete(string $filename, string $type): void {
     $dir = match ($type) {
-        'fiche' => UPLOAD_FICHE_DIR,
-        'feb'   => UPLOAD_FEB_DIR,
-        default => UPLOAD_BL_DIR,
+        'fiche'      => UPLOAD_FICHE_DIR,
+        'feb'        => UPLOAD_FEB_DIR,
+        'validation' => UPLOAD_VALIDATION_DIR,
+        default      => UPLOAD_BL_DIR,
     };
     $path = $dir . basename($filename);
     if (file_exists($path)) {
@@ -125,9 +127,10 @@ function upload_delete(string $filename, string $type): void {
  */
 function upload_url(string $filename, string $type): string {
     $sub = match ($type) {
-        'fiche' => 'fiches',
-        'feb'   => 'feb',
-        default => 'bl',
+        'fiche'      => 'fiches',
+        'feb'        => 'feb',
+        'validation' => 'validation',
+        default      => 'bl',
     };
     return UPLOAD_URL . $sub . '/' . rawurlencode($filename);
 }

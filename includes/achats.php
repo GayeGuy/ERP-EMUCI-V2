@@ -868,7 +868,12 @@ function ach_lancer_validation(int $feb_id, array $user): array {
               WHERE id=?",
             [json_encode($workflow, JSON_UNESCAPED_UNICODE), $now, json_encode($historique, JSON_UNESCAPED_UNICODE), $feb_id]
         );
-        audit_log($uid, 'UPDATE', 'achats', $feb_id, "Lancement de la validation — palier « {$palier['libelle']} », $montant XOF, " . count($workflow) . ' étape(s)');
+        // Les avertissements budgétaires (mode "alerte", non bloquant) sont
+        // ajoutés au message d'audit : c'est cette trace que le dashboard
+        // (J9, Bloc 4) relit pour l'alerte "dépassements budgétaires".
+        $msg_lancement = "Lancement de la validation — palier « {$palier['libelle']} », $montant XOF, " . count($workflow) . ' étape(s)';
+        if ($controle['avertissements']) $msg_lancement .= ' — ' . implode(' ', $controle['avertissements']);
+        audit_log($uid, 'UPDATE', 'achats', $feb_id, $msg_lancement);
         if ($transaction_locale) db_commit();
     } catch (Exception $e) {
         if ($transaction_locale) db_rollback();
@@ -957,7 +962,28 @@ function ach_viser(int $feb_id, array $user, bool $accepte, string $commentaire 
             db_rollback();
             throw $e;
         }
-        audit_log($uid, 'UPDATE', 'achats', $feb_id, "Dernière signature obtenue (étape « $etape_label ») — FEB confirmée");
+
+        // J9, Bloc 1 : la fiche de validation se génère une seule fois, ici,
+        // juste après la confirmation — jamais recalculée par la suite. Hors
+        // de la transaction ci-dessus par choix : le rendu dompdf et
+        // l'écriture disque n'ont rien de transactionnel, et les prolonger
+        // sous le verrou budgétaire (SELECT ... FOR UPDATE, ach_controle_budget)
+        // retiendrait ce verrou plus longtemps qu'il ne le faut. Un échec de
+        // génération ne doit jamais défaire une confirmation déjà acquise —
+        // il est journalisé et laissé rattrapable, pas fatal.
+        try {
+            require_once __DIR__ . '/pdf_achats.php';
+            ach_generer_fiche_validation($feb_id);
+        } catch (Throwable $e) {
+            // Throwable, pas seulement Exception : une Error (classe
+            // manquante, require_once en échec) ne doit pas non plus faire
+            // sauter une confirmation déjà acquise.
+            error_log("Échec génération fiche de validation FEB $feb_id : " . $e->getMessage());
+        }
+
+        $msg_confirmation = "Dernière signature obtenue (étape « $etape_label ») — FEB confirmée";
+        if ($controle['avertissements']) $msg_confirmation .= ' — ' . implode(' ', $controle['avertissements']);
+        audit_log($uid, 'UPDATE', 'achats', $feb_id, $msg_confirmation);
         ach_notifier_demandeur_feb($feb_id, "Votre FEB {$feb['numero']} est entièrement signée.");
         if ($feb['acheteur_id']) db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','FEB confirmée',?,?)",
             [(int)$feb['acheteur_id'], "FEB {$feb['numero']} entièrement signée.", '/pages/achats/file_attente.php']);
@@ -1340,4 +1366,286 @@ function ach_cloturer_reliquat(int $suivi_id, string $motif, array $user): void 
              '/pages/achats/suivi_achats.php']
         );
     }
+}
+
+// ── J9 — Tableaux de bord : périmètre département ────────────
+//    NULL = vue globale (Achats, direction, finance — RAF/DAF/PDG voient
+//    déjà tout le circuit de validation, même logique ici) ; tableau =
+//    restriction aux départements de l'utilisateur (user_departements,
+//    même table que le N+1/di_roles) ; [] = aucun département couvert,
+//    périmètre vide plutôt qu'une vue globale par défaut dangereuse.
+function ach_perimetre_departements(array $user): ?array {
+    $role = $user['role_slug'] ?? '';
+    // Vocation globale par nature : direction, Achats, PDG.
+    if (in_array($role, ['admin', 'superadmin', 'superviseur_achat', 'directeur_general', 'lecteur'], true)) {
+        return null;
+    }
+    $depts = array_map('intval', array_column(
+        db_fetch_all("SELECT DISTINCT departement_id FROM user_departements WHERE user_id=?", [(int)$user['id']]),
+        'departement_id'
+    ));
+    // RAF/DAF couvrent tout le circuit financier par défaut (comportement
+    // historique du rôle) — sauf s'ils sont explicitement rattachés à un ou
+    // plusieurs départements précis, auquel cas ils sont scopés comme
+    // n'importe quel responsable qui n'en couvre qu'un (point 11/21).
+    if (!$depts && in_array($role, ['raf', 'daf'], true)) return null;
+    return $depts;
+}
+
+// Fragment de clause + paramètres pour restreindre une requête sur feb à un
+// périmètre de départements. $depts === null : aucune restriction.
+function ach_clause_departement(?array $depts, string $alias = 'f'): array {
+    if ($depts === null) return ['', []];
+    if (!$depts) return [" AND 1=0", []];
+    $place = implode(',', array_fill(0, count($depts), '?'));
+    return [" AND $alias.departement_id IN ($place)", $depts];
+}
+
+// Moyenne ET médiane (jours) — un délai extrême ne doit pas masquer les
+// autres (Bloc 3, point 14).
+function ach_delais_jours(string $sql, array $params): array {
+    $valeurs = array_map('floatval', array_column(db_fetch_all($sql, $params), 'd'));
+    if (!$valeurs) return ['moyenne' => null, 'mediane' => null, 'n' => 0];
+    sort($valeurs);
+    $n = count($valeurs);
+    $mid = intdiv($n, 2);
+    $mediane = $n % 2 === 0 ? ($valeurs[$mid - 1] + $valeurs[$mid]) / 2 : $valeurs[$mid];
+    return ['moyenne' => round(array_sum($valeurs) / $n, 1), 'mediane' => round($mediane, 1), 'n' => $n];
+}
+
+// ── KPI du dashboard opérationnel (Bloc 3) ────────────────────
+function ach_dashboard_kpis(array $user, ?array $depts, string $du, string $au): array {
+    [$clause, $pd] = ach_clause_departement($depts, 'f');
+
+    // À traiter aujourd'hui : file d'attente non prise en charge (J3) +
+    // visas en attente de CET utilisateur (J5) — un seul chiffre agrégé.
+    $a_viser   = count(ach_a_viser($user));
+    $non_prise = (int) db_fetch_value("SELECT COUNT(*) FROM feb f WHERE f.statut='soumise' AND f.acheteur_id IS NULL$clause", $pd);
+
+    // Taux de service sur stock — la mesure directe que J3 a rendue possible.
+    $arb = db_fetch_one(
+        "SELECT COUNT(*) FILTER (WHERE fl.arbitrage='stock') AS nb_stock, COUNT(*) AS nb_total
+         FROM feb_lignes fl JOIN feb f ON f.id=fl.feb_id
+         WHERE f.date_soumission BETWEEN ? AND ?$clause",
+        array_merge([$du, $au], $pd)
+    );
+    $taux_service_stock = $arb && (int)$arb['nb_total'] > 0 ? round(100 * (int)$arb['nb_stock'] / (int)$arb['nb_total'], 1) : null;
+
+    $delai_prise_charge = ach_delais_jours(
+        "SELECT EXTRACT(EPOCH FROM (date_prise_charge - date_soumission))/86400 AS d
+         FROM feb f WHERE date_prise_charge IS NOT NULL AND date_soumission BETWEEN ? AND ?$clause",
+        array_merge([$du, $au], $pd)
+    );
+    $delai_validation = ach_delais_jours(
+        "SELECT EXTRACT(EPOCH FROM (date_confirmation - date_lancement_validation))/86400 AS d
+         FROM feb f WHERE date_confirmation IS NOT NULL AND date_lancement_validation IS NOT NULL AND date_soumission BETWEEN ? AND ?$clause",
+        array_merge([$du, $au], $pd)
+    );
+    $delai_livraison = ach_delais_jours(
+        "SELECT EXTRACT(EPOCH FROM (fs.date_livraison_reelle - f.date_confirmation))/86400 AS d
+         FROM feb_suivi fs JOIN feb f ON f.id=fs.feb_id
+         WHERE fs.date_livraison_reelle IS NOT NULL AND f.date_confirmation IS NOT NULL AND f.date_soumission BETWEEN ? AND ?$clause",
+        array_merge([$du, $au], $pd)
+    );
+
+    // Taux de livraison à temps et complète — formulation retenue à la
+    // place du sigle OTIF (point 15) : receptionnee, sans clôture de
+    // reliquat, et livrée au plus tard à la date prévue.
+    $liv = db_fetch_one(
+        "SELECT COUNT(*) FILTER (WHERE fs.date_livraison_reelle <= fs.date_livraison_prevue) AS nb_temps, COUNT(*) AS nb_total
+         FROM feb_suivi fs JOIN feb f ON f.id=fs.feb_id
+         WHERE fs.quantite_recue >= fs.quantite_commandee AND fs.cloture_reliquat=0
+           AND fs.date_livraison_reelle IS NOT NULL AND f.date_soumission BETWEEN ? AND ?$clause",
+        array_merge([$du, $au], $pd)
+    );
+    $taux_livraison_temps = $liv && (int)$liv['nb_total'] > 0 ? round(100 * (int)$liv['nb_temps'] / (int)$liv['nb_total'], 1) : null;
+
+    return [
+        'a_traiter' => $a_viser + $non_prise, 'a_viser' => $a_viser, 'non_prise' => $non_prise,
+        'taux_service_stock' => $taux_service_stock,
+        'delai_prise_charge' => $delai_prise_charge,
+        'delai_validation'   => $delai_validation,
+        'delai_livraison'    => $delai_livraison,
+        'taux_livraison_temps' => $taux_livraison_temps,
+    ];
+}
+
+// ── Répartition des dépenses (Bloc 4, point 16-17) — barres, jamais un
+//    camembert. $axe : 'famille' | 'departement' | 'fournisseur'.
+//    Zéro-safe par construction : une requête sans ligne renvoie un
+//    tableau vide, jamais une division par zéro (aucune division ici).
+function ach_repartition_depenses(string $axe, ?array $depts, string $du, string $au): array {
+    [$clause, $pd] = ach_clause_departement($depts, 'f');
+    $params = array_merge([$du, $au], $pd);
+
+    if ($axe === 'famille') {
+        $sql = "SELECT COALESCE(fa.libelle,'—') AS label, SUM(fl.montant_ttc) AS total
+                FROM feb_lignes fl JOIN feb f ON f.id=fl.feb_id
+                LEFT JOIN familles_achat fa ON fa.id=fl.famille_id
+                WHERE fl.arbitrage='achat' AND f.date_soumission BETWEEN ? AND ?$clause
+                GROUP BY fa.libelle ORDER BY total DESC";
+    } elseif ($axe === 'departement') {
+        $sql = "SELECT COALESCE(d.label,'—') AS label, SUM(fl.montant_ttc) AS total
+                FROM feb_lignes fl JOIN feb f ON f.id=fl.feb_id
+                LEFT JOIN departements d ON d.id=f.departement_id
+                WHERE fl.arbitrage='achat' AND f.date_soumission BETWEEN ? AND ?$clause
+                GROUP BY d.label ORDER BY total DESC";
+    } else {
+        $sql = "SELECT fo.raison_sociale AS label, SUM(fl.montant_ttc) AS total
+                FROM feb_lignes fl JOIN feb f ON f.id=fl.feb_id
+                JOIN fournisseurs fo ON fo.id=fl.fournisseur_id
+                WHERE fl.arbitrage='achat' AND f.date_soumission BETWEEN ? AND ?$clause
+                GROUP BY fo.raison_sociale ORDER BY total DESC LIMIT 10";
+    }
+    $rows = db_fetch_all($sql, $params);
+    foreach ($rows as &$r) { $r['total'] = (int)$r['total']; }
+    unset($r);
+    return $rows;
+}
+
+// ── Alertes cliquables (Bloc 4, point 18-19) — chacune retourne la liste
+//    des FEB concernées, jamais un chiffre isolé.
+function ach_alertes_retard_validation(?array $depts): array {
+    [$clause, $pd] = ach_clause_departement($depts, 'f');
+    $seuil = (int) ach_param('seuil_retard_validation_jours', 5);
+    return db_fetch_all(
+        "SELECT f.id, f.numero, f.objet, f.montant_total, f.date_lancement_validation,
+                CONCAT(u.prenom,' ',u.nom) AS demandeur_nom, d.label AS departement_label,
+                DATE_PART('day', NOW() - f.date_lancement_validation) AS jours_ecoules
+         FROM feb f
+         LEFT JOIN users u ON u.id=f.demandeur_id
+         LEFT JOIN departements d ON d.id=f.departement_id
+         WHERE f.statut='en_validation' AND f.date_lancement_validation < NOW() - (?::text || ' days')::interval$clause
+         ORDER BY f.date_lancement_validation ASC",
+        array_merge([$seuil], $pd)
+    );
+}
+
+function ach_alertes_suivi_retard(?array $depts): array {
+    [$clause, $pd] = ach_clause_departement($depts, 'f');
+    $rows = db_fetch_all(
+        "SELECT fs.*, f.numero, f.objet, f.montant_total, CONCAT(u.prenom,' ',u.nom) AS demandeur_nom,
+                d.label AS departement_label, fl.designation
+         FROM feb_suivi fs
+         JOIN feb f         ON f.id  = fs.feb_id
+         JOIN feb_lignes fl ON fl.id = fs.feb_ligne_id
+         LEFT JOIN users u        ON u.id = f.demandeur_id
+         LEFT JOIN departements d ON d.id = f.departement_id
+         WHERE 1=1$clause",
+        $pd
+    );
+    return array_values(array_filter($rows, fn($r) => ach_statut_suivi_calcule($r) === 'en_retard'));
+}
+
+function ach_alertes_depassement_budget(?array $depts, string $du, string $au): array {
+    [$clause, $pd] = ach_clause_departement($depts, 'f');
+    return db_fetch_all(
+        "SELECT a.id AS audit_id, a.description, a.created_at, f.id AS feb_id, f.numero, f.objet, f.montant_total,
+                CONCAT(u.prenom,' ',u.nom) AS demandeur_nom, d.label AS departement_label
+         FROM audit_log a
+         JOIN feb f ON f.id = a.entite_id AND a.module = 'achats'
+         LEFT JOIN users u        ON u.id = f.demandeur_id
+         LEFT JOIN departements d ON d.id = f.departement_id
+         WHERE a.description ILIKE '%dépassement de%' AND a.created_at BETWEEN ? AND ?$clause
+         ORDER BY a.created_at DESC",
+        array_merge([$du . ' 00:00:00', $au . ' 23:59:59'], $pd)
+    );
+}
+
+// ── Score fournisseur (Bloc 6) — deux critères mesurables aujourd'hui,
+//    jamais agrégés en une note unique tant que leur pondération n'est pas
+//    arbitrée (point 23). Le troisième critère annoncé à l'origine (le
+//    service) reste hors V1 : sa donnée n'existe pas encore.
+function ach_score_fournisseur(int $fournisseur_id): array {
+    // Prix : écart moyen (%) à la moyenne des offres du même lot. Un lot
+    // regroupe déjà les offres d'un même article/famille (J4) — c'est donc
+    // la base de comparaison naturelle, pas une moyenne toutes familles
+    // confondues qui n'aurait pas de sens.
+    $offres = db_fetch_all("SELECT montant_ttc, lot, feb_id FROM feb_offres WHERE fournisseur_id=?", [$fournisseur_id]);
+    $ecarts = [];
+    foreach ($offres as $o) {
+        $moyenne_lot = (float) db_fetch_value("SELECT AVG(montant_ttc) FROM feb_offres WHERE feb_id=? AND lot=?", [$o['feb_id'], $o['lot']]);
+        if ($moyenne_lot > 0) {
+            $ecarts[] = ((float)$o['montant_ttc'] - $moyenne_lot) / $moyenne_lot * 100;
+        }
+    }
+    $score_prix = $ecarts ? round(array_sum($ecarts) / count($ecarts), 1) : null;
+
+    // Délai : part des offres retenues de ce fournisseur dont la livraison
+    // réelle a respecté le délai annoncé (delai_annonce jours après le BC).
+    $retenues = db_fetch_all(
+        "SELECT o.delai_annonce, fs.date_bc, fs.date_livraison_reelle
+         FROM feb_offres o
+         JOIN feb_lignes fl ON fl.feb_id = o.feb_id AND fl.lot = o.lot AND fl.fournisseur_id = o.fournisseur_id
+         JOIN feb_suivi fs  ON fs.feb_ligne_id = fl.id
+         WHERE o.fournisseur_id=? AND o.retenue=1 AND o.delai_annonce IS NOT NULL
+           AND fs.date_bc IS NOT NULL AND fs.date_livraison_reelle IS NOT NULL",
+        [$fournisseur_id]
+    );
+    $respectes = 0;
+    foreach ($retenues as $r) {
+        $limite = (new DateTime($r['date_bc']))->modify("+{$r['delai_annonce']} days");
+        if (new DateTime($r['date_livraison_reelle']) <= $limite) $respectes++;
+    }
+    $total = count($retenues);
+    $score_delai = $total > 0 ? round(100 * $respectes / $total, 1) : null;
+
+    return ['score_prix' => $score_prix, 'nb_offres' => count($ecarts), 'score_delai' => $score_delai, 'nb_livraisons' => $total];
+}
+
+// ── Budget consommé par département, toutes familles confondues
+//    (Bloc 5, dashboard direction) — enveloppe totale vs engagé+réservé.
+function ach_budget_departements(?array $depts, int $exercice): array {
+    [$clause, $pd] = ach_clause_departement($depts, 'd');
+    $enveloppes = db_fetch_all(
+        "SELECT d.id, d.label, COALESCE(SUM(lb.enveloppe),0) AS enveloppe
+         FROM departements d
+         LEFT JOIN lignes_budgetaires lb ON lb.departement_id=d.id AND lb.exercice=? AND lb.actif=1
+         WHERE d.actif=1$clause
+         GROUP BY d.id, d.label ORDER BY d.label",
+        array_merge([$exercice], $pd)
+    );
+    $engages = array_column(
+        db_fetch_all(
+            "SELECT f.departement_id, SUM(fl.montant_ttc) AS engage
+             FROM feb_lignes fl JOIN feb f ON f.id=fl.feb_id
+             WHERE fl.arbitrage='achat' AND f.statut IN ('confirmee','en_validation') AND f.exercice=?
+             GROUP BY f.departement_id",
+            [$exercice]
+        ),
+        'engage', 'departement_id'
+    );
+    foreach ($enveloppes as &$e) {
+        $engage = (int)($engages[$e['id']] ?? 0);
+        $e['enveloppe'] = (int)$e['enveloppe'];
+        $e['engage'] = $engage;
+        $e['taux'] = $e['enveloppe'] > 0 ? round(100 * $engage / $e['enveloppe'], 1) : null;
+    }
+    unset($e);
+    return $enveloppes;
+}
+
+// ── Barres horizontales, une seule teinte (les catégories sont déjà lues
+//    sur l'étiquette de chaque barre — une couleur par barre n'encoderait
+//    rien de plus) : dépenses par famille/département/fournisseur (Bloc 4).
+//    Zéro-safe : une liste vide affiche un état vide, jamais une division
+//    par zéro ni un graphique qui ressemble à une erreur.
+function ach_html_barres(array $rows, string $message_vide = 'Aucune donnée pour cette période.'): string {
+    if (!$rows) {
+        return '<div class="ach-empty">' . h($message_vide) . '</div>';
+    }
+    $max = max(array_column($rows, 'total'));
+    if ($max <= 0) {
+        return '<div class="ach-empty">' . h($message_vide) . '</div>';
+    }
+    $html = '<div class="ach-barres">';
+    foreach ($rows as $r) {
+        $pct = round(100 * $r['total'] / $max, 1);
+        $html .= '<div class="ach-barre-row">'
+            . '<div class="ach-barre-label">' . h($r['label']) . '</div>'
+            . '<div class="ach-barre-track"><div class="ach-barre-fill" style="width:' . $pct . '%"></div></div>'
+            . '<div class="ach-barre-val">' . number_format((float)$r['total'], 0, ',', ' ') . ' XOF</div>'
+            . '</div>';
+    }
+    return $html . '</div>';
 }
