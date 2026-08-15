@@ -194,3 +194,73 @@ Reste ouvert :
   limite non traité — l'y rattacher demanderait de dupliquer ou factoriser
   le script anti-FOUC, hors périmètre de cette passe.
 
+---
+
+## Grille de recette — les 4 critères (référence 2026-08-28)
+
+Les 5 écrans du module Achats (`pages/achats/`) doivent respecter ces 4
+critères sans exception, dès l'écriture — c'est moins cher que de les
+rattraper après coup. Mesurés ici sur 3 pages de référence à titre de
+base de comparaison, **captures et modales ouvertes** (un scan qui ne
+regarde que le DOM visible au chargement rate tout ce qui est dans une
+modale fermée — c'est très exactement ce qui s'est produit lors du lot
+P1 harden, cf. constat ci-dessous).
+
+1. **Nom accessible sur chaque champ** — `label[for]`, `aria-label` ou
+   `aria-labelledby`.
+2. **`required` en attribut HTML**, jamais un `*` écrit en dur dans le
+   label — la règle CSS globale (`:has(:required)`) l'affiche seule.
+3. **Aucun `outline:none` local sans repli** — le bloc `:focus-visible`
+   global de `templates/header.php` doit suffire.
+4. **44×44px sous 768px, aucun débordement à 375px** — `.btn-sm` reste
+   l'exception documentée plus haut.
+
+Mesuré le 2026-08-15 (Playwright, connecté, viewport 1280 puis 375,
+modales ouvertes via clic réel sur le bouton d'ouverture) :
+
+| Page / état | Sans nom accessible | `*` en dur | `outline:none` local | Sous 44px (375px) | Débordement 375px |
+|---|---|---|---|---|---|
+| dashboard_legacy | 0 | 0 | 2 | 0 | non |
+| commandes (liste) | 0 | 2 | 3 | 19 | non |
+| commandes (modale "Nouvelle commande") | **6** | 2 | 3 | 19 | non |
+| point_journalier (liste) | 0 | 3 | 4 | 1 | non |
+| point_journalier (modale "Nouveau point journalier") | **9** | 3 | 4 | 7 | non |
+
+Constats :
+- **Aucun débordement** sur les 3 pages, liste et modale — critère 4
+  (volet débordement) déjà propre, rien à corriger sur `.dtbl`/`.step`
+  (`.dtbl` n'existe d'ailleurs pas dans le code — sans objet ici).
+- **Critère 1 en échec seulement dans les modales**, jamais dans les
+  pages liste : confirme que le lot P1 harden (63 → 0 champs, commit
+  `17a307d`) a mesuré sur le DOM visible au chargement — les champs
+  planqués dans une modale fermée (`display:none`) n'existaient pas pour
+  ce scan et n'ont donc jamais été comptés. Sur `commandes.php`, modale
+  « Nouvelle commande » : `aType`, `aArticle`, `aQte`, `aUnite`, `cmdSite`,
+  `cmdNotes`. Sur `point_journalier.php`, modale « Nouveau point
+  journalier » (au-delà de la section Véhicules déjà corrigée) : les
+  champs rivets (`p-stock-rivets`, `p-gonfl-util`, `p-gonfl-end`,
+  `p-eclate-util`, `p-eclate-end`, `p-np-conc`, `p-np-usag`) et 2 champs
+  sans id.
+- **Critère 2** : `"Site *"` / `"Motif de rejet *"` (commandes),
+  `"Motif du rejet *"` / `"Nombre de films final *"` / `"Explication *"`
+  (point_journalier) — astérisque écrit en dur au lieu de l'attribut
+  `required`, à corriger avec le même geste que celui déjà fait sur
+  d'autres pages en P1 harden.
+- **Critère 3** : le bloc `:focus-visible` global neutralise déjà l'effet
+  de ces `outline:none` locaux (vérifié au clavier : anneau bien visible
+  au Tab sur `commandes.php`) — les décomptes ci-dessus sont du code
+  redondant à nettoyer, pas un vrai défaut fonctionnel actuellement.
+- **Critère 4** : le gros des 19/19 sur Commandes est `.btn-sm` (32px,
+  exception documentée) plus 2 `<select>` de filtre sans classe `.fsel`
+  (37px, échappent au plancher posé sur `.fsel`/`.form-control`). Sur
+  Point journalier, la modale ajoute des champs numériques compacts
+  (rivets/gonflables, ~36-52px de large) et le bouton de fermeture
+  `.mclose` (32px) — sous le plancher mais de taille cohérente avec un
+  usage desktop dense ; à trancher au cas par cas si signalé gênant en
+  usage tactile réel.
+
+Ces deux derniers points (critères 1 et 2 en échec dans les modales) ne
+sont pas corrigés dans ce lot — le Bloc 0 de ce chantier avait pour
+périmètre de mesurer et consigner, pas de rouvrir un audit
+d'accessibilité complet des pages existantes. À reprendre si demandé.
+
