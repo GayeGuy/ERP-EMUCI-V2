@@ -199,18 +199,27 @@ function _groupes_def(): array {
             ],
         ],
 
-        // ── ACHATS (Jour 1 : écrans de paramétrage seulement — fournisseurs,
-        //    familles/types, paliers, budget, généraux. Les écrans FEB
-        //    (création/suivi/tableau de bord) suivront dans un lot séparé ;
-        //    pas d'entrée nav vers des pages qui n'existent pas encore.)
+        // ── ACHATS — transversal (cf. get_groupes_pour_role) : « Mes FEB » et
+        //    « Nouvelle FEB » sont ouverts à tout titulaire du droit de
+        //    lecture/création sur `achats` (tout le monde sauf le lecteur/PDG,
+        //    cf. migration_achats_03_permissions.sql et ach_peut_creer()) ;
+        //    les 5 écrans de paramétrage restent filtrés par `achats_param`,
+        //    donc invisibles pour la plupart des rôles malgré le groupe visible.
         'ACHATS' => [
             'icon'        => 'ph-shopping-cart',
             'titre'       => 'Achats',
-            'description' => 'Fournisseurs, paliers de validation et paramétrage budgétaire',
+            'description' => 'Expression de besoin, fournisseurs et paramétrage budgétaire',
             'couleur'     => '#B45309',
             'gradient'    => 'linear-gradient(135deg, #B45309 0%, #F59E0B 100%)',
-            'first_page'  => 'pages/achats/param_fournisseurs.php',
+            'first_page'  => 'pages/achats/mes_feb.php',
             'nav' => [
+                ['label'=>'Mes FEB',               'icon'=>'ph-list-checks',
+                 'url'=>'pages/achats/mes_feb.php','active_keys'=>['achats_mes_feb'],
+                 'perm'=>['achats','can_read']],
+                ['label'=>'Nouvelle FEB',          'icon'=>'ph-plus-circle',
+                 'url'=>'pages/achats/feb_fiche.php','active_keys'=>['achats_mes_feb'],
+                 'perm'=>['achats','can_read'],
+                 'roles_exclude'=>['lecteur']],
                 ['label'=>'Fournisseurs',          'icon'=>'ph-storefront',
                  'url'=>'pages/achats/param_fournisseurs.php','active_keys'=>['achats_param_fournisseurs'],
                  'perm'=>['achats_param','can_read']],
@@ -292,8 +301,13 @@ function get_groupes_pour_role(string $role_slug): array {
         'superadmin'                 => $all,
     ];
     $groupes = $map[$role_slug] ?? ['DASHBOARD'];
-    // « Demandes internes » est transversal : visible par tous les rôles.
+    // « Demandes internes » et « Achats » sont transversaux : visibles par
+    // tous les rôles. Pour Achats, seuls « Mes FEB »/« Nouvelle FEB »
+    // s'affichent réellement pour la plupart (filtrage par item dans
+    // get_groupe_nav_items — les écrans de paramétrage restent réservés à
+    // achats_param).
     if (!in_array('DEMANDES', $groupes, true)) $groupes[] = 'DEMANDES';
+    if (!in_array('ACHATS', $groupes, true)) $groupes[] = 'ACHATS';
     return $groupes;
 }
 
