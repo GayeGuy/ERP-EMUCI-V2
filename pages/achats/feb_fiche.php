@@ -127,15 +127,14 @@ $default_fonction = $feb ? $feb['fonction']       : ($user['role_nom'] ?? '');
 $default_urgence  = $feb ? (int)$feb['urgence']   : 0;
 $default_objet    = $feb ? $feb['objet']          : '';
 
-$sites        = db_fetch_all("SELECT id, nom FROM sites WHERE actif=1 ORDER BY nom");
-$departements = db_fetch_all("SELECT id, label FROM departements WHERE actif=1 ORDER BY label");
-$familles     = db_fetch_all("SELECT id, libelle FROM familles_achat WHERE actif=1 ORDER BY libelle");
+// code inclus pour chaque référentiel : RG-05 compose le code analytique
+// côté client (aperçu en lecture seule) sur le même schéma que
+// ach_code_analytique() côté serveur, qui reste seule autorité à l'écriture.
+$sites        = db_fetch_all("SELECT id, nom, code FROM sites WHERE actif=1 ORDER BY nom");
+$departements = db_fetch_all("SELECT id, label, code FROM departements WHERE actif=1 ORDER BY label");
+$familles     = db_fetch_all("SELECT id, libelle, code FROM familles_achat WHERE actif=1 ORDER BY libelle");
 $types_achat  = db_fetch_all("SELECT code, libelle FROM achat_types WHERE actif=1 ORDER BY libelle");
 $articles     = db_fetch_all("SELECT id, code, libelle, unite FROM articles WHERE actif=1 ORDER BY libelle");
-$codes_budget = db_fetch_all(
-    "SELECT DISTINCT code_comptable FROM lignes_budgetaires WHERE actif=1 AND exercice=? ORDER BY code_comptable",
-    [(int)date('Y')]
-);
 $max_lignes = (int)ach_param('max_lignes_feb', 14);
 
 include __DIR__ . '/../../templates/header.php';
@@ -183,7 +182,7 @@ include __DIR__ . '/../../templates/header.php';
   <div class="feb-grid">
     <div class="ach-fg">
       <label for="fh-site">Site</label>
-      <select id="fh-site">
+      <select id="fh-site" onchange="renderLignes()">
         <option value="">— Aucun —</option>
         <?php foreach ($sites as $s): ?>
           <option value="<?= $s['id'] ?>" <?= (string)$default_site_id === (string)$s['id'] ? 'selected' : '' ?>><?= h($s['nom']) ?></option>
@@ -192,7 +191,7 @@ include __DIR__ . '/../../templates/header.php';
     </div>
     <div class="ach-fg">
       <label for="fh-dept">Service</label>
-      <select id="fh-dept">
+      <select id="fh-dept" onchange="renderLignes()">
         <option value="">— Aucun —</option>
         <?php foreach ($departements as $d): ?>
           <option value="<?= $d['id'] ?>" <?= (string)$default_dept_id === (string)$d['id'] ? 'selected' : '' ?>><?= h($d['label']) ?></option>
@@ -217,6 +216,7 @@ include __DIR__ . '/../../templates/header.php';
       <div class="ach-err" id="err-objet"></div>
     </div>
   </div>
+  <div class="ach-err" id="err-entete" style="margin-top:10px"></div>
 </div>
 
 <div class="ach-table-wrap">
@@ -235,7 +235,7 @@ include __DIR__ . '/../../templates/header.php';
   <div id="feb-lignes-table-wrap" style="overflow-x:auto;display:none">
     <table class="ach-table">
       <thead><tr>
-        <th>Désignation</th><th>Qté</th><th>Unité</th><th>Famille</th><th>Type</th><th>Code analytique</th><th>Actions</th>
+        <th>Désignation</th><th>Qté</th><th>Unité</th><th>Famille</th><th>Type</th><th>Code analytique (lot)</th><th>Actions</th>
       </tr></thead>
       <tbody id="feb-lignes-tbody"></tbody>
     </table>
@@ -290,7 +290,7 @@ include __DIR__ . '/../../templates/header.php';
       </div>
       <div class="ach-fg">
         <label for="lg-famille">Famille</label>
-        <select id="lg-famille">
+        <select id="lg-famille" onchange="febMajCodePreview()">
           <option value="">— Sélectionner —</option>
           <?php foreach ($familles as $f): ?>
             <option value="<?= $f['id'] ?>"><?= h($f['libelle']) ?></option>
@@ -307,13 +307,8 @@ include __DIR__ . '/../../templates/header.php';
         </select>
       </div>
       <div class="ach-fg" style="grid-column:1 / -1">
-        <label for="lg-code">Code analytique</label>
-        <input type="text" id="lg-code" list="codes-dl" placeholder="ex : 6061">
-        <datalist id="codes-dl">
-          <?php foreach ($codes_budget as $c): ?>
-            <option value="<?= h($c['code_comptable']) ?>"></option>
-          <?php endforeach; ?>
-        </datalist>
+        <label>Code analytique (composé automatiquement — RG-05)</label>
+        <div id="lg-code-preview" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:monospace;font-weight:700;color:var(--navy);background:#f8fafc">—</div>
       </div>
     </div>
     <div class="ach-err" id="err-ligne-modal"></div>
@@ -334,13 +329,33 @@ let lignes = <?= json_encode(array_map(fn($l) => [
     'quantite'        => (int)$l['quantite'],
     'unite'           => $l['unite'],
     'famille_id'      => $l['famille_id'],
-    'code_analytique' => $l['code_analytique'],
     'type_achat'      => $l['type_achat'],
 ], $feb_lignes), JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 let pieces = <?= json_encode(array_map(fn($p) => [
     'id' => (int)$p['id'], 'nom_origine' => $p['nom_origine'], 'taille' => (int)$p['taille'],
     'url' => '/uploads/feb/' . rawurlencode($p['fichier']),
 ], $feb_pieces), JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+
+// ── Composition du code analytique (RG-05) — même schéma que
+// ach_code_analytique() côté serveur : SITE/SERVICE/FAMILLE, majuscules,
+// sans espace. Purement un aperçu ; le serveur recompose et fait autorité.
+const SITE_CODES = {}; <?php foreach ($sites as $s): ?>SITE_CODES[<?= $s['id'] ?>] = <?= json_encode($s['code']) ?>;<?php endforeach; ?>
+const DEPT_CODES  = {}; <?php foreach ($departements as $d): ?>DEPT_CODES[<?= $d['id'] ?>] = <?= json_encode($d['code']) ?>;<?php endforeach; ?>
+const FAM_CODES   = {}; <?php foreach ($familles as $f): ?>FAM_CODES[<?= $f['id'] ?>] = <?= json_encode($f['code']) ?>;<?php endforeach; ?>
+function febComputeCode(familleId) {
+  const siteId = document.getElementById('fh-site').value;
+  const deptId = document.getElementById('fh-dept').value;
+  if (!siteId || !deptId || !familleId) return null;
+  const s = SITE_CODES[siteId], d = DEPT_CODES[deptId], f = FAM_CODES[familleId];
+  if (!s || !d || !f) return null;
+  const norm = x => String(x).toUpperCase().replace(/\s+/g, '');
+  return `${norm(s)}/${norm(d)}/${norm(f)}`;
+}
+function febMajCodePreview() {
+  const familleId = document.getElementById('lg-famille').value;
+  const code = febComputeCode(familleId);
+  document.getElementById('lg-code-preview').textContent = code || (familleId ? '— (site et service requis)' : '—');
+}
 
 function achPost(data, isForm) {
   let body;
@@ -352,7 +367,7 @@ function clearFieldErrors() {
   document.querySelectorAll('.ach-err').forEach(e => { e.style.display = 'none'; e.textContent = ''; });
 }
 function showFieldError(field, message) {
-  const map = { objet: 'err-objet', lignes: 'err-lignes' };
+  const map = { objet: 'err-objet', lignes: 'err-lignes', entete: 'err-entete' };
   const id = map[field] || null;
   const el = id ? document.getElementById(id) : document.getElementById('err-lignes');
   if (el) { el.textContent = message; el.style.display = 'block'; }
@@ -376,7 +391,7 @@ function renderLignes() {
       <td>${esc(l.unite || '—')}</td>
       <td>${esc(famMap[l.famille_id] || '—')}</td>
       <td>${esc(typeMap[l.type_achat] || '—')}</td>
-      <td>${esc(l.code_analytique || '—')}</td>
+      <td style="font-family:monospace">${esc(febComputeCode(l.famille_id) || '—')}</td>
       <td style="display:flex;gap:8px">
         <button type="button" class="btn btn-secondary btn-sm" aria-label="Modifier la ligne ${i+1}" onclick="febOpenLigneModal(${i})"><i class="ph ph-pencil-simple" aria-hidden="true"></i></button>
         <button type="button" class="btn btn-secondary btn-sm" aria-label="Retirer la ligne ${i+1}" onclick="febRetirerLigne(${i})"><i class="ph ph-trash" aria-hidden="true"></i></button>
@@ -401,7 +416,6 @@ function febOpenLigneModal(index) {
     document.getElementById('lg-unite').value = '';
     document.getElementById('lg-famille').value = '';
     document.getElementById('lg-type').value = '';
-    document.getElementById('lg-code').value = '';
   } else {
     const l = lignes[index];
     document.getElementById('lg-index').value = index;
@@ -411,8 +425,8 @@ function febOpenLigneModal(index) {
     document.getElementById('lg-unite').value = l.unite || '';
     document.getElementById('lg-famille').value = l.famille_id || '';
     document.getElementById('lg-type').value = l.type_achat || '';
-    document.getElementById('lg-code').value = l.code_analytique || '';
   }
+  febMajCodePreview();
   document.getElementById('ligne-modal').classList.add('open');
   setTimeout(() => document.getElementById('lg-designation').focus(), 80);
 }
@@ -434,16 +448,18 @@ function febSaveLigne() {
   if (!quantite || quantite < 1) { document.getElementById('err-lg-quantite').textContent = 'La quantité doit être strictement positive.'; document.getElementById('err-lg-quantite').style.display = 'block'; ok = false; }
   if (!ok) return;
 
-  const codeAnalytique = document.getElementById('lg-code').value.trim();
+  const familleId = document.getElementById('lg-famille').value || null;
   const idxStr = document.getElementById('lg-index').value;
   const idx = idxStr === '' ? null : parseInt(idxStr, 10);
 
-  // Trois codes analytiques au maximum par FEB : contrôle sur le nombre de
-  // codes distincts, pas sur le nombre de lignes.
-  if (codeAnalytique) {
-    const distincts = new Set(lignes.map((l, i) => (idx !== null && i === idx) ? null : l.code_analytique).filter(Boolean));
-    if (!distincts.has(codeAnalytique) && distincts.size >= 3) {
-      document.getElementById('err-ligne-modal').textContent = 'Trois codes analytiques au maximum par FEB.';
+  // RG-02 : trois codes analytiques au maximum par FEB. Site et service
+  // étant constants sur toute la FEB, la limite revient en pratique à trois
+  // familles distinctes (cf. ach_creer_feb(), qui refait ce contrôle côté
+  // serveur — celui-ci n'est qu'un retour immédiat à l'utilisateur).
+  if (familleId) {
+    const distinctes = new Set(lignes.map((l, i) => (idx !== null && i === idx) ? null : l.famille_id).filter(Boolean));
+    if (!distinctes.has(familleId) && distinctes.size >= 3) {
+      document.getElementById('err-ligne-modal').textContent = 'Trois familles distinctes au maximum par FEB (donc trois codes analytiques) — créez une seconde FEB pour la suite.';
       document.getElementById('err-ligne-modal').style.display = 'block';
       return;
     }
@@ -453,9 +469,8 @@ function febSaveLigne() {
   const ligne = {
     designation, quantite,
     unite: document.getElementById('lg-unite').value.trim(),
-    famille_id: document.getElementById('lg-famille').value || null,
+    famille_id: familleId,
     type_achat: document.getElementById('lg-type').value || null,
-    code_analytique: codeAnalytique || null,
     article_id: art ? art.id : null,
   };
   if (idx === null) lignes.push(ligne); else lignes[idx] = ligne;

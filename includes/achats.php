@@ -141,6 +141,24 @@ class AchValidationException extends Exception {
 //                true  = soumettre (contrôles complets + numérotation).
 //
 //    Retourne ['id'=>int, 'numero'=>?string, 'statut'=>string].
+// ── Code analytique composé — RG-05 : jamais saisi à la main, toujours
+//    dérivé du site et du service portés par la FEB (RG-06) et de la
+//    famille de la ligne. Chaîne vide si l'un des trois manque encore
+//    (brouillon incomplet) — l'appelant décide s'il bloque ou tolère.
+function ach_code_analytique(array $feb, int $famille_id): string {
+    $site_id        = !empty($feb['site_id']) ? (int)$feb['site_id'] : 0;
+    $departement_id = !empty($feb['departement_id']) ? (int)$feb['departement_id'] : 0;
+    if (!$site_id || !$departement_id || !$famille_id) return '';
+
+    $site_code = db_fetch_value("SELECT code FROM sites WHERE id=?", [$site_id]);
+    $dept_code = db_fetch_value("SELECT code FROM departements WHERE id=?", [$departement_id]);
+    $fam_code  = db_fetch_value("SELECT code FROM familles_achat WHERE id=?", [$famille_id]);
+    if (!$site_code || !$dept_code || !$fam_code) return '';
+
+    $norm = static fn(string $s): string => strtoupper(str_replace(' ', '', trim($s)));
+    return $norm($site_code) . '/' . $norm($dept_code) . '/' . $norm($fam_code);
+}
+
 function ach_creer_feb(array $user, ?int $feb_id, array $entete, array $lignes, bool $soumettre): array {
     $uid = (int)$user['id'];
 
@@ -159,9 +177,12 @@ function ach_creer_feb(array $user, ?int $feb_id, array $entete, array $lignes, 
     //    enregistrement (brouillon compris) — plafond de lignes et codes
     //    analytiques sont des limites structurelles de la FEB, pas des
     //    conditions de complétude qu'on tolère en brouillon.
+    //    Le code analytique n'est jamais lu depuis $l (RG-05) : il est
+    //    recomposé ici à partir du site/service de l'en-tête et de la
+    //    famille de la ligne — aucune saisie libre ne peut plus l'atteindre.
     $max_lignes = (int)ach_param('max_lignes_feb', 14);
     $lignes_ok  = [];
-    $codes_analytiques = [];
+    $familles_distinctes = [];
     $n = 0;
     foreach ($lignes as $l) {
         $designation = trim($l['designation'] ?? '');
@@ -170,26 +191,34 @@ function ach_creer_feb(array $user, ?int $feb_id, array $entete, array $lignes, 
         $quantite = (int)($l['quantite'] ?? 1);
         if ($quantite < 1) throw new AchValidationException("Quantité invalide à la ligne $n : elle doit être strictement positive.", "ligne_{$n}_quantite");
 
-        $code_analytique = trim($l['code_analytique'] ?? '');
-        if ($code_analytique !== '' && !in_array($code_analytique, $codes_analytiques, true)) {
-            $codes_analytiques[] = $code_analytique;
+        $famille_id = !empty($l['famille_id']) ? (int)$l['famille_id'] : null;
+        if ($famille_id && !in_array($famille_id, $familles_distinctes, true)) {
+            $familles_distinctes[] = $famille_id;
         }
+        $code = $famille_id ? ach_code_analytique(['site_id' => $site_id, 'departement_id' => $departement_id], $famille_id) : '';
 
         $lignes_ok[] = [
             'designation'     => $designation,
             'article_id'      => !empty($l['article_id']) ? (int)$l['article_id'] : null,
             'quantite'        => $quantite,
             'unite'           => trim($l['unite'] ?? '') ?: null,
-            'famille_id'      => !empty($l['famille_id']) ? (int)$l['famille_id'] : null,
-            'code_analytique' => $code_analytique ?: null,
+            'famille_id'      => $famille_id,
+            'code_analytique' => $code ?: null,
             'type_achat'      => trim($l['type_achat'] ?? '') ?: null,
         ];
     }
     if (count($lignes_ok) > $max_lignes) {
         throw new AchValidationException("Trop de lignes : $max_lignes maximum (paramètre « max_lignes_feb », modifiable dans Achats → Paramètres généraux).", 'lignes');
     }
-    if (count($codes_analytiques) > 3) {
-        throw new AchValidationException('Trois codes analytiques au maximum par FEB.', 'lignes');
+    // RG-02 : trois codes analytiques au maximum par FEB. Le site et le
+    // service étant constants sur toute la FEB (RG-06), deux lignes n'ont
+    // de codes différents que si leurs familles diffèrent — la limite
+    // devient donc, en pratique, une limite de trois familles distinctes.
+    if (count($familles_distinctes) > 3) {
+        throw new AchValidationException(
+            'Trois familles distinctes au maximum par FEB (donc trois codes analytiques) — créez une seconde FEB pour la suite.',
+            'lignes'
+        );
     }
 
     // ── Contrôles supplémentaires, uniquement à la soumission — un
@@ -197,6 +226,9 @@ function ach_creer_feb(array $user, ?int $feb_id, array $entete, array $lignes, 
     if ($soumettre) {
         if (count($lignes_ok) === 0) {
             throw new AchValidationException('Ajoutez au moins une ligne avant de soumettre.', 'lignes');
+        }
+        if (!$site_id || !$departement_id) {
+            throw new AchValidationException('Site et service sont obligatoires : ils composent le code analytique de chaque ligne.', 'entete');
         }
         foreach ($lignes_ok as $i => $l) {
             $num = $i + 1;
@@ -240,11 +272,13 @@ function ach_creer_feb(array $user, ?int $feb_id, array $entete, array $lignes, 
         $num_ligne = 0;
         foreach ($lignes_ok as $l) {
             $num_ligne++;
+            // lot = code_analytique (RG-08) : pas de second identifiant à
+            // maintenir en parallèle, cf. ach_lots_feb().
             db_query(
-                "INSERT INTO feb_lignes (feb_id, numero_ligne, designation, article_id, quantite, unite, famille_id, code_analytique, type_achat)
-                 VALUES (?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO feb_lignes (feb_id, numero_ligne, designation, article_id, quantite, unite, famille_id, code_analytique, lot, type_achat)
+                 VALUES (?,?,?,?,?,?,?,?,?,?)",
                 [$feb_id, $num_ligne, $l['designation'], $l['article_id'], $l['quantite'],
-                 $l['unite'], $l['famille_id'], $l['code_analytique'], $l['type_achat']]
+                 $l['unite'], $l['famille_id'], $l['code_analytique'], $l['code_analytique'], $l['type_achat']]
             );
         }
 
@@ -470,4 +504,111 @@ function ach_basculer_vers_commande(int $feb_id, array $user): ?int {
     }
 
     return $cmd_id;
+}
+
+// ── Lots d'une FEB, pour le comparatif d'offres (pages/achats/feb_traitement.php).
+//    Un lot = un code analytique (RG-08, cf. ach_creer_feb()) : pas de
+//    second identifiant à maintenir en parallèle, le regroupement se fait
+//    directement sur feb_lignes.lot.
+//    Les lignes arbitrées « stock » en sortent : on ne demande pas d'offre
+//    pour ce qu'on ne va pas acheter — un lot entièrement servi sur stock
+//    n'apparaît donc pas dans le résultat.
+function ach_lots_feb(int $feb_id): array {
+    $lignes = db_fetch_all(
+        "SELECT * FROM feb_lignes
+          WHERE feb_id=? AND lot IS NOT NULL AND lot <> '' AND arbitrage <> 'stock'
+          ORDER BY lot, numero_ligne",
+        [$feb_id]
+    );
+    $lots = [];
+    foreach ($lignes as $l) {
+        $lot = $l['lot'];
+        if (!isset($lots[$lot])) {
+            $lots[$lot] = ['lot' => $lot, 'lignes' => [], 'nb_articles' => 0, 'somme_quantites' => 0];
+        }
+        $lots[$lot]['lignes'][]         = $l;
+        $lots[$lot]['nb_articles']     += 1;
+        $lots[$lot]['somme_quantites'] += (int)$l['quantite'];
+    }
+    return array_values($lots);
+}
+
+// ── Recalcule feb.montant_total à partir des lignes — appelé à chaque
+//    changement d'offre retenue ou de montant de ligne (point 26).
+function ach_recalculer_montant_total(int $feb_id): void {
+    $total = (int) db_fetch_value("SELECT COALESCE(SUM(montant_ttc),0) FROM feb_lignes WHERE feb_id=?", [$feb_id]);
+    db_query("UPDATE feb SET montant_total=? WHERE id=?", [$total, $feb_id]);
+}
+
+// ── Retient une offre pour son lot — une seule transaction :
+//    1) une seule offre retenue par lot (remise à faux des autres, jamais
+//       un simple UPDATE ciblé qui laisserait une ancienne retenue en place) ;
+//    2) report du fournisseur retenu sur les lignes du lot, sauf celles
+//       marquées en dérogation (RG-09 : le fournisseur retenu peut différer
+//       d'une ligne à l'autre, une dérogation manuelle ne doit jamais être
+//       écrasée par un report en masse) ;
+//    3) audit de l'ancienne et de la nouvelle offre retenue (autorisé tant
+//       que la FEB reste en prise_en_charge — même contrôle que le reste de
+//       feb_traitement.php, refait ici pour rester utilisable isolément).
+function ach_retenir_offre_lot(int $offre_id, array $user): void {
+    $uid = (int)$user['id'];
+
+    $offre = db_fetch_one("SELECT * FROM feb_offres WHERE id=?", [$offre_id]);
+    if (!$offre) throw new AchValidationException('Offre introuvable.');
+    $feb_id = (int)$offre['feb_id'];
+    $lot    = $offre['lot'];
+
+    $feb = db_fetch_one("SELECT * FROM feb WHERE id=?", [$feb_id]);
+    if (!$feb || (int)$feb['acheteur_id'] !== $uid || $feb['statut'] !== 'prise_en_charge') {
+        throw new AchValidationException("Cette FEB n'est pas (ou plus) en cours de traitement par vous.");
+    }
+
+    $ancienne = db_fetch_one("SELECT id, fournisseur_id FROM feb_offres WHERE feb_id=? AND lot=? AND retenue=1", [$feb_id, $lot]);
+
+    $pdo = get_db();
+    $transaction_locale = !$pdo->inTransaction();
+    if ($transaction_locale) db_begin();
+    try {
+        db_query("UPDATE feb_offres SET retenue=0 WHERE feb_id=? AND lot=?", [$feb_id, $lot]);
+        db_query("UPDATE feb_offres SET retenue=1 WHERE id=?", [$offre_id]);
+        db_query(
+            "UPDATE feb_lignes SET fournisseur_id=? WHERE feb_id=? AND lot=? AND fournisseur_derogation=0",
+            [$offre['fournisseur_id'], $feb_id, $lot]
+        );
+        ach_recalculer_montant_total($feb_id);
+
+        $msg = $ancienne
+            ? "Changement d'offre retenue sur le lot $lot : offre #{$ancienne['id']} → offre #$offre_id"
+            : "Offre retenue sur le lot $lot : offre #$offre_id";
+        audit_log($uid, 'UPDATE', 'achats', $feb_id, $msg);
+
+        if ($transaction_locale) db_commit();
+    } catch (Exception $e) {
+        if ($transaction_locale) db_rollback();
+        throw $e;
+    }
+}
+
+// ── Vérifie la cohérence du comparatif avant de poursuivre : par lot ayant
+//    une offre retenue, la somme des montants de ligne doit égaler le
+//    montant de l'offre (point 36) ; par ligne, un type d'achat doit être
+//    renseigné (Bloc 4, point 29). Ne modifie rien — laisse l'appelant
+//    décider quoi faire du résultat.
+function ach_verifier_comparatif(int $feb_id): array {
+    foreach (ach_lots_feb($feb_id) as $lot) {
+        $offre = db_fetch_one("SELECT * FROM feb_offres WHERE feb_id=? AND lot=? AND retenue=1", [$feb_id, $lot['lot']]);
+        if ($offre) {
+            $somme = array_sum(array_map(fn($l) => (int)$l['montant_ttc'], $lot['lignes']));
+            if ($somme !== (int)$offre['montant_ttc']) {
+                return ['ok' => false, 'message' =>
+                    "Lot {$lot['lot']} : la somme des lignes ($somme XOF) ne correspond pas au montant de l'offre retenue ({$offre['montant_ttc']} XOF)."];
+            }
+        }
+        foreach ($lot['lignes'] as $l) {
+            if (!$l['type_achat']) {
+                return ['ok' => false, 'message' => "La ligne « {$l['designation']} » (lot {$lot['lot']}) n'a pas de type d'achat."];
+            }
+        }
+    }
+    return ['ok' => true, 'message' => 'Comparatif vérifié : tout est cohérent.'];
 }
