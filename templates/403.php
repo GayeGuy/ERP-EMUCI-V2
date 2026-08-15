@@ -32,7 +32,7 @@ $dashboard_url = APP_URL . '/pages/dashboard.php';
 </head>
 <body>
   <div class="box">
-    <div class="icon">🔒</div>
+    <div class="icon"><i class="ph ph-lock" aria-hidden="true"></i></div>
     <h1>Accès refusé</h1>
     <p>Vous n'avez pas les permissions pour accéder à cette page.</p>
     <p class="timer" id="timer">Redirection automatique dans <strong id="count">3</strong>s...</p>

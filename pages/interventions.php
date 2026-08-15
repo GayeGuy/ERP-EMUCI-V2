@@ -184,20 +184,20 @@ include __DIR__ . '/../templates/header.php';
 
 <!-- KPIs -->
 <div class="int-kpis">
-  <div class="ik"><div class="ik-val"><?= $nb_preventive ?></div><div class="ik-lbl">🗓️ Préventives</div></div>
-  <div class="ik red"><div class="ik-val" style="color:var(--danger-d)"><?= $nb_curative ?></div><div class="ik-lbl">🔧 Curatives</div></div>
-  <div class="ik orange"><div class="ik-val" style="color:#f39c12"><?= $nb_demandees ?></div><div class="ik-lbl">📬 Demandes en attente</div></div>
-  <div class="ik green"><div class="ik-val" style="color:#f39c12"><?= $nb_en_cours ?></div><div class="ik-lbl">⚙️ En cours</div></div>
+  <div class="ik"><div class="ik-val"><?= $nb_preventive ?></div><div class="ik-lbl"><i class="ph ph-calendar" aria-hidden="true"></i> Préventives</div></div>
+  <div class="ik red"><div class="ik-val" style="color:var(--danger-d)"><?= $nb_curative ?></div><div class="ik-lbl"><i class="ph ph-wrench" aria-hidden="true"></i> Curatives</div></div>
+  <div class="ik orange"><div class="ik-val" style="color:#f39c12"><?= $nb_demandees ?></div><div class="ik-lbl"><i class="ph ph-tray" aria-hidden="true"></i> Demandes en attente</div></div>
+  <div class="ik green"><div class="ik-val" style="color:#f39c12"><?= $nb_en_cours ?></div><div class="ik-lbl"><i class="ph ph-gear" aria-hidden="true"></i> En cours</div></div>
 </div>
 
 <!-- TABS -->
 <div class="tab-nav">
-  <button class="tab-btn <?= $onglet==='toutes'?'active':'' ?>" onclick="showTab('toutes',this)">🔧 Toutes</button>
-  <button class="tab-btn <?= $onglet==='preventive'?'active':'' ?>" onclick="showTab('preventive',this)">🗓️ Préventives</button>
-  <button class="tab-btn <?= $onglet==='curative'?'active':'' ?>" onclick="showTab('curative',this)">🚨 Curatives</button>
+  <button class="tab-btn <?= $onglet==='toutes'?'active':'' ?>" onclick="showTab('toutes',this)"><i class="ph ph-wrench" aria-hidden="true"></i> Toutes</button>
+  <button class="tab-btn <?= $onglet==='preventive'?'active':'' ?>" onclick="showTab('preventive',this)"><i class="ph ph-calendar" aria-hidden="true"></i> Préventives</button>
+  <button class="tab-btn <?= $onglet==='curative'?'active':'' ?>" onclick="showTab('curative',this)"><i class="ph ph-warning-octagon" aria-hidden="true"></i> Curatives</button>
   <?php if($nb_demandees>0): ?>
   <button class="tab-btn <?= $onglet==='demandes'?'active':'' ?>" onclick="showTab('demandes',this)">
-    📬 Demandes <span style="background:var(--danger);color:white;border-radius:10px;padding:1px 7px;font-size:12px;margin-left:4px"><?= $nb_demandees ?></span>
+    <i class="ph ph-tray" aria-hidden="true"></i> Demandes <span style="background:var(--danger);color:white;border-radius:10px;padding:1px 7px;font-size:12px;margin-left:4px"><?= $nb_demandees ?></span>
   </button>
   <?php endif; ?>
 </div>
@@ -217,11 +217,11 @@ include __DIR__ . '/../templates/header.php';
   </form>
   <div style="display:flex;gap:8px">
     <?php if($is_coord): ?>
-    <button class="btn btn-primary" onclick="ouvrirDemande()">🔧 Signaler une panne</button>
+    <button class="btn btn-primary" onclick="ouvrirDemande()"><i class="ph ph-wrench" aria-hidden="true"></i> Signaler une panne</button>
     <?php endif; ?>
     <?php if($can_create && !$is_coord): ?>
-    <button class="btn btn-primary" onclick="ouvrirCreation('preventive')">📅 + Préventive</button>
-    <button class="btn" style="background:#fee2e2;color:#991b1b;border:1.5px solid #fca5a5" onclick="ouvrirCreation('curative')">🚨 + Curative</button>
+    <button class="btn btn-primary" onclick="ouvrirCreation('preventive')"><i class="ph ph-calendar" aria-hidden="true"></i> + Préventive</button>
+    <button class="btn" style="background:#fee2e2;color:#991b1b;border:1.5px solid #fca5a5" onclick="ouvrirCreation('curative')"><i class="ph ph-warning-octagon" aria-hidden="true"></i> + Curative</button>
     <?php endif; ?>
   </div>
 </div>
@@ -239,7 +239,7 @@ foreach($types_onglets as $tab_key => $type_filtre):
   <div class="card">
     <div class="card-header">
       <h3>
-        <?= $tab_key==='preventive'?'🗓️ Interventions Préventives':($tab_key==='curative'?'🚨 Interventions Curatives':($tab_key==='demandes'?'📬 Demandes Coordinateurs':'🔧 Toutes les Interventions')) ?>
+        <?= $tab_key==='preventive'?'<i class="ph ph-calendar" aria-hidden="true"></i> Interventions Préventives':($tab_key==='curative'?'<i class="ph ph-warning-octagon" aria-hidden="true"></i> Interventions Curatives':($tab_key==='demandes'?'<i class="ph ph-tray" aria-hidden="true"></i> Demandes Coordinateurs':'<i class="ph ph-wrench" aria-hidden="true"></i> Toutes les Interventions')) ?>
         <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= count($items) ?>)</span>
       </h3>
     </div>
@@ -258,7 +258,7 @@ foreach($types_onglets as $tab_key => $type_filtre):
           <tr style="<?= $int['statut']==='demandee'?'background:#fffbf0':'' ?>">
             <td style="font-weight:600;white-space:nowrap"><?= fmt_date($int['date_intervention']??$int['created_at'],'d/m/Y') ?></td>
             <?php $is_prev = in_array($int['type_action']??'',['maintenance_preventive']); ?>
-            <td><span class="type-badge type-<?= $is_prev?'preventive':'curative' ?>"><?= $is_prev ? '🗓️ Préventive' : '🚨 Curative' ?></span></td>
+            <td><span class="type-badge type-<?= $is_prev?'preventive':'curative' ?>"><?= $is_prev ? '<i class="ph ph-calendar" aria-hidden="true"></i> Préventive' : '<i class="ph ph-warning-octagon" aria-hidden="true"></i> Curative' ?></span></td>
             <td style="font-size:13px">
               <?= h($int['equip_nom']??'—') ?>
               <?php if($int['numero_serie_interne']): ?><div style="font-size:12px;color:var(--muted)"><?= h($int['numero_serie_interne']) ?></div><?php endif; ?>
@@ -267,8 +267,8 @@ foreach($types_onglets as $tab_key => $type_filtre):
             <td style="font-size:12px;max-width:200px"><?= h($int['description']) ?></td>
             <td style="text-align:center"><span class="type-badge prio-<?= 'normale' ?>"><?= ucfirst('normale') ?></span></td>
             <td><span class="type-badge statut-<?= $int['statut'] ?>"><?= [
-              'planifiee'=>'📅 Planifiée','en_cours'=>'⚙️ En cours','terminee'=>'✅ Terminée',
-              'demandee'=>'📬 Demandée','annulee'=>'❌ Annulée'
+              'planifiee'=>'<i class="ph ph-calendar" aria-hidden="true"></i> Planifiée','en_cours'=>'<i class="ph ph-gear" aria-hidden="true"></i> En cours','terminee'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Terminée',
+              'demandee'=>'<i class="ph ph-tray" aria-hidden="true"></i> Demandée','annulee'=>'<i class="ph ph-x-circle" aria-hidden="true"></i> Annulée'
             ][$int['statut']] ?? $int['statut'] ?></span></td>
             <td style="font-size:12px;color:var(--muted)"><?= h($int['createur']??'—') ?></td>
             <?php if(!$is_coord): ?>
@@ -277,7 +277,7 @@ foreach($types_onglets as $tab_key => $type_filtre):
               <button class="btn btn-primary btn-sm" onclick="changerStatut(<?= $int['id'] ?>,'en_cours')">▶️ Démarrer</button>
               <?php endif; ?>
               <?php if($int['statut']==='en_cours'): ?>
-              <button class="btn btn-success btn-sm" onclick="terminer(<?= $int['id'] ?>)">✅ Terminer</button>
+              <button class="btn btn-success btn-sm" onclick="terminer(<?= $int['id'] ?>)"><i class="ph ph-check-circle" aria-hidden="true"></i> Terminer</button>
               <?php endif; ?>
             </td>
             <?php endif; ?>
@@ -295,8 +295,8 @@ foreach($types_onglets as $tab_key => $type_filtre):
 <div id="modalDemande" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:20px;padding:28px;width:500px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)">🔧 Signaler une panne</h3>
-      <button onclick="fermer('Demande')" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)"><i class="ph ph-wrench" aria-hidden="true"></i> Signaler une panne</h3>
+      <button onclick="fermer('Demande')" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div id="alertDemande"></div>
     <div class="form-group" style="margin-bottom:14px">
@@ -314,7 +314,7 @@ foreach($types_onglets as $tab_key => $type_filtre):
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px">
       <button class="btn btn-secondary" onclick="fermer('Demande')">Annuler</button>
-      <button class="btn btn-primary" onclick="envoyerDemande()">📤 Envoyer la demande</button>
+      <button class="btn btn-primary" onclick="envoyerDemande()"><i class="ph ph-upload-simple" aria-hidden="true"></i> Envoyer la demande</button>
     </div>
   </div>
 </div>
@@ -326,7 +326,7 @@ foreach($types_onglets as $tab_key => $type_filtre):
   <div style="background:white;border-radius:20px;padding:28px;width:520px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
       <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)" id="titleCreation">Nouvelle intervention</h3>
-      <button onclick="fermer('Creation')" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+      <button onclick="fermer('Creation')" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <input type="hidden" id="cType" value="preventive">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
@@ -367,7 +367,7 @@ foreach($types_onglets as $tab_key => $type_filtre):
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px">
       <button class="btn btn-secondary" onclick="fermer('Creation')">Annuler</button>
-      <button class="btn btn-primary" onclick="creer()">✅ Créer</button>
+      <button class="btn btn-primary" onclick="creer()"><i class="ph ph-check-circle" aria-hidden="true"></i> Créer</button>
     </div>
   </div>
 </div>
@@ -376,7 +376,7 @@ foreach($types_onglets as $tab_key => $type_filtre):
 <!-- MODAL TERMINER -->
 <div id="modalTerminer" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:20px;padding:28px;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin-bottom:20px">✅ Clôturer l'intervention</h3>
+    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin-bottom:20px"><i class="ph ph-check-circle" aria-hidden="true"></i> Clôturer l'intervention</h3>
     <input type="hidden" id="tId">
     <div class="form-group" style="margin-bottom:20px">
       <label>Notes de résolution</label>
@@ -384,7 +384,7 @@ foreach($types_onglets as $tab_key => $type_filtre):
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px">
       <button class="btn btn-secondary" onclick="fermer('Terminer')">Annuler</button>
-      <button class="btn btn-success" onclick="confirmerTerminer()">✅ Clôturer</button>
+      <button class="btn btn-success" onclick="confirmerTerminer()"><i class="ph ph-check-circle" aria-hidden="true"></i> Clôturer</button>
     </div>
   </div>
 </div>

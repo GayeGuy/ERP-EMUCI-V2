@@ -592,7 +592,7 @@ $type_colors = [
             <span class="type-badge" style="background:<?= $tc['bg'] ?>;color:<?= $tc['color'] ?>">
               <?= $types_labels[$s['type']] ?? $s['type'] ?>
               <?php if (!empty($s['option_caisse'])): ?>
-              <span style="font-size:12px;background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:8px;margin-left:3px">💰</span>
+              <span style="font-size:12px;background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:8px;margin-left:3px"><i class="ph ph-currency-circle-dollar" aria-hidden="true"></i></span>
               <?php endif; ?>
             </span>
           </td>
@@ -662,7 +662,7 @@ $type_colors = [
 <!-- ===== MODAL CRÉER / MODIFIER ===== -->
 <div class="modal-overlay" id="mS">
   <div class="modal" style="width:560px">
-    <div class="mhdr"><h3 id="mST">Nouveau site</h3><button class="mclose" onclick="closeMX('mS')">✕</button></div>
+    <div class="mhdr"><h3 id="mST">Nouveau site</h3><button class="mclose" onclick="closeMX('mS')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody">
       <div id="mSAlert"></div>
       <input type="hidden" id="sId">
@@ -700,7 +700,7 @@ $type_colors = [
       <div id="sCaisseWrap" style="display:none;margin-bottom:14px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;background:var(--lighter);border-radius:8px;border:1px solid var(--border)">
           <input type="checkbox" id="sCaisse">
-          <div><div style="font-weight:600;font-size:13px">💰 Option Caisse</div>
+          <div><div style="font-weight:600;font-size:13px"><i class="ph ph-currency-circle-dollar" aria-hidden="true"></i> Option Caisse</div>
           <div style="font-size:12px;color:var(--muted)">Ce site encaisse directement</div></div>
         </label>
       </div>
@@ -720,7 +720,7 @@ $type_colors = [
 <!-- ===== MODAL DÉTAIL ===== -->
 <div class="modal-overlay" id="mSD">
   <div class="modal" style="width:660px">
-    <div class="mhdr"><h3 id="sdT">Détail site</h3><button class="mclose" onclick="closeMX('mSD')">✕</button></div>
+    <div class="mhdr"><h3 id="sdT">Détail site</h3><button class="mclose" onclick="closeMX('mSD')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody" id="sdB"></div>
   </div>
 </div>
@@ -728,7 +728,7 @@ $type_colors = [
 <!-- ===== MODAL CALCULATEUR ===== -->
 <div class="modal-overlay" id="mCapa">
   <div class="modal" style="width:620px">
-    <div class="mhdr"><h3>Calculateur de capacité</h3><button class="mclose" onclick="closeMX('mCapa')">✕</button></div>
+    <div class="mhdr"><h3>Calculateur de capacité</h3><button class="mclose" onclick="closeMX('mCapa')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody">
       <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Combien de sites de ce type puis-je créer avec le stock disponible ?</p>
       <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap">
@@ -748,7 +748,7 @@ $type_colors = [
 <!-- ===== MODAL CONFIG TYPES ===== -->
 <div class="modal-overlay" id="mCfg">
   <div class="modal" style="width:680px">
-    <div class="mhdr"><h3>Configuration des besoins par type</h3><button class="mclose" onclick="closeMX('mCfg')">✕</button></div>
+    <div class="mhdr"><h3>Configuration des besoins par type</h3><button class="mclose" onclick="closeMX('mCfg')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody">
       <div class="tabs" id="cfgTabs">
         <?php foreach ($types_calculables as $k => $l): ?>
@@ -903,7 +903,7 @@ function viewS(id){
       </div>`).join('')||'<p style="color:var(--muted);font-size:13px">Aucun utilisateur.</p>';
     document.getElementById('sdB').innerHTML=`
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 18px;margin-bottom:18px">
-        ${[['Code',r.code],['Type',r.type],['Ville',r.ville||'—'],['Responsable',r.responsable_nom||'—'],['Adresse',r.adresse||'—'],['Statut',r.actif==1?'✅ Actif':'❌ Inactif']].map(([l,v])=>`<div style="padding:6px 0;border-bottom:1px solid var(--border)"><div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">${l}</div><div style="font-size:13px">${v}</div></div>`).join('')}
+        ${[['Code',r.code],['Type',r.type],['Ville',r.ville||'—'],['Responsable',r.responsable_nom||'—'],['Adresse',r.adresse||'—'],['Statut',r.actif==1?'<i class="ph ph-check-circle" aria-hidden="true"></i> Actif':'<i class="ph ph-x-circle" aria-hidden="true"></i> Inactif']].map(([l,v])=>`<div style="padding:6px 0;border-bottom:1px solid var(--border)"><div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">${l}</div><div style="font-size:13px">${v}</div></div>`).join('')}
       </div>
       <h4 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;margin-bottom:8px">Équipements (${r.equip_par_type.reduce((s,e)=>s+parseInt(e.total),0)})</h4>
       ${equips}
@@ -1009,8 +1009,8 @@ function saveCfg(type){
         <td style="font-size:12px;color:var(--muted)"><?= fmt_datetime($si['derniere_apparition']) ?></td>
         <td style="text-align:center">
           <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
-            <button class="btn btn-primary btn-sm" onclick="ouvrirLierSite(<?= $si['id'] ?>,'<?= h($si['nom_emuci']) ?>')">🔗 Lier</button>
-            <button class="btn btn-secondary btn-sm" onclick="ouvrirCreerDepuisEmuci(<?= $si['id'] ?>,'<?= h($si['nom_emuci']) ?>')">➕ Créer</button>
+            <button class="btn btn-primary btn-sm" onclick="ouvrirLierSite(<?= $si['id'] ?>,'<?= h($si['nom_emuci']) ?>')"><i class="ph ph-link" aria-hidden="true"></i> Lier</button>
+            <button class="btn btn-secondary btn-sm" onclick="ouvrirCreerDepuisEmuci(<?= $si['id'] ?>,'<?= h($si['nom_emuci']) ?>')"><i class="ph ph-plus" aria-hidden="true"></i> Créer</button>
             <button class="btn btn-sm" style="background:#F1F5F9;color:#64748B;border:1.5px solid #E2E8F0" onclick="ignorerSiteEmuci(<?= $si['id'] ?>,'<?= h($si['nom_emuci']) ?>')">Ignorer</button>
           </div>
         </td>
@@ -1024,7 +1024,7 @@ function saveCfg(type){
 <!-- Modal Lier EMUCI -->
 <div id="modalLierEmuci" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.55);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:26px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:14px">🔗 Lier site EMUCI</h3>
+    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:14px"><i class="ph ph-link" aria-hidden="true"></i> Lier site EMUCI</h3>
     <div id="alertLierEmuci"></div>
     <input type="hidden" id="lierId">
     <div style="background:#EFF6FF;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#1D4ED8">Nom EMUCI : <strong id="lierNomEmuci"></strong></div>
@@ -1036,7 +1036,7 @@ function saveCfg(type){
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px">
       <button class="btn btn-secondary" onclick="document.getElementById('modalLierEmuci').style.display='none'">Annuler</button>
-      <button class="btn btn-primary" onclick="confirmerLier()">🔗 Lier</button>
+      <button class="btn btn-primary" onclick="confirmerLier()"><i class="ph ph-link" aria-hidden="true"></i> Lier</button>
     </div>
   </div>
 </div>
@@ -1044,7 +1044,7 @@ function saveCfg(type){
 <!-- Modal Créer depuis EMUCI -->
 <div id="modalCreerEmuci" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.55);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:26px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:14px">➕ Créer site depuis EMUCI</h3>
+    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:14px"><i class="ph ph-plus" aria-hidden="true"></i> Créer site depuis EMUCI</h3>
     <div id="alertCreerEmuci"></div>
     <input type="hidden" id="creerId">
     <div style="background:#EFF6FF;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#1D4ED8">Nom EMUCI : <strong id="creerNomEmuci"></strong></div>
@@ -1056,7 +1056,7 @@ function saveCfg(type){
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px">
       <button class="btn btn-secondary" onclick="document.getElementById('modalCreerEmuci').style.display='none'">Annuler</button>
-      <button class="btn btn-primary" onclick="confirmerCreerEmuci()">➕ Créer</button>
+      <button class="btn btn-primary" onclick="confirmerCreerEmuci()"><i class="ph ph-plus" aria-hidden="true"></i> Créer</button>
     </div>
   </div>
 </div>

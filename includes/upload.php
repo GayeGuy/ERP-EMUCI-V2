@@ -120,7 +120,7 @@ function upload_url(string $filename, string $type): string {
 function upload_link(string $filename, string $type, string $label = 'Voir le document'): string {
     if (!$filename) return '<span style="color:var(--muted);font-size:12px">—</span>';
     $url  = upload_url($filename, $type);
-    $icon = str_ends_with(strtolower($filename), '.pdf') ? '📄' : '🖼️';
+    $icon = str_ends_with(strtolower($filename), '.pdf') ? '<i class="ph ph-file-text" aria-hidden="true"></i>' : '<i class="ph ph-image" aria-hidden="true"></i>';
     return "<a href='$url' target='_blank' style='font-size:12.5px;color:var(--blue-mid,#1a56a0);text-decoration:none'>$icon $label</a>";
 }
 

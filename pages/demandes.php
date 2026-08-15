@@ -590,7 +590,7 @@ include __DIR__ . '/../templates/header.php';
   </form>
   <?php if ($has_filter): ?>
   <div style="margin:-10px 0 14px;font-size:12px">
-    <a href="?" style="color:#e74c3c;text-decoration:none;font-weight:700">✕ Effacer les filtres</a>
+    <a href="?" style="color:#e74c3c;text-decoration:none;font-weight:700"><i class="ph ph-x" aria-hidden="true"></i> Effacer les filtres</a>
   </div>
   <?php endif; ?>
 

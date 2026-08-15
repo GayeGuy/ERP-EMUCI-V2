@@ -398,11 +398,11 @@ include __DIR__ . '/../templates/header.php';
 <!-- ===== WELCOME BANNER ===== -->
 <div class="welcome-banner">
   <div class="wb-left">
-    <h2>Bonjour, <?= h($user['prenom']) ?> 👋</h2>
+    <h2>Bonjour, <?= h($user['prenom']) ?> <i class="ph ph-hand-waving" aria-hidden="true"></i></h2>
     <p>
       <?= date('l d F Y') ?> · <?= h($user['role_nom']) ?>
       <?php if($site_force && ($site_info['nom']??'')): ?>
-       · 🏢 <?= h($site_info['nom']) ?>
+       · <i class="ph ph-buildings" aria-hidden="true"></i> <?= h($site_info['nom']) ?>
       <?php endif; ?>
     </p>
   </div>
@@ -411,10 +411,10 @@ include __DIR__ . '/../templates/header.php';
     <a href="<?= APP_URL ?>/pages/equipements.php" class="wb-btn primary">+ Équipement</a>
     <?php endif; ?>
     <?php if(can('receptions','can_read') && $role_slug !== 'coordinateur_site'): ?>
-    <a href="<?= APP_URL ?>/pages/reception_site.php" class="wb-btn secondary">📦 Réceptions</a>
+    <a href="<?= APP_URL ?>/pages/reception_site.php" class="wb-btn secondary"><i class="ph ph-package" aria-hidden="true"></i> Réceptions</a>
     <?php endif; ?>
     <?php if(can('rapports','can_export') && $role_slug !== 'coordinateur_site'): ?>
-    <a href="<?= APP_URL ?>/pages/rapports.php" class="wb-btn secondary">📊 Rapports</a>
+    <a href="<?= APP_URL ?>/pages/rapports.php" class="wb-btn secondary"><i class="ph ph-chart-bar" aria-hidden="true"></i> Rapports</a>
     <?php endif; ?>
   </div>
 </div>
@@ -423,7 +423,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- ===== RÉCEPTIONS SITE (Coordinateur) ===== -->
 <div class="dash-card" style="margin-bottom:20px">
   <div class="dash-card-header">
-    <h3>📦 Mes réceptions récentes</h3>
+    <h3><i class="ph ph-package" aria-hidden="true"></i> Mes réceptions récentes</h3>
     <a href="<?= APP_URL ?>/pages/reception_site.php" style="font-size:12px;color:var(--blue-mid,#1a56a0)">Voir tout →</a>
   </div>
   <div class="table-wrap">
@@ -436,15 +436,15 @@ include __DIR__ . '/../templates/header.php';
       <?php foreach($receptions_recentes as $rr): ?>
       <tr>
         <td style="font-size:12px;color:var(--muted)"><?= fmt_date($rr['date_reception']) ?></td>
-        <td><span style="font-size:12px;font-weight:700;color:<?= $rr['type_reception']==='consommable'?'#27ae60':'#1a56a0' ?>"><?= $rr['type_reception']==='consommable'?'🧴 Conso':'💻 Équip' ?></span></td>
+        <td><span style="font-size:12px;font-weight:700;color:<?= $rr['type_reception']==='consommable'?'#27ae60':'#1a56a0' ?>"><?= $rr['type_reception']==='consommable'?'<i class="ph ph-flask" aria-hidden="true"></i> Conso':'<i class="ph ph-desktop" aria-hidden="true"></i> Équip' ?></span></td>
         <td style="font-size:13px">
           <?= $rr['type_reception']==='consommable' ? h($rr['conso_lib']??'—').' <small style="color:var(--muted)">'.h($rr['unite']??'').'</small>' : h($rr['equip_type']??'—').' <small style="color:var(--muted);font-family:monospace">'.h($rr['equip_num']??'').'</small>' ?>
         </td>
         <td style="text-align:right;font-weight:700"><?= $rr['quantite']?fmt_number($rr['quantite'],1):'—' ?></td>
         <td><span class="statut-badge <?= $rr['statut'] ?>" style="font-size:12px;padding:2px 7px;border-radius:5px;font-weight:700;background:<?= $rr['statut']==='en_attente'?'#fff8e7':($rr['statut']==='receptionnee'?'#eafaf1':'#fdf0ef') ?>;color:<?= $rr['statut']==='en_attente'?'#b7791f':($rr['statut']==='receptionnee'?'#1e8449':'#c0392b') ?>">
-          <?= match($rr['statut']){'en_attente'=>'⏳ Attente','receptionnee'=>'✅ Reçu','litige'=>'⚠️ Litige',default=>$rr['statut']} ?>
+          <?= match($rr['statut']){'en_attente'=>'⏳ Attente','receptionnee'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Reçu','litige'=>'<i class="ph ph-warning" aria-hidden="true"></i> Litige',default=>$rr['statut']} ?>
         </span></td>
-        <td><?= !empty($rr['fichier_fiche'])?'<a href="'.upload_url($rr['fichier_fiche'],'fiche').'" target="_blank" style="font-size:12px">📄 Voir</a>':'<span style="color:var(--muted);font-size:12px">—</span>' ?></td>
+        <td><?= !empty($rr['fichier_fiche'])?'<a href="'.upload_url($rr['fichier_fiche'],'fiche').'" target="_blank" style="font-size:12px"><i class="ph ph-file-text" aria-hidden="true"></i> Voir</a>':'<span style="color:var(--muted);font-size:12px">—</span>' ?></td>
       </tr>
       <?php endforeach; ?>
       </tbody>
@@ -457,7 +457,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- ===== VUE SUPERVISEUR : toutes les réceptions coordinateurs ===== -->
 <div class="dash-card" style="margin-bottom:20px">
   <div class="dash-card-header">
-    <h3>📋 Réceptions de tous les sites</h3>
+    <h3><i class="ph ph-clipboard-text" aria-hidden="true"></i> Réceptions de tous les sites</h3>
     <a href="<?= APP_URL ?>/pages/reception_site.php" style="font-size:12px;color:var(--blue-mid,#1a56a0)">Détail →</a>
   </div>
   <div class="table-wrap">
@@ -468,10 +468,10 @@ include __DIR__ . '/../templates/header.php';
       <tr>
         <td style="font-size:12px;color:var(--muted)"><?= fmt_date($rr['date_reception']) ?></td>
         <td style="font-weight:600;font-size:13px"><?= h($rr['site_nom']??'—') ?></td>
-        <td><span style="font-size:12px;font-weight:700;color:<?= $rr['type_reception']==='consommable'?'#27ae60':'#1a56a0' ?>"><?= $rr['type_reception']==='consommable'?'🧴':'💻' ?></span></td>
+        <td><span style="font-size:12px;font-weight:700;color:<?= $rr['type_reception']==='consommable'?'#27ae60':'#1a56a0' ?>"><?= $rr['type_reception']==='consommable'?'<i class="ph ph-flask" aria-hidden="true"></i>':'<i class="ph ph-desktop" aria-hidden="true"></i>' ?></span></td>
         <td style="font-size:12.5px"><?= h($rr['type_reception']==='consommable'?($rr['conso_lib']??'—'):($rr['equip_type']??'—')) ?></td>
         <td style="text-align:right"><?= $rr['quantite']?fmt_number($rr['quantite'],1):'—' ?></td>
-        <td><span style="font-size:12px;font-weight:700;padding:2px 7px;border-radius:5px;background:<?= $rr['statut']==='en_attente'?'#fff8e7':($rr['statut']==='receptionnee'?'#eafaf1':'#fdf0ef') ?>;color:<?= $rr['statut']==='en_attente'?'#b7791f':($rr['statut']==='receptionnee'?'#1e8449':'#c0392b') ?>"><?= match($rr['statut']){'en_attente'=>'⏳','receptionnee'=>'✅','litige'=>'⚠️',default=>''} ?> <?= $rr['statut'] ?></span></td>
+        <td><span style="font-size:12px;font-weight:700;padding:2px 7px;border-radius:5px;background:<?= $rr['statut']==='en_attente'?'#fff8e7':($rr['statut']==='receptionnee'?'#eafaf1':'#fdf0ef') ?>;color:<?= $rr['statut']==='en_attente'?'#b7791f':($rr['statut']==='receptionnee'?'#1e8449':'#c0392b') ?>"><?= match($rr['statut']){'en_attente'=>'⏳','receptionnee'=>'<i class="ph ph-check-circle" aria-hidden="true"></i>','litige'=>'<i class="ph ph-warning" aria-hidden="true"></i>',default=>''} ?> <?= $rr['statut'] ?></span></td>
       </tr>
       <?php endforeach; ?>
       </tbody>
@@ -483,7 +483,7 @@ include __DIR__ . '/../templates/header.php';
 <?php if($role_slug === 'coordinateur_site' && !empty($stock_conso_site)): ?>
 <!-- ===== STOCK CONSOMMABLES DU SITE ===== -->
 <div class="dash-card" style="margin-bottom:20px">
-  <div class="dash-card-header"><h3>🧴 Stock consommables — Mon site</h3></div>
+  <div class="dash-card-header"><h3><i class="ph ph-flask" aria-hidden="true"></i> Stock consommables — Mon site</h3></div>
   <div class="table-wrap">
     <table>
       <thead><tr><th>Article</th><th>Unité</th><th style="text-align:right">Stock</th><th style="text-align:right">Seuil</th><th>Niveau</th></tr></thead>
@@ -493,7 +493,7 @@ include __DIR__ . '/../templates/header.php';
         $col = $sc['quantite']<=$sc['seuil_alerte']?'var(--danger-d)':($pct<150?'var(--warning-d)':'var(--success-d)');
       ?>
       <tr>
-        <td style="font-size:13px;font-weight:<?= $sc['quantite']<=$sc['seuil_alerte']?'700':'400' ?>;color:<?= $sc['quantite']<=$sc['seuil_alerte']?'var(--danger-d)':'var(--text)' ?>"><?= h($sc['libelle']) ?><?= $sc['quantite']<=$sc['seuil_alerte']?' ⚠️':'' ?></td>
+        <td style="font-size:13px;font-weight:<?= $sc['quantite']<=$sc['seuil_alerte']?'700':'400' ?>;color:<?= $sc['quantite']<=$sc['seuil_alerte']?'var(--danger-d)':'var(--text)' ?>"><?= h($sc['libelle']) ?><?= $sc['quantite']<=$sc['seuil_alerte']?' <i class="ph ph-warning" aria-hidden="true"></i>':'' ?></td>
         <td style="color:var(--muted);font-size:12px"><?= $sc['unite'] ?></td>
         <td style="text-align:right;font-weight:700;color:<?= $col ?>"><?= fmt_number($sc['quantite'],1) ?></td>
         <td style="text-align:right;color:var(--muted);font-size:12px"><?= fmt_number($sc['seuil_alerte'],1) ?></td>
@@ -512,7 +512,7 @@ include __DIR__ . '/../templates/header.php';
   <?php if($role_slug !== 'coordinateur_site'): ?>
   <div class="dash-card">
     <div class="dash-card-header">
-      <h3>🏢 Sites</h3>
+      <h3><i class="ph ph-buildings" aria-hidden="true"></i> Sites</h3>
       <a href="<?= APP_URL ?>/pages/admin/sites.php" style="font-size:12px;color:var(--blue-mid,#1a56a0);text-decoration:none">Voir les sites →</a>
     </div>
     <div class="dash-card-body">
@@ -551,13 +551,13 @@ include __DIR__ . '/../templates/header.php';
         <div style="font-family:'Montserrat',sans-serif;font-size:42px;font-weight:900;color:var(--navy);line-height:1"><?= fmt_number($kpi_equip_total) ?></div>
         <div style="font-size:12px;color:var(--muted);margin-top:5px"><?= fmt_number($kpi_equip_bon??0) ?> en bon état · <?= fmt_number($kpi_equip_hs??0) ?> H.S.</div>
       </div>
-      <div style="font-size:36px;opacity:.12">💻</div>
+      <div style="font-size:36px;opacity:.12"><i class="ph ph-desktop" aria-hidden="true"></i></div>
     </div>
 
     <!-- SÉPARATION INFO / OPÉRATIONNEL -->
     <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--border)">
       <div style="padding:16px 20px;border-right:1px solid var(--border)">
-        <div style="font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">💻 Informatique</div>
+        <div style="font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px"><i class="ph ph-desktop" aria-hidden="true"></i> Informatique</div>
         <div style="font-family:'Montserrat',sans-serif;font-size:28px;font-weight:800;color:var(--navy)"><?= fmt_number($kpi_equip_info??0) ?></div>
         <?php if($kpi_equip_total > 0): ?>
         <div style="height:4px;background:var(--border);border-radius:2px;margin-top:10px;overflow:hidden">
@@ -567,7 +567,7 @@ include __DIR__ . '/../templates/header.php';
         <?php endif; ?>
       </div>
       <div style="padding:16px 20px">
-        <div style="font-size:12px;font-weight:700;color:#10a37f;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">⚙️ Opérationnel</div>
+        <div style="font-size:12px;font-weight:700;color:#10a37f;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px"><i class="ph ph-gear" aria-hidden="true"></i> Opérationnel</div>
         <div style="font-family:'Montserrat',sans-serif;font-size:28px;font-weight:800;color:var(--navy)"><?= fmt_number($kpi_equip_op??0) ?></div>
         <?php if($kpi_equip_total > 0): ?>
         <div style="height:4px;background:var(--border);border-radius:2px;margin-top:10px;overflow:hidden">
@@ -645,7 +645,7 @@ include __DIR__ . '/../templates/header.php';
   <?php if($role_slug !== 'coordinateur_site'): ?>
   <div class="dash-card">
     <div class="dash-card-header">
-      <h3>📊 Consommation par site</h3>
+      <h3><i class="ph ph-chart-bar" aria-hidden="true"></i> Consommation par site</h3>
       <span style="font-size:12px;color:var(--muted)">12 derniers mois · FCFA</span>
     </div>
     <div class="dash-card-body">
@@ -664,7 +664,7 @@ include __DIR__ . '/../templates/header.php';
   <?php if($role_slug !== 'gestionnaire_stock'): ?>
   <div class="dash-card">
     <div class="dash-card-header">
-      <h3>🎞️ Bobines actives par site</h3>
+      <h3><i class="ph ph-film-strip" aria-hidden="true"></i> Bobines actives par site</h3>
       <a href="<?= APP_URL ?>/pages/operations/bobines.php" style="font-size:12px;color:var(--blue-mid,#1a56a0);text-decoration:none">Voir tout →</a>
     </div>
     <div class="dash-card-body" style="padding:0">
@@ -691,7 +691,7 @@ include __DIR__ . '/../templates/header.php';
   <!-- RIVETS PAR SITE -->
   <div class="dash-card">
     <div class="dash-card-header">
-      <h3>🔩 <?= $role_slug==='coordinateur_site' ? 'Stock & Consommation Rivets' : 'Rivets en stock par site' ?></h3>
+      <h3><i class="ph ph-wrench" aria-hidden="true"></i> <?= $role_slug==='coordinateur_site' ? 'Stock & Consommation Rivets' : 'Rivets en stock par site' ?></h3>
       <a href="<?= APP_URL ?>/pages/operations/point_journalier.php" style="font-size:12px;color:var(--blue-mid,#1a56a0);text-decoration:none">Points journaliers →</a>
     </div>
     <?php if($role_slug === 'coordinateur_site'): ?>
@@ -702,7 +702,7 @@ include __DIR__ . '/../templates/header.php';
         foreach($rivets_par_site as $rs){ if($rs['type_rivet']==='gonflable') $rv_gonfl=$rs['stock_rivets']; else $rv_eclate=$rs['stock_rivets']; }
       ?>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
-        <?php foreach([['gonflable','🔵','Gonflables',$rv_gonfl,'#e3f2fd','#1565c0'],['eclate','🔴','Éclatés',$rv_eclate,'#fce4ec','#880e4f']] as [$t,$ic,$lb,$qty,$bg,$col]): ?>
+        <?php foreach([['gonflable','<i class="ph ph-circle" aria-hidden="true"></i>','Gonflables',$rv_gonfl,'#e3f2fd','#1565c0'],['eclate','<i class="ph ph-circle" aria-hidden="true"></i>','Éclatés',$rv_eclate,'#fce4ec','#880e4f']] as [$t,$ic,$lb,$qty,$bg,$col]): ?>
         <div style="background:<?= $bg ?>;border-radius:12px;padding:14px 16px">
           <div style="font-size:12px;font-weight:700;color:<?= $col ?>;margin-bottom:4px"><?= $ic ?> <?= $lb ?></div>
           <div style="font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900;color:<?= $qty<100?'#e74c3c':($qty<500?'#f39c12':$col) ?>"><?= fmt_number($qty) ?></div>
@@ -719,13 +719,13 @@ include __DIR__ . '/../templates/header.php';
         <div style="color:var(--muted)"><?= fmt_date($pj['date_point'],'d/m') ?> <span style="font-size:12px;background:var(--lighter);padding:1px 6px;border-radius:8px"><?= $lbl ?></span></div>
         <div style="display:flex;gap:10px">
           <?php if($pj['rivets_gonflables']>0||$pj['rivets_eclates']>0): ?>
-          <span style="color:#1565c0">🔵 <?= $pj['rivets_gonflables'] ?></span>
-          <span style="color:#880e4f">🔴 <?= $pj['rivets_eclates'] ?></span>
+          <span style="color:#1565c0"><i class="ph ph-circle" aria-hidden="true"></i> <?= $pj['rivets_gonflables'] ?></span>
+          <span style="color:#880e4f"><i class="ph ph-circle" aria-hidden="true"></i> <?= $pj['rivets_eclates'] ?></span>
           <?php else: ?>
-          <span style="color:var(--muted)">🔩 <?= $pj['rivets_utilises'] ?></span>
+          <span style="color:var(--muted)"><i class="ph ph-wrench" aria-hidden="true"></i> <?= $pj['rivets_utilises'] ?></span>
           <?php endif; ?>
           <?php if($pj['rivets_endommages']>0): ?>
-          <span style="color:var(--warning-d)">⚠️ <?= $pj['rivets_endommages'] ?></span>
+          <span style="color:var(--warning-d)"><i class="ph ph-warning" aria-hidden="true"></i> <?= $pj['rivets_endommages'] ?></span>
           <?php endif; ?>
         </div>
       </div>
@@ -777,12 +777,12 @@ include __DIR__ . '/../templates/header.php';
   <!-- FIN DE CYCLE ALERTES -->
   <div class="dash-card">
     <div class="dash-card-header">
-      <h3>⚠️ Équipements en fin de cycle</h3>
+      <h3><i class="ph ph-warning" aria-hidden="true"></i> Équipements en fin de cycle</h3>
       <span style="font-size:12px;color:var(--muted)">60 prochains jours</span>
     </div>
     <div class="dash-card-body" style="padding:12px 20px">
       <?php if (empty($fin_cycle_list)): ?>
-        <div style="text-align:center;color:var(--success-d);padding:32px 0;font-size:13px">✅ Aucun équipement en fin de cycle</div>
+        <div style="text-align:center;color:var(--success-d);padding:32px 0;font-size:13px"><i class="ph ph-check-circle" aria-hidden="true"></i> Aucun équipement en fin de cycle</div>
       <?php else: ?>
         <?php foreach($fin_cycle_list as $fc):
           $j = (int)$fc['jours_restants'];
@@ -808,12 +808,12 @@ include __DIR__ . '/../templates/header.php';
   <!-- STOCK BAS CONSOMMABLES -->
   <div class="dash-card">
     <div class="dash-card-header">
-      <h3>🧴 Stock consommables bas</h3>
+      <h3><i class="ph ph-flask" aria-hidden="true"></i> Stock consommables bas</h3>
       <a href="<?= APP_URL ?>/pages/consommables.php" style="font-size:12px;color:var(--blue-mid, #1a56a0);text-decoration:none">Gérer →</a>
     </div>
     <div class="dash-card-body">
       <?php if (empty($stock_bas_list)): ?>
-        <div style="text-align:center;color:var(--success-d);padding:32px 0;font-size:13px">✅ Tous les stocks sont suffisants</div>
+        <div style="text-align:center;color:var(--success-d);padding:32px 0;font-size:13px"><i class="ph ph-check-circle" aria-hidden="true"></i> Tous les stocks sont suffisants</div>
       <?php else: ?>
         <?php foreach($stock_bas_list as $sb):
           $ratio = $sb['seuil_alerte'] > 0 ? min(100, ($sb['stock_global'] / $sb['seuil_alerte']) * 100) : 0;
@@ -840,7 +840,7 @@ include __DIR__ . '/../templates/header.php';
 <?php if(!in_array($role_slug,['maintenance_info','gestionnaire_stock'])): ?>
 <div class="dash-card" style="margin-bottom:20px">
   <div class="dash-card-header">
-    <h3>📋 Dernières activités<?= $role_slug==='superviseur_operation' ? ' des coordinateurs' : '' ?></h3>
+    <h3><i class="ph ph-clipboard-text" aria-hidden="true"></i> Dernières activités<?= $role_slug==='superviseur_operation' ? ' des coordinateurs' : '' ?></h3>
     <?php if(can('audit','can_read')): ?>
     <a href="<?= APP_URL ?>/pages/admin/audit.php" style="font-size:12px;color:var(--blue-mid, #1a56a0);text-decoration:none">Voir tout →</a>
     <?php endif; ?>

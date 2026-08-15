@@ -154,13 +154,13 @@ include __DIR__ . '/../../templates/header.php';
 </style>
 
 <div style="margin-bottom:20px">
-  <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">🔗 Gestion des Délégations</h2>
+  <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)"><i class="ph ph-link" aria-hidden="true"></i> Gestion des Délégations</h2>
   <p style="font-size:13px;color:var(--muted);margin-top:4px">Attribuez des tâches à votre Gestionnaire Opération. Les modifications prennent effet immédiatement.</p>
 </div>
 
 <?php if(empty($gestionnaires)): ?>
 <div class="card"><div class="card-body" style="text-align:center;padding:60px;color:var(--muted)">
-  <div style="font-size:48px;margin-bottom:16px">👤</div>
+  <div style="font-size:48px;margin-bottom:16px"><i class="ph ph-user" aria-hidden="true"></i></div>
   <div style="font-size:15px;font-weight:600;margin-bottom:8px">Aucun Gestionnaire Opération actif</div>
   <div style="font-size:13px">Créez un compte avec le profil "Gestionnaire Opération" depuis l'administration.</div>
 </div></div>
@@ -200,7 +200,7 @@ include __DIR__ . '/../../templates/header.php';
 
 <?php if ($is_admin_role): ?>
 <div style="margin-top:36px">
-  <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">📋 Responsables des sessions d'inventaire</h2>
+  <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)"><i class="ph ph-clipboard-text" aria-hidden="true"></i> Responsables des sessions d'inventaire</h2>
   <p style="font-size:13px;color:var(--muted);margin-top:4px">
     Par défaut, seul un administrateur peut ouvrir et clôturer une session d'inventaire mensuel.
     Déléguez ce droit à la personne de votre choix, quel que soit son profil.

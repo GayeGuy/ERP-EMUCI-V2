@@ -373,17 +373,17 @@ include __DIR__ . '/../templates/header.php';
         </p>
         <div class="theme-opts">
           <div class="theme-opt" data-pref="light" onclick="setThemePref('light')">
-            <span class="t-em">☀️</span>
+            <span class="t-em"><i class="ph ph-sun" aria-hidden="true"></i></span>
             <span class="t-lbl">Clair</span>
             <span class="t-sub">Toujours en mode clair</span>
           </div>
           <div class="theme-opt" data-pref="dark" onclick="setThemePref('dark')">
-            <span class="t-em">🌙</span>
+            <span class="t-em"><i class="ph ph-moon" aria-hidden="true"></i></span>
             <span class="t-lbl">Sombre</span>
             <span class="t-sub">Toujours en mode sombre</span>
           </div>
           <div class="theme-opt" data-pref="auto" onclick="setThemePref('auto')">
-            <span class="t-em">💻</span>
+            <span class="t-em"><i class="ph ph-desktop" aria-hidden="true"></i></span>
             <span class="t-lbl">Système</span>
             <span class="t-sub">Suit les réglages de l'OS</span>
           </div>

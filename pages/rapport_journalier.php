@@ -203,7 +203,7 @@ include __DIR__ . '/../templates/header.php';
     </select>
     <?php else: ?>
     <span style="padding:9px 14px;background:var(--lighter);border-radius:9px;font-size:13px;font-weight:600;color:var(--navy)">
-      📍 <?= h(db_fetch_value("SELECT nom FROM sites WHERE id=?",[$site_force]) ?? '') ?>
+      <i class="ph ph-map-pin" aria-hidden="true"></i> <?= h(db_fetch_value("SELECT nom FROM sites WHERE id=?",[$site_force]) ?? '') ?>
     </span>
     <?php endif; ?>
     <input type="month" name="mois" value="<?= h($f_mois) ?>" onchange="this.form.submit()" aria-label="Choisir le mois"
@@ -217,7 +217,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- LISTE -->
 <div class="card">
   <div class="card-header">
-    <h3>📋 Rapports journaliers <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= count($rapports) ?>)</span></h3>
+    <h3><i class="ph ph-clipboard-text" aria-hidden="true"></i> Rapports journaliers <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= count($rapports) ?>)</span></h3>
   </div>
   <div class="table-wrap">
     <table>
@@ -247,12 +247,12 @@ include __DIR__ . '/../templates/header.php';
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:700;color:var(--blue)"><?= $r['nb_interventions'] ?></td>
           <td style="font-size:12.5px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?= h($r['observations']) ?>"><?= h($r['observations']??'—') ?></td>
           <td style="font-size:12.5px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?= h($r['actions_preventives']) ?>"><?= h($r['actions_preventives']??'—') ?></td>
-          <td><span class="rbadge <?= $r['statut']??'brouillon' ?>"><?= ($r['statut']??'brouillon')==='valide'?'✅ Validé':'⏳ Brouillon' ?></span></td>
+          <td><span class="rbadge <?= $r['statut']??'brouillon' ?>"><?= ($r['statut']??'brouillon')==='valide'?'<i class="ph ph-check-circle" aria-hidden="true"></i> Validé':'⏳ Brouillon' ?></span></td>
           <td style="font-size:12px;color:var(--muted)"><?= h($r['technicien_nom']??'—') ?></td>
           <td style="text-align:center;white-space:nowrap;display:flex;gap:4px;justify-content:center">
-            <button class="btn btn-secondary btn-sm" onclick="editer(<?= $r['id'] ?>,<?= $r['site_id'] ?>,'<?= $r['date_rapport'] ?>')" title="Modifier">✏️</button>
+            <button class="btn btn-secondary btn-sm" onclick="editer(<?= $r['id'] ?>,<?= $r['site_id'] ?>,'<?= $r['date_rapport'] ?>')" title="Modifier"><i class="ph ph-pencil-simple" aria-hidden="true"></i></button>
             <?php if(($r['statut']??'brouillon')==='brouillon' && in_array($role_slug,['admin','superadmin'])): ?>
-            <button class="btn btn-success btn-sm" onclick="valider(<?= $r['id'] ?>)" title="Valider">✅</button>
+            <button class="btn btn-success btn-sm" onclick="valider(<?= $r['id'] ?>)" title="Valider"><i class="ph ph-check-circle" aria-hidden="true"></i></button>
             <?php endif; ?>
           </td>
         </tr>
@@ -266,15 +266,15 @@ include __DIR__ . '/../templates/header.php';
 <div id="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:flex-start;justify-content:center;padding:30px;overflow-y:auto">
   <div style="background:white;border-radius:16px;padding:28px;width:620px;max-width:95vw;margin:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-      <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy)">📋 Rapport journalier informatique</h3>
-      <button onclick="fermer()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted)">✕</button>
+      <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy)"><i class="ph ph-clipboard-text" aria-hidden="true"></i> Rapport journalier informatique</h3>
+      <button onclick="fermer()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted)"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
 
     <div id="mAlert"></div>
 
     <!-- Stats temps réel -->
     <div id="statsBox" style="display:none;background:var(--lighter);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;border-left:3px solid var(--blue-light)">
-      <div style="font-weight:700;color:var(--navy);margin-bottom:6px">📊 État actuel des équipements informatiques</div>
+      <div style="font-weight:700;color:var(--navy);margin-bottom:6px"><i class="ph ph-chart-bar" aria-hidden="true"></i> État actuel des équipements informatiques</div>
       <div style="display:flex;gap:20px;flex-wrap:wrap">
         <span>Total : <strong id="sTotal" style="color:var(--navy)">—</strong></span>
         <span style="color:var(--success-d)">OK : <strong id="sOk">—</strong></span>
@@ -285,7 +285,7 @@ include __DIR__ . '/../templates/header.php';
 
     <!-- Interventions du jour -->
     <div id="intervBox" style="display:none;margin-bottom:16px">
-      <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px">🛠️ Interventions enregistrées ce jour</div>
+      <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px"><i class="ph ph-wrench" aria-hidden="true"></i> Interventions enregistrées ce jour</div>
       <div id="intervList" style="font-size:12.5px;color:var(--muted)"></div>
     </div>
 
@@ -348,7 +348,7 @@ include __DIR__ . '/../templates/header.php';
 
     <div style="display:flex;justify-content:flex-end;gap:10px">
       <button class="btn btn-secondary" onclick="fermer()">Annuler</button>
-      <button class="btn btn-primary" id="btnSave" onclick="sauver()">💾 Enregistrer</button>
+      <button class="btn btn-primary" id="btnSave" onclick="sauver()"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Enregistrer</button>
     </div>
   </div>
 </div>

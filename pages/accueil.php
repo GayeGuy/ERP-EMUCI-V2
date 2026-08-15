@@ -353,7 +353,7 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
       </div>
       <div class="notif-list" id="notif-list">
         <?php if (empty($notifs)): ?>
-          <div class="notif-empty">✅ Aucune notification</div>
+          <div class="notif-empty"><i class="ph ph-check-circle" aria-hidden="true"></i> Aucune notification</div>
         <?php else: ?>
           <?php foreach ($notifs as $n): ?>
             <div class="notif-item" onclick="readNotif(<?= $n['id'] ?>, '<?= h($n['lien']??'') ?>')">
@@ -464,7 +464,7 @@ function refreshNotifs() {
     }
     const list = document.getElementById('notif-list');
     if (!list) return;
-    if (count === 0) { list.innerHTML = '<div class="notif-empty">✅ Aucune notification</div>'; return; }
+    if (count === 0) { list.innerHTML = '<div class="notif-empty"><i class="ph ph-check-circle" aria-hidden="true"></i> Aucune notification</div>'; return; }
     const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     list.innerHTML = d.data.data.map(n => `
       <div class="notif-item" data-id="${n.id}" data-lien="${esc(n.lien||'')}">

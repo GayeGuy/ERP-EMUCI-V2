@@ -157,7 +157,7 @@ include __DIR__ . '/../templates/header.php';
 
 <div class="page-header">
   <div>
-    <h2 class="page-title" style="font-size:22px;font-weight:800;color:var(--navy);margin:0">📊 Point EMUCI</h2>
+    <h2 class="page-title" style="font-size:22px;font-weight:800;color:var(--navy);margin:0"><i class="ph ph-chart-bar" aria-hidden="true"></i> Point EMUCI</h2>
     <p style="color:var(--muted);margin:4px 0 0;font-size:14px">
       Comparaison plaques posées (coordinateur) vs import OptoPlate
     </p>
@@ -172,7 +172,7 @@ include __DIR__ . '/../templates/header.php';
 
 <?php if (!$has_import): ?>
 <div style="background:#fff3e0;border:1px solid #ffcc80;border-radius:12px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:12px">
-  <span style="font-size:22px">⚠️</span>
+  <span style="font-size:22px"><i class="ph ph-warning" aria-hidden="true"></i></span>
   <div>
     <strong>Aucun import OptoPlate pour le <?= h(date('d/m/Y', strtotime($f_date))) ?></strong>
     <div style="font-size:13px;color:#7f4f00;margin-top:2px">
@@ -212,7 +212,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- TABLEAU PAR SITE -->
 <?php if (empty($rows)): ?>
 <div style="text-align:center;padding:60px 20px;color:var(--muted)">
-  <div style="font-size:40px;margin-bottom:12px">📋</div>
+  <div style="font-size:40px;margin-bottom:12px"><i class="ph ph-clipboard-text" aria-hidden="true"></i></div>
   <div>Aucune donnée pour le <?= h(date('d/m/Y', strtotime($f_date))) ?></div>
 </div>
 <?php else: ?>
@@ -252,7 +252,7 @@ include __DIR__ . '/../templates/header.php';
         <?php if ($r['corrected'] !== null): ?>
           <span class="corr-badge" title="<?= h($r['motif']) ?> — <?= h($r['corrected_by']) ?>"
                 onclick="showMotif(<?= $r['pj_id'] ?>, '<?= h(addslashes($r['motif'])) ?>', '<?= h(addslashes($r['corrected_by'] ?? '')) ?>', '<?= h($r['corrected_at']) ?>')">
-            <?= $r['corrected'] ?> ✏️
+            <?= $r['corrected'] ?> <i class="ph ph-pencil-simple" aria-hidden="true"></i>
           </span>
         <?php else: ?>
           <span style="color:var(--muted);font-size:13px">—</span>
@@ -267,10 +267,10 @@ include __DIR__ . '/../templates/header.php';
       <td style="text-align:center;white-space:nowrap;padding:8px 12px">
         <?php if ($r['pj_id']): ?>
           <button class="btn-correct" onclick="openCorrection(<?= $r['pj_id'] ?>,<?= $r['site_id'] ?>,<?= $r['effective'] ?? 0 ?>,'<?= h(addslashes($r['site_nom'])) ?>')">
-            ✏️ Corriger
+            <i class="ph ph-pencil-simple" aria-hidden="true"></i> Corriger
           </button>
           <?php if ($r['corrected'] !== null): ?>
-          <button class="btn-annul" onclick="annulerCorrection(<?= $r['pj_id'] ?>,<?= $r['site_id'] ?>)" title="Annuler la correction GP">✕</button>
+          <button class="btn-annul" onclick="annulerCorrection(<?= $r['pj_id'] ?>,<?= $r['site_id'] ?>)" title="Annuler la correction GP"><i class="ph ph-x" aria-hidden="true"></i></button>
           <?php endif; ?>
         <?php else: ?>
           <span class="no-pj">Pas de PJ</span>
@@ -288,7 +288,7 @@ include __DIR__ . '/../templates/header.php';
 <?php if ($can_correct): ?>
 <div id="modalCorrection" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:16px;padding:28px 32px;width:90%;max-width:460px;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-    <h3 style="margin:0 0 6px;font-size:17px">✏️ Corriger le déclaratif</h3>
+    <h3 style="margin:0 0 6px;font-size:17px"><i class="ph ph-pencil-simple" aria-hidden="true"></i> Corriger le déclaratif</h3>
     <p id="mCorrSite" style="color:var(--muted);font-size:14px;margin:0 0 20px"></p>
     <input type="hidden" id="mCorrPjId">
     <input type="hidden" id="mCorrSiteId">
@@ -305,7 +305,7 @@ include __DIR__ . '/../templates/header.php';
 
     <div style="display:flex;gap:10px;margin-top:20px;justify-content:flex-end">
       <button class="btn btn-secondary" onclick="closeCorrection()">Annuler</button>
-      <button class="btn btn-primary" onclick="submitCorrection()">💾 Enregistrer</button>
+      <button class="btn btn-primary" onclick="submitCorrection()"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Enregistrer</button>
     </div>
   </div>
 </div>
@@ -313,7 +313,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- MODAL MOTIF -->
 <div id="modalMotif" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
   <div style="background:#fff;border-radius:16px;padding:28px 32px;width:90%;max-width:420px;box-shadow:0 8px 40px rgba(0,0,0,.18)">
-    <h3 style="margin:0 0 16px;font-size:17px">📋 Détail de la correction</h3>
+    <h3 style="margin:0 0 16px;font-size:17px"><i class="ph ph-clipboard-text" aria-hidden="true"></i> Détail de la correction</h3>
     <div id="mMotifContent"></div>
     <div style="text-align:right;margin-top:20px">
       <button class="btn btn-secondary" onclick="document.getElementById('modalMotif').style.display='none'">Fermer</button>

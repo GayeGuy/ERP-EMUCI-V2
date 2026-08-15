@@ -202,7 +202,7 @@ include __DIR__ . '/../../templates/header.php';
 <form method="GET" style="background:white;border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:18px">
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
     <div style="position:relative;flex:1;min-width:200px">
-      <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted)">🔍</span>
+      <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted)"><i class="ph ph-magnifying-glass" aria-hidden="true"></i></span>
       <input type="text" name="q" value="<?= h($search) ?>" aria-label="Rechercher dans les descriptions"
              placeholder="Rechercher dans les descriptions…"
              style="width:100%;padding:9px 14px 9px 36px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none;font-family:'Manrope',sans-serif">
@@ -233,11 +233,11 @@ include __DIR__ . '/../../templates/header.php';
       <?php endforeach; ?>
     </select>
     <?php if($search||$f_user||$f_module||$f_action||$f_from||$f_to): ?>
-    <a href="audit.php" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;text-decoration:none;color:var(--text);white-space:nowrap">✕ Reset</a>
+    <a href="audit.php" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;text-decoration:none;color:var(--text);white-space:nowrap"><i class="ph ph-x" aria-hidden="true"></i> Reset</a>
     <?php endif; ?>
     <button type="submit" class="btn btn-primary btn-sm">Filtrer</button>
     <?php if(can('audit','can_export')): ?>
-    <a href="<?= APP_URL ?>/api/export.php?type=audit" class="btn btn-secondary btn-sm" style="white-space:nowrap">📥 Excel</a>
+    <a href="<?= APP_URL ?>/api/export.php?type=audit" class="btn btn-secondary btn-sm" style="white-space:nowrap"><i class="ph ph-download-simple" aria-hidden="true"></i> Excel</a>
     <?php endif; ?>
   </div>
 </form>
@@ -245,7 +245,7 @@ include __DIR__ . '/../../templates/header.php';
 <!-- JOURNAL -->
 <div class="card">
   <div class="card-header">
-    <h3>📋 Journal d'audit <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= fmt_number($total) ?> entrées)</span></h3>
+    <h3><i class="ph ph-clipboard-text" aria-hidden="true"></i> Journal d'audit <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= fmt_number($total) ?> entrées)</span></h3>
   </div>
   <div class="table-wrap">
     <table>
@@ -302,7 +302,7 @@ include __DIR__ . '/../../templates/header.php';
           <td style="font-size:11.5px;color:var(--muted);font-family:monospace"><?= h($l['ip_address']) ?></td>
           <td style="text-align:center">
             <?php if($l['has_old']||$l['has_new']): ?>
-            <button class="btn btn-secondary btn-sm" onclick="viewLog(<?= $l['id'] ?>)" title="Voir les modifications">🔍</button>
+            <button class="btn btn-secondary btn-sm" onclick="viewLog(<?= $l['id'] ?>)" title="Voir les modifications"><i class="ph ph-magnifying-glass" aria-hidden="true"></i></button>
             <?php else: ?>
             <span style="color:var(--border)">—</span>
             <?php endif; ?>
@@ -318,7 +318,7 @@ include __DIR__ . '/../../templates/header.php';
 <!-- MODAL DÉTAIL -->
 <div class="modal-overlay" id="mLog">
   <div class="modal">
-    <div class="mhdr"><h3>🔍 Détail de l'action</h3><button class="mclose" onclick="document.getElementById('mLog').classList.remove('open')">✕</button></div>
+    <div class="mhdr"><h3><i class="ph ph-magnifying-glass" aria-hidden="true"></i> Détail de l'action</h3><button class="mclose" onclick="document.getElementById('mLog').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody" id="logB"></div>
   </div>
 </div>
@@ -352,8 +352,8 @@ function viewLog(id){
               <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${l}</div>
               <div style="font-size:13px">${v}</div></div>`).join('')}
         </div>
-        ${oldJson?`<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:var(--danger-d);margin-bottom:6px;text-transform:uppercase">📤 Ancienne valeur</div><div class="diff-block old">${escHtml(oldJson)}</div></div>`:''}
-        ${newJson?`<div><div style="font-size:12px;font-weight:700;color:var(--success-d);margin-bottom:6px;text-transform:uppercase">📥 Nouvelle valeur</div><div class="diff-block new">${escHtml(newJson)}</div></div>`:''}
+        ${oldJson?`<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:var(--danger-d);margin-bottom:6px;text-transform:uppercase"><i class="ph ph-upload-simple" aria-hidden="true"></i> Ancienne valeur</div><div class="diff-block old">${escHtml(oldJson)}</div></div>`:''}
+        ${newJson?`<div><div style="font-size:12px;font-weight:700;color:var(--success-d);margin-bottom:6px;text-transform:uppercase"><i class="ph ph-download-simple" aria-hidden="true"></i> Nouvelle valeur</div><div class="diff-block new">${escHtml(newJson)}</div></div>`:''}
         ${!oldJson&&!newJson?'<p style="color:var(--muted);text-align:center;padding:20px">Aucune donnée de modification enregistrée.</p>':''}`;
     });
 }

@@ -214,7 +214,7 @@ include __DIR__ . '/../templates/header.php';
       <a href="<?= APP_URL ?>/pages/inventaire_sessions.php" style="color:var(--muted);font-size:13px;text-decoration:none">← Sessions</a>
       <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:19px;font-weight:800;color:var(--navy);margin-top:4px">
         <?= h($session['libelle'] ?: 'Session du ' . fmt_date($session['date_debut'])) ?>
-        <span class="statut-badge statut-<?= $session['statut'] ?>"><?= $session['statut']==='ouverte'?'⏳ Ouverte':'✅ Clôturée' ?></span>
+        <span class="statut-badge statut-<?= $session['statut'] ?>"><?= $session['statut']==='ouverte'?'⏳ Ouverte':'<i class="ph ph-check-circle" aria-hidden="true"></i> Clôturée' ?></span>
       </h2>
       <p style="font-size:13px;color:var(--muted);margin-top:4px">
         <?= h(inv_periode_label($session['type_periode'] ?? 'mensuel')) ?>
@@ -226,9 +226,9 @@ include __DIR__ . '/../templates/header.php';
       </p>
     </div>
     <?php if ($peut_cloturer): ?>
-    <button class="btn btn-success" onclick="cloturerSession(<?= $session['id'] ?>)">✅ Clôturer la session</button>
+    <button class="btn btn-success" onclick="cloturerSession(<?= $session['id'] ?>)"><i class="ph ph-check-circle" aria-hidden="true"></i> Clôturer la session</button>
     <?php elseif ($session['statut'] === 'ouverte'): ?>
-    <span style="font-size:12.5px;color:var(--muted)">🔒 Clôture possible une fois tous les sites clôturés</span>
+    <span style="font-size:12.5px;color:var(--muted)"><i class="ph ph-lock" aria-hidden="true"></i> Clôture possible une fois tous les sites clôturés</span>
     <?php endif; ?>
   </div>
 
@@ -239,7 +239,7 @@ include __DIR__ . '/../templates/header.php';
   </div>
 
   <div class="card">
-    <div class="card-header"><h3>📊 Récapitulatif par site</h3></div>
+    <div class="card-header"><h3><i class="ph ph-chart-bar" aria-hidden="true"></i> Récapitulatif par site</h3></div>
     <div class="table-wrap">
       <table>
         <thead><tr>
@@ -252,7 +252,7 @@ include __DIR__ . '/../templates/header.php';
         <tbody>
         <?php foreach ($sites_session as $s):
           $st = $s['inv_statut'] === 'valide' ? 'cloture' : ($s['inv_statut'] === 'brouillon' ? 'en_cours' : 'non_commence');
-          $st_lbl = ['non_commence'=>'⏳ Non commencé','en_cours'=>'📝 En cours','cloture'=>'✅ Clôturé'][$st];
+          $st_lbl = ['non_commence'=>'⏳ Non commencé','en_cours'=>'<i class="ph ph-note-pencil" aria-hidden="true"></i> En cours','cloture'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Clôturé'][$st];
         ?>
           <tr>
             <td style="font-weight:700"><?= h($s['nom']) ?></td>
@@ -267,7 +267,7 @@ include __DIR__ . '/../templates/header.php';
             <td style="text-align:center"><?= $s['total_films_physique'] ? fmt_number($s['total_films_physique']) : '—' ?></td>
             <td style="text-align:center">
               <?php if ($s['inv_id']): ?>
-              <a href="<?= APP_URL ?>/pages/inventaire_detail.php?id=<?= $s['inv_id'] ?>" class="btn btn-secondary btn-sm">👁 Détail</a>
+              <a href="<?= APP_URL ?>/pages/inventaire_detail.php?id=<?= $s['inv_id'] ?>" class="btn btn-secondary btn-sm"><i class="ph ph-eye" aria-hidden="true"></i> Détail</a>
               <?php else: ?><span style="color:var(--muted);font-size:12px">—</span><?php endif; ?>
             </td>
           </tr>
@@ -281,7 +281,7 @@ include __DIR__ . '/../templates/header.php';
   <!-- ═══════════ LISTE DES SESSIONS ═══════════ -->
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
     <div>
-      <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:19px;font-weight:800;color:var(--navy)">📋 Sessions d'inventaire</h2>
+      <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:19px;font-weight:800;color:var(--navy)"><i class="ph ph-clipboard-text" aria-hidden="true"></i> Sessions d'inventaire</h2>
       <p style="font-size:13px;color:var(--muted);margin-top:2px">Encadrer les campagnes d'inventaire mensuel, site par site.</p>
     </div>
     <button class="btn btn-primary" onclick="ouvrirModal()">+ Ouvrir une session</button>
@@ -304,9 +304,9 @@ include __DIR__ . '/../templates/header.php';
             <td><?= h($s['libelle'] ?: '—') ?></td>
             <td style="text-align:center;font-weight:700"><?= $s['nb_sites'] ?></td>
             <td style="text-align:center"><?= $s['nb_clotures'] ?> / <?= $s['nb_sites'] ?></td>
-            <td><span class="statut-badge statut-<?= $s['statut'] ?>"><?= $s['statut']==='ouverte'?'⏳ Ouverte':'✅ Clôturée' ?></span></td>
+            <td><span class="statut-badge statut-<?= $s['statut'] ?>"><?= $s['statut']==='ouverte'?'⏳ Ouverte':'<i class="ph ph-check-circle" aria-hidden="true"></i> Clôturée' ?></span></td>
             <td style="font-size:12px;color:var(--muted)"><?= h($s['ouverte_par_nom'] ?? '—') ?></td>
-            <td><a href="?id=<?= $s['id'] ?>" class="btn btn-secondary btn-sm">👁 Voir</a></td>
+            <td><a href="?id=<?= $s['id'] ?>" class="btn btn-secondary btn-sm"><i class="ph ph-eye" aria-hidden="true"></i> Voir</a></td>
           </tr>
         <?php endforeach; endif; ?>
         </tbody>
@@ -318,8 +318,8 @@ include __DIR__ . '/../templates/header.php';
   <div id="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
     <div style="background:white;border-radius:20px;padding:28px;width:560px;max-width:95vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-        <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800;color:var(--navy)">📋 Ouvrir une session d'inventaire</h3>
-        <button onclick="fermer()" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+        <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800;color:var(--navy)"><i class="ph ph-clipboard-text" aria-hidden="true"></i> Ouvrir une session d'inventaire</h3>
+        <button onclick="fermer()" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
       </div>
       <div id="mAlert"></div>
       <div class="form-group" style="margin-bottom:14px"><label>Libellé (optionnel)</label>
@@ -354,7 +354,7 @@ include __DIR__ . '/../templates/header.php';
       <div class="form-group" style="margin-bottom:20px"><label>Notes</label><textarea class="form-control" id="fNotes" rows="2"></textarea></div>
       <div style="display:flex;justify-content:flex-end;gap:10px">
         <button class="btn btn-secondary" onclick="fermer()">Annuler</button>
-        <button class="btn btn-primary" id="btnOuvrir" onclick="ouvrirSession()">🚀 Ouvrir la session</button>
+        <button class="btn btn-primary" id="btnOuvrir" onclick="ouvrirSession()"><i class="ph ph-rocket-launch" aria-hidden="true"></i> Ouvrir la session</button>
       </div>
     </div>
   </div>

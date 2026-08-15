@@ -675,7 +675,7 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
         Inventaire du <?= fmt_date($inv['date_inventaire']) ?>
       </h2>
       <span style="padding:3px 10px;border-radius:6px;font-size:12px;font-weight:700;background:<?= $inv['statut']==='valide'?'#eafaf1':($inv['statut']==='brouillon'?'#fff8e7':'#fdf0ef') ?>;color:<?= $inv['statut']==='valide'?'#1e8449':($inv['statut']==='brouillon'?'#b7791f':'#c0392b') ?>">
-        <?= ['brouillon'=>'⏳ Brouillon','valide'=>'✅ Validé','annule'=>'❌ Annulé'][$inv['statut']]??$inv['statut'] ?>
+        <?= ['brouillon'=>'⏳ Brouillon','valide'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Validé','annule'=>'<i class="ph ph-x-circle" aria-hidden="true"></i> Annulé'][$inv['statut']]??$inv['statut'] ?>
       </span>
     </div>
     <div class="inv-meta">
@@ -690,25 +690,25 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
       <i class="ph-duotone ph-file-pdf"></i> PDF
     </a>
     <?php if($can_edit): ?>
-    <button class="btn btn-secondary" id="btnSauverTout" onclick="sauverTout()">💾 Tout sauver</button>
+    <button class="btn btn-secondary" id="btnSauverTout" onclick="sauverTout()"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Tout sauver</button>
     <?php endif; ?>
     <?php if($can_validate): ?>
-    <button class="btn btn-success" onclick="ouvrirRecapValidation()">✅ Valider l'inventaire</button>
+    <button class="btn btn-success" onclick="ouvrirRecapValidation()"><i class="ph ph-check-circle" aria-hidden="true"></i> Valider l'inventaire</button>
     <?php endif; ?>
   </div>
 </div>
 
 <!-- STATS -->
 <div class="stat-chips">
-  <span class="chip blue">📦 Bobines : <strong id="statTotal"><?= count($lignes) ?></strong></span>
-  <span class="chip green">✅ OK : <strong id="statOk"><?= $nb_saisis - $nb_ecarts ?></strong></span>
-  <span class="chip red">⚠️ Écarts : <strong id="statEcarts"><?= $nb_ecarts ?></strong></span>
+  <span class="chip blue"><i class="ph ph-package" aria-hidden="true"></i> Bobines : <strong id="statTotal"><?= count($lignes) ?></strong></span>
+  <span class="chip green"><i class="ph ph-check-circle" aria-hidden="true"></i> OK : <strong id="statOk"><?= $nb_saisis - $nb_ecarts ?></strong></span>
+  <span class="chip red"><i class="ph ph-warning" aria-hidden="true"></i> Écarts : <strong id="statEcarts"><?= $nb_ecarts ?></strong></span>
   <span class="chip gray">⏳ Non saisis : <strong id="statNonSaisis"><?= $nb_non_saisi ?></strong></span>
   <?php
   $nb_ecarts_connus = count(array_filter($bobine_ids, fn($id)=>isset($ecarts_connus_map[$id])));
   if($nb_ecarts_connus>0):
   ?>
-  <span class="chip orange">📋 Écarts connus : <strong><?= $nb_ecarts_connus ?></strong></span>
+  <span class="chip orange"><i class="ph ph-clipboard-text" aria-hidden="true"></i> Écarts connus : <strong><?= $nb_ecarts_connus ?></strong></span>
   <?php endif; ?>
 </div>
 
@@ -718,14 +718,14 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
 <div id="modalRecapValidation" style="display:none;position:fixed;inset:0;background:rgba(13,31,53,.5);z-index:800;align-items:center;justify-content:center"
      onclick="if(event.target===this)this.style.display='none'">
   <div style="background:white;border-radius:16px;padding:24px 26px;width:100%;max-width:560px;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-    <h3 style="font-family:'Montserrat',sans-serif;font-size:17px;font-weight:800;color:var(--navy);margin:0 0 4px">📋 Récapitulatif avant validation</h3>
+    <h3 style="font-family:'Montserrat',sans-serif;font-size:17px;font-weight:800;color:var(--navy);margin:0 0 4px"><i class="ph ph-clipboard-text" aria-hidden="true"></i> Récapitulatif avant validation</h3>
     <p style="font-size:13px;color:var(--muted);margin:0 0 16px">Vérifiez les données ci-dessous avant d'enregistrer définitivement l'inventaire.</p>
     <div id="recapStats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px"></div>
     <div id="recapNonSaisi" style="display:none;background:#fff8e7;color:#b7791f;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px"></div>
     <div id="recapEcarts"></div>
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:14px;border-top:1px solid var(--border)">
       <button class="btn btn-secondary" onclick="document.getElementById('modalRecapValidation').style.display='none'">Non, modifier les infos</button>
-      <button class="btn btn-success" id="btnConfirmerValidation" onclick="confirmerValidation()">✅ Oui, valider l'inventaire</button>
+      <button class="btn btn-success" id="btnConfirmerValidation" onclick="confirmerValidation()"><i class="ph ph-check-circle" aria-hidden="true"></i> Oui, valider l'inventaire</button>
     </div>
   </div>
 </div>
@@ -773,7 +773,7 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
 
 <!-- LÉGENDE -->
 <div style="display:flex;gap:16px;font-size:12px;color:var(--muted);margin-bottom:12px;align-items:center">
-  <span>📝 <strong>Films comptés</strong> : stock réel compté physiquement</span>
+  <span><i class="ph ph-note-pencil" aria-hidden="true"></i> <strong>Films comptés</strong> : stock réel compté physiquement</span>
   <span style="border-left:1px solid var(--border);padding-left:16px">
     <span style="border-bottom:2px dashed #f39c12;padding-bottom:1px"><strong>Écart connu</strong></span> : différence connue avant l'inventaire, renseignée automatiquement par le système
   </span>
@@ -781,8 +781,8 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
 
 <!-- TABLEAU PRINCIPAL -->
 <div style="background:#e8f4fd;border:1px solid #90caf9;border-radius:10px;padding:10px 16px;margin-bottom:14px;font-size:13px;display:flex;gap:20px;flex-wrap:wrap">
-  <span>📌 <strong>Qté physique</strong> = photo figée à la date de l'inventaire</span>
-  <span style="border-left:1px solid #90caf9;padding-left:20px">🔴 <strong>Qté temps réel</strong> = stock actuel mis à jour en continu par les consommations</span>
+  <span><i class="ph ph-push-pin" aria-hidden="true"></i> <strong>Qté physique</strong> = photo figée à la date de l'inventaire</span>
+  <span style="border-left:1px solid #90caf9;padding-left:20px"><i class="ph ph-circle" aria-hidden="true"></i> <strong>Qté temps réel</strong> = stock actuel mis à jour en continu par les consommations</span>
   <span style="border-left:1px solid #90caf9;padding-left:20px;border-bottom:2px dashed #f39c12;padding-bottom:1px"><strong>Écart connu</strong> = différence connue avant l'inventaire</span>
 </div>
 
@@ -794,11 +794,11 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
           <th style="padding:10px 14px;text-align:left">Numéro</th>
           <th style="padding:10px 14px">Type</th>
           <th style="padding:10px 14px">Site</th>
-          <th style="padding:10px 14px;text-align:right">Qté système 🖥️</th>
-          <th style="padding:10px 14px;text-align:right;border-right:1px solid rgba(255,255,255,.15)">Qté physique 📌</th>
+          <th style="padding:10px 14px;text-align:right">Qté système <i class="ph ph-monitor" aria-hidden="true"></i></th>
+          <th style="padding:10px 14px;text-align:right;border-right:1px solid rgba(255,255,255,.15)">Qté physique <i class="ph ph-push-pin" aria-hidden="true"></i></th>
           <th style="padding:10px 14px;text-align:center">Écart connu</th>
           <th style="padding:10px 14px;text-align:center">Écart mesuré</th>
-          <th style="padding:10px 14px;text-align:right;background:rgba(255,255,255,.08);border-left:2px solid #f39c12">🔴 Qté temps réel</th>
+          <th style="padding:10px 14px;text-align:right;background:rgba(255,255,255,.08);border-left:2px solid #f39c12"><i class="ph ph-circle" aria-hidden="true"></i> Qté temps réel</th>
           <th style="padding:10px 14px;text-align:right;background:rgba(255,255,255,.08)">Conso/j moy</th>
           <th style="padding:10px 14px;text-align:right;background:rgba(255,255,255,.08)">Jours restants</th>
           <th style="padding:10px 14px;text-align:center;background:rgba(255,255,255,.08)">Épuisement estimé</th>
@@ -896,7 +896,7 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
         <td style="padding:9px 14px;text-align:center" id="ecart-<?= $l['id'] ?>">
           <?php if($saisi): ?>
           <span class="ecart-val <?= $ecart_mes<0?'ecart-neg':($ecart_mes>0?'ecart-pos':'ecart-zero') ?>">
-            <?= $ecart_mes!=0?(($ecart_mes>0?'+':'').$ecart_mes.' films'):'✅ OK' ?>
+            <?= $ecart_mes!=0?(($ecart_mes>0?'+':'').$ecart_mes.' films'):'<i class="ph ph-check-circle" aria-hidden="true"></i> OK' ?>
           </span>
           <?php else: ?><span style="color:#94a3b8">—</span><?php endif; ?>
         </td>
@@ -944,11 +944,11 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
           <span id="etat-<?= $l['id'] ?>"
                 style="display:<?= $saisi ? 'inline' : 'none' ?>;font-size:12px;font-weight:700;
                        color:<?= $saisi ? '#1e8449' : '#b7791f' ?>;margin-right:8px">
-            <?= $saisi ? '✅ Sauvegardé' : '🟠 En cours' ?>
+            <?= $saisi ? '<i class="ph ph-check-circle" aria-hidden="true"></i> Sauvegardé' : '<i class="ph ph-circle" aria-hidden="true"></i> En cours' ?>
           </span>
           <button id="btn-<?= $l['id'] ?>"
                   style="display:<?= $saisi ? 'none' : 'inline-block' ?>;background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
-                  onclick="sauverLigne(<?= $l['id'] ?>)">💾 Enregistrer</button>
+                  onclick="sauverLigne(<?= $l['id'] ?>)"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Enregistrer</button>
         </td>
 
         <!-- Demande de modification -->
@@ -956,7 +956,7 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
           <?php if ($demande_active && $demande_active['type'] === 'demande_site'): ?>
             <!-- Flux direct : admin/responsable de session -> site, réponse immédiate -->
             <div style="background:#fff8e7;border:1px solid #f0d999;border-radius:8px;padding:8px 10px;margin-bottom:6px">
-              <div style="font-size:12px;font-weight:700;color:#b7791f">🔶 Demandé par <?= h($demande_active['demandeur_nom'] ?? '—') ?></div>
+              <div style="font-size:12px;font-weight:700;color:#b7791f"><i class="ph ph-diamond" aria-hidden="true"></i> Demandé par <?= h($demande_active['demandeur_nom'] ?? '—') ?></div>
               <div style="font-size:12px;color:#5a4a1f;margin-top:2px"><?= h($demande_active['motif']) ?></div>
               <?php if ($demande_active['valeur_proposee'] !== null): ?>
               <div style="font-size:12px;color:#5a4a1f;margin-top:2px">Valeur proposée : <strong><?= (int)$demande_active['valeur_proposee'] ?></strong></div>
@@ -979,9 +979,9 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
             <?php if ($can_demander_site): ?>
             <div style="display:flex;gap:6px">
               <button style="background:#eafaf1;color:#1e8449;border:1px solid #bfe6d0;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
-                      onclick="autoriserModif(<?= (int)$demande_active['id'] ?>)">✅ Autoriser</button>
+                      onclick="autoriserModif(<?= (int)$demande_active['id'] ?>)"><i class="ph ph-check-circle" aria-hidden="true"></i> Autoriser</button>
               <button style="background:#fdf0ef;color:#c0392b;border:1px solid #f6c9c4;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
-                      onclick="ouvrirModalMotif('refuser_modif',<?= (int)$demande_active['id'] ?>)">❌ Refuser</button>
+                      onclick="ouvrirModalMotif('refuser_modif',<?= (int)$demande_active['id'] ?>)"><i class="ph ph-x-circle" aria-hidden="true"></i> Refuser</button>
             </div>
             <?php else: ?>
             <span style="font-size:12px;color:#94a3b8">En attente de réponse de l'administrateur</span>
@@ -990,30 +990,30 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
           <?php elseif ($demande_active && $demande_active['type'] === 'demande_autorisation' && $demande_active['statut'] === 'autorise'): ?>
             <!-- Autorisation accordée : le site peut maintenant corriger -->
             <div style="background:#eafaf1;border:1px solid #bfe6d0;border-radius:8px;padding:8px 10px;margin-bottom:6px">
-              <div style="font-size:12px;font-weight:700;color:#1e8449">✅ Autorisation accordée</div>
+              <div style="font-size:12px;font-weight:700;color:#1e8449"><i class="ph ph-check-circle" aria-hidden="true"></i> Autorisation accordée</div>
               <div style="font-size:12px;color:#1e5c3a;margin-top:2px">Corrigez la quantité physique puis confirmez.</div>
             </div>
             <?php if ($can_edit): ?>
             <button style="background:#eafaf1;color:#1e8449;border:1px solid #bfe6d0;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
-                    onclick="repondreModif(<?= (int)$demande_active['id'] ?>,<?= $l['id'] ?>)">💾 Enregistrer la correction</button>
+                    onclick="repondreModif(<?= (int)$demande_active['id'] ?>,<?= $l['id'] ?>)"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Enregistrer la correction</button>
             <?php endif; ?>
 
           <?php elseif ($saisi): ?>
             <?php if ($demande_close && $demande_close['statut'] === 'traite'): ?>
             <div style="font-size:12px;color:#1e8449;margin-bottom:6px">
-              ✅ Modifiée suite à demande (<?= h($demande_close['demandeur_nom'] ?? '—') ?> → <?= (int)$demande_close['valeur_finale'] ?>)
+              <i class="ph ph-check-circle" aria-hidden="true"></i> Modifiée suite à demande (<?= h($demande_close['demandeur_nom'] ?? '—') ?> → <?= (int)$demande_close['valeur_finale'] ?>)
             </div>
             <?php elseif ($demande_close && $demande_close['statut'] === 'refuse'): ?>
             <div style="font-size:12px;color:#c0392b;margin-bottom:6px">
-              ❌ Autorisation refusée<?= $demande_close['reponse'] ? ' : ' . h($demande_close['reponse']) : '' ?>
+              <i class="ph ph-x-circle" aria-hidden="true"></i> Autorisation refusée<?= $demande_close['reponse'] ? ' : ' . h($demande_close['reponse']) : '' ?>
             </div>
             <?php endif; ?>
             <?php if ($can_demander_site): ?>
             <button style="background:#f8f9fb;color:#5a6480;border:1px solid #e2e8f0;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600"
-                    onclick="ouvrirModalMotif('demander_modif',<?= $l['id'] ?>)">🔁 Demander modif au site</button>
+                    onclick="ouvrirModalMotif('demander_modif',<?= $l['id'] ?>)"><i class="ph ph-repeat" aria-hidden="true"></i> Demander modif au site</button>
             <?php elseif ($is_coord): ?>
             <button style="background:#f8f9fb;color:#5a6480;border:1px solid #e2e8f0;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600"
-                    onclick="ouvrirModalMotif('demander_autorisation',<?= $l['id'] ?>)">🔁 Demander une modification</button>
+                    onclick="ouvrirModalMotif('demander_autorisation',<?= $l['id'] ?>)"><i class="ph ph-repeat" aria-hidden="true"></i> Demander une modification</button>
             <?php endif; ?>
           <?php else: ?>
             <span style="font-size:12px;color:#94a3b8">—</span>
@@ -1030,10 +1030,10 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
 <?php if($can_edit || $can_validate): ?>
 <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
   <?php if($can_edit): ?>
-  <button class="btn btn-secondary" onclick="sauverTout()">💾 Tout sauver</button>
+  <button class="btn btn-secondary" onclick="sauverTout()"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Tout sauver</button>
   <?php endif; ?>
   <?php if($can_validate): ?>
-  <button class="btn btn-success" style="font-size:14px;padding:10px 24px" onclick="ouvrirRecapValidation()">✅ Valider l'inventaire</button>
+  <button class="btn btn-success" style="font-size:14px;padding:10px 24px" onclick="ouvrirRecapValidation()"><i class="ph ph-check-circle" aria-hidden="true"></i> Valider l'inventaire</button>
   <?php endif; ?>
 </div>
 <?php endif; ?>
@@ -1200,7 +1200,7 @@ async function sauverTout(){
       if(btnEl) btnEl.style.display='none';
     });
     toast(d.message);
-    document.getElementById('alertZone').innerHTML=`<div style="background:#eafaf1;padding:10px 16px;border-radius:8px;font-size:13px;color:#1e8449;margin-bottom:12px">✅ ${d.message}</div>`;
+    document.getElementById('alertZone').innerHTML=`<div style="background:#eafaf1;padding:10px 16px;border-radius:8px;font-size:13px;color:#1e8449;margin-bottom:12px"><i class="ph ph-check-circle" aria-hidden="true"></i> ${d.message}</div>`;
   } else toast('Erreur : '+d.message,'error');
 }
 
@@ -1245,7 +1245,7 @@ function ouvrirRecapValidation(){
   const nonSaisiEl = document.getElementById('recapNonSaisi');
   if(nonSaisis>0){
     nonSaisiEl.style.display='block';
-    nonSaisiEl.innerHTML = `⚠️ ${nonSaisis} bobine(s) sans stock physique saisi ne seront pas prises en compte dans la validation.`;
+    nonSaisiEl.innerHTML = `<i class="ph ph-warning" aria-hidden="true"></i> ${nonSaisis} bobine(s) sans stock physique saisi ne seront pas prises en compte dans la validation.`;
   } else nonSaisiEl.style.display='none';
 
   const recapEl = document.getElementById('recapEcarts');
@@ -1264,7 +1264,7 @@ function ouvrirRecapValidation(){
         </table>
       </div>`;
   } else {
-    recapEl.innerHTML = `<div style="background:#eafaf1;color:#1e8449;border-radius:8px;padding:10px 14px;font-size:13px">✅ Aucun écart, tous les stocks concordent.</div>`;
+    recapEl.innerHTML = `<div style="background:#eafaf1;color:#1e8449;border-radius:8px;padding:10px 14px;font-size:13px"><i class="ph ph-check-circle" aria-hidden="true"></i> Aucun écart, tous les stocks concordent.</div>`;
   }
 
   document.getElementById('modalRecapValidation').style.display='flex';
@@ -1277,7 +1277,7 @@ async function confirmerValidation(){
   document.getElementById('modalRecapValidation').style.display='none';
   btn.disabled = false; btn.textContent = "✅ Oui, valider l'inventaire";
   if(d.success){toast(d.message);setTimeout(()=>location.href='inventaire_bobines.php',1500);}
-  else{document.getElementById('alertZone').innerHTML=`<div style="background:#fdf0ef;padding:10px 16px;border-radius:8px;font-size:13px;color:#c0392b;margin-bottom:12px">❌ ${d.message}</div>`;}
+  else{document.getElementById('alertZone').innerHTML=`<div style="background:#fdf0ef;padding:10px 16px;border-radius:8px;font-size:13px;color:#c0392b;margin-bottom:12px"><i class="ph ph-x-circle" aria-hidden="true"></i> ${d.message}</div>`;}
 }
 
 function updateStats(){

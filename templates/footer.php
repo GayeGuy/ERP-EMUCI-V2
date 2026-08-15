@@ -61,7 +61,7 @@ function refreshNotifs() {
     }
     const list = document.querySelector('.notif-list');
     if (!list) return;
-    if (count === 0) { list.innerHTML = '<div class="notif-empty">✅ Aucune notification</div>'; return; }
+    if (count === 0) { list.innerHTML = '<div class="notif-empty"><i class="ph ph-check-circle" aria-hidden="true"></i> Aucune notification</div>'; return; }
     const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     list.innerHTML = d.data.data.map(n=>`
       <div class="notif-item" data-id="${n.id}" data-lien="${esc(n.lien||'')}">

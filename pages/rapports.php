@@ -400,12 +400,12 @@ include __DIR__ . '/../templates/header.php';
   </span>
   <?php if(can('rapports','can_export')): ?>
   <div style="display:flex;gap:6px">
-    <a href="<?= APP_URL ?>/api/export.php?type=equipements" class="btn btn-secondary btn-sm">📥 Équipements</a>
-    <a href="<?= APP_URL ?>/api/export.php?type=livraisons"  class="btn btn-secondary btn-sm">📥 Livraisons</a>
-    <a href="<?= APP_URL ?>/api/export.php?type=consommables" class="btn btn-secondary btn-sm">📥 Consommables</a>
-    <a href="<?= APP_URL ?>/api/export.php?type=couts_sites&annee=<?= $annee ?>&mois=<?= $mois ?>&site=<?= $f_site ?>" class="btn btn-secondary btn-sm">💰 Coûts sites</a>
+    <a href="<?= APP_URL ?>/api/export.php?type=equipements" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Équipements</a>
+    <a href="<?= APP_URL ?>/api/export.php?type=livraisons"  class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Livraisons</a>
+    <a href="<?= APP_URL ?>/api/export.php?type=consommables" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Consommables</a>
+    <a href="<?= APP_URL ?>/api/export.php?type=couts_sites&annee=<?= $annee ?>&mois=<?= $mois ?>&site=<?= $f_site ?>" class="btn btn-secondary btn-sm"><i class="ph ph-currency-circle-dollar" aria-hidden="true"></i> Coûts sites</a>
     <?php if(can('audit','can_export')): ?>
-    <a href="<?= APP_URL ?>/api/export.php?type=audit" class="btn btn-secondary btn-sm">📥 Audit</a>
+    <a href="<?= APP_URL ?>/api/export.php?type=audit" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Audit</a>
     <?php endif; ?>
   </div>
   <?php endif; ?>
@@ -434,11 +434,11 @@ include __DIR__ . '/../templates/header.php';
 <!-- CHARTS ROW 1 -->
 <div class="rapport-grid c32" style="margin-bottom:20px">
   <div class="r-card">
-    <div class="r-card-hdr"><h3>📈 Consommation mensuelle — 12 mois glissants</h3></div>
+    <div class="r-card-hdr"><h3><i class="ph ph-chart-line-up" aria-hidden="true"></i> Consommation mensuelle — 12 mois glissants</h3></div>
     <div class="r-card-body"><canvas id="chartM12" height="180"></canvas></div>
   </div>
   <div class="r-card">
-    <div class="r-card-hdr"><h3>🏢 Consommation par site (période)</h3></div>
+    <div class="r-card-hdr"><h3><i class="ph ph-buildings" aria-hidden="true"></i> Consommation par site (période)</h3></div>
     <div class="r-card-body">
       <?php if(empty($conso_par_site)||!array_sum(array_column($conso_par_site,'total'))): ?>
       <div style="text-align:center;color:var(--muted);padding:40px 0;font-size:13px">Aucune donnée pour la période.</div>
@@ -452,9 +452,9 @@ include __DIR__ . '/../templates/header.php';
 <!-- CONSOMMATION PAR CONSOMMABLE -->
 <div class="r-card" style="margin-bottom:20px">
   <div class="r-card-hdr">
-    <h3>🧴 Consommation par produit (période : <?= fmt_date($date_debut) ?> → <?= fmt_date($date_fin) ?>)</h3>
+    <h3><i class="ph ph-flask" aria-hidden="true"></i> Consommation par produit (période : <?= fmt_date($date_debut) ?> → <?= fmt_date($date_fin) ?>)</h3>
     <?php if(can('rapports','can_export')): ?>
-    <a href="<?= APP_URL ?>/api/export.php?type=livraisons" class="btn btn-secondary btn-sm">📥 Excel</a>
+    <a href="<?= APP_URL ?>/api/export.php?type=livraisons" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Excel</a>
     <?php endif; ?>
   </div>
   <div class="table-wrap">
@@ -489,15 +489,15 @@ include __DIR__ . '/../templates/header.php';
 
 <!-- ÉTAT ÉQUIPEMENTS PAR SITE -->
 <div class="r-card" style="margin-bottom:20px;overflow:hidden">
-  <div class="r-card-hdr"><h3>💻 État des équipements par site</h3></div>
+  <div class="r-card-hdr"><h3><i class="ph ph-desktop" aria-hidden="true"></i> État des équipements par site</h3></div>
   <div class="table-wrap" style="overflow-x:auto">
     <table>
       <thead><tr>
         <th>Site</th>
-        <th style="text-align:center">🟢 Neuf</th>
-        <th style="text-align:center">🔵 Bon</th>
-        <th style="text-align:center">🟡 Usagé</th>
-        <th style="text-align:center">🔴 H.S.</th>
+        <th style="text-align:center"><i class="ph ph-circle" aria-hidden="true"></i> Neuf</th>
+        <th style="text-align:center"><i class="ph ph-circle" aria-hidden="true"></i> Bon</th>
+        <th style="text-align:center"><i class="ph ph-circle" aria-hidden="true"></i> Usagé</th>
+        <th style="text-align:center"><i class="ph ph-circle" aria-hidden="true"></i> H.S.</th>
         <th style="text-align:center">Total</th>
         <th>Répartition</th>
       </tr></thead>
@@ -537,12 +537,12 @@ include __DIR__ . '/../templates/header.php';
   <!-- FIN DE CYCLE -->
   <div class="r-card">
     <div class="r-card-hdr">
-      <h3>⚠️ Équipements — Fin de cycle (90j)</h3>
+      <h3><i class="ph ph-warning" aria-hidden="true"></i> Équipements — Fin de cycle (90j)</h3>
       <span style="font-size:12px;color:var(--muted)"><?= count($fin_cycle_soon) ?> équipement(s)</span>
     </div>
     <div class="r-card-body" style="padding:10px 18px">
       <?php if(empty($fin_cycle_soon)): ?>
-      <div style="text-align:center;padding:30px;color:var(--success-d)">✅ Aucun équipement en fin de cycle dans les 90 prochains jours.</div>
+      <div style="text-align:center;padding:30px;color:var(--success-d)"><i class="ph ph-check-circle" aria-hidden="true"></i> Aucun équipement en fin de cycle dans les 90 prochains jours.</div>
       <?php else: foreach($fin_cycle_soon as $f):
         $j=(int)$f['jours'];
         $cls=$j<0?'exp':($j<=30?'soon':'ok');
@@ -564,7 +564,7 @@ include __DIR__ . '/../templates/header.php';
   <?php if($show_activite): ?>
   <div class="r-card">
     <div class="r-card-hdr">
-      <h3>👥 Activité des utilisateurs (période)</h3>
+      <h3><i class="ph ph-users" aria-hidden="true"></i> Activité des utilisateurs (période)</h3>
     </div>
     <div class="r-card-body" style="padding:10px 18px">
       <?php if(empty($activite_users)): ?>
@@ -599,7 +599,7 @@ include __DIR__ . '/../templates/header.php';
 <div style="margin:28px 0 10px;display:flex;align-items:center;gap:10px">
   <div style="flex:1;height:2px;background:linear-gradient(90deg,var(--navy),transparent)"></div>
   <h2 style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:var(--navy);white-space:nowrap;padding:0 10px">
-    💰 Coûts Consommables en FCFA
+    <i class="ph ph-currency-circle-dollar" aria-hidden="true"></i> Coûts Consommables en FCFA
   </h2>
   <div style="flex:1;height:2px;background:linear-gradient(270deg,var(--navy),transparent)"></div>
 </div>
@@ -635,16 +635,16 @@ include __DIR__ . '/../templates/header.php';
 <div class="rapport-grid c32" style="margin-bottom:20px">
   <div class="r-card">
     <div class="r-card-hdr">
-      <h3>📈 Évolution des coûts par site — 12 mois glissants (FCFA)</h3>
+      <h3><i class="ph ph-chart-line-up" aria-hidden="true"></i> Évolution des coûts par site — 12 mois glissants (FCFA)</h3>
     </div>
     <div class="r-card-body"><canvas id="chartCoutEvol" height="200"></canvas></div>
   </div>
 
   <div class="r-card">
     <div class="r-card-hdr">
-      <h3>🏢 Coût par site — période (FCFA)</h3>
+      <h3><i class="ph ph-buildings" aria-hidden="true"></i> Coût par site — période (FCFA)</h3>
       <?php if(can('rapports','can_export')): ?>
-      <a href="<?= APP_URL ?>/api/export.php?type=couts_sites&annee=<?= $annee ?>&mois=<?= $mois ?>&site=<?= $f_site ?>" class="btn btn-secondary btn-sm">📥 Excel</a>
+      <a href="<?= APP_URL ?>/api/export.php?type=couts_sites&annee=<?= $annee ?>&mois=<?= $mois ?>&site=<?= $f_site ?>" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Excel</a>
       <?php endif; ?>
     </div>
     <div class="r-card-body" style="padding:10px 18px">
@@ -674,7 +674,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- POINT HEBDOMADAIRE -->
 <div class="r-card" style="margin-bottom:20px">
   <div class="r-card-hdr">
-    <h3>📅 Point hebdomadaire — Semaine du <?= date('d/m',strtotime($debut_semaine_courante)) ?> au <?= date('d/m',strtotime($fin_semaine_courante)) ?></h3>
+    <h3><i class="ph ph-calendar" aria-hidden="true"></i> Point hebdomadaire — Semaine du <?= date('d/m',strtotime($debut_semaine_courante)) ?> au <?= date('d/m',strtotime($fin_semaine_courante)) ?></h3>
     <span style="font-size:12px;color:var(--muted);font-weight:600">
       Total : <?= number_format($kpi_cout_semaine,0,',',' ') ?> FCFA
     </span>
@@ -726,9 +726,9 @@ include __DIR__ . '/../templates/header.php';
 <?php if(!empty($detail_article_site)): ?>
 <div class="r-card" style="margin-bottom:20px">
   <div class="r-card-hdr">
-    <h3>🧴 Détail coûts par article × site (période) — Top 60</h3>
+    <h3><i class="ph ph-flask" aria-hidden="true"></i> Détail coûts par article × site (période) — Top 60</h3>
     <?php if(can('rapports','can_export')): ?>
-    <a href="<?= APP_URL ?>/api/export.php?type=couts_sites&annee=<?= $annee ?>&mois=<?= $mois ?>&site=<?= $f_site ?>&detail=1" class="btn btn-secondary btn-sm">📥 Excel détail</a>
+    <a href="<?= APP_URL ?>/api/export.php?type=couts_sites&annee=<?= $annee ?>&mois=<?= $mois ?>&site=<?= $f_site ?>&detail=1" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Excel détail</a>
     <?php endif; ?>
   </div>
   <div class="table-wrap">
@@ -766,13 +766,13 @@ include __DIR__ . '/../templates/header.php';
 <!-- BILAN FIN DE MOIS PAR SITE -->
 <div class="r-card" style="margin-bottom:20px">
   <div class="r-card-hdr" style="justify-content:space-between">
-    <h3>📊 Bilan mensuel — <?= date('F Y') ?> (coût par site et par article)</h3>
+    <h3><i class="ph ph-chart-bar" aria-hidden="true"></i> Bilan mensuel — <?= date('F Y') ?> (coût par site et par article)</h3>
     <div style="display:flex;align-items:center;gap:10px">
       <span style="font-size:12px;font-weight:700;color:var(--navy)">
         Total mois : <?= number_format($kpi_cout_mois_cur,0,',',' ') ?> FCFA
       </span>
       <?php if(can('rapports','can_export')): ?>
-      <a href="<?= APP_URL ?>/api/export.php?type=bilan_mensuel&annee=<?= date('Y') ?>&mois=<?= date('n') ?>" class="btn btn-secondary btn-sm">📥 Excel bilan</a>
+      <a href="<?= APP_URL ?>/api/export.php?type=bilan_mensuel&annee=<?= date('Y') ?>&mois=<?= date('n') ?>" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Excel bilan</a>
       <?php endif; ?>
     </div>
   </div>
@@ -784,7 +784,7 @@ include __DIR__ . '/../templates/header.php';
     <?php else: foreach($bilan_par_site as $site_nom => $data): ?>
     <div class="bilan-section">
       <div class="bilan-site-hdr" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-        <span>🏢 <?= h($site_nom) ?></span>
+        <span><i class="ph ph-buildings" aria-hidden="true"></i> <?= h($site_nom) ?></span>
         <span class="bsh-total"><?= number_format($data['total'],0,',',' ') ?> FCFA</span>
       </div>
       <div class="bilan-site-body">

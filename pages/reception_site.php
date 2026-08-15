@@ -260,11 +260,11 @@ include __DIR__ . '/../templates/header.php';
     <div><div class="rk-val"><?= $kpi_attente ?></div><div class="rk-label">En attente de réception</div></div>
   </div>
   <div class="rk success">
-    <div class="rk-icon">✅</div>
+    <div class="rk-icon"><i class="ph ph-check-circle" aria-hidden="true"></i></div>
     <div><div class="rk-val"><?= $kpi_receptionne ?></div><div class="rk-label">Réceptionnées</div></div>
   </div>
   <div class="rk danger">
-    <div class="rk-icon">⚠️</div>
+    <div class="rk-icon"><i class="ph ph-warning" aria-hidden="true"></i></div>
     <div><div class="rk-val"><?= $kpi_litige ?></div><div class="rk-label">En litige</div></div>
   </div>
 </div>
@@ -297,7 +297,7 @@ include __DIR__ . '/../templates/header.php';
 <div class="card" style="padding:0;overflow:hidden">
   <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
     <h3 style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;color:var(--navy)">
-      📦 Liste des réceptions
+      <i class="ph ph-package" aria-hidden="true"></i> Liste des réceptions
     </h3>
     <span style="font-size:12px;color:var(--muted)"><?= count($receptions) ?> enregistrement(s)</span>
   </div>
@@ -322,7 +322,7 @@ include __DIR__ . '/../templates/header.php';
           <td style="font-size:13px;font-weight:500"><?= h($r['site_nom']) ?></td>
           <td>
             <span style="font-size:11.5px;font-weight:700;color:<?= $r['type_reception']==='consommable'?'#27ae60':'#1a56a0' ?>">
-              <?= $r['type_reception']==='consommable'?'🧴 Consommable':'💻 Équipement' ?>
+              <?= $r['type_reception']==='consommable'?'<i class="ph ph-flask" aria-hidden="true"></i> Consommable':'<i class="ph ph-desktop" aria-hidden="true"></i> Équipement' ?>
             </span>
           </td>
           <td style="font-size:13px">
@@ -339,14 +339,14 @@ include __DIR__ . '/../templates/header.php';
           </td>
           <td><span class="statut-badge <?= $r['statut'] ?>"><?= match($r['statut']){
             'en_attente'  =>'⏳ En attente',
-            'receptionnee'=>'✅ Réceptionnée',
-            'litige'      =>'⚠️ Litige',
+            'receptionnee'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Réceptionnée',
+            'litige'      =>'<i class="ph ph-warning" aria-hidden="true"></i> Litige',
             default       =>h($r['statut'])
           } ?></span></td>
           <td><?= upload_link($r['fichier_fiche']??'','fiche','Voir fiche') ?></td>
           <td style="text-align:center;white-space:nowrap">
             <!-- Bouton Détail : tout le monde -->
-            <button class="btn btn-sm" style="background:#e8f4fd;color:#1a56a0;border:none;padding:4px 8px;border-radius:6px;cursor:pointer" onclick="openDetail(<?= $r['id'] ?>)">🔍 Détail</button>
+            <button class="btn btn-sm" style="background:#e8f4fd;color:#1a56a0;border:none;padding:4px 8px;border-radius:6px;cursor:pointer" onclick="openDetail(<?= $r['id'] ?>)"><i class="ph ph-magnifying-glass" aria-hidden="true"></i> Détail</button>
 
             <?php
             $role = $user['role_slug'];
@@ -356,18 +356,18 @@ include __DIR__ . '/../templates/header.php';
 
             <?php if($r['statut']==='en_attente' && $peut_receptionner): ?>
               <!-- Coordinateur : réceptionner ou signaler litige -->
-              <button class="btn btn-sm btn-success" onclick="openReceptionner(<?= $r['id'] ?>)" style="margin-left:4px">✅ Réceptionner</button>
-              <button class="btn btn-sm btn-danger"  onclick="openLitige(<?= $r['id'] ?>)" style="margin-left:4px">⚠️ Litige</button>
+              <button class="btn btn-sm btn-success" onclick="openReceptionner(<?= $r['id'] ?>)" style="margin-left:4px"><i class="ph ph-check-circle" aria-hidden="true"></i> Réceptionner</button>
+              <button class="btn btn-sm btn-danger"  onclick="openLitige(<?= $r['id'] ?>)" style="margin-left:4px"><i class="ph ph-warning" aria-hidden="true"></i> Litige</button>
 
             <?php elseif($r['statut']==='litige' && $peut_traiter_litige): ?>
               <!-- Gestionnaire/Admin : traiter le litige -->
-              <button class="btn btn-sm" style="background:#fff3cd;color:#856404;border:1px solid #ffc107;padding:5px 10px;border-radius:6px;cursor:pointer;margin-left:4px;font-weight:600" onclick="openTraiterLitige(<?= $r['id'] ?>)">🔧 Traiter litige</button>
+              <button class="btn btn-sm" style="background:#fff3cd;color:#856404;border:1px solid #ffc107;padding:5px 10px;border-radius:6px;cursor:pointer;margin-left:4px;font-weight:600" onclick="openTraiterLitige(<?= $r['id'] ?>)"><i class="ph ph-wrench" aria-hidden="true"></i> Traiter litige</button>
 
             <?php elseif($r['statut']==='receptionnee'): ?>
-              <span style="font-size:12px;color:var(--success-d);margin-left:4px">✔ Validé</span>
+              <span style="font-size:12px;color:var(--success-d);margin-left:4px"><i class="ph ph-check-circle" aria-hidden="true"></i> Validé</span>
 
             <?php elseif($r['statut']==='litige' && $is_coord): ?>
-              <span style="font-size:12px;color:var(--danger-d);margin-left:4px">⚠ En cours de traitement</span>
+              <span style="font-size:12px;color:var(--danger-d);margin-left:4px"><i class="ph ph-warning" aria-hidden="true"></i> En cours de traitement</span>
 
             <?php elseif($r['statut']==='en_attente' && !$is_coord): ?>
               <span style="font-size:12px;color:var(--muted);margin-left:4px">⏳ Attente coordinateur</span>
@@ -384,13 +384,13 @@ include __DIR__ . '/../templates/header.php';
 <div id="modalReceptionner" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:28px;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin-bottom:18px">
-      ✅ Valider la réception
+      <i class="ph ph-check-circle" aria-hidden="true"></i> Valider la réception
     </h3>
     <input type="hidden" id="recId">
 
     <div class="form-group" style="margin-bottom:14px">
       <label style="font-size:13px;font-weight:600;color:var(--text);display:block;margin-bottom:6px">
-        📎 Fiche signée <span style="color:var(--danger-d)">*</span>
+        <i class="ph ph-paperclip" aria-hidden="true"></i> Fiche signée <span style="color:var(--danger-d)">*</span>
         <span style="font-size:12px;font-weight:400;color:var(--muted)">(PDF ou image — obligatoire)</span>
       </label>
       <input type="file" id="recFiche" accept=".pdf,.jpg,.jpeg,.png,.webp"
@@ -405,7 +405,7 @@ include __DIR__ . '/../templates/header.php';
 
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button class="btn btn-secondary" onclick="closeModal('modalReceptionner')">Annuler</button>
-      <button class="btn btn-success" id="btnRecValider" onclick="doReceptionner()">✅ Valider la réception</button>
+      <button class="btn btn-success" id="btnRecValider" onclick="doReceptionner()"><i class="ph ph-check-circle" aria-hidden="true"></i> Valider la réception</button>
     </div>
   </div>
 </div>
@@ -414,7 +414,7 @@ include __DIR__ . '/../templates/header.php';
 <div id="modalLitige" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:28px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--danger-d);margin-bottom:18px">
-      ⚠️ Signaler un litige
+      <i class="ph ph-warning" aria-hidden="true"></i> Signaler un litige
     </h3>
     <input type="hidden" id="litId">
     <div class="form-group">
@@ -423,7 +423,7 @@ include __DIR__ . '/../templates/header.php';
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
       <button class="btn btn-secondary" onclick="closeModal('modalLitige')">Annuler</button>
-      <button class="btn btn-danger" onclick="doLitige()">⚠️ Confirmer le litige</button>
+      <button class="btn btn-danger" onclick="doLitige()"><i class="ph ph-warning" aria-hidden="true"></i> Confirmer le litige</button>
     </div>
   </div>
 </div>
@@ -432,8 +432,8 @@ include __DIR__ . '/../templates/header.php';
 <div id="modalDetail" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:28px;width:600px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
-      <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy)">🔍 Détail réception</h3>
-      <button onclick="closeModal('modalDetail')" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button>
+      <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy)"><i class="ph ph-magnifying-glass" aria-hidden="true"></i> Détail réception</h3>
+      <button onclick="closeModal('modalDetail')" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div id="detailContent" style="font-size:13px">
       <div style="text-align:center;color:var(--muted);padding:20px">Chargement…</div>
@@ -441,7 +441,7 @@ include __DIR__ . '/../templates/header.php';
 
     <!-- FIL DE DISCUSSION LITIGE -->
     <div id="litFil" style="display:none;margin-top:18px;border-top:1px solid var(--border);padding-top:16px">
-      <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">💬 Discussion litige</h4>
+      <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px"><i class="ph ph-chat-circle" aria-hidden="true"></i> Discussion litige</h4>
       <div id="litMessages" style="max-height:200px;overflow-y:auto;margin-bottom:12px;display:flex;flex-direction:column;gap:8px"></div>
       <div style="display:flex;gap:8px">
         <textarea id="litMsg" rows="2" style="flex:1;padding:8px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;resize:none" placeholder="Votre message…"></textarea>
@@ -454,16 +454,16 @@ include __DIR__ . '/../templates/header.php';
 <!-- MODAL TRAITER LITIGE (gestionnaire) -->
 <div id="modalTraiterLitige" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:28px;width:500px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-    <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin-bottom:18px">🔧 Traiter le litige</h3>
+    <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin-bottom:18px"><i class="ph ph-wrench" aria-hidden="true"></i> Traiter le litige</h3>
     <input type="hidden" id="traitId">
     <div class="form-group" style="margin-bottom:14px">
       <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px">Action à effectuer</label>
       <div style="display:flex;gap:10px">
         <label style="display:flex;align-items:center;gap:6px;padding:10px 16px;border:2px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;flex:1">
-          <input type="radio" name="action_type" value="renvoi" checked> 🔄 Renvoyer la commande
+          <input type="radio" name="action_type" value="renvoi" checked> <i class="ph ph-arrow-clockwise" aria-hidden="true"></i> Renvoyer la commande
         </label>
         <label style="display:flex;align-items:center;gap:6px;padding:10px 16px;border:2px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;flex:1">
-          <input type="radio" name="action_type" value="cloture"> ✅ Clôturer le litige
+          <input type="radio" name="action_type" value="cloture"> <i class="ph ph-check-circle" aria-hidden="true"></i> Clôturer le litige
         </label>
       </div>
     </div>
@@ -473,7 +473,7 @@ include __DIR__ . '/../templates/header.php';
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button class="btn btn-secondary" onclick="closeModal('modalTraiterLitige')">Annuler</button>
-      <button class="btn btn-primary" onclick="doTraiterLitige()">🔧 Valider le traitement</button>
+      <button class="btn btn-primary" onclick="doTraiterLitige()"><i class="ph ph-wrench" aria-hidden="true"></i> Valider le traitement</button>
     </div>
   </div>
 </div>
@@ -509,7 +509,7 @@ function openDetail(id){
           </div>
           <div><div style="font-size:12px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Date réception</div><div>${rec.date_reception}</div></div>
           <div><div style="font-size:12px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Type</div>
-            <div>${rec.type_reception==='consommable'?'🧴 Consommable':'💻 Équipement'}</div>
+            <div>${rec.type_reception==='consommable'?'<i class="ph ph-flask" aria-hidden="true"></i> Consommable':'<i class="ph ph-desktop" aria-hidden="true"></i> Équipement'}</div>
           </div>`;
 
       if(rec.type_reception==='consommable'){

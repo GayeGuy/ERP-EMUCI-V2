@@ -17,9 +17,9 @@ $active_page = 'support_it_gestion';
 require_permission('affectations_it', 'can_read');
 
 $sous_roles_dispo = [
-    'maintenance'           => ['icon'=>'🔧','label'=>'Maintenance','desc'=>'Interventions équipements, rapport journalier'],
-    'controleur_production' => ['icon'=>'📋','label'=>'Contrôleur Production','desc'=>'Import OptoPlate & OptoTrace, Point EMUCI'],
-    'gestionnaire_bobines'  => ['icon'=>'🎞️','label'=>'Gestionnaire Bobines','desc'=>'Validation stock matin, suivi bobines coordinateurs'],
+    'maintenance'           => ['icon'=>'<i class="ph ph-wrench" aria-hidden="true"></i>','label'=>'Maintenance','desc'=>'Interventions équipements, rapport journalier'],
+    'controleur_production' => ['icon'=>'<i class="ph ph-clipboard-text" aria-hidden="true"></i>','label'=>'Contrôleur Production','desc'=>'Import OptoPlate & OptoTrace, Point EMUCI'],
+    'gestionnaire_bobines'  => ['icon'=>'<i class="ph ph-film-strip" aria-hidden="true"></i>','label'=>'Gestionnaire Bobines','desc'=>'Validation stock matin, suivi bobines coordinateurs'],
 ];
 
 // ── AJAX
@@ -114,7 +114,7 @@ include __DIR__ . '/../templates/header.php';
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:10px">
   <div>
-    <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">💻 Gestion des Support IT</h2>
+    <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)"><i class="ph ph-desktop" aria-hidden="true"></i> Gestion des Support IT</h2>
     <p style="font-size:13px;color:var(--muted);margin-top:4px">Affectez un ou plusieurs sous-rôles à chaque compte Support IT. Les droits sont mis à jour immédiatement.</p>
   </div>
   <button class="btn btn-primary" onclick="document.getElementById('mPromouvoir').style.display='flex'">
@@ -124,7 +124,7 @@ include __DIR__ . '/../templates/header.php';
 
 <?php if(empty($supports)): ?>
 <div class="card"><div class="card-body" style="text-align:center;padding:60px;color:var(--muted)">
-  <div style="font-size:48px;margin-bottom:16px">💻</div>
+  <div style="font-size:48px;margin-bottom:16px"><i class="ph ph-desktop" aria-hidden="true"></i></div>
   <div style="font-size:15px;font-weight:600;margin-bottom:8px">Aucun compte Support IT actif</div>
   <div style="font-size:13px">Créez des comptes avec le profil "Support IT" depuis l'administration.</div>
 </div></div>
@@ -178,8 +178,8 @@ include __DIR__ . '/../templates/header.php';
 <div id="mPromouvoir" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.5);z-index:500;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700;color:var(--navy)">💻 Promouvoir en Support IT</h3>
-      <button onclick="document.getElementById('mPromouvoir').style.display='none'" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--muted)">✕</button>
+      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700;color:var(--navy)"><i class="ph ph-desktop" aria-hidden="true"></i> Promouvoir en Support IT</h3>
+      <button onclick="document.getElementById('mPromouvoir').style.display='none'" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--muted)"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div style="padding:22px">
       <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Sélectionnez un compte existant à transformer en Support IT. Son rôle sera changé et vous pourrez ensuite lui affecter des sous-rôles.</p>

@@ -242,9 +242,9 @@ include __DIR__ . '/../templates/header.php';
 <!-- FILTRES -->
 <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:20px">
   <div class="vue-tabs" style="margin-bottom:0;border:none">
-    <a href="?vue=journalier&date=<?= h($f_date) ?>&site=<?= $f_site ?>" class="vue-tab <?= $f_vue==='journalier'?'active':'' ?>">📅 Journalier</a>
-    <a href="?vue=mensuel&mois=<?= h($f_mois) ?>&site=<?= $f_site ?>" class="vue-tab <?= $f_vue==='mensuel'?'active':'' ?>">📆 Mensuel</a>
-    <a href="?vue=annuel&annee=<?= $f_annee ?>&site=<?= $f_site ?>" class="vue-tab <?= $f_vue==='annuel'?'active':'' ?>">📊 Annuel</a>
+    <a href="?vue=journalier&date=<?= h($f_date) ?>&site=<?= $f_site ?>" class="vue-tab <?= $f_vue==='journalier'?'active':'' ?>"><i class="ph ph-calendar" aria-hidden="true"></i> Journalier</a>
+    <a href="?vue=mensuel&mois=<?= h($f_mois) ?>&site=<?= $f_site ?>" class="vue-tab <?= $f_vue==='mensuel'?'active':'' ?>"><i class="ph ph-calendar-blank" aria-hidden="true"></i> Mensuel</a>
+    <a href="?vue=annuel&annee=<?= $f_annee ?>&site=<?= $f_site ?>" class="vue-tab <?= $f_vue==='annuel'?'active':'' ?>"><i class="ph ph-chart-bar" aria-hidden="true"></i> Annuel</a>
   </div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     <select class="fsel" aria-label="Filtrer par site" onchange="location.href=updateParam('site',this.value)">
@@ -256,11 +256,11 @@ include __DIR__ . '/../templates/header.php';
     <?php if($f_vue==='journalier'): ?>
     <input type="date" value="<?= h($f_date) ?>" onchange="location.href=updateParam('date',this.value)" aria-label="Choisir la date"
            style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none">
-    <a href="?vue=journalier&date=<?= h($f_date) ?>&site=<?= $f_site ?>&export=journalier" class="btn btn-secondary btn-sm">📥 Excel</a>
+    <a href="?vue=journalier&date=<?= h($f_date) ?>&site=<?= $f_site ?>&export=journalier" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Excel</a>
     <?php elseif($f_vue==='mensuel'): ?>
     <input type="month" value="<?= h($f_mois) ?>" onchange="location.href=updateParam('mois',this.value)" aria-label="Choisir le mois"
            style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none">
-    <a href="?vue=mensuel&mois=<?= h($f_mois) ?>&site=<?= $f_site ?>&export=mensuel" class="btn btn-secondary btn-sm">📥 Excel</a>
+    <a href="?vue=mensuel&mois=<?= h($f_mois) ?>&site=<?= $f_site ?>&export=mensuel" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Excel</a>
     <?php else: ?>
     <select class="fsel" aria-label="Filtrer par année" onchange="location.href=updateParam('annee',this.value)">
       <?php for($y=date('Y');$y>=2023;$y--): ?>
@@ -299,7 +299,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- ═══ VUE JOURNALIÈRE ═══ -->
 <div class="card">
   <div class="card-header">
-    <h3>📅 Points journaliers du <?= fmt_date($f_date,'d/m/Y') ?></h3>
+    <h3><i class="ph ph-calendar" aria-hidden="true"></i> Points journaliers du <?= fmt_date($f_date,'d/m/Y') ?></h3>
     <span style="font-size:13px;color:var(--muted)"><?= count($pj_jour) ?> point(s)</span>
   </div>
   <div class="table-wrap">
@@ -332,13 +332,13 @@ include __DIR__ . '/../templates/header.php';
           <td style="text-align:center;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:16px"><?= $p['total_engins']??0 ?></td>
           <td style="text-align:center;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:16px;color:var(--blue)"><?= $p['total_plaques']??0 ?></td>
           <td style="text-align:center"><?= number_format($p['moyenne_prod']??0,1) ?> V/H</td>
-          <td style="text-align:center"><?= $p['rivets_utilises']??0 ?> 🔩</td>
-          <td><span class="statut-pj s-<?= $p['statut'] ?>"><?= ['valide'=>'✅ Validé','brouillon'=>'⏳ Brouillon','en_attente_validation'=>'📤 En attente validation','refuse'=>'❌ Refusé'][$p['statut']] ?? $p['statut'] ?></span></td>
+          <td style="text-align:center"><?= $p['rivets_utilises']??0 ?> <i class="ph ph-wrench" aria-hidden="true"></i></td>
+          <td><span class="statut-pj s-<?= $p['statut'] ?>"><?= ['valide'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Validé','brouillon'=>'⏳ Brouillon','en_attente_validation'=>'<i class="ph ph-upload-simple" aria-hidden="true"></i> En attente validation','refuse'=>'<i class="ph ph-x-circle" aria-hidden="true"></i> Refusé'][$p['statut']] ?? $p['statut'] ?></span></td>
           <td style="font-size:12px;color:var(--muted)"><?= h($p['agent_nom']??'—') ?></td>
           <td style="text-align:center;white-space:nowrap">
-            <a href="<?= APP_URL ?>/pages/operations/point_journalier.php?view=<?= $p['id'] ?>" class="btn btn-secondary btn-sm">👁</a>
+            <a href="<?= APP_URL ?>/pages/operations/point_journalier.php?view=<?= $p['id'] ?>" class="btn btn-secondary btn-sm"><i class="ph ph-eye" aria-hidden="true"></i></a>
             <?php if($p['statut']==='en_attente_validation' && in_array($role_slug,['superviseur_operation','admin','superadmin'])): ?>
-            <button class="btn btn-success btn-sm" onclick="validerPJ(<?= $p['id'] ?>)">✅</button>
+            <button class="btn btn-success btn-sm" onclick="validerPJ(<?= $p['id'] ?>)"><i class="ph ph-check-circle" aria-hidden="true"></i></button>
             <?php endif; ?>
           </td>
         </tr>
@@ -352,14 +352,14 @@ include __DIR__ . '/../templates/header.php';
 <!-- ═══ VUE MENSUELLE ═══ -->
 <?php if(!empty($graph_mois)): ?>
 <div class="card" style="margin-bottom:20px">
-  <div class="card-header"><h3>📈 Évolution des plaques posées — <?= h($f_mois) ?></h3></div>
+  <div class="card-header"><h3><i class="ph ph-chart-line-up" aria-hidden="true"></i> Évolution des plaques posées — <?= h($f_mois) ?></h3></div>
   <div class="card-body"><canvas id="chartMois" height="100"></canvas></div>
 </div>
 <?php endif; ?>
 
 <div class="card">
   <div class="card-header">
-    <h3>📆 Résumé mensuel — <?= h($f_mois) ?></h3>
+    <h3><i class="ph ph-calendar-blank" aria-hidden="true"></i> Résumé mensuel — <?= h($f_mois) ?></h3>
   </div>
   <div class="table-wrap">
     <table>
@@ -392,7 +392,7 @@ include __DIR__ . '/../templates/header.php';
           </td>
           <td style="text-align:center;font-family:'Plus Jakarta Sans',sans-serif;font-weight:800;font-size:16px;color:var(--blue)"><?= fmt_number($p['total_plaques']) ?></td>
           <td style="text-align:center;font-weight:700"><?= fmt_number($p['total_engins']) ?></td>
-          <td style="text-align:center"><?= fmt_number($p['rivets_utilises']) ?> 🔩</td>
+          <td style="text-align:center"><?= fmt_number($p['rivets_utilises']) ?> <i class="ph ph-wrench" aria-hidden="true"></i></td>
           <td style="text-align:center"><?= fmt_number($p['heures_total']) ?>h</td>
           <td style="text-align:center"><?= number_format($p['moy_vh_avg']??0,1) ?> V/H</td>
         </tr>
@@ -417,12 +417,12 @@ include __DIR__ . '/../templates/header.php';
 <?php elseif($f_vue === 'annuel'): ?>
 <!-- ═══ VUE ANNUELLE ═══ -->
 <div class="card" style="margin-bottom:20px">
-  <div class="card-header"><h3>📊 Évolution annuelle <?= $f_annee ?></h3></div>
+  <div class="card-header"><h3><i class="ph ph-chart-bar" aria-hidden="true"></i> Évolution annuelle <?= $f_annee ?></h3></div>
   <div class="card-body"><canvas id="chartAnnee" height="120"></canvas></div>
 </div>
 
 <div class="card">
-  <div class="card-header"><h3>📊 Résumé annuel <?= $f_annee ?></h3></div>
+  <div class="card-header"><h3><i class="ph ph-chart-bar" aria-hidden="true"></i> Résumé annuel <?= $f_annee ?></h3></div>
   <div class="table-wrap">
     <table>
       <thead><tr>

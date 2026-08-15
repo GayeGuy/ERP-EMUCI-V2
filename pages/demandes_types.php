@@ -155,7 +155,7 @@ include __DIR__ . '/../templates/header.php';
               <?php if ($i): ?><span class="dt-arrow">→</span><?php endif; ?>
               <span class="dt-chip"><?= h($s['label']) ?></span>
             <?php endforeach; ?>
-            <?php if (!$steps): ?><span style="color:#e74c3c;font-size:12px">⚠ aucun circuit défini</span><?php endif; ?>
+            <?php if (!$steps): ?><span style="color:#e74c3c;font-size:12px"><i class="ph ph-warning" aria-hidden="true"></i> aucun circuit défini</span><?php endif; ?>
           </div>
         </div>
         <div class="dt-acts">

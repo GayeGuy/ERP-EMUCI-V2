@@ -371,15 +371,15 @@ include __DIR__ . '/../templates/header.php';
   </div>
   <div class="cb-step s-valide" onclick="filtrer('valide')">
     <div class="sv"><?= $kpi['valide'] ?></div>
-    <div class="sl">📋 À préparer</div>
+    <div class="sl"><i class="ph ph-clipboard-text" aria-hidden="true"></i> À préparer</div>
   </div>
   <div class="cb-step s-expedie" onclick="filtrer('expedie')">
     <div class="sv"><?= $kpi['expedie'] ?></div>
-    <div class="sl">🚚 Expédiées</div>
+    <div class="sl"><i class="ph ph-truck" aria-hidden="true"></i> Expédiées</div>
   </div>
   <div class="cb-step s-recu" onclick="filtrer('recu')">
     <div class="sv"><?= $kpi['recu'] ?></div>
-    <div class="sl">✅ Reçues</div>
+    <div class="sl"><i class="ph ph-check-circle" aria-hidden="true"></i> Reçues</div>
   </div>
 </div>
 
@@ -453,26 +453,26 @@ include __DIR__ . '/../templates/header.php';
           </td>
           <td>
             <span class="st-badge st-<?= $cmd['statut'] ?>">
-              <?= ['en_attente'=>'⏳ En attente','valide'=>'📋 À préparer','expedie'=>'🚚 Expédiée',
-                   'recu'=>'✅ Reçue','rejete'=>'❌ Rejetée','annule'=>'Annulée'][$cmd['statut']] ?? $cmd['statut'] ?>
+              <?= ['en_attente'=>'⏳ En attente','valide'=>'<i class="ph ph-clipboard-text" aria-hidden="true"></i> À préparer','expedie'=>'<i class="ph ph-truck" aria-hidden="true"></i> Expédiée',
+                   'recu'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Reçue','rejete'=>'<i class="ph ph-x-circle" aria-hidden="true"></i> Rejetée','annule'=>'Annulée'][$cmd['statut']] ?? $cmd['statut'] ?>
             </span>
           </td>
           <td style="font-size:12px"><?= h($cmd['demandeur']??'—') ?></td>
           <td style="text-align:center;white-space:nowrap">
             <div style="display:flex;gap:4px;justify-content:center">
             <?php if($is_sup && $cmd['statut']==='en_attente'): ?>
-              <button class="btn btn-primary btn-sm" onclick="valider(<?= $cmd['id'] ?>,'<?= h($cmd['numero']) ?>')">✅ Valider</button>
-              <button class="btn btn-danger btn-sm"  onclick="rejeter(<?= $cmd['id'] ?>,'<?= h($cmd['numero']) ?>')">❌ Rejeter</button>
+              <button class="btn btn-primary btn-sm" onclick="valider(<?= $cmd['id'] ?>,'<?= h($cmd['numero']) ?>')"><i class="ph ph-check-circle" aria-hidden="true"></i> Valider</button>
+              <button class="btn btn-danger btn-sm"  onclick="rejeter(<?= $cmd['id'] ?>,'<?= h($cmd['numero']) ?>')"><i class="ph ph-x-circle" aria-hidden="true"></i> Rejeter</button>
             <?php endif; ?>
             <?php if($is_gsb && $cmd['statut']==='valide'): ?>
-              <button class="btn btn-primary btn-sm" onclick="ouvrirPreparation(<?= $cmd['id'] ?>,'<?= h($cmd['numero']) ?>','<?= h($cmd['type_bobine']) ?>','<?= $cmd['site_id'] ?>')">🎞️ Préparer</button>
+              <button class="btn btn-primary btn-sm" onclick="ouvrirPreparation(<?= $cmd['id'] ?>,'<?= h($cmd['numero']) ?>','<?= h($cmd['type_bobine']) ?>','<?= $cmd['site_id'] ?>')"><i class="ph ph-film-strip" aria-hidden="true"></i> Préparer</button>
             <?php endif; ?>
             <?php if($cmd['statut']==='expedie' && ($is_coord || $is_gsb)): ?>
-              <button class="btn btn-success btn-sm" onclick="confirmerReception(<?= $cmd['id'] ?>)">✅ Réceptionner</button>
+              <button class="btn btn-success btn-sm" onclick="confirmerReception(<?= $cmd['id'] ?>)"><i class="ph ph-check-circle" aria-hidden="true"></i> Réceptionner</button>
             <?php endif; ?>
             <?php if($cmd['statut']==='en_attente' && ($is_coord || $is_sup)): ?>
               <button class="btn btn-sm" style="background:#FEE2E2;color:#991B1B;border:1.5px solid #FCA5A5"
-                      onclick="annuler(<?= $cmd['id'] ?>)">✕</button>
+                      onclick="annuler(<?= $cmd['id'] ?>)"><i class="ph ph-x" aria-hidden="true"></i></button>
             <?php endif; ?>
             <?php if(in_array($cmd['statut'],['expedie','recu']) && $cmd['nb_bobines']>0): ?>
               <button class="detail-btn" onclick="voirDetailCommande(<?= $cmd['id'] ?>,'<?= h($cmd['numero']) ?>')">
@@ -496,7 +496,7 @@ include __DIR__ . '/../templates/header.php';
       <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)">
         <i class="ph-duotone ph-film-strip"></i> Demander une bobine
       </h3>
-      <button onclick="fermer('Nouvelle')" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+      <button onclick="fermer('Nouvelle')" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div id="alertNouvelle"></div>
 
@@ -557,7 +557,7 @@ include __DIR__ . '/../templates/header.php';
         <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)" id="titlePrep">Préparer la commande</h3>
         <div id="subtitlePrep" style="font-size:12px;color:var(--muted);margin-top:3px"></div>
       </div>
-      <button onclick="fermer('Prep')" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+      <button onclick="fermer('Prep')" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div id="alertPrep"></div>
 
@@ -586,7 +586,7 @@ include __DIR__ . '/../templates/header.php';
       <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)">
         <i class="ph-duotone ph-arrows-left-right"></i> Transférer une bobine
       </h3>
-      <button onclick="fermer('Transfert')" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+      <button onclick="fermer('Transfert')" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div id="alertTransfert"></div>
 
@@ -635,7 +635,7 @@ async function voirDetailCommande(cmdId, numCmd){
           <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)" id="dcTitle"></h3>
           <div id="dcSub" style="font-size:12px;color:var(--muted);margin-top:2px"></div>
         </div>
-        <button onclick="document.getElementById('modalDetailCmd').remove()" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+        <button onclick="document.getElementById('modalDetailCmd').remove()" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
       </div>
       <div id="dcBody">Chargement…</div>
     </div>`;
@@ -669,7 +669,7 @@ async function voirDetailCommande(cmdId, numCmd){
         <div style="font-size:12px;color:var(--muted);font-weight:600">Préparé par</div>
       </div>
     </div>
-    <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">🎞️ Numéros de bobines affectées</div>
+    <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px"><i class="ph ph-film-strip" aria-hidden="true"></i> Numéros de bobines affectées</div>
     <div style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden">
       <table style="width:100%;border-collapse:collapse">
         <thead><tr style="background:#06033A">
@@ -729,10 +729,10 @@ async function checkDispo(){
   info.style.display='block';
   if(nb>0){
     info.style.background='#D1FAE5'; info.style.color='#065F46';
-    info.innerHTML=`✅ <strong>${nb}</strong> bobine(s) de ce type disponible(s) en entrepôt.`;
+    info.innerHTML=`<i class="ph ph-check-circle" aria-hidden="true"></i> <strong>${nb}</strong> bobine(s) de ce type disponible(s) en entrepôt.`;
   } else {
     info.style.background='#FEF3C7'; info.style.color='#92400E';
-    info.innerHTML=`⚠️ Aucune bobine disponible en entrepôt pour l'instant. La demande sera transmise au GSB qui vérifiera.`;
+    info.innerHTML=`<i class="ph ph-warning" aria-hidden="true"></i> Aucune bobine disponible en entrepôt pour l'instant. La demande sera transmise au GSB qui vérifiera.`;
   }
 }
 async function envoyerDemande(){

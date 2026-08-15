@@ -239,10 +239,10 @@ include __DIR__ . '/../templates/header.php';
 <!-- ── KPIs ── -->
 <div class="equip-kpis">
   <div class="ek">          <div class="ek-val"><?= $nb_total ?></div>                                          <div class="ek-lbl">Total</div></div>
-  <div class="ek green">    <div class="ek-val" style="color:var(--success-d)"><?= $nb_ok ?></div>                <div class="ek-lbl">✅ Opérationnels</div></div>
-  <div class="ek red">      <div class="ek-val" style="color:var(--danger-d)"><?= $nb_hs ?></div>                 <div class="ek-lbl">❌ Hors service</div></div>
-  <div class="ek purple">   <div class="ek-val" style="color:#8e44ad"><?= $nb_stock ?></div>                    <div class="ek-lbl">📦 En stock</div></div>
-  <div class="ek orange">   <div class="ek-val" style="color:#f39c12"><?= $nb_fin_cycle ?></div>               <div class="ek-lbl">⚠️ Fin cycle &lt;30j</div></div>
+  <div class="ek green">    <div class="ek-val" style="color:var(--success-d)"><?= $nb_ok ?></div>                <div class="ek-lbl"><i class="ph ph-check-circle" aria-hidden="true"></i> Opérationnels</div></div>
+  <div class="ek red">      <div class="ek-val" style="color:var(--danger-d)"><?= $nb_hs ?></div>                 <div class="ek-lbl"><i class="ph ph-x-circle" aria-hidden="true"></i> Hors service</div></div>
+  <div class="ek purple">   <div class="ek-val" style="color:#8e44ad"><?= $nb_stock ?></div>                    <div class="ek-lbl"><i class="ph ph-package" aria-hidden="true"></i> En stock</div></div>
+  <div class="ek orange">   <div class="ek-val" style="color:#f39c12"><?= $nb_fin_cycle ?></div>               <div class="ek-lbl"><i class="ph ph-warning" aria-hidden="true"></i> Fin cycle &lt;30j</div></div>
 </div>
 
 <!-- ── LIGNE 2 : Filtres (remplace les blocs résumé) ── -->
@@ -282,7 +282,7 @@ include __DIR__ . '/../templates/header.php';
   </div>
 
   <?php if($f_site||$f_etat||$f_type||$f_search): ?>
-  <a href="?categorie=<?= h($f_categorie) ?>" class="btn btn-secondary btn-sm" title="Réinitialiser les filtres">✕ Effacer</a>
+  <a href="?categorie=<?= h($f_categorie) ?>" class="btn btn-secondary btn-sm" title="Réinitialiser les filtres"><i class="ph ph-x" aria-hidden="true"></i> Effacer</a>
   <?php endif; ?>
 
   <a href="?categorie=<?= h($f_categorie) ?>&site=<?= $f_site ?>&etat=<?= h($f_etat) ?>&type=<?= $f_type ?>&q=<?= urlencode($f_search) ?>&export=1"
@@ -354,12 +354,12 @@ include __DIR__ . '/../templates/header.php';
           </td>
           <td style="text-align:center">
             <span style="padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700;background:<?= ($e['statut_stock']??'')==='en_stock'?'#e8f4f9':'#f0f0f0' ?>;color:<?= ($e['statut_stock']??'')==='en_stock'?'var(--blue)':'#666' ?>">
-              <?= ($e['statut_stock']??'affecte')==='en_stock'?'📦 Stock':'✅ Affecté' ?>
+              <?= ($e['statut_stock']??'affecte')==='en_stock'?'<i class="ph ph-package" aria-hidden="true"></i> Stock':'<i class="ph ph-check-circle" aria-hidden="true"></i> Affecté' ?>
             </span>
           </td>
           <?php if($can_update): ?>
           <td style="text-align:center">
-            <button class="btn btn-secondary btn-sm" onclick="modifierEquip(<?= htmlspecialchars(json_encode($e),ENT_QUOTES) ?>)">✏️</button>
+            <button class="btn btn-secondary btn-sm" onclick="modifierEquip(<?= htmlspecialchars(json_encode($e),ENT_QUOTES) ?>)"><i class="ph ph-pencil-simple" aria-hidden="true"></i></button>
           </td>
           <?php endif; ?>
         </tr>
@@ -375,7 +375,7 @@ include __DIR__ . '/../templates/header.php';
   <div style="background:white;border-radius:20px;padding:28px;width:580px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
       <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)" id="titleModal">Nouvel équipement</h3>
-      <button onclick="fermerModal()" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+      <button onclick="fermerModal()" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <input type="hidden" id="eId">
     <input type="hidden" id="eAction" value="creer">
@@ -442,11 +442,11 @@ include __DIR__ . '/../templates/header.php';
       </div>
     </div>
     <div style="background:var(--lighter);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--muted)">
-      💡 <strong>Amortissement OHADA :</strong> <?= $f_categorie==='informatique'?'Matériel informatique — 3 ans (36 mois)':'Matériel opérationnel — 5 ans (60 mois)' ?>. La date de fin de cycle et la valeur résiduelle sont calculées automatiquement.
+      <i class="ph ph-lightbulb" aria-hidden="true"></i> <strong>Amortissement OHADA :</strong> <?= $f_categorie==='informatique'?'Matériel informatique — 3 ans (36 mois)':'Matériel opérationnel — 5 ans (60 mois)' ?>. La date de fin de cycle et la valeur résiduelle sont calculées automatiquement.
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px">
       <button class="btn btn-secondary" onclick="fermerModal()">Annuler</button>
-      <button class="btn btn-primary" id="btnSave" onclick="sauvegarder()">✅ Enregistrer</button>
+      <button class="btn btn-primary" id="btnSave" onclick="sauvegarder()"><i class="ph ph-check-circle" aria-hidden="true"></i> Enregistrer</button>
     </div>
   </div>
 </div>

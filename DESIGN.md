@@ -117,16 +117,34 @@ au cas par cas, pas par un remplacement global du token.
 
 ---
 
-## Ce qui reste ouvert (P3, non traité par ce document)
+## Icônes : Phosphor plutôt qu'emoji
 
-- Emojis utilisés comme icônes dans plusieurs pages (au lieu de Phosphor,
-  déjà chargé via CDN et utilisé ailleurs) — incohérence visuelle, pas un
-  problème d'accessibilité en soi.
-- Dégradés sur les avatars — à statuer : les garder comme signature visuelle
-  ou les uniformiser.
-- `transition: all` par endroits au lieu de propriétés ciblées — coût de
-  performance marginal, à corriger opportunistement.
-- Thème sombre : des règles `[data-theme="dark"]` existent déjà par endroits
-  dans `templates/header.php` mais aucune bascule utilisateur n'y donne
-  accès — décision à prendre (l'achever, ou le retirer pour ne pas laisser de
-  code mort).
+Les emoji utilisés comme icônes dans le HTML/JS rendu navigateur ont été
+convertis en `<i class="ph ph-xxx" aria-hidden="true"></i>` (2026-08, 724
+remplacements sur 43 fichiers). Restent volontairement en emoji :
+
+- Tout ce qui est stocké/réaffiché comme texte brut échappé par `h()` —
+  messages de notification (`notif_create`, table `notifications`),
+  messages d'audit (`audit_log`), réponses JSON (`json_response`), lignes
+  `db_query`/`db_insert`. Une balise `<i>` y apparaîtrait littéralement
+  (`&lt;i class=...&gt;`) au lieu de s'afficher comme icône.
+- Le contenu de `<option>`, les attributs `title=`/`alt=`/`aria-label=`/
+  `placeholder=`, et tout ce qui passe par `.textContent =` en JS — le HTML
+  n'y est jamais interprété.
+- Les gabarits HTML destinés à l'export PDF (Dompdf) — la police Phosphor
+  n'y est pas chargée (voir plus haut, plancher 12px).
+- Les flèches typographiques (→ ← ↩ etc.) utilisées en ligne dans du texte,
+  qui ne jouent pas un rôle d'icône.
+
+Prochain emoji-icône ajouté à une page : vérifier d'abord si sa valeur finit
+par transiter par un de ces chemins avant de le convertir — c'est la
+majorité des erreurs rencontrées lors de cette conversion.
+
+## Ce qui reste ouvert
+
+- Thème sombre : en cours de finition (2026-08) — une bascule fonctionnelle
+  existe déjà (`pages/mon_profil.php`, section « Apparence », JS
+  `setThemePref()`, persistée dans `localStorage['ds-theme-pref']`) avec
+  anti-FOUC dans `templates/header.php`, mais la couverture CSS
+  `[data-theme="dark"]` reste partielle — la plupart des pages n'ont aucune
+  règle sombre sur leur propre `<style>` local.

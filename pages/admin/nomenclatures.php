@@ -162,20 +162,20 @@ include __DIR__ . '/../../templates/header.php';
     <div class="nom-stat"><div class="sv"><?= $n['seuil_alerte'] ?></div><div class="sl">Seuil alerte</div></div>
   </div>
   <div class="nom-actions">
-    <button class="btn btn-secondary btn-sm" onclick="viewN(<?= $n['id'] ?>)">👁 Détail & Liens</button>
+    <button class="btn btn-secondary btn-sm" onclick="viewN(<?= $n['id'] ?>)"><i class="ph ph-eye" aria-hidden="true"></i> Détail & Liens</button>
     <?php if(can('nomenclatures','can_update')): ?>
-    <button class="btn btn-secondary btn-sm" onclick="editN(<?= $n['id'] ?>)">✏️</button>
+    <button class="btn btn-secondary btn-sm" onclick="editN(<?= $n['id'] ?>)"><i class="ph ph-pencil-simple" aria-hidden="true"></i></button>
     <?php endif; ?>
     <?php if(can('nomenclatures','can_delete')&&$n['stock_total']==0): ?>
-    <button class="btn btn-danger btn-sm" onclick="delN(<?= $n['id'] ?>,'<?= h($n['code']) ?>')">🗑</button>
+    <button class="btn btn-danger btn-sm" onclick="delN(<?= $n['id'] ?>,'<?= h($n['code']) ?>')"><i class="ph ph-trash" aria-hidden="true"></i></button>
     <?php endif; ?>
-    <a href="../equipements.php?nom=<?= $n['id'] ?>" class="btn btn-secondary btn-sm" style="margin-left:auto">📋 Stock</a>
+    <a href="../equipements.php?nom=<?= $n['id'] ?>" class="btn btn-secondary btn-sm" style="margin-left:auto"><i class="ph ph-clipboard-text" aria-hidden="true"></i> Stock</a>
   </div>
 </div>
 <?php endforeach; ?>
 <?php if(empty($noms)): ?>
 <div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--muted)">
-  <div style="font-size:48px;margin-bottom:12px">🏷️</div>
+  <div style="font-size:48px;margin-bottom:12px"><i class="ph ph-tag" aria-hidden="true"></i></div>
   <p>Aucune nomenclature. Créez votre premier type d'équipement.</p>
 </div>
 <?php endif; ?>
@@ -184,7 +184,7 @@ include __DIR__ . '/../../templates/header.php';
 <!-- MODAL FORM -->
 <div class="modal-overlay" id="mN">
   <div class="modal">
-    <div class="mhdr"><h3 id="mNT">Nouvelle nomenclature</h3><button class="mclose" onclick="closeMN()">✕</button></div>
+    <div class="mhdr"><h3 id="mNT">Nouvelle nomenclature</h3><button class="mclose" onclick="closeMN()"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody">
       <div id="mNAlert"></div>
       <input type="hidden" id="nId">
@@ -210,7 +210,7 @@ include __DIR__ . '/../../templates/header.php';
     </div>
     <div class="mfoot">
       <button class="btn btn-secondary" onclick="closeMN()">Annuler</button>
-      <button class="btn btn-primary" id="bSN" onclick="saveN()">💾 Enregistrer</button>
+      <button class="btn btn-primary" id="bSN" onclick="saveN()"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Enregistrer</button>
     </div>
   </div>
 </div>
@@ -218,7 +218,7 @@ include __DIR__ . '/../../templates/header.php';
 <!-- MODAL DÉTAIL / COMPOSITION -->
 <div class="modal-overlay" id="mND">
   <div class="modal" style="width:600px">
-    <div class="mhdr"><h3 id="ndT">Détail</h3><button class="mclose" onclick="document.getElementById('mND').classList.remove('open')">✕</button></div>
+    <div class="mhdr"><h3 id="ndT">Détail</h3><button class="mclose" onclick="document.getElementById('mND').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody" id="ndB"></div>
   </div>
 </div>
@@ -280,7 +280,7 @@ function viewN(id){
             <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${l}</div>
             <div style="font-size:13.5px">${v}</div></div>`).join('')}
       </div>
-      <h4 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;margin-bottom:10px">🔗 Composition du poste</h4>
+      <h4 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;margin-bottom:10px"><i class="ph ph-link" aria-hidden="true"></i> Composition du poste</h4>
       <p style="font-size:12px;color:var(--muted);margin-bottom:10px">Définissez les composants requis pour constituer un poste complet de ce type.</p>
       <div id="liensC">${liens||'<div style="color:var(--muted);font-size:13px;margin-bottom:8px">Aucun composant défini.</div>'}</div>
       ${addForm}`;

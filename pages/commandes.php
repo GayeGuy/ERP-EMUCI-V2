@@ -1032,15 +1032,15 @@ include __DIR__ . '/../templates/header.php';
   </div>
   <div class="step s-valide" onclick="filtrer('en_attente_livraison')">
     <div class="s-num"><?= $kpi['attente_liv'] ?></div>
-    <div class="s-lbl">📋 À préparer</div>
+    <div class="s-lbl"><i class="ph ph-clipboard-text" aria-hidden="true"></i> À préparer</div>
   </div>
   <div class="step s-livraison" onclick="filtrer('en_cours_livraison')">
     <div class="s-num"><?= $kpi['en_cours'] ?></div>
-    <div class="s-lbl">🚚 En livraison</div>
+    <div class="s-lbl"><i class="ph ph-truck" aria-hidden="true"></i> En livraison</div>
   </div>
   <div class="step s-recu" onclick="filtrer('recu')">
     <div class="s-num"><?= $kpi['recu'] ?></div>
-    <div class="s-lbl">✅ Reçu</div>
+    <div class="s-lbl"><i class="ph ph-check-circle" aria-hidden="true"></i> Reçu</div>
   </div>
 </div>
 
@@ -1096,7 +1096,7 @@ include __DIR__ . '/../templates/header.php';
           <td style="text-align:center;font-weight:700">
             <?= $cmd['nb_lignes'] ?>
             <?php if($cmd['nb_rejets']>0): ?>
-              <span style="background:#FEE2E2;color:#991B1B;padding:1px 6px;border-radius:8px;font-size:12px;font-weight:700">❌<?= $cmd['nb_rejets'] ?></span>
+              <span style="background:#FEE2E2;color:#991B1B;padding:1px 6px;border-radius:8px;font-size:12px;font-weight:700"><i class="ph ph-x-circle" aria-hidden="true"></i><?= $cmd['nb_rejets'] ?></span>
             <?php endif; ?>
           </td>
           <?php if($voir_prix): ?>
@@ -1104,7 +1104,7 @@ include __DIR__ . '/../templates/header.php';
           <?php endif; ?>
           <td>
             <span class="st-badge st-<?= $cmd['statut'] ?>">
-              <?= ['en_attente'=>'⏳ À valider','en_attente_livraison'=>'📋 À préparer','en_cours_livraison'=>'🚚 En livraison','recu'=>'✅ Reçu','rejete'=>'❌ Rejeté','annule'=>'Annulé'][$cmd['statut']] ?? $cmd['statut'] ?>
+              <?= ['en_attente'=>'⏳ À valider','en_attente_livraison'=>'<i class="ph ph-clipboard-text" aria-hidden="true"></i> À préparer','en_cours_livraison'=>'<i class="ph ph-truck" aria-hidden="true"></i> En livraison','recu'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Reçu','rejete'=>'<i class="ph ph-x-circle" aria-hidden="true"></i> Rejeté','annule'=>'Annulé'][$cmd['statut']] ?? $cmd['statut'] ?>
             </span>
           </td>
           <td style="font-size:12px"><?= h($cmd['agent']??'—') ?></td>
@@ -1114,15 +1114,15 @@ include __DIR__ . '/../templates/header.php';
                     onclick="voirDetail(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>')">
               <i class="ph-duotone ph-eye"></i>
             </button>
-            <a href="?id=<?= $cmd['id'] ?>&export=1&format=pdf" target="_blank" class="btn btn-secondary btn-sm" title="Imprimer PDF">🖨️</a>
+            <a href="?id=<?= $cmd['id'] ?>&export=1&format=pdf" target="_blank" class="btn btn-secondary btn-sm" title="Imprimer PDF"><i class="ph ph-printer" aria-hidden="true"></i></a>
             <?php if($is_gestionnaire && $cmd['statut']==='en_attente_livraison'): ?>
-              <button class="btn btn-primary btn-sm" onclick="ouvrirLivraison(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>')">🚚 Expédier</button>
+              <button class="btn btn-primary btn-sm" onclick="ouvrirLivraison(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>')"><i class="ph ph-truck" aria-hidden="true"></i> Expédier</button>
             <?php endif; ?>
             <?php if($cmd['statut']==='en_cours_livraison' && ($is_coord || $is_gestionnaire)): ?>
-              <button class="btn btn-success btn-sm" onclick="receptionner(<?= $cmd['id'] ?>)">✅ Réceptionner</button>
+              <button class="btn btn-success btn-sm" onclick="receptionner(<?= $cmd['id'] ?>)"><i class="ph ph-check-circle" aria-hidden="true"></i> Réceptionner</button>
             <?php endif; ?>
             <?php if($cmd['statut']==='en_attente' && ($is_coord || $is_superviseur || $is_gestionnaire)): ?>
-              <button class="btn btn-sm" style="background:#FEE2E2;color:#991B1B;border:1.5px solid #FCA5A5" onclick="annuler(<?= $cmd['id'] ?>)">✕</button>
+              <button class="btn btn-sm" style="background:#FEE2E2;color:#991B1B;border:1.5px solid #FCA5A5" onclick="annuler(<?= $cmd['id'] ?>)"><i class="ph ph-x" aria-hidden="true"></i></button>
             <?php endif; ?>
             </div>
           </td>
@@ -1144,7 +1144,7 @@ include __DIR__ . '/../templates/header.php';
           <span style="font-size:12px;font-weight:400;color:var(--muted);margin-left:8px"><?= h(db_fetch_value("SELECT nom FROM sites WHERE id=?",[$site_force])??'') ?></span>
         <?php endif; ?>
       </h3>
-      <button onclick="fermer('Nouvelle')" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+      <button onclick="fermer('Nouvelle')" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div id="alertNouvelle"></div>
 
@@ -1251,7 +1251,7 @@ include __DIR__ . '/../templates/header.php';
   <div style="background:white;border-radius:18px;padding:26px;width:740px;max-width:96vw;box-shadow:0 20px 60px rgba(0,0,0,.25);margin:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800;color:var(--navy)" id="titleValidation">Valider commande</h3>
-      <button onclick="fermer('Validation')" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+      <button onclick="fermer('Validation')" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div id="alertValidation"></div>
     <div style="background:#EFF6FF;border-left:4px solid #3B82F6;padding:12px 14px;border-radius:8px;margin-bottom:14px;font-size:13px;color:#1D4ED8">
@@ -1260,7 +1260,7 @@ include __DIR__ . '/../templates/header.php';
     <div id="lignesValidation"></div>
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px">
       <button class="btn btn-secondary" onclick="fermer('Validation')">Annuler</button>
-      <button class="btn btn-primary" onclick="confirmerValidation()">✅ Valider la commande</button>
+      <button class="btn btn-primary" onclick="confirmerValidation()"><i class="ph ph-check-circle" aria-hidden="true"></i> Valider la commande</button>
     </div>
   </div>
 </div>
@@ -1276,7 +1276,7 @@ include __DIR__ . '/../templates/header.php';
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px">
       <button class="btn btn-secondary" onclick="fermer('Rejet')">Annuler</button>
-      <button class="btn btn-danger" onclick="confirmerRejet()">❌ Rejeter</button>
+      <button class="btn btn-danger" onclick="confirmerRejet()"><i class="ph ph-x-circle" aria-hidden="true"></i> Rejeter</button>
     </div>
   </div>
 </div>
@@ -1288,7 +1288,7 @@ include __DIR__ . '/../templates/header.php';
   <div style="background:white;border-radius:18px;padding:26px;width:740px;max-width:96vw;box-shadow:0 20px 60px rgba(0,0,0,.25);margin:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
       <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800;color:var(--navy)" id="titleLivraison">Préparer livraison</h3>
-      <button onclick="fermer('Livraison')" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+      <button onclick="fermer('Livraison')" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div id="alertLivraison"></div>
     <div style="background:#FEF3C7;border-left:4px solid #F59E0B;padding:12px 14px;border-radius:8px;margin-bottom:14px;font-size:13px;color:#92400E">
@@ -1301,7 +1301,7 @@ include __DIR__ . '/../templates/header.php';
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px">
       <button class="btn btn-secondary" onclick="fermer('Livraison')">Annuler</button>
-      <button class="btn btn-primary" onclick="confirmerLivraison()">🚚 Expédier</button>
+      <button class="btn btn-primary" onclick="confirmerLivraison()"><i class="ph ph-truck" aria-hidden="true"></i> Expédier</button>
     </div>
   </div>
 </div>
@@ -1319,7 +1319,7 @@ include __DIR__ . '/../templates/header.php';
       </div>
       <div style="display:flex;align-items:center;gap:12px">
         <span id="detail-statut-badge" class="st-badge"></span>
-        <button onclick="fermer('Detail')" style="background:rgba(255,255,255,.12);border:none;color:white;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center">✕</button>
+        <button onclick="fermer('Detail')" style="background:rgba(255,255,255,.12);border:none;color:white;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center"><i class="ph ph-x" aria-hidden="true"></i></button>
       </div>
     </div>
 

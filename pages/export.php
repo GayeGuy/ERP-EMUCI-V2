@@ -81,7 +81,7 @@ if ($type === '') {
     .exp-card h4{margin:0;font-size:15px}
     .exp-card p{margin:0;font-size:12.5px;color:var(--muted,#7f8c8d);flex:1}
     </style>
-    <h2 style="margin-bottom:16px">📤 Exports</h2>
+    <h2 style="margin-bottom:16px"><i class="ph ph-upload-simple" aria-hidden="true"></i> Exports</h2>
     <div class="exp-grid">
       <?php foreach ($exports as $e):
         if (!can($e['perm'][0], $e['perm'][1])) continue;
@@ -90,7 +90,7 @@ if ($type === '') {
         <i class="ph-duotone <?= h($e['icon']) ?>"></i>
         <h4><?= h($e['label']) ?></h4>
         <p><?= h($e['desc']) ?></p>
-        <a href="?type=<?= $e['type'] ?><?= $e['extra'] ?? '' ?>" class="btn btn-primary btn-sm">📥 Télécharger</a>
+        <a href="?type=<?= $e['type'] ?><?= $e['extra'] ?? '' ?>" class="btn btn-primary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Télécharger</a>
       </div>
       <?php endforeach; ?>
     </div>

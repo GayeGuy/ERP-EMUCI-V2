@@ -325,7 +325,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
   <!-- LEFT -->
   <div class="left-panel">
     <div class="brand">
-      <div class="brand-icon">📦</div>
+      <div class="brand-icon"><i class="ph ph-package" aria-hidden="true"></i></div>
       <h1>Stock<br>Manager</h1>
       <p>Gestion complète de votre inventaire d'équipements et consommables</p>
     </div>
@@ -352,7 +352,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     <div class="form-group">
       <label for="email">Adresse email</label>
       <div class="input-wrap">
-        <span class="icon">✉</span>
+        <span class="icon"><i class="ph ph-envelope-simple" aria-hidden="true"></i></span>
         <input type="email" id="email" name="email" placeholder="vous@domaine.ci" autocomplete="email" required>
       </div>
     </div>
@@ -360,9 +360,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     <div class="form-group">
       <label for="password">Mot de passe</label>
       <div class="input-wrap">
-        <span class="icon">🔒</span>
+        <span class="icon"><i class="ph ph-lock" aria-hidden="true"></i></span>
         <input type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password" required>
-        <button class="toggle-pw" type="button" onclick="togglePw()" title="Afficher/masquer">👁</button>
+        <button class="toggle-pw" type="button" onclick="togglePw()" title="Afficher/masquer"><i class="ph ph-eye" aria-hidden="true"></i></button>
       </div>
     </div>
 
@@ -391,7 +391,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     const el = document.getElementById(id);
     el.textContent = '';
     el.className = 'alert ' + (id.includes('error') ? 'alert-danger' : 'alert-success') + ' show';
-    el.innerHTML = (id.includes('error') ? '❌ ' : '✅ ') + msg;
+    el.innerHTML = (id.includes('error') ? '<i class="ph ph-x-circle" aria-hidden="true"></i> ' : '<i class="ph ph-check-circle" aria-hidden="true"></i> ') + msg;
   }
 
   function hideAlerts() {

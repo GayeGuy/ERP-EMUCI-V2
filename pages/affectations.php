@@ -230,7 +230,7 @@ include __DIR__ . '/../templates/header.php';
     <!-- FORMULAIRE AFFECTATION -->
     <div class="card" style="margin-bottom:20px">
       <div class="card-header">
-        <h3>🔗 Nouvelle affectation / Transfert</h3>
+        <h3><i class="ph ph-link" aria-hidden="true"></i> Nouvelle affectation / Transfert</h3>
       </div>
       <div class="card-body">
         <div id="affAlert"></div>
@@ -282,7 +282,7 @@ include __DIR__ . '/../templates/header.php';
         <!-- BON DE LIVRAISON OBLIGATOIRE pour transfert vers site -->
         <div id="affBLWrap" style="display:none;background:#fff8e7;border:2px dashed #f39c12;border-radius:10px;padding:14px;margin-bottom:14px">
           <label style="font-size:13px;font-weight:700;color:#b7791f;display:block;margin-bottom:6px">
-            📎 Bon de livraison <span style="color:var(--danger-d)">*</span>
+            <i class="ph ph-paperclip" aria-hidden="true"></i> Bon de livraison <span style="color:var(--danger-d)">*</span>
             <span style="font-size:12px;font-weight:400;color:var(--muted)"> — obligatoire pour tout transfert vers un site</span>
           </label>
           <input type="file" id="affFichierBL" accept=".pdf,.jpg,.jpeg,.png,.webp"
@@ -292,14 +292,14 @@ include __DIR__ . '/../templates/header.php';
 
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button class="btn btn-secondary" onclick="resetAff()">Réinitialiser</button>
-          <button class="btn btn-primary" id="btnAff" onclick="saveAff()">✅ Valider l'affectation</button>
+          <button class="btn btn-primary" id="btnAff" onclick="saveAff()"><i class="ph ph-check-circle" aria-hidden="true"></i> Valider l'affectation</button>
         </div>
       </div>
     </div>
 
     <!-- STATS RAPIDES -->
     <div class="card">
-      <div class="card-header"><h3>📊 Résumé des affectations</h3></div>
+      <div class="card-header"><h3><i class="ph ph-chart-bar" aria-hidden="true"></i> Résumé des affectations</h3></div>
       <div class="card-body" style="padding:16px">
         <?php
         $stats_sites = db_fetch_all(
@@ -319,7 +319,7 @@ include __DIR__ . '/../templates/header.php';
         </div>
         <?php endforeach; ?>
         <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:13px;color:var(--muted)">
-          ✅ <strong><?= $non_affectes_count ?></strong> équipement(s) disponible(s) en stock
+          <i class="ph ph-check-circle" aria-hidden="true"></i> <strong><?= $non_affectes_count ?></strong> équipement(s) disponible(s) en stock
         </div>
       </div>
     </div>
@@ -345,18 +345,18 @@ include __DIR__ . '/../templates/header.php';
           <option value="maintenance" <?= $f_type==='maintenance'?'selected':'' ?>>Maintenance</option>
         </select>
         <?php if($f_site||$f_type): ?>
-        <a href="affectations.php" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;text-decoration:none;color:var(--text)">✕ Reset</a>
+        <a href="affectations.php" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;text-decoration:none;color:var(--text)"><i class="ph ph-x" aria-hidden="true"></i> Reset</a>
         <?php endif; ?>
       </form>
       <?php if(can('affectations','can_export')): ?>
-      <a href="<?= APP_URL ?>/api/export.php?type=mouvements<?= $f_site ? '&site='.$f_site : '' ?><?= $f_type ? '&type_mouv='.urlencode($f_type) : '' ?>" class="btn btn-secondary btn-sm">📥 Excel</a>
+      <a href="<?= APP_URL ?>/api/export.php?type=mouvements<?= $f_site ? '&site='.$f_site : '' ?><?= $f_type ? '&type_mouv='.urlencode($f_type) : '' ?>" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Excel</a>
       <?php endif; ?>
     </div>
 
     <!-- HISTORIQUE DES MOUVEMENTS -->
     <div class="card" style="margin-bottom:20px">
       <div class="card-header">
-        <h3>📋 Historique des mouvements <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= fmt_number($total) ?>)</span></h3>
+        <h3><i class="ph ph-clipboard-text" aria-hidden="true"></i> Historique des mouvements <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= fmt_number($total) ?>)</span></h3>
       </div>
       <div style="padding:4px 20px">
         <?php if(empty($mouvements)): ?>
@@ -369,10 +369,10 @@ include __DIR__ . '/../templates/header.php';
             <div class="mouv-detail">
               <?php if($m['site_source']): ?>De : <strong><?= h($m['site_source']) ?></strong><?php endif; ?>
               <?php if($m['site_dest']): ?> → <strong><?= h($m['site_dest']) ?></strong><?php endif; ?>
-              <?php if($m['user_dest']): ?> · 👤 <?= h($m['user_dest']) ?><?php endif; ?>
+              <?php if($m['user_dest']): ?> · <i class="ph ph-user" aria-hidden="true"></i> <?= h($m['user_dest']) ?><?php endif; ?>
               <?php if($m['notes']): ?><br><em><?= h($m['notes']) ?></em><?php endif; ?>
               <?php if(!empty($m['fichier_bl'])): ?>
-              <br><?= upload_link($m['fichier_bl'],'bl','📎 Bon de livraison') ?>
+              <br><?= upload_link($m['fichier_bl'],'bl','<i class="ph ph-paperclip" aria-hidden="true"></i> Bon de livraison') ?>
               <?php endif; ?>
             </div>
             <div class="mouv-detail">par <?= h($m['agent'] ?? 'Système') ?></div>
@@ -392,7 +392,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- MODAL RETOUR STOCK -->
 <div class="modal-overlay" id="mRetour">
   <div class="modal">
-    <div class="mhdr"><h3>↩ Retour en stock</h3><button class="mclose" onclick="document.getElementById('mRetour').classList.remove('open')">✕</button></div>
+    <div class="mhdr"><h3>↩ Retour en stock</h3><button class="mclose" onclick="document.getElementById('mRetour').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody">
       <input type="hidden" id="rEquipId">
       <div class="alert alert-warning">L'équipement <strong id="rEquipNum"></strong> sera retiré de son site et remis en stock central.</div>
@@ -450,7 +450,7 @@ function selectEquip(id,num,type,site,user,etat){
   document.getElementById('affEquipInfo').style.display='block';
   document.getElementById('affEquipInfoContent').innerHTML=`
     <strong>${escHtml(num)}</strong> · ${escHtml(type)}<br>
-    📍 Actuellement : <strong>${escHtml(site)}</strong> · 👤 ${escHtml(user)} · État : <strong>${escHtml(etat)}</strong>`;
+    <i class="ph ph-map-pin" aria-hidden="true"></i> Actuellement : <strong>${escHtml(site)}</strong> · <i class="ph ph-user" aria-hidden="true"></i> ${escHtml(user)} · État : <strong>${escHtml(etat)}</strong>`;
 }
 
 function resetAff(){
@@ -492,7 +492,7 @@ async function saveAff(){
   // Vérifier BL si transfert vers site
   const fichierBL = document.getElementById('affFichierBL').files[0];
   if(site && (type==='transfert'||type==='sortie') && !fichierBL){
-    document.getElementById('affAlert').innerHTML='<div class="alert alert-danger">⚠️ Le bon de livraison est obligatoire pour un transfert vers un site.</div>';
+    document.getElementById('affAlert').innerHTML='<div class="alert alert-danger"><i class="ph ph-warning" aria-hidden="true"></i> Le bon de livraison est obligatoire pour un transfert vers un site.</div>';
     document.getElementById('affFichierBL').focus(); return;
   }
 

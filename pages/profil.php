@@ -106,10 +106,10 @@ include __DIR__ . '/../templates/header.php';
         <div class="role-badge"><?= h($user['role_nom']) ?></div>
       </div>
       <div class="profil-meta">
-        <div class="meta-item"><span class="m-icon">✉</span><span class="m-val"><?= h($user['email']) ?></span></div>
-        <div class="meta-item"><span class="m-icon">📱</span><span class="m-val"><?= h($user['telephone'] ?: '—') ?></span></div>
-        <div class="meta-item"><span class="m-icon">📅</span><span class="m-val">Inscrit le <?= fmt_date($user['created_at']) ?></span></div>
-        <div class="meta-item"><span class="m-icon">🕐</span><span class="m-val">Dernière connexion : <?= fmt_datetime($user['last_login']) ?></span></div>
+        <div class="meta-item"><span class="m-icon"><i class="ph ph-envelope-simple" aria-hidden="true"></i></span><span class="m-val"><?= h($user['email']) ?></span></div>
+        <div class="meta-item"><span class="m-icon"><i class="ph ph-device-mobile" aria-hidden="true"></i></span><span class="m-val"><?= h($user['telephone'] ?: '—') ?></span></div>
+        <div class="meta-item"><span class="m-icon"><i class="ph ph-calendar" aria-hidden="true"></i></span><span class="m-val">Inscrit le <?= fmt_date($user['created_at']) ?></span></div>
+        <div class="meta-item"><span class="m-icon"><i class="ph ph-clock" aria-hidden="true"></i></span><span class="m-val">Dernière connexion : <?= fmt_datetime($user['last_login']) ?></span></div>
       </div>
     </div>
   </div>
@@ -117,9 +117,9 @@ include __DIR__ . '/../templates/header.php';
   <!-- COLONNE DROITE -->
   <div class="profil-card">
     <div class="tabs">
-      <button class="tab-btn active" onclick="showTab('infos',this)">📝 Informations</button>
-      <button class="tab-btn" onclick="showTab('password',this)">🔒 Mot de passe</button>
-      <button class="tab-btn" onclick="showTab('activites',this)">📋 Activités</button>
+      <button class="tab-btn active" onclick="showTab('infos',this)"><i class="ph ph-note-pencil" aria-hidden="true"></i> Informations</button>
+      <button class="tab-btn" onclick="showTab('password',this)"><i class="ph ph-lock" aria-hidden="true"></i> Mot de passe</button>
+      <button class="tab-btn" onclick="showTab('activites',this)"><i class="ph ph-clipboard-text" aria-hidden="true"></i> Activités</button>
     </div>
 
     <!-- TAB : INFOS -->
@@ -139,7 +139,7 @@ include __DIR__ . '/../templates/header.php';
       <div class="form-group"><label>Téléphone</label>
         <input type="text" class="form-control" id="f-tel" value="<?= h($user['telephone'] ?? '') ?>" placeholder="+225 00 00 00 00">
       </div>
-      <button class="btn btn-primary" onclick="saveInfos()">💾 Enregistrer</button>
+      <button class="btn btn-primary" onclick="saveInfos()"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Enregistrer</button>
     </div>
 
     <!-- TAB : MOT DE PASSE -->
@@ -154,7 +154,7 @@ include __DIR__ . '/../templates/header.php';
       <div class="form-group"><label>Confirmer le nouveau mot de passe</label>
         <input type="password" class="form-control" id="f-confirm-pwd" placeholder="••••••••">
       </div>
-      <button class="btn btn-primary" onclick="changePwd()">🔒 Modifier le mot de passe</button>
+      <button class="btn btn-primary" onclick="changePwd()"><i class="ph ph-lock" aria-hidden="true"></i> Modifier le mot de passe</button>
     </div>
 
     <!-- TAB : ACTIVITÉS -->

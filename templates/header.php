@@ -840,7 +840,7 @@ $unread = count($notifs);
     </div>
     <div class="notif-list">
       <?php if (empty($notifs)): ?>
-        <div class="notif-empty">✅ Aucune notification</div>
+        <div class="notif-empty"><i class="ph ph-check-circle" aria-hidden="true"></i> Aucune notification</div>
       <?php else: ?>
         <?php foreach ($notifs as $n): ?>
           <div class="notif-item" onclick="readNotif(<?= $n['id'] ?>, '<?= h($n['lien']??'') ?>')">

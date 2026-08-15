@@ -791,7 +791,7 @@ include __DIR__ . '/../../templates/header.php';
       </select>
       <?php else: ?>
       <span style="padding:9px 14px;background:var(--lighter);border-radius:9px;font-size:13px;font-weight:600;color:var(--navy)">
-        📍 <?= h(db_fetch_value("SELECT nom FROM sites WHERE id=?", [$f_site]) ?? 'Mon site') ?>
+        <i class="ph ph-map-pin" aria-hidden="true"></i> <?= h(db_fetch_value("SELECT nom FROM sites WHERE id=?", [$f_site]) ?? 'Mon site') ?>
       </span>
       <?php endif; ?>
       <input type="month" name="mois" value="<?= h($f_mois) ?>" onchange="this.form.submit()" aria-label="Choisir le mois"
@@ -800,7 +800,7 @@ include __DIR__ . '/../../templates/header.php';
   </div>
   <?php if(in_array($role_slug_pj, ['coordinateur_site','admin','superadmin'])): ?>
   <?php if($stock_bloque): ?>
-  <button class="btn btn-secondary" disabled style="opacity:.5;cursor:not-allowed">🔒 Activité bloquée</button>
+  <button class="btn btn-secondary" disabled style="opacity:.5;cursor:not-allowed"><i class="ph ph-lock" aria-hidden="true"></i> Activité bloquée</button>
   <?php else: ?>
   <button class="btn btn-primary" onclick="openPointForm()">+ Nouveau point journalier</button>
   <?php endif; ?>
@@ -809,7 +809,7 @@ include __DIR__ . '/../../templates/header.php';
 
 <?php if($stock_bloque && $stock_bloque_msg): ?>
 <div style="background:#FEF2F2;border:2px solid #FECACA;border-radius:12px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:flex-start;gap:12px">
-  <span style="font-size:22px;flex-shrink:0">🚫</span>
+  <span style="font-size:22px;flex-shrink:0"><i class="ph ph-prohibit" aria-hidden="true"></i></span>
   <div>
     <div style="font-weight:800;color:#991B1B;font-size:14px;margin-bottom:4px">Saisie de point journalier bloquée</div>
     <div style="color:#7F1D1D;font-size:13px"><?= h($stock_bloque_msg) ?></div>
@@ -831,12 +831,12 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
 ?>
 <div style="background:#fee2e2;border:2px solid #fca5a5;border-radius:16px;padding:20px 24px;margin-bottom:20px">
   <div style="display:flex;align-items:flex-start;gap:16px">
-    <div style="font-size:40px;flex-shrink:0">🔒</div>
+    <div style="font-size:40px;flex-shrink:0"><i class="ph ph-lock" aria-hidden="true"></i></div>
     <div style="flex:1">
       <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:#991b1b;margin-bottom:4px">Activité bloquée par le gestionnaire stock bobines</div>
       <div style="font-size:13px;color:#991b1b">Votre stock présente des écarts non résolus. Vous ne pouvez pas saisir de point journalier aujourd'hui.</div>
       <?php if($validation_matin['commentaire']): ?>
-      <div style="margin-top:8px;font-size:13px;color:#7f1d1d">💬 Motif GSB : <strong><?= h($validation_matin['commentaire']) ?></strong></div>
+      <div style="margin-top:8px;font-size:13px;color:#7f1d1d"><i class="ph ph-chat-circle" aria-hidden="true"></i> Motif GSB : <strong><?= h($validation_matin['commentaire']) ?></strong></div>
       <?php endif; ?>
     </div>
   </div>
@@ -844,7 +844,7 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
   <?php if(!empty($corrections_demandees)): ?>
   <div style="margin-top:16px;background:white;border-radius:12px;overflow:hidden;border:1.5px solid #fca5a5">
     <div style="padding:10px 16px;background:#fef2f2;border-bottom:1px solid #fca5a5;font-size:13px;font-weight:700;color:#991b1b">
-      ⚠️ Corrections à apporter sur <?= count($corrections_demandees) ?> bobine(s)
+      <i class="ph ph-warning" aria-hidden="true"></i> Corrections à apporter sur <?= count($corrections_demandees) ?> bobine(s)
     </div>
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead>
@@ -887,7 +887,7 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
 
 <?php if(!$stock_bloque && $validation_matin && $validation_matin['statut']==='autorise_ecart'): ?>
 <div style="background:#fef3c7;border:2px solid #fcd34d;border-radius:14px;padding:14px 20px;margin-bottom:16px;display:flex;align-items:center;gap:12px">
-  <div style="font-size:24px">⚠️</div>
+  <div style="font-size:24px"><i class="ph ph-warning" aria-hidden="true"></i></div>
   <div>
     <div style="font-size:14px;font-weight:700;color:#92400e">Écart autorisé par le gestionnaire</div>
     <div style="font-size:12px;color:#92400e;margin-top:2px">Commentaire : <?= h($validation_matin['commentaire']) ?></div>
@@ -898,19 +898,19 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
 <!-- KPI BAR -->
 <div class="kpi-bar">
   <div class="kpi-card">
-    <div class="kpi-icon" style="background:#e3f2fd">🚗</div>
+    <div class="kpi-icon" style="background:#e3f2fd"><i class="ph ph-car" aria-hidden="true"></i></div>
     <div><div class="kpi-val"><?= fmt_number($kpi_engins) ?></div><div class="kpi-lbl">Engins ce mois</div></div>
   </div>
   <div class="kpi-card">
-    <div class="kpi-icon" style="background:#e8f5e9">📋</div>
+    <div class="kpi-icon" style="background:#e8f5e9"><i class="ph ph-clipboard-text" aria-hidden="true"></i></div>
     <div><div class="kpi-val"><?= fmt_number($kpi_plaques) ?></div><div class="kpi-lbl">Plaques ce mois</div></div>
   </div>
   <div class="kpi-card">
-    <div class="kpi-icon" style="background:#f3e5f5">🔩</div>
+    <div class="kpi-icon" style="background:#f3e5f5"><i class="ph ph-wrench" aria-hidden="true"></i></div>
     <div><div class="kpi-val"><?= fmt_number($kpi_rivets) ?></div><div class="kpi-lbl">Rivets posés</div></div>
   </div>
   <div class="kpi-card">
-    <div class="kpi-icon" style="background:#d1fae5">✅</div>
+    <div class="kpi-icon" style="background:#d1fae5"><i class="ph ph-check-circle" aria-hidden="true"></i></div>
     <div><div class="kpi-val"><?= $kpi_valides ?> / <?= count($points) ?></div><div class="kpi-lbl">Points validés</div></div>
   </div>
 </div>
@@ -920,7 +920,7 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
 <div id="panel-corrections-bobines" style="background:white;border:2px solid #f59e0b;border-radius:14px;margin-bottom:20px;overflow:hidden">
   <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:linear-gradient(90deg,#fffbeb,#fef3c7);border-bottom:1px solid #fcd34d">
     <div style="display:flex;align-items:center;gap:10px">
-      <span style="font-size:20px">🔔</span>
+      <span style="font-size:20px"><i class="ph ph-bell" aria-hidden="true"></i></span>
       <div>
         <div style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;color:#92400e">
           <?= $nb_corrections_attente ?> demande<?= $nb_corrections_attente > 1 ? 's' : '' ?> de correction bobine<?= $nb_corrections_attente > 1 ? 's' : '' ?> en attente
@@ -976,7 +976,7 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
   <span style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Stock rivets :</span>
   <?php foreach($stock_rivets_all as $sr):
     $label = $sr['type_rivet'] === 'eclate' ? 'Éclatés' : 'Gonflables';
-    $icon  = $sr['type_rivet'] === 'eclate' ? '🔴' : '🔵';
+    $icon  = $sr['type_rivet'] === 'eclate' ? '<i class="ph ph-circle" aria-hidden="true"></i>' : '<i class="ph ph-circle" aria-hidden="true"></i>';
     $col   = $sr['quantite']<100 ? '#dc2626' : ($sr['quantite']<500 ? '#d97706' : '#1e40af');
     $bg    = $sr['quantite']<100 ? '#fee2e2' : ($sr['quantite']<500 ? '#fef3c7' : '#eff6ff');
   ?>
@@ -993,13 +993,13 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
 <!-- LISTE DES POINTS — CARDS -->
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
   <h3 style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:700;color:var(--navy)">
-    📋 Points journaliers <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= count($points) ?>)</span>
+    <i class="ph ph-clipboard-text" aria-hidden="true"></i> Points journaliers <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= count($points) ?>)</span>
   </h3>
 </div>
 
 <?php if(empty($points)): ?>
 <div style="background:white;border:1px solid var(--border);border-radius:14px;padding:48px;text-align:center;color:var(--muted)">
-  <div style="font-size:40px;margin-bottom:12px">📋</div>
+  <div style="font-size:40px;margin-bottom:12px"><i class="ph ph-clipboard-text" aria-hidden="true"></i></div>
   <div style="font-size:15px;font-weight:600">Aucun point journalier ce mois</div>
   <div style="font-size:13px;margin-top:4px">Cliquez sur "Nouveau point" pour commencer</div>
 </div>
@@ -1007,16 +1007,16 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
 <div style="display:flex;flex-direction:column;gap:8px">
 <?php
 $statut_cfg = [
-  'valide'                => ['bg'=>'#d1fae5','col'=>'#065f46','icon'=>'✅','lbl'=>'Validé'],
+  'valide'                => ['bg'=>'#d1fae5','col'=>'#065f46','icon'=>'<i class="ph ph-check-circle" aria-hidden="true"></i>','lbl'=>'Validé'],
   'brouillon'             => ['bg'=>'#fef3c7','col'=>'#92400e','icon'=>'⏳','lbl'=>'Brouillon'],
-  'en_attente_validation' => ['bg'=>'#dbeafe','col'=>'#1d4ed8','icon'=>'📤','lbl'=>'En attente'],
-  'suivi'                 => ['bg'=>'#f1f5f9','col'=>'#475569','icon'=>'📊','lbl'=>'Suivi'],
-  'rejete'                => ['bg'=>'#fee2e2','col'=>'#991b1b','icon'=>'❌','lbl'=>'Rejeté'],
+  'en_attente_validation' => ['bg'=>'#dbeafe','col'=>'#1d4ed8','icon'=>'<i class="ph ph-upload-simple" aria-hidden="true"></i>','lbl'=>'En attente'],
+  'suivi'                 => ['bg'=>'#f1f5f9','col'=>'#475569','icon'=>'<i class="ph ph-chart-bar" aria-hidden="true"></i>','lbl'=>'Suivi'],
+  'rejete'                => ['bg'=>'#fee2e2','col'=>'#991b1b','icon'=>'<i class="ph ph-x-circle" aria-hidden="true"></i>','lbl'=>'Rejeté'],
 ];
 $type_cfg = [
   'point_9h'  => ['lbl'=>'9h', 'bg'=>'#fef3c7','col'=>'#92400e'],
   'point_13h' => ['lbl'=>'13h','bg'=>'#ffedd5','col'=>'#c2410c'],
-  'point_18h' => ['lbl'=>'18h ✅','bg'=>'#dbeafe','col'=>'#1d4ed8'],
+  'point_18h' => ['lbl'=>'18h <i class="ph ph-check-circle" aria-hidden="true"></i>','bg'=>'#dbeafe','col'=>'#1d4ed8'],
   'final'     => ['lbl'=>'Final','bg'=>'#e0f2fe','col'=>'#0369a1'],
   'intermediaire'=>['lbl'=>'Interm.','bg'=>'#fff7ed','col'=>'#c2410c'],
 ];
@@ -1025,10 +1025,10 @@ foreach($points as $p):
   $tc  = $type_cfg[$p['type_point']] ?? ['lbl'=>$p['type_point'],'bg'=>'#f3f4f6','col'=>'#374151'];
   $today = ($p['date_point'] === date('Y-m-d'));
   $veh = [];
-  if($p['nb_vp']>0)     $veh[]="🚗 {$p['nb_vp']}";
-  if($p['nb_camion']>0) $veh[]="🚛 {$p['nb_camion']}";
-  if($p['nb_semi']>0)   $veh[]="🚚 {$p['nb_semi']}";
-  if($p['nb_moto']>0)   $veh[]="🏍️ {$p['nb_moto']}";
+  if($p['nb_vp']>0)     $veh[]="<i class='ph ph-car' aria-hidden='true'></i> {$p['nb_vp']}";
+  if($p['nb_camion']>0) $veh[]="<i class='ph ph-truck' aria-hidden='true'></i> {$p['nb_camion']}";
+  if($p['nb_semi']>0)   $veh[]="<i class='ph ph-truck' aria-hidden='true'></i> {$p['nb_semi']}";
+  if($p['nb_moto']>0)   $veh[]="<i class='ph ph-motorcycle' aria-hidden='true'></i> {$p['nb_moto']}";
 ?>
 <div class="pj-card<?= $today ? ' today' : '' ?>">
 
@@ -1048,12 +1048,12 @@ foreach($points as $p):
       <?php endif; ?>
     </div>
     <div class="pj-pills">
-      <span class="pj-pill engins">🚗 <?= $p['total_engins'] ?> engins</span>
-      <span class="pj-pill plaques">📋 <?= $p['total_plaques'] ?> plaques</span>
+      <span class="pj-pill engins"><i class="ph ph-car" aria-hidden="true"></i> <?= $p['total_engins'] ?> engins</span>
+      <span class="pj-pill plaques"><i class="ph ph-clipboard-text" aria-hidden="true"></i> <?= $p['total_plaques'] ?> plaques</span>
       <?php if($p['rivets_utilises'] > 0): ?>
-      <span class="pj-pill rivets">🔩 <?= $p['rivets_utilises'] ?> rivets<?= $p['rivets_endommages']>0?' (⚠️'.$p['rivets_endommages'].' end.)':'' ?></span>
+      <span class="pj-pill rivets"><i class="ph ph-wrench" aria-hidden="true"></i> <?= $p['rivets_utilises'] ?> rivets<?= $p['rivets_endommages']>0?' (<i class="ph ph-warning" aria-hidden="true"></i>'.$p['rivets_endommages'].' end.)':'' ?></span>
       <?php endif; ?>
-      <span class="pj-pill prod">⚡ <?= $p['moyenne_prod'] ?> V/H</span>
+      <span class="pj-pill prod"><i class="ph ph-lightning" aria-hidden="true"></i> <?= $p['moyenne_prod'] ?> V/H</span>
       <?php if($veh): ?>
       <span class="pj-pill veh"><?= implode(' · ', $veh) ?></span>
       <?php endif; ?>
@@ -1064,19 +1064,19 @@ foreach($points as $p):
   <div class="pj-actions" style="flex-direction:column">
     <div class="pj-status" style="background:<?= $sc['bg'] ?>;color:<?= $sc['col'] ?>"><?= $sc['icon'] ?> <?= $sc['lbl'] ?></div>
     <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
-      <button class="btn btn-secondary btn-sm" onclick="viewPoint(<?= $p['id'] ?>)" title="Aperçu">👁</button>
-      <button class="btn btn-secondary btn-sm" onclick="printPoint(<?= $p['id'] ?>)" title="Imprimer">🖨️</button>
+      <button class="btn btn-secondary btn-sm" onclick="viewPoint(<?= $p['id'] ?>)" title="Aperçu"><i class="ph ph-eye" aria-hidden="true"></i></button>
+      <button class="btn btn-secondary btn-sm" onclick="printPoint(<?= $p['id'] ?>)" title="Imprimer"><i class="ph ph-printer" aria-hidden="true"></i></button>
       <?php if($p['statut']==='brouillon' && ($p['agent_id']??0)==$user['id']): ?>
         <?php if(($p['type_point']??'')==='point_18h'): ?>
-        <button class="btn btn-primary btn-sm" onclick="soumettrePoint(<?= $p['id'] ?>)" title="Soumettre">📤</button>
+        <button class="btn btn-primary btn-sm" onclick="soumettrePoint(<?= $p['id'] ?>)" title="Soumettre"><i class="ph ph-upload-simple" aria-hidden="true"></i></button>
         <?php else: ?>
-        <button class="btn btn-success btn-sm" onclick="validerPointCoord(<?= $p['id'] ?>)" title="Valider">✅</button>
+        <button class="btn btn-success btn-sm" onclick="validerPointCoord(<?= $p['id'] ?>)" title="Valider"><i class="ph ph-check-circle" aria-hidden="true"></i></button>
         <?php endif; ?>
-        <button class="btn btn-secondary btn-sm" onclick="editPoint(<?= $p['id'] ?>)" title="Modifier" style="background:#e8f4f9;color:var(--blue)">✏️</button>
+        <button class="btn btn-secondary btn-sm" onclick="editPoint(<?= $p['id'] ?>)" title="Modifier" style="background:#e8f4f9;color:var(--blue)"><i class="ph ph-pencil-simple" aria-hidden="true"></i></button>
       <?php endif; ?>
       <?php if(in_array($p['statut'],['brouillon','en_attente_validation']) && ($p['type_point']??'')==='point_18h' && in_array($role_slug_pj,['admin','superadmin','superviseur_operation'])): ?>
-        <button class="btn btn-success btn-sm" onclick="validerPoint(<?= $p['id'] ?>)" title="Valider">✅</button>
-        <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5" onclick="ouvrirRejet(<?= $p['id'] ?>,<?= htmlspecialchars(json_encode($p['date_point'])) ?>)" title="Rejeter">❌</button>
+        <button class="btn btn-success btn-sm" onclick="validerPoint(<?= $p['id'] ?>)" title="Valider"><i class="ph ph-check-circle" aria-hidden="true"></i></button>
+        <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5" onclick="ouvrirRejet(<?= $p['id'] ?>,<?= htmlspecialchars(json_encode($p['date_point'])) ?>)" title="Rejeter"><i class="ph ph-x-circle" aria-hidden="true"></i></button>
       <?php endif; ?>
     </div>
   </div>
@@ -1090,8 +1090,8 @@ foreach($points as $p):
 <div class="modal-overlay" id="mPoint">
   <div class="modal" style="width:900px">
     <div class="mhdr">
-      <h3>📝 Nouveau point journalier</h3>
-      <button class="mclose" onclick="document.getElementById('mPoint').classList.remove('open')">✕</button>
+      <h3><i class="ph ph-note-pencil" aria-hidden="true"></i> Nouveau point journalier</h3>
+      <button class="mclose" onclick="document.getElementById('mPoint').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div class="mbody">
       <div id="pAlert"></div>
@@ -1133,7 +1133,7 @@ foreach($points as $p):
             <?php if($role_slug_pj === 'coordinateur_site' && $user['site_id']): ?>
             <input type="hidden" id="p-site" value="<?= (int)$user['site_id'] ?>">
             <div class="form-control" style="background:var(--lighter);color:var(--navy);font-weight:600;cursor:default">
-              📍 <?= h(db_fetch_value("SELECT nom FROM sites WHERE id=?",[(int)$user['site_id']]) ?? '') ?>
+              <i class="ph ph-map-pin" aria-hidden="true"></i> <?= h(db_fetch_value("SELECT nom FROM sites WHERE id=?",[(int)$user['site_id']]) ?? '') ?>
             </div>
             <?php else: ?>
             <select class="form-control" id="p-site" onchange="loadStockRivets();loadBobines();loadStockPMMA()">
@@ -1154,7 +1154,7 @@ foreach($points as $p):
               <option value="point_18h" selected>🕕 Point 18h — Fin de journée ✅</option>
             </select>
             <div id="type-info" style="margin-top:6px;font-size:12px;padding:7px 12px;border-radius:8px;background:#d1fae5;color:#065f46;font-weight:600">
-              ✅ Ce point sera envoyé en validation au superviseur.
+              <i class="ph ph-check-circle" aria-hidden="true"></i> Ce point sera envoyé en validation au superviseur.
             </div>
           </div>
         </div>
@@ -1174,7 +1174,7 @@ foreach($points as $p):
         </div>
       <div class="point-grid" style="margin-bottom:0">
         <?php
-        $veh_icons = ['VP'=>'🚗','CAM'=>'🚛','SEMI'=>'🚚','MOTO'=>'🏍️'];
+        $veh_icons = ['VP'=>'<i class="ph ph-car" aria-hidden="true"></i>','CAM'=>'<i class="ph ph-truck" aria-hidden="true"></i>','SEMI'=>'<i class="ph ph-truck" aria-hidden="true"></i>','MOTO'=>'<i class="ph ph-motorcycle" aria-hidden="true"></i>'];
         $veh_colors= ['VP'=>'#e3f2fd','CAM'=>'#e8f5e9','SEMI'=>'#fff3e0','MOTO'=>'#fce4ec'];
         foreach($types_v as $tv):
         ?>
@@ -1187,9 +1187,9 @@ foreach($points as $p):
             </div>
           </div>
           <div class="vc-badges">
-            <span class="badge-info">🪪 <?= $tv['nb_plaques'] ?> plaque(s)</span>
-            <span class="badge-info">🔩 <?= $tv['nb_rivets'] ?> rivets</span>
-            <span class="badge-info">🎞️ <?= $tv['nb_plaques'] ?> film(s)</span>
+            <span class="badge-info"><i class="ph ph-identification-card" aria-hidden="true"></i> <?= $tv['nb_plaques'] ?> plaque(s)</span>
+            <span class="badge-info"><i class="ph ph-wrench" aria-hidden="true"></i> <?= $tv['nb_rivets'] ?> rivets</span>
+            <span class="badge-info"><i class="ph ph-film-strip" aria-hidden="true"></i> <?= $tv['nb_plaques'] ?> film(s)</span>
           </div>
           <input type="number" class="nb-input" id="nb-<?= $tv['code'] ?>"
                  min="0" value="0" placeholder="0"
@@ -1217,7 +1217,7 @@ foreach($points as $p):
         </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:0">
         <div style="background:#e3f2fd;border-radius:12px;padding:14px;border:1.5px solid #90caf9">
-          <div style="font-size:12px;font-weight:700;color:#1565c0;margin-bottom:10px">🔵 Rivets Gonflables</div>
+          <div style="font-size:12px;font-weight:700;color:#1565c0;margin-bottom:10px"><i class="ph ph-circle" aria-hidden="true"></i> Rivets Gonflables</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
             <div class="form-group" style="margin:0">
               <label style="font-size:12px;color:#1565c0">Posés</label>
@@ -1233,7 +1233,7 @@ foreach($points as $p):
           <div id="info-gonfl" style="font-size:12px;margin-top:8px;color:#1565c0;font-weight:600">Stock: — | Sortis: 0</div>
         </div>
         <div style="background:#fce4ec;border-radius:12px;padding:14px;border:1.5px solid #f48fb1">
-          <div style="font-size:12px;font-weight:700;color:#880e4f;margin-bottom:10px">🔴 Rivets Éclatés</div>
+          <div style="font-size:12px;font-weight:700;color:#880e4f;margin-bottom:10px"><i class="ph ph-circle" aria-hidden="true"></i> Rivets Éclatés</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
             <div class="form-group" style="margin:0">
               <label style="font-size:12px;color:#880e4f">Posés</label>
@@ -1283,10 +1283,10 @@ foreach($points as $p):
           <h4>Compléments</h4>
         </div>
         <div class="form-row cols-2" style="margin-bottom:16px">
-          <div class="form-group"><label>🚫 Non posés — Concessionnaires</label>
+          <div class="form-group"><label><i class="ph ph-prohibit" aria-hidden="true"></i> Non posés — Concessionnaires</label>
             <input type="number" class="form-control" id="p-np-conc" min="0" value="0">
           </div>
-          <div class="form-group"><label>🚫 Non posés — Usagers</label>
+          <div class="form-group"><label><i class="ph ph-prohibit" aria-hidden="true"></i> Non posés — Usagers</label>
             <input type="number" class="form-control" id="p-np-usag" min="0" value="0">
           </div>
         </div>
@@ -1312,8 +1312,8 @@ foreach($points as $p):
     </div>
     <div class="mfoot">
       <button class="btn btn-secondary" onclick="document.getElementById('mPoint').classList.remove('open')">Annuler</button>
-      <button class="btn btn-secondary" onclick="togglePreview()">👁 Aperçu</button>
-      <button class="btn btn-primary" id="btn-save-point" onclick="savePoint()">💾 Enregistrer le point</button>
+      <button class="btn btn-secondary" onclick="togglePreview()"><i class="ph ph-eye" aria-hidden="true"></i> Aperçu</button>
+      <button class="btn btn-primary" id="btn-save-point" onclick="savePoint()"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Enregistrer le point</button>
     </div>
   </div>
 </div>
@@ -1322,8 +1322,8 @@ foreach($points as $p):
 <div class="modal-overlay" id="mRejet">
   <div class="modal" style="width:480px">
     <div class="mhdr">
-      <h3>❌ Rejeter le point journalier</h3>
-      <button class="mclose" onclick="document.getElementById('mRejet').classList.remove('open')">✕</button>
+      <h3><i class="ph ph-x-circle" aria-hidden="true"></i> Rejeter le point journalier</h3>
+      <button class="mclose" onclick="document.getElementById('mRejet').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div class="mbody">
       <input type="hidden" id="rejet-point-id" value="">
@@ -1333,12 +1333,12 @@ foreach($points as $p):
         <textarea class="form-control" id="rejet-motif" rows="3" placeholder="Expliquer pourquoi le point est rejeté…"></textarea>
       </div>
       <div style="background:#fef3c7;border-radius:10px;padding:10px 14px;font-size:12px;color:#92400e;margin-top:12px">
-        ⚠️ Le rejet va <strong>restaurer le stock</strong> films et rivets déduits par ce point. Le coordinateur sera notifié.
+        <i class="ph ph-warning" aria-hidden="true"></i> Le rejet va <strong>restaurer le stock</strong> films et rivets déduits par ce point. Le coordinateur sera notifié.
       </div>
     </div>
     <div class="mfoot">
       <button class="btn btn-secondary" onclick="document.getElementById('mRejet').classList.remove('open')">Annuler</button>
-      <button class="btn" style="background:#dc2626;color:white" onclick="confirmerRejet()">❌ Confirmer le rejet</button>
+      <button class="btn" style="background:#dc2626;color:white" onclick="confirmerRejet()"><i class="ph ph-x-circle" aria-hidden="true"></i> Confirmer le rejet</button>
     </div>
   </div>
 </div>
@@ -1346,8 +1346,8 @@ foreach($points as $p):
 <!-- MODAL RÉPONSE CORRECTION BOBINE (coordinateur) -->
 <div class="modal-overlay" id="mReponseCorr">
   <div class="modal" style="width:520px">
-    <div class="mhdr"><h3>🔔 Répondre à la demande de correction</h3>
-      <button class="mclose" onclick="fermerReponseCorrection()">✕</button>
+    <div class="mhdr"><h3><i class="ph ph-bell" aria-hidden="true"></i> Répondre à la demande de correction</h3>
+      <button class="mclose" onclick="fermerReponseCorrection()"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div class="mbody">
       <input type="hidden" id="rc-correction-id" value="">
@@ -1371,21 +1371,21 @@ foreach($points as $p):
           <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer" id="rc-opt-approuvee">
             <input type="radio" name="rc-reponse" value="approuvee" onchange="onRcReponseChange()">
             <div>
-              <div style="font-size:13px;font-weight:700;color:#065f46">✅ Confirmer la proposition du GSB</div>
+              <div style="font-size:13px;font-weight:700;color:#065f46"><i class="ph ph-check-circle" aria-hidden="true"></i> Confirmer la proposition du GSB</div>
               <div style="font-size:12px;color:#6b7280">Le stock sera ajusté à la valeur proposée par le GSB.</div>
             </div>
           </label>
           <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer" id="rc-opt-contreproposee">
             <input type="radio" name="rc-reponse" value="contreproposee" onchange="onRcReponseChange()">
             <div>
-              <div style="font-size:13px;font-weight:700;color:#b45309">🔄 Contre-proposer une autre valeur</div>
+              <div style="font-size:13px;font-weight:700;color:#b45309"><i class="ph ph-arrow-clockwise" aria-hidden="true"></i> Contre-proposer une autre valeur</div>
               <div style="font-size:12px;color:#6b7280">Vous proposez un nombre de films différent, avec explication.</div>
             </div>
           </label>
           <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer" id="rc-opt-refusee">
             <input type="radio" name="rc-reponse" value="refusee" onchange="onRcReponseChange()">
             <div>
-              <div style="font-size:13px;font-weight:700;color:#991b1b">❌ Refuser la demande de correction</div>
+              <div style="font-size:13px;font-weight:700;color:#991b1b"><i class="ph ph-x-circle" aria-hidden="true"></i> Refuser la demande de correction</div>
               <div style="font-size:12px;color:#6b7280">Votre saisie initiale est maintenue telle quelle.</div>
             </div>
           </label>
@@ -1414,10 +1414,10 @@ foreach($points as $p):
 <!-- MODAL DETAIL POINT -->
 <div class="modal-overlay" id="mDetail">
   <div class="modal" style="width:700px">
-    <div class="mhdr"><h3>📊 Détail du point</h3>
+    <div class="mhdr"><h3><i class="ph ph-chart-bar" aria-hidden="true"></i> Détail du point</h3>
       <div style="display:flex;gap:8px">
-        <button class="btn btn-secondary btn-sm" onclick="printPoint(currentPointId)" title="Imprimer">🖨️ Imprimer</button>
-        <button class="mclose" onclick="document.getElementById('mDetail').classList.remove('open')">✕</button>
+        <button class="btn btn-secondary btn-sm" onclick="printPoint(currentPointId)" title="Imprimer"><i class="ph ph-printer" aria-hidden="true"></i> Imprimer</button>
+        <button class="mclose" onclick="document.getElementById('mDetail').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button>
       </div>
     </div>
     <div class="mbody" id="detail-body"></div>
@@ -1585,7 +1585,7 @@ function ajouterLignePmma(){
   div.dataset.type = type;
   div.style.cssText='display:grid;grid-template-columns:1fr 110px 110px 32px;gap:8px;align-items:end;padding:8px 10px;background:var(--lighter);border-radius:9px;margin-bottom:6px';
   div.innerHTML=`
-    <div style="font-size:13px;font-weight:600;color:var(--navy);padding-bottom:2px">🪟 ${type} <span style="font-size:12px;color:var(--muted);font-weight:400">stock : ${stock}</span></div>
+    <div style="font-size:13px;font-weight:600;color:var(--navy);padding-bottom:2px"><i class="ph ph-app-window" aria-hidden="true"></i> ${type} <span style="font-size:12px;color:var(--muted);font-weight:400">stock : ${stock}</span></div>
     <div>
       <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px">Utilisés</label>
       <input type="number" data-kind="util" min="0" max="${stock}" value="0"
@@ -1597,7 +1597,7 @@ function ajouterLignePmma(){
              class="form-control" style="font-size:13px;text-align:center">
     </div>
     <button type="button" onclick="this.closest('[data-type]').remove()"
-            style="background:#fee2e2;border:none;border-radius:7px;cursor:pointer;font-size:15px;color:#991b1b;width:32px;height:32px;margin-bottom:1px">✕</button>`;
+            style="background:#fee2e2;border:none;border-radius:7px;cursor:pointer;font-size:15px;color:#991b1b;width:32px;height:32px;margin-bottom:1px"><i class="ph ph-x" aria-hidden="true"></i></button>`;
   document.getElementById('pmma-lignes').appendChild(div);
   sel.value='';
 }
@@ -1636,7 +1636,7 @@ function ajouterObservation(type, texte){
     <select class="form-control" style="flex:0 0 130px;font-size:12.5px" onchange="majCouleurObservation(this)">${optsHtml}</select>
     <input type="text" class="form-control" style="flex:1;font-size:13px" placeholder="Observation…" value="${escAttr(texte)}">
     <button type="button" onclick="this.closest('[data-obs-row]').remove();renumeroterObservations();"
-            style="background:#fee2e2;border:none;border-radius:7px;cursor:pointer;font-size:14px;color:#991b1b;width:30px;height:30px;flex:0 0 30px">✕</button>`;
+            style="background:#fee2e2;border:none;border-radius:7px;cursor:pointer;font-size:14px;color:#991b1b;width:30px;height:30px;flex:0 0 30px"><i class="ph ph-x" aria-hidden="true"></i></button>`;
   document.getElementById('obs-lignes').appendChild(div);
   majCouleurObservation(div.querySelector('select'));
   renumeroterObservations();
@@ -1868,10 +1868,10 @@ function updatePreview(engins,plaques,moy){
   document.getElementById('prev-date').textContent='Date : '+new Date(date).toLocaleDateString('fr-FR',{day:'2-digit',month:'long',year:'numeric'});
   const rivets=(parseInt(document.getElementById('c-rivets').textContent)||0);
   document.getElementById('prev-stats').innerHTML=[
-    ['🚗',document.getElementById('nb-VP')?.value||0,'VP'],
-    ['🚛',document.getElementById('nb-CAM')?.value||0,'Camion'],
-    ['🚚',document.getElementById('nb-SEMI')?.value||0,'Semi'],
-    ['🏍️',document.getElementById('nb-MOTO')?.value||0,'Moto'],
+    ['<i class="ph ph-car" aria-hidden="true"></i>',document.getElementById('nb-VP')?.value||0,'VP'],
+    ['<i class="ph ph-truck" aria-hidden="true"></i>',document.getElementById('nb-CAM')?.value||0,'Camion'],
+    ['<i class="ph ph-truck" aria-hidden="true"></i>',document.getElementById('nb-SEMI')?.value||0,'Semi'],
+    ['<i class="ph ph-motorcycle" aria-hidden="true"></i>',document.getElementById('nb-MOTO')?.value||0,'Moto'],
   ].map(([i,v,l])=>`<div class="pp-stat"><div class="psv">${v}</div><div class="psl">${i} ${l}</div></div>`).join('');
   const detail=TYPES_V.map(tv=>{
     const n=parseInt(document.getElementById('nb-'+tv.code)?.value||0);
@@ -2054,7 +2054,7 @@ async function viewPoint(id){
 
     <!-- Véhicules -->
     <div style="margin-bottom:20px">
-      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">🚗 Répartition véhicules</div>
+      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px"><i class="ph ph-car" aria-hidden="true"></i> Répartition véhicules</div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">${vehCards}</div>
       <div style="display:flex;justify-content:space-between;margin-top:10px;padding:10px 14px;background:#f8fafc;border-radius:8px;font-size:13px">
         <span style="color:var(--muted)">Total engins</span>

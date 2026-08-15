@@ -104,41 +104,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 // ============================================================
 $roles   = db_fetch_all("SELECT * FROM roles ORDER BY id");
 $modules = [
-    'affectations'       => ['🔗', 'Affectations'],
-    'affectations_it'    => ['👨‍💻', 'Affectations support IT'],
-    'agents'             => ['👥', 'Annuaire agents'],
-    'bobines'            => ['🎞️', 'Bobines'],
-    'commandes'          => ['🏪', 'Commandes'],
-    'commandes_bobines'  => ['🛒', 'Commandes bobines'],
-    'consommables'       => ['🧴', 'Consommables'],
-    'delegations'        => ['🤝', 'Délégations'],
-    'demandes'           => ['📝', 'Demandes internes'],
-    'departements'       => ['🏗️', 'Départements'],
-    'equipements'        => ['💻', 'Équipements'],
-    'import_emuci'       => ['📥', 'Import EMUCI'],
-    'interventions'      => ['🛠️', 'Interventions maintenance'],
-    'inventaire_bobines' => ['📊', 'Inventaire bobines'],
-    'audit'              => ['📋', 'Journal d\'audit'],
-    'nomenclatures'      => ['🏷️', 'Nomenclatures'],
-    'pmma'               => ['🖨️', 'PMMA'],
-    'point_emuci'        => ['🔍', 'Point EMUCI'],
-    'operations'         => ['🚛', 'Points journaliers'],
-    'rapport_journalier' => ['📄', 'Rapport journalier IT'],
-    'rapports'           => ['📊', 'Rapports & Analyses'],
-    'rapports_gsb'       => ['📋', 'Rapports GSB'],
-    'receptions'         => ['📦', 'Réceptions site'],
-    'rivets'             => ['🔩', 'Rivets'],
-    'sites'              => ['🏢', 'Sites'],
-    'users'              => ['👥', 'Utilisateurs'],
-    'validation_stock'   => ['✅', 'Validation stock matin'],
-    'stock_bobines'      => ['📈', 'Vue stock bobines'],
+    'affectations'       => ['<i class="ph ph-link" aria-hidden="true"></i>', 'Affectations'],
+    'affectations_it'    => ['<i class="ph ph-headset" aria-hidden="true"></i>', 'Affectations support IT'],
+    'agents'             => ['<i class="ph ph-users" aria-hidden="true"></i>', 'Annuaire agents'],
+    'bobines'            => ['<i class="ph ph-film-strip" aria-hidden="true"></i>', 'Bobines'],
+    'commandes'          => ['<i class="ph ph-storefront" aria-hidden="true"></i>', 'Commandes'],
+    'commandes_bobines'  => ['<i class="ph ph-shopping-cart" aria-hidden="true"></i>', 'Commandes bobines'],
+    'consommables'       => ['<i class="ph ph-flask" aria-hidden="true"></i>', 'Consommables'],
+    'delegations'        => ['<i class="ph ph-handshake" aria-hidden="true"></i>', 'Délégations'],
+    'demandes'           => ['<i class="ph ph-note-pencil" aria-hidden="true"></i>', 'Demandes internes'],
+    'departements'       => ['<i class="ph ph-buildings" aria-hidden="true"></i>', 'Départements'],
+    'equipements'        => ['<i class="ph ph-desktop" aria-hidden="true"></i>', 'Équipements'],
+    'import_emuci'       => ['<i class="ph ph-download-simple" aria-hidden="true"></i>', 'Import EMUCI'],
+    'interventions'      => ['<i class="ph ph-wrench" aria-hidden="true"></i>', 'Interventions maintenance'],
+    'inventaire_bobines' => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Inventaire bobines'],
+    'audit'              => ['<i class="ph ph-clipboard-text" aria-hidden="true"></i>', 'Journal d\'audit'],
+    'nomenclatures'      => ['<i class="ph ph-tag" aria-hidden="true"></i>', 'Nomenclatures'],
+    'pmma'               => ['<i class="ph ph-printer" aria-hidden="true"></i>', 'PMMA'],
+    'point_emuci'        => ['<i class="ph ph-magnifying-glass" aria-hidden="true"></i>', 'Point EMUCI'],
+    'operations'         => ['<i class="ph ph-truck" aria-hidden="true"></i>', 'Points journaliers'],
+    'rapport_journalier' => ['<i class="ph ph-file-text" aria-hidden="true"></i>', 'Rapport journalier IT'],
+    'rapports'           => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Rapports & Analyses'],
+    'rapports_gsb'       => ['<i class="ph ph-clipboard-text" aria-hidden="true"></i>', 'Rapports GSB'],
+    'receptions'         => ['<i class="ph ph-package" aria-hidden="true"></i>', 'Réceptions site'],
+    'rivets'             => ['<i class="ph ph-wrench" aria-hidden="true"></i>', 'Rivets'],
+    'sites'              => ['<i class="ph ph-buildings" aria-hidden="true"></i>', 'Sites'],
+    'users'              => ['<i class="ph ph-users" aria-hidden="true"></i>', 'Utilisateurs'],
+    'validation_stock'   => ['<i class="ph ph-check-circle" aria-hidden="true"></i>', 'Validation stock matin'],
+    'stock_bobines'      => ['<i class="ph ph-chart-line-up" aria-hidden="true"></i>', 'Vue stock bobines'],
 ];
 $actions = [
-    'can_read'   => ['👁', 'Lire'],
-    'can_create' => ['➕', 'Créer'],
-    'can_update' => ['✏️', 'Modifier'],
-    'can_delete' => ['🗑', 'Supprimer'],
-    'can_export' => ['📥', 'Exporter'],
+    'can_read'   => ['<i class="ph ph-eye" aria-hidden="true"></i>', 'Lire'],
+    'can_create' => ['<i class="ph ph-plus" aria-hidden="true"></i>', 'Créer'],
+    'can_update' => ['<i class="ph ph-pencil-simple" aria-hidden="true"></i>', 'Modifier'],
+    'can_delete' => ['<i class="ph ph-trash" aria-hidden="true"></i>', 'Supprimer'],
+    'can_export' => ['<i class="ph ph-download-simple" aria-hidden="true"></i>', 'Exporter'],
 ];
 
 // Charger toutes les permissions
@@ -258,13 +258,13 @@ include __DIR__ . '/../../templates/header.php';
 <?php foreach($roles as $r):
   $is_superadmin = $r['slug'] === 'superadmin';
   $can_edit      = $user['role_slug'] === 'superadmin' && !$is_superadmin;
-  $role_icons    = ['superadmin'=>'👑','admin'=>'🛡️','lecteur'=>'👔'];
+  $role_icons    = ['superadmin'=>'<i class="ph ph-crown" aria-hidden="true"></i>','admin'=>'<i class="ph ph-shield" aria-hidden="true"></i>','lecteur'=>'<i class="ph ph-briefcase" aria-hidden="true"></i>'];
 ?>
 <div class="perm-pane <?= $r===reset($roles)?'active':'' ?>" id="role-<?= $r['id'] ?>">
 
   <!-- RÔLE HEADER -->
   <div class="role-header">
-    <div class="role-avatar"><?= $role_icons[$r['slug']] ?? '👤' ?></div>
+    <div class="role-avatar"><?= $role_icons[$r['slug']] ?? '<i class="ph ph-user" aria-hidden="true"></i>' ?></div>
     <div style="flex:1">
       <div class="role-title"><?= h($r['nom']) ?></div>
       <div class="role-sub">
@@ -274,11 +274,11 @@ include __DIR__ . '/../../templates/header.php';
     </div>
     <?php if($is_superadmin): ?>
     <div style="background:rgba(255,255,255,.15);border-radius:8px;padding:8px 14px;font-size:12px;font-weight:600">
-      🔒 Accès total — non modifiable
+      <i class="ph ph-lock" aria-hidden="true"></i> Accès total — non modifiable
     </div>
     <?php elseif($can_edit): ?>
     <button class="btn" style="background:var(--navy,#1E2B4A);color:white" onclick="savePerms(<?= $r['id'] ?>)">
-      💾 Sauvegarder
+      <i class="ph ph-floppy-disk" aria-hidden="true"></i> Sauvegarder
     </button>
     <?php else: ?>
     <div style="background:rgba(255,255,255,.1);border-radius:8px;padding:8px 14px;font-size:12px">
@@ -289,7 +289,7 @@ include __DIR__ . '/../../templates/header.php';
 
   <?php if($is_superadmin): ?>
   <div class="alert alert-info">
-    <span>👑</span> Le Super Administrateur a accès à toutes les fonctionnalités sans restriction. Ses permissions ne peuvent pas être modifiées.
+    <span><i class="ph ph-crown" aria-hidden="true"></i></span> Le Super Administrateur a accès à toutes les fonctionnalités sans restriction. Ses permissions ne peuvent pas être modifiées.
   </div>
 
   <?php else: ?>
@@ -352,11 +352,11 @@ include __DIR__ . '/../../templates/header.php';
   <?php if($can_edit): ?>
   <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px;padding:14px 18px;background:white;border:1px solid var(--border);border-radius:10px;flex-wrap:wrap;gap:10px">
     <div style="font-size:13px;color:var(--muted)">
-      💡 Les modifications ne prennent effet qu'après avoir cliqué sur <strong>Sauvegarder</strong>.
+      <i class="ph ph-lightbulb" aria-hidden="true"></i> Les modifications ne prennent effet qu'après avoir cliqué sur <strong>Sauvegarder</strong>.
     </div>
     <div style="display:flex;gap:8px">
-      <button class="btn btn-secondary" onclick="allOff(<?= $r['id'] ?>)">🚫 Tout désactiver</button>
-      <button class="btn btn-primary" onclick="savePerms(<?= $r['id'] ?>)">💾 Sauvegarder les permissions</button>
+      <button class="btn btn-secondary" onclick="allOff(<?= $r['id'] ?>)"><i class="ph ph-prohibit" aria-hidden="true"></i> Tout désactiver</button>
+      <button class="btn btn-primary" onclick="savePerms(<?= $r['id'] ?>)"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Sauvegarder les permissions</button>
     </div>
   </div>
   <?php endif; ?>
@@ -370,7 +370,7 @@ include __DIR__ . '/../../templates/header.php';
 <!-- MODAL NOUVEAU RÔLE -->
 <div class="modal-overlay" id="mRole">
   <div class="modal">
-    <div class="mhdr"><h3>Nouveau rôle</h3><button class="mclose" onclick="document.getElementById('mRole').classList.remove('open')">✕</button></div>
+    <div class="mhdr"><h3>Nouveau rôle</h3><button class="mclose" onclick="document.getElementById('mRole').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody">
       <div id="mRAlert"></div>
       <div class="form-group"><label>Nom du rôle *</label>
@@ -385,7 +385,7 @@ include __DIR__ . '/../../templates/header.php';
     </div>
     <div class="mfoot">
       <button class="btn btn-secondary" onclick="document.getElementById('mRole').classList.remove('open')">Annuler</button>
-      <button class="btn btn-primary" onclick="saveRole()">💾 Créer le rôle</button>
+      <button class="btn btn-primary" onclick="saveRole()"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Créer le rôle</button>
     </div>
   </div>
 </div>

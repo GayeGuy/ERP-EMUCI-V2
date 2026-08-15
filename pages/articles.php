@@ -457,8 +457,8 @@ include __DIR__ . '/../templates/header.php';
           <span style="font-size:12px;color:var(--muted)"><?= $UNITES[$a['unite']]??$a['unite'] ?></span>
         </div>
       </div>
-      <?php if($ratio<=0): ?><span style="font-size:18px">🔴</span>
-      <?php elseif($cls): ?><span style="font-size:18px">🟡</span>
+      <?php if($ratio<=0): ?><span style="font-size:18px"><i class="ph ph-circle" aria-hidden="true"></i></span>
+      <?php elseif($cls): ?><span style="font-size:18px"><i class="ph ph-circle" aria-hidden="true"></i></span>
       <?php endif; ?>
     </div>
     <div class="ac-stock">
@@ -701,7 +701,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- MODAL CRÉER/MODIFIER ARTICLE -->
 <div class="modal-overlay" id="mA">
   <div class="modal" style="width:540px">
-    <div class="mhdr"><h3 id="mAT">Nouvel article</h3><button class="mclose" onclick="closeMA()">✕</button></div>
+    <div class="mhdr"><h3 id="mAT">Nouvel article</h3><button class="mclose" onclick="closeMA()"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody">
       <div id="mAAlert"></div>
       <input type="hidden" id="aId">
@@ -745,7 +745,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- MODAL DÉTAIL ARTICLE -->
 <div class="modal-overlay" id="mAD">
   <div class="modal" style="width:620px">
-    <div class="mhdr"><h3 id="adT">Détail article</h3><button class="mclose" onclick="document.getElementById('mAD').classList.remove('open')">✕</button></div>
+    <div class="mhdr"><h3 id="adT">Détail article</h3><button class="mclose" onclick="document.getElementById('mAD').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody" id="adB">Chargement…</div>
   </div>
 </div>
@@ -920,7 +920,7 @@ function viewArticle(id){
         <div><h4 style="font-size:13px;margin-bottom:10px;color:var(--navy)">Stock par site</h4>${sites}<h4 style="font-size:13px;margin:14px 0 10px;color:var(--navy)">Dernières réceptions</h4>${recs}</div>
         <div><h4 style="font-size:13px;margin-bottom:10px;color:var(--navy)">Dernières distributions</h4>${dists}</div>
       </div>
-      ${<?= can('consommables','can_update')?'true':'false' ?>?`<div style="text-align:right;margin-top:16px"><button class="btn btn-secondary btn-sm" onclick="editArticle(${r.id})">✏️ Modifier</button></div>`:''}`;
+      ${<?= can('consommables','can_update')?'true':'false' ?>?`<div style="text-align:right;margin-top:16px"><button class="btn btn-secondary btn-sm" onclick="editArticle(${r.id})"><i class="ph ph-pencil-simple" aria-hidden="true"></i> Modifier</button></div>`:''}`;
   });
 }
 function editArticle(id){

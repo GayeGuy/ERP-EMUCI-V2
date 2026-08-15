@@ -268,21 +268,21 @@ include __DIR__ . '/../templates/header.php';
 <?php if ($session_active): ?>
 <div class="session-banner">
   <div>
-    📋 Session d'inventaire <strong><?= h(mb_strtolower(inv_periode_label($session_active['type_periode']))) ?></strong>
+    <i class="ph ph-clipboard-text" aria-hidden="true"></i> Session d'inventaire <strong><?= h(mb_strtolower(inv_periode_label($session_active['type_periode']))) ?></strong>
     en cours<?= $session_active['libelle'] ? ' — ' . h($session_active['libelle']) : '' ?>
     <span style="color:var(--muted)">(du <?= fmt_date($session_active['date_debut']) ?> au <?= fmt_date($session_active['date_fin']) ?>)</span>
   </div>
   <?php if ($session_active['inv_id']): ?>
     <?php if ($session_active['inv_statut'] === 'valide'): ?>
-    <span style="font-size:13px;color:var(--success-d);font-weight:700;margin-right:10px">✅ Clôturé</span>
+    <span style="font-size:13px;color:var(--success-d);font-weight:700;margin-right:10px"><i class="ph ph-check-circle" aria-hidden="true"></i> Clôturé</span>
     <?php elseif ($session_active['inv_complet']): ?>
-    <span style="font-size:13px;color:#1565c0;font-weight:700;margin-right:10px">📤 Complet — en attente de validation</span>
+    <span style="font-size:13px;color:#1565c0;font-weight:700;margin-right:10px"><i class="ph ph-upload-simple" aria-hidden="true"></i> Complet — en attente de validation</span>
     <?php endif; ?>
     <a href="inventaire_detail.php?id=<?= (int)$session_active['inv_id'] ?>" class="btn btn-primary btn-sm">
-      <?= ($session_active['inv_statut'] === 'valide' || $session_active['inv_complet']) ? '👁 Voir mon inventaire' : '📝 Continuer mon inventaire' ?>
+      <?= ($session_active['inv_statut'] === 'valide' || $session_active['inv_complet']) ? '<i class="ph ph-eye" aria-hidden="true"></i> Voir mon inventaire' : '<i class="ph ph-note-pencil" aria-hidden="true"></i> Continuer mon inventaire' ?>
     </a>
   <?php elseif ($can_create): ?>
-    <button class="btn btn-primary btn-sm" onclick="creerInventaireSession(<?= (int)$session_active['id'] ?>)">📝 Préparer mon inventaire</button>
+    <button class="btn btn-primary btn-sm" onclick="creerInventaireSession(<?= (int)$session_active['id'] ?>)"><i class="ph ph-note-pencil" aria-hidden="true"></i> Préparer mon inventaire</button>
   <?php endif; ?>
 </div>
 <?php endif; ?>
@@ -314,7 +314,7 @@ include __DIR__ . '/../templates/header.php';
 </div>
 
 <div class="card">
-  <div class="card-header"><h3>📋 Inventaires <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= count($inventaires) ?>)</span></h3></div>
+  <div class="card-header"><h3><i class="ph ph-clipboard-text" aria-hidden="true"></i> Inventaires <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= count($inventaires) ?>)</span></h3></div>
   <div class="table-wrap">
     <table>
       <thead><tr>
@@ -335,7 +335,7 @@ include __DIR__ . '/../templates/header.php';
       ?>
         <tr>
           <td style="font-weight:700;white-space:nowrap"><?= fmt_date($inv['date_inventaire'],'d/m/Y') ?></td>
-          <td><span class="type-badge type-<?= $inv['type_inventaire'] ?>"><?= $inv['type_inventaire']==='mensuel'?'📆 Mensuel':'📅 Journalier' ?></span></td>
+          <td><span class="type-badge type-<?= $inv['type_inventaire'] ?>"><?= $inv['type_inventaire']==='mensuel'?'<i class="ph ph-calendar-blank" aria-hidden="true"></i> Mensuel':'<i class="ph ph-calendar" aria-hidden="true"></i> Journalier' ?></span></td>
           <td style="font-weight:600"><?= h($inv['site_nom']??'Global') ?></td>
           <td style="text-align:center;font-weight:700"><?= $inv['nb_bobines'] ?></td>
           <td style="text-align:center;font-weight:700"><?= fmt_number($inv['total_films_systeme']??0) ?></td>
@@ -350,14 +350,14 @@ include __DIR__ . '/../templates/header.php';
           <td style="text-align:center">
             <?php if($ecart_emuci!=0): ?>
             <span style="font-weight:700;color:<?= $ecart_emuci>0?'#e74c3c':'#f39c12' ?>"><?= $ecart_emuci>0?'+':'' ?><?= $ecart_emuci ?> films</span>
-            <?php else: ?><span class="badge badge-success" style="font-size:12px">✅ OK</span><?php endif; ?>
+            <?php else: ?><span class="badge badge-success" style="font-size:12px"><i class="ph ph-check-circle" aria-hidden="true"></i> OK</span><?php endif; ?>
           </td>
-          <td><span class="statut-inv statut-<?= $inv['statut'] ?>"><?= $inv['statut']==='valide'?'✅ Validé':'⏳ En cours' ?></span></td>
+          <td><span class="statut-inv statut-<?= $inv['statut'] ?>"><?= $inv['statut']==='valide'?'<i class="ph ph-check-circle" aria-hidden="true"></i> Validé':'⏳ En cours' ?></span></td>
           <td style="font-size:12px;color:var(--muted)"><?= h($inv['createur']??'—') ?></td>
           <td style="text-align:center;white-space:nowrap;display:flex;gap:4px;justify-content:center">
-            <a href="inventaire_detail.php?id=<?= $inv['id'] ?>" class="btn btn-secondary btn-sm">👁 Détail</a>
+            <a href="inventaire_detail.php?id=<?= $inv['id'] ?>" class="btn btn-secondary btn-sm"><i class="ph ph-eye" aria-hidden="true"></i> Détail</a>
             <?php if($inv['statut']==='brouillon' && $can_validate): ?>
-            <button class="btn btn-success btn-sm" onclick="valider(<?= $inv['id'] ?>)">✅ Valider</button>
+            <button class="btn btn-success btn-sm" onclick="valider(<?= $inv['id'] ?>)"><i class="ph ph-check-circle" aria-hidden="true"></i> Valider</button>
             <?php endif; ?>
           </td>
         </tr>
@@ -371,8 +371,8 @@ include __DIR__ . '/../templates/header.php';
 <div id="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:20px;padding:30px;width:520px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:22px">
-      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800;color:var(--navy)">📅 Nouvel inventaire journalier</h3>
-      <button onclick="fermer()" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800;color:var(--navy)"><i class="ph ph-calendar" aria-hidden="true"></i> Nouvel inventaire journalier</h3>
+      <button onclick="fermer()" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <p style="font-size:12.5px;color:var(--muted);margin:-10px 0 16px">
       L'inventaire mensuel/trimestriel/semestriel/annuel n'est pas créé ici : il est déjà prêt dès l'ouverture
@@ -399,7 +399,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="form-group" style="margin-bottom:20px"><label>Notes</label><textarea class="form-control" id="fNotes" rows="2"></textarea></div>
     <div style="display:flex;justify-content:flex-end;gap:10px">
       <button class="btn btn-secondary" onclick="fermer()">Annuler</button>
-      <button class="btn btn-primary" id="btnCreer" onclick="creer()">🚀 Créer</button>
+      <button class="btn btn-primary" id="btnCreer" onclick="creer()"><i class="ph ph-rocket-launch" aria-hidden="true"></i> Créer</button>
     </div>
   </div>
 </div>

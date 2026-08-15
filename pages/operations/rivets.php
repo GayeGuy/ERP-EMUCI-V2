@@ -281,7 +281,7 @@ include __DIR__ . '/../../templates/header.php';
     ?>
     <?php if($can_appro): ?>
     <button class="btn btn-primary" onclick="document.getElementById('mAppro').classList.add('open')">+ Approvisionner</button>
-    <button class="btn btn-secondary" onclick="document.getElementById('mAjust').classList.add('open')">⚖️ Ajustement</button>
+    <button class="btn btn-secondary" onclick="document.getElementById('mAjust').classList.add('open')"><i class="ph ph-scales" aria-hidden="true"></i> Ajustement</button>
     <?php endif; ?>
   </div>
 </div>
@@ -399,8 +399,8 @@ foreach ($stocks as $r) {
         <th>Date</th>
         <?php if(!$site_force_r): ?><th>Site</th><?php endif; ?>
         <th>Engins</th>
-        <th style="text-align:center">🔵 Gonfl.</th>
-        <th style="text-align:center">🔴 Éclatés</th>
+        <th style="text-align:center"><i class="ph ph-circle" aria-hidden="true"></i> Gonfl.</th>
+        <th style="text-align:center"><i class="ph ph-circle" aria-hidden="true"></i> Éclatés</th>
         <th style="text-align:center">Endommagés</th>
         <th style="text-align:center">Total sortis</th>
       </tr></thead>
@@ -434,7 +434,7 @@ foreach ($stocks as $r) {
 <!-- MODAL APPROVISIONNER -->
 <div class="modal-overlay" id="mAppro">
   <div class="modal">
-    <div class="mhdr"><h3>+ Approvisionner en rivets</h3><button class="mclose" onclick="document.getElementById('mAppro').classList.remove('open')">✕</button></div>
+    <div class="mhdr"><h3>+ Approvisionner en rivets</h3><button class="mclose" onclick="document.getElementById('mAppro').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody">
       <div id="apAlert"></div>
       <div class="form-group"><label>Site *</label>
@@ -452,7 +452,7 @@ foreach ($stocks as $r) {
     </div>
     <div class="mfoot">
       <button class="btn btn-secondary" onclick="document.getElementById('mAppro').classList.remove('open')">Annuler</button>
-      <button class="btn btn-primary" onclick="saveAppro()">✅ Valider</button>
+      <button class="btn btn-primary" onclick="saveAppro()"><i class="ph ph-check-circle" aria-hidden="true"></i> Valider</button>
     </div>
   </div>
 </div>
@@ -460,7 +460,7 @@ foreach ($stocks as $r) {
 <!-- MODAL AJUSTEMENT -->
 <div class="modal-overlay" id="mAjust">
   <div class="modal">
-    <div class="mhdr"><h3>⚖️ Ajustement stock rivets</h3><button class="mclose" onclick="document.getElementById('mAjust').classList.remove('open')">✕</button></div>
+    <div class="mhdr"><h3><i class="ph ph-scales" aria-hidden="true"></i> Ajustement stock rivets</h3><button class="mclose" onclick="document.getElementById('mAjust').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody">
       <div id="ajAlert"></div>
       <div class="form-group"><label>Site *</label>
@@ -478,7 +478,7 @@ foreach ($stocks as $r) {
     </div>
     <div class="mfoot">
       <button class="btn btn-secondary" onclick="document.getElementById('mAjust').classList.remove('open')">Annuler</button>
-      <button class="btn btn-primary" onclick="saveAjust()">✅ Appliquer</button>
+      <button class="btn btn-primary" onclick="saveAjust()"><i class="ph ph-check-circle" aria-hidden="true"></i> Appliquer</button>
     </div>
   </div>
 </div>

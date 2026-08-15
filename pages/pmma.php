@@ -604,7 +604,7 @@ include __DIR__ . '/../templates/header.php';
   <div class="modal">
     <div class="mhdr">
       <h3><i class="ph-duotone ph-download-simple"></i> Entrée PMMA</h3>
-      <button class="mclose" onclick="document.getElementById('mEntree').classList.remove('open')">✕</button>
+      <button class="mclose" onclick="document.getElementById('mEntree').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div class="mbody">
       <div id="alertEntree"></div>
@@ -640,7 +640,7 @@ include __DIR__ . '/../templates/header.php';
   <div class="modal">
     <div class="mhdr">
       <h3><i class="ph-duotone ph-upload-simple"></i> Sortie PMMA</h3>
-      <button class="mclose" onclick="document.getElementById('mSortie').classList.remove('open')">✕</button>
+      <button class="mclose" onclick="document.getElementById('mSortie').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div class="mbody">
       <div id="alertSortie"></div>

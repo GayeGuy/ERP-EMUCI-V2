@@ -505,7 +505,7 @@ include __DIR__ . '/../templates/header.php';
   <!-- Rapport journalier -->
   <div class="rg-card">
     <div class="rg-card-hdr">
-      <div class="rg-card-icon" style="background:#e3f2fd">📅</div>
+      <div class="rg-card-icon" style="background:#e3f2fd"><i class="ph ph-calendar" aria-hidden="true"></i></div>
       <div>
         <div class="rg-card-title">Rapport journalier</div>
         <div class="rg-card-sub">Consommations et état du stock pour la période sélectionnée.</div>
@@ -527,7 +527,7 @@ include __DIR__ . '/../templates/header.php';
   <!-- Rapport mensuel -->
   <div class="rg-card">
     <div class="rg-card-hdr">
-      <div class="rg-card-icon" style="background:#e8f5e9">📆</div>
+      <div class="rg-card-icon" style="background:#e8f5e9"><i class="ph ph-calendar-blank" aria-hidden="true"></i></div>
       <div>
         <div class="rg-card-title">Rapport mensuel</div>
         <div class="rg-card-sub">Synthèse mensuelle des consommations avec totaux et tendances.</div>
@@ -551,7 +551,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- HISTORIQUE VALIDATIONS -->
 <div class="rg-card-full">
   <div class="rg-card-hdr">
-    <div class="rg-card-icon" style="background:#d1fae5">✅</div>
+    <div class="rg-card-icon" style="background:#d1fae5"><i class="ph ph-check-circle" aria-hidden="true"></i></div>
     <div>
       <div class="rg-card-title">Historique des validations</div>
       <div class="rg-card-sub">Export de toutes les validations de stock (date, bobine, écarts, validateur, commentaires).</div>

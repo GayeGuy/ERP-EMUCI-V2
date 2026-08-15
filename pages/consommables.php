@@ -359,10 +359,10 @@ include __DIR__ . '/../templates/header.php';
 <!-- KPIs -->
 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px">
   <?php foreach([
-    ['🧴','Références',         $kpi_total_consos,                        '',         'blue'],
-    ['⚠️','Alertes stock',      $kpi_alertes,                             'à réappro','red'],
-    ['📥','Reçu ce mois',       fmt_number($kpi_receptions_mois,1),       'en stock', 'teal'],
-    ['📤','Distribué ce mois',  fmt_number($kpi_distrib_mois,1),          'vers sites','green'],
+    ['<i class="ph ph-flask" aria-hidden="true"></i>','Références',         $kpi_total_consos,                        '',         'blue'],
+    ['<i class="ph ph-warning" aria-hidden="true"></i>','Alertes stock',      $kpi_alertes,                             'à réappro','red'],
+    ['<i class="ph ph-download-simple" aria-hidden="true"></i>','Reçu ce mois',       fmt_number($kpi_receptions_mois,1),       'en stock', 'teal'],
+    ['<i class="ph ph-upload-simple" aria-hidden="true"></i>','Distribué ce mois',  fmt_number($kpi_distrib_mois,1),          'vers sites','green'],
   ] as [$ico,$lbl,$val,$sub,$col]): ?>
   <div style="background:white;border:1px solid var(--border);border-radius:14px;padding:18px 20px;display:flex;align-items:center;gap:14px;border-top:3px solid var(--<?= $col ?>)">
     <div style="width:48px;height:48px;border-radius:13px;background:var(--lighter);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0"><?= $ico ?></div>
@@ -376,29 +376,29 @@ include __DIR__ . '/../templates/header.php';
 
 <!-- TABS -->
 <div class="tabs" id="mainTabs">
-  <button class="tab-btn active"  onclick="showTab('stock',this)">📦 Stock</button>
-  <button class="tab-btn"         onclick="showTab('reception',this)">📥 Réception fournisseur</button>
-  <button class="tab-btn"         onclick="showTab('distribution',this)">📤 Distribution site</button>
-  <button class="tab-btn"         onclick="showTab('historique',this)">📋 Historique</button>
+  <button class="tab-btn active"  onclick="showTab('stock',this)"><i class="ph ph-package" aria-hidden="true"></i> Stock</button>
+  <button class="tab-btn"         onclick="showTab('reception',this)"><i class="ph ph-download-simple" aria-hidden="true"></i> Réception fournisseur</button>
+  <button class="tab-btn"         onclick="showTab('distribution',this)"><i class="ph ph-upload-simple" aria-hidden="true"></i> Distribution site</button>
+  <button class="tab-btn"         onclick="showTab('historique',this)"><i class="ph ph-clipboard-text" aria-hidden="true"></i> Historique</button>
 </div>
 
 <!-- ═══ TAB STOCK ═══ -->
 <div class="tab-pane active" id="tab-stock">
   <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
     <div style="position:relative;flex:1;min-width:200px">
-      <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted)">🔍</span>
+      <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted)"><i class="ph ph-magnifying-glass" aria-hidden="true"></i></span>
       <input type="text" id="searchQ" value="<?= h($search) ?>" placeholder="Rechercher…" aria-label="Rechercher un consommable"
         style="width:100%;padding:10px 14px 10px 38px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;outline:none;font-family:'DM Sans',sans-serif"
         oninput="filterConsos(this.value)">
     </div>
     <label style="display:flex;align-items:center;gap:6px;font-size:13.5px;cursor:pointer;padding:9px 14px;border:1.5px solid var(--border);border-radius:9px;background:white">
-      <input type="checkbox" id="alerteOnly" <?= $f_alerte?'checked':'' ?> onchange="filterConsos()">⚠️ Alertes seulement
+      <input type="checkbox" id="alerteOnly" <?= $f_alerte?'checked':'' ?> onchange="filterConsos()"><i class="ph ph-warning" aria-hidden="true"></i> Alertes seulement
     </label>
     <?php if(can('consommables','can_create')): ?>
     <button class="btn btn-primary" onclick="openMC()">+ Nouveau consommable</button>
     <?php endif; ?>
     <?php if(can('consommables','can_export')): ?>
-    <a href="<?= APP_URL ?>/api/export.php?type=consommables" class="btn btn-secondary btn-sm">📥 Excel</a>
+    <a href="<?= APP_URL ?>/api/export.php?type=consommables" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Excel</a>
     <?php endif; ?>
   </div>
 
@@ -418,9 +418,9 @@ include __DIR__ . '/../templates/header.php';
         <span><?= $unites[$c['unite']]??$c['unite'] ?> · <?= $c['nb_sites'] ?> site(s)</span>
       </div>
       <?php if($ratio<=0): ?>
-        <span title="Stock épuisé" style="font-size:20px">🔴</span>
+        <span title="Stock épuisé" style="font-size:20px"><i class="ph ph-circle" aria-hidden="true"></i></span>
       <?php elseif($cls): ?>
-        <span title="Stock bas" style="font-size:20px">🟡</span>
+        <span title="Stock bas" style="font-size:20px"><i class="ph ph-circle" aria-hidden="true"></i></span>
       <?php endif; ?>
     </div>
     <div class="cc-stock">
@@ -437,22 +437,22 @@ include __DIR__ . '/../templates/header.php';
         </div>
         <div class="stock-bar"><div class="stock-fill" style="width:<?= $pct ?>%;background:<?= $fill ?>"></div></div>
         <div style="font-size:10.5px;color:var(--muted);margin-top:4px;display:flex;gap:8px">
-          <?php if($c['receptions_30j']>0): ?><span>📥 +<?= fmt_number($c['receptions_30j'],1) ?> reçus</span><?php endif; ?>
-          <?php if($c['distributions_30j']>0): ?><span>📤 -<?= fmt_number($c['distributions_30j'],1) ?> distribués</span><?php endif; ?>
+          <?php if($c['receptions_30j']>0): ?><span><i class="ph ph-download-simple" aria-hidden="true"></i> +<?= fmt_number($c['receptions_30j'],1) ?> reçus</span><?php endif; ?>
+          <?php if($c['distributions_30j']>0): ?><span><i class="ph ph-upload-simple" aria-hidden="true"></i> -<?= fmt_number($c['distributions_30j'],1) ?> distribués</span><?php endif; ?>
         </div>
       </div>
     </div>
     <div class="cc-footer">
       <span style="color:var(--muted)">Seuil alerte : <?= $c['seuil_alerte'] ?></span>
       <?php if(!empty($c['prix_unitaire'])&&$c['prix_unitaire']>0): ?>
-      <span style="font-weight:700;color:var(--blue-mid,#1a56a0)">💰 <?= fmt_number($c['prix_unitaire'],0) ?> FCFA/<?= $c['unite'] ?></span>
+      <span style="font-weight:700;color:var(--blue-mid,#1a56a0)"><i class="ph ph-currency-circle-dollar" aria-hidden="true"></i> <?= fmt_number($c['prix_unitaire'],0) ?> FCFA/<?= $c['unite'] ?></span>
       <?php endif; ?>
     </div>
   </div>
   <?php endforeach; ?>
   <?php if(empty($consos)): ?>
   <div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--muted)">
-    <div style="font-size:48px;margin-bottom:12px">🧴</div><p>Aucun consommable.</p>
+    <div style="font-size:48px;margin-bottom:12px"><i class="ph ph-flask" aria-hidden="true"></i></div><p>Aucun consommable.</p>
   </div>
   <?php endif; ?>
   </div>
@@ -462,10 +462,10 @@ include __DIR__ . '/../templates/header.php';
 <div class="tab-pane" id="tab-reception">
   <div style="max-width:600px">
     <div class="alert alert-info" style="margin-bottom:20px">
-      📥 <strong>Réception fournisseur</strong> — Enregistrez ici quand vous recevez une livraison du fournisseur. Le stock global augmente.
+      <i class="ph ph-download-simple" aria-hidden="true"></i> <strong>Réception fournisseur</strong> — Enregistrez ici quand vous recevez une livraison du fournisseur. Le stock global augmente.
     </div>
     <div class="card">
-      <div class="card-header"><h3>📥 Nouvelle réception</h3></div>
+      <div class="card-header"><h3><i class="ph ph-download-simple" aria-hidden="true"></i> Nouvelle réception</h3></div>
       <div class="card-body">
         <div id="recAlert"></div>
 
@@ -492,7 +492,7 @@ include __DIR__ . '/../templates/header.php';
               <div class="si-val" id="recStockVal">0</div>
               <div style="font-size:12px;color:var(--muted)" id="recStockUnite"></div>
             </div>
-            <div style="font-size:24px">📦</div>
+            <div style="font-size:24px"><i class="ph ph-package" aria-hidden="true"></i></div>
             <div style="flex:1;font-size:13px;color:var(--muted)" id="recStockMsg"></div>
           </div>
         </div>
@@ -525,7 +525,7 @@ include __DIR__ . '/../templates/header.php';
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button class="btn btn-secondary" onclick="resetRec()">Réinitialiser</button>
-          <button class="btn btn-primary" onclick="saveRec()">📥 Valider la réception</button>
+          <button class="btn btn-primary" onclick="saveRec()"><i class="ph ph-download-simple" aria-hidden="true"></i> Valider la réception</button>
         </div>
       </div>
     </div>
@@ -536,10 +536,10 @@ include __DIR__ . '/../templates/header.php';
 <div class="tab-pane" id="tab-distribution">
   <div style="max-width:600px">
     <div class="alert alert-info" style="margin-bottom:20px">
-      📤 <strong>Distribution vers site</strong> — Enregistrez ici quand vous envoyez des articles vers un site. Le stock global diminue.
+      <i class="ph ph-upload-simple" aria-hidden="true"></i> <strong>Distribution vers site</strong> — Enregistrez ici quand vous envoyez des articles vers un site. Le stock global diminue.
     </div>
     <div class="card">
-      <div class="card-header"><h3>📤 Nouvelle distribution</h3></div>
+      <div class="card-header"><h3><i class="ph ph-upload-simple" aria-hidden="true"></i> Nouvelle distribution</h3></div>
       <div class="card-body">
         <div id="distAlert"></div>
 
@@ -567,7 +567,7 @@ include __DIR__ . '/../templates/header.php';
               <div class="si-val" id="distStockVal">0</div>
               <div style="font-size:12px;color:var(--muted)" id="distStockUnite"></div>
             </div>
-            <div style="font-size:24px">📦</div>
+            <div style="font-size:24px"><i class="ph ph-package" aria-hidden="true"></i></div>
             <div style="flex:1;font-size:13px" id="distStockMsg"></div>
           </div>
         </div>
@@ -592,7 +592,7 @@ include __DIR__ . '/../templates/header.php';
             <input type="text" class="form-control" id="distTotal" disabled style="background:var(--lighter);font-weight:700;color:var(--navy)">
           </div>
         </div>
-        <div id="distQteWarn" style="display:none" class="alert alert-danger">⚠️ Quantité supérieure au stock disponible !</div>
+        <div id="distQteWarn" style="display:none" class="alert alert-danger"><i class="ph ph-warning" aria-hidden="true"></i> Quantité supérieure au stock disponible !</div>
 
         <div class="form-row cols-2">
           <div class="form-group"><label>Date</label>
@@ -606,7 +606,7 @@ include __DIR__ . '/../templates/header.php';
         <!-- BON DE LIVRAISON OBLIGATOIRE -->
         <div class="form-group" style="background:#fff8e7;border:2px dashed #f39c12;border-radius:10px;padding:14px;margin-bottom:14px">
           <label style="font-size:13px;font-weight:700;color:#b7791f;display:block;margin-bottom:6px">
-            📎 Bon de livraison <span style="color:var(--danger-d)">*</span>
+            <i class="ph ph-paperclip" aria-hidden="true"></i> Bon de livraison <span style="color:var(--danger-d)">*</span>
             <span style="font-size:12px;font-weight:400;color:var(--muted)"> — PDF ou image obligatoire pour valider la livraison</span>
           </label>
           <input type="file" id="distFichierBL" accept=".pdf,.jpg,.jpeg,.png,.webp"
@@ -619,7 +619,7 @@ include __DIR__ . '/../templates/header.php';
         </div>
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button class="btn btn-secondary" onclick="resetDist()">Réinitialiser</button>
-          <button class="btn btn-primary" id="btnDist" onclick="saveDist()">📤 Valider la distribution</button>
+          <button class="btn btn-primary" id="btnDist" onclick="saveDist()"><i class="ph ph-upload-simple" aria-hidden="true"></i> Valider la distribution</button>
         </div>
       </div>
     </div>
@@ -630,15 +630,15 @@ include __DIR__ . '/../templates/header.php';
 <div class="tab-pane" id="tab-historique">
   <div style="display:flex;justify-content:flex-end;margin-bottom:14px;gap:8px">
     <?php if(can('consommables','can_export')): ?>
-    <a href="<?= APP_URL ?>/api/export.php?type=livraisons" class="btn btn-secondary btn-sm">📥 Excel distributions</a>
+    <a href="<?= APP_URL ?>/api/export.php?type=livraisons" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Excel distributions</a>
     <?php endif; ?>
   </div>
   <div class="card">
     <div class="card-header">
-      <h3>📋 Historique mouvements</h3>
+      <h3><i class="ph ph-clipboard-text" aria-hidden="true"></i> Historique mouvements</h3>
       <div style="display:flex;gap:6px">
-        <span class="flux-badge reception">📥 Réception</span>
-        <span class="flux-badge distribution">📤 Distribution</span>
+        <span class="flux-badge reception"><i class="ph ph-download-simple" aria-hidden="true"></i> Réception</span>
+        <span class="flux-badge distribution"><i class="ph ph-upload-simple" aria-hidden="true"></i> Distribution</span>
       </div>
     </div>
     <div class="table-wrap">
@@ -656,7 +656,7 @@ include __DIR__ . '/../templates/header.php';
         <?php else: foreach($historique as $h): ?>
           <tr>
             <td style="white-space:nowrap;font-size:12.5px"><?= fmt_date($h['date_op']) ?></td>
-            <td><span class="flux-badge <?= $h['type_op'] ?>"><?= $h['type_op']==='reception'?'📥 Réception':'📤 Distribution' ?></span></td>
+            <td><span class="flux-badge <?= $h['type_op'] ?>"><?= $h['type_op']==='reception'?'<i class="ph ph-download-simple" aria-hidden="true"></i> Réception':'<i class="ph ph-upload-simple" aria-hidden="true"></i> Distribution' ?></span></td>
             <td><span style="font-family:monospace;font-size:11.5px;font-weight:700;color:var(--navy)"><?= h($h['conso_code']) ?></span> <?= h($h['conso_lib']) ?></td>
             <td style="text-align:right;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;color:<?= $h['type_op']==='reception'?'var(--success-d)':'var(--blue-mid,#1a56a0)' ?>">
               <?= $h['type_op']==='reception'?'+':'-' ?><?= fmt_number($h['quantite'],1) ?>
@@ -679,7 +679,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- MODAL CRÉER/MODIFIER CONSOMMABLE -->
 <div class="modal-overlay" id="mC">
   <div class="modal" style="width:540px">
-    <div class="mhdr"><h3 id="mCT">Nouveau consommable</h3><button class="mclose" onclick="closeMC()">✕</button></div>
+    <div class="mhdr"><h3 id="mCT">Nouveau consommable</h3><button class="mclose" onclick="closeMC()"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody">
       <div id="mCAlert"></div>
       <input type="hidden" id="cId">
@@ -710,7 +710,7 @@ include __DIR__ . '/../templates/header.php';
     </div>
     <div class="mfoot">
       <button class="btn btn-secondary" onclick="closeMC()">Annuler</button>
-      <button class="btn btn-primary" id="bSC" onclick="saveConso()">💾 Enregistrer</button>
+      <button class="btn btn-primary" id="bSC" onclick="saveConso()"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Enregistrer</button>
     </div>
   </div>
 </div>
@@ -718,7 +718,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- MODAL DÉTAIL -->
 <div class="modal-overlay" id="mCD">
   <div class="modal" style="width:660px">
-    <div class="mhdr"><h3 id="cdT">Détail</h3><button class="mclose" onclick="document.getElementById('mCD').classList.remove('open')">✕</button></div>
+    <div class="mhdr"><h3 id="cdT">Détail</h3><button class="mclose" onclick="document.getElementById('mCD').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody" id="cdB"></div>
   </div>
 </div>
@@ -843,7 +843,7 @@ function saveDist(){
     document.getElementById('distAlert').innerHTML='<div class="alert alert-danger">Consommable, site et quantité obligatoires.</div>'; return;
   }
   if(!fichierBL){
-    document.getElementById('distAlert').innerHTML='<div class="alert alert-danger">⚠️ Le bon de livraison (PDF ou image) est obligatoire.</div>';
+    document.getElementById('distAlert').innerHTML='<div class="alert alert-danger"><i class="ph ph-warning" aria-hidden="true"></i> Le bon de livraison (PDF ou image) est obligatoire.</div>';
     document.getElementById('distFichierBL').focus(); return;
   }
 
@@ -949,13 +949,13 @@ function viewConso(id){
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
         <div>
-          <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;margin-bottom:10px">📍 Stock par site</h4>${sites}
-          <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;margin:14px 0 10px">📥 Dernières réceptions</h4>${recs}
+          <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;margin-bottom:10px"><i class="ph ph-map-pin" aria-hidden="true"></i> Stock par site</h4>${sites}
+          <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;margin:14px 0 10px"><i class="ph ph-download-simple" aria-hidden="true"></i> Dernières réceptions</h4>${recs}
         </div>
         <div>
-          <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;margin-bottom:10px">📈 Distributions 6 mois</h4>
+          <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;margin-bottom:10px"><i class="ph ph-chart-line-up" aria-hidden="true"></i> Distributions 6 mois</h4>
           <canvas id="chartC${id}" height="120"></canvas>
-          <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;margin:14px 0 10px">📤 Dernières distributions</h4>${dists}
+          <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;margin:14px 0 10px"><i class="ph ph-upload-simple" aria-hidden="true"></i> Dernières distributions</h4>${dists}
         </div>
       </div>`;
     const labels=r.conso_mensuelle.map(m=>m.mois), vals=r.conso_mensuelle.map(m=>m.total);
