@@ -431,7 +431,7 @@ include __DIR__ . '/../templates/header.php';
 .rg-filters-title{font-size:13px;font-weight:800;color:var(--navy);margin-bottom:14px;display:flex;align-items:center;gap:8px}
 .rg-filters-row{display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap}
 .rg-field{display:flex;flex-direction:column;gap:5px}
-.rg-field label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.rg-field label{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .rg-field input,.rg-field select{padding:8px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;color:var(--navy);outline:none;transition:border-color .15s;background:white}
 .rg-field input:focus,.rg-field select:focus{border-color:#1B75BC}
 .rg-cards{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}

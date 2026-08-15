@@ -243,7 +243,7 @@ include __DIR__ . '/../templates/header.php';
   margin-bottom: 4px;
 }
 .kpi-label { font-size: 12px; color: var(--muted); font-weight: 500; }
-.kpi-sub   { font-size: 11px; color: var(--muted); margin-top: 6px; }
+.kpi-sub   { font-size: 12px; color: var(--muted); margin-top: 6px; }
 
 /* SECTION GRID */
 .dash-grid { display: grid; gap: 20px; margin-bottom: 20px; }
@@ -287,8 +287,8 @@ include __DIR__ . '/../templates/header.php';
 .alerte-dot.ok      { background: var(--success); }
 .alerte-info { flex: 1; }
 .alerte-info .a-titre { font-size: 13px; font-weight: 500; }
-.alerte-info .a-sub   { font-size: 11px; color: var(--muted); }
-.alerte-badge { font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
+.alerte-info .a-sub   { font-size: 12px; color: var(--muted); }
+.alerte-badge { font-size: 12px; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
 .alerte-badge.danger  { background: #fdf0ef; color: var(--danger-d); }
 .alerte-badge.warning { background: #fef9e7; color: var(--warning-d); }
 
@@ -311,7 +311,7 @@ include __DIR__ . '/../templates/header.php';
 }
 .audit-item:last-child { border-bottom: none; }
 .audit-action-badge {
-  font-size: 10px; font-weight: 700; padding: 3px 7px;
+  font-size: 12px; font-weight: 700; padding: 3px 7px;
   border-radius: 5px; flex-shrink: 0; margin-top: 2px;
   text-transform: uppercase; letter-spacing: .5px;
 }
@@ -323,7 +323,7 @@ include __DIR__ . '/../templates/header.php';
 .audit-action-badge.EXPORT   { background: #faf5ff; color: #6c3483; }
 .audit-action-badge.TRANSFER { background: #e8f8f5; color: #1e8449; }
 .audit-desc  { font-size: 12.5px; flex: 1; }
-.audit-meta  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.audit-meta  { font-size: 12px; color: var(--muted); margin-top: 2px; }
 
 /* SITE CARDS */
 .site-mini-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -335,7 +335,7 @@ include __DIR__ . '/../templates/header.php';
 }
 .site-mini:hover { border-color: var(--blue-mid, #1a56a0); }
 .site-mini .s-nom  { font-size: 13px; font-weight: 600; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.site-mini .s-type { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.site-mini .s-type { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
 .site-mini .s-cnt  { font-family: 'Montserrat', sans-serif; font-size: 22px; font-weight: 800; color: var(--navy); }
 
 /* ANIMATIONS */
@@ -436,12 +436,12 @@ include __DIR__ . '/../templates/header.php';
       <?php foreach($receptions_recentes as $rr): ?>
       <tr>
         <td style="font-size:12px;color:var(--muted)"><?= fmt_date($rr['date_reception']) ?></td>
-        <td><span style="font-size:11px;font-weight:700;color:<?= $rr['type_reception']==='consommable'?'#27ae60':'#1a56a0' ?>"><?= $rr['type_reception']==='consommable'?'🧴 Conso':'💻 Équip' ?></span></td>
+        <td><span style="font-size:12px;font-weight:700;color:<?= $rr['type_reception']==='consommable'?'#27ae60':'#1a56a0' ?>"><?= $rr['type_reception']==='consommable'?'🧴 Conso':'💻 Équip' ?></span></td>
         <td style="font-size:13px">
           <?= $rr['type_reception']==='consommable' ? h($rr['conso_lib']??'—').' <small style="color:var(--muted)">'.h($rr['unite']??'').'</small>' : h($rr['equip_type']??'—').' <small style="color:var(--muted);font-family:monospace">'.h($rr['equip_num']??'').'</small>' ?>
         </td>
         <td style="text-align:right;font-weight:700"><?= $rr['quantite']?fmt_number($rr['quantite'],1):'—' ?></td>
-        <td><span class="statut-badge <?= $rr['statut'] ?>" style="font-size:10px;padding:2px 7px;border-radius:5px;font-weight:700;background:<?= $rr['statut']==='en_attente'?'#fff8e7':($rr['statut']==='receptionnee'?'#eafaf1':'#fdf0ef') ?>;color:<?= $rr['statut']==='en_attente'?'#b7791f':($rr['statut']==='receptionnee'?'#1e8449':'#c0392b') ?>">
+        <td><span class="statut-badge <?= $rr['statut'] ?>" style="font-size:12px;padding:2px 7px;border-radius:5px;font-weight:700;background:<?= $rr['statut']==='en_attente'?'#fff8e7':($rr['statut']==='receptionnee'?'#eafaf1':'#fdf0ef') ?>;color:<?= $rr['statut']==='en_attente'?'#b7791f':($rr['statut']==='receptionnee'?'#1e8449':'#c0392b') ?>">
           <?= match($rr['statut']){'en_attente'=>'⏳ Attente','receptionnee'=>'✅ Reçu','litige'=>'⚠️ Litige',default=>$rr['statut']} ?>
         </span></td>
         <td><?= !empty($rr['fichier_fiche'])?'<a href="'.upload_url($rr['fichier_fiche'],'fiche').'" target="_blank" style="font-size:12px">📄 Voir</a>':'<span style="color:var(--muted);font-size:12px">—</span>' ?></td>
@@ -468,10 +468,10 @@ include __DIR__ . '/../templates/header.php';
       <tr>
         <td style="font-size:12px;color:var(--muted)"><?= fmt_date($rr['date_reception']) ?></td>
         <td style="font-weight:600;font-size:13px"><?= h($rr['site_nom']??'—') ?></td>
-        <td><span style="font-size:11px;font-weight:700;color:<?= $rr['type_reception']==='consommable'?'#27ae60':'#1a56a0' ?>"><?= $rr['type_reception']==='consommable'?'🧴':'💻' ?></span></td>
+        <td><span style="font-size:12px;font-weight:700;color:<?= $rr['type_reception']==='consommable'?'#27ae60':'#1a56a0' ?>"><?= $rr['type_reception']==='consommable'?'🧴':'💻' ?></span></td>
         <td style="font-size:12.5px"><?= h($rr['type_reception']==='consommable'?($rr['conso_lib']??'—'):($rr['equip_type']??'—')) ?></td>
         <td style="text-align:right"><?= $rr['quantite']?fmt_number($rr['quantite'],1):'—' ?></td>
-        <td><span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:<?= $rr['statut']==='en_attente'?'#fff8e7':($rr['statut']==='receptionnee'?'#eafaf1':'#fdf0ef') ?>;color:<?= $rr['statut']==='en_attente'?'#b7791f':($rr['statut']==='receptionnee'?'#1e8449':'#c0392b') ?>"><?= match($rr['statut']){'en_attente'=>'⏳','receptionnee'=>'✅','litige'=>'⚠️',default=>''} ?> <?= $rr['statut'] ?></span></td>
+        <td><span style="font-size:12px;font-weight:700;padding:2px 7px;border-radius:5px;background:<?= $rr['statut']==='en_attente'?'#fff8e7':($rr['statut']==='receptionnee'?'#eafaf1':'#fdf0ef') ?>;color:<?= $rr['statut']==='en_attente'?'#b7791f':($rr['statut']==='receptionnee'?'#1e8449':'#c0392b') ?>"><?= match($rr['statut']){'en_attente'=>'⏳','receptionnee'=>'✅','litige'=>'⚠️',default=>''} ?> <?= $rr['statut'] ?></span></td>
       </tr>
       <?php endforeach; ?>
       </tbody>
@@ -530,7 +530,7 @@ include __DIR__ . '/../templates/header.php';
         <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--lighter);border-radius:10px;border-left:4px solid <?= $col ?>">
           <div>
             <div style="font-size:13px;font-weight:700;color:var(--navy)"><?= $lbl ?></div>
-            <div style="font-size:11px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.5px">Type de site</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.5px">Type de site</div>
           </div>
           <div style="font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900;color:<?= $col ?>"><?= $st['nb'] ?></div>
         </div>
@@ -547,7 +547,7 @@ include __DIR__ . '/../templates/header.php';
     <!-- TITRE + TOTAL -->
     <div style="padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
       <div>
-        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Équipements</div>
+        <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px">Équipements</div>
         <div style="font-family:'Montserrat',sans-serif;font-size:42px;font-weight:900;color:var(--navy);line-height:1"><?= fmt_number($kpi_equip_total) ?></div>
         <div style="font-size:12px;color:var(--muted);margin-top:5px"><?= fmt_number($kpi_equip_bon??0) ?> en bon état · <?= fmt_number($kpi_equip_hs??0) ?> H.S.</div>
       </div>
@@ -557,30 +557,30 @@ include __DIR__ . '/../templates/header.php';
     <!-- SÉPARATION INFO / OPÉRATIONNEL -->
     <div style="display:grid;grid-template-columns:1fr 1fr;border-bottom:1px solid var(--border)">
       <div style="padding:16px 20px;border-right:1px solid var(--border)">
-        <div style="font-size:11px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">💻 Informatique</div>
+        <div style="font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">💻 Informatique</div>
         <div style="font-family:'Montserrat',sans-serif;font-size:28px;font-weight:800;color:var(--navy)"><?= fmt_number($kpi_equip_info??0) ?></div>
         <?php if($kpi_equip_total > 0): ?>
         <div style="height:4px;background:var(--border);border-radius:2px;margin-top:10px;overflow:hidden">
           <div style="width:<?= round(($kpi_equip_info??0)/$kpi_equip_total*100) ?>%;height:100%;background:var(--blue);border-radius:2px"></div>
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:4px"><?= round(($kpi_equip_info??0)/$kpi_equip_total*100) ?>% du total</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px"><?= round(($kpi_equip_info??0)/$kpi_equip_total*100) ?>% du total</div>
         <?php endif; ?>
       </div>
       <div style="padding:16px 20px">
-        <div style="font-size:11px;font-weight:700;color:#10a37f;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">⚙️ Opérationnel</div>
+        <div style="font-size:12px;font-weight:700;color:#10a37f;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">⚙️ Opérationnel</div>
         <div style="font-family:'Montserrat',sans-serif;font-size:28px;font-weight:800;color:var(--navy)"><?= fmt_number($kpi_equip_op??0) ?></div>
         <?php if($kpi_equip_total > 0): ?>
         <div style="height:4px;background:var(--border);border-radius:2px;margin-top:10px;overflow:hidden">
           <div style="width:<?= round(($kpi_equip_op??0)/$kpi_equip_total*100) ?>%;height:100%;background:#10a37f;border-radius:2px"></div>
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:4px"><?= round(($kpi_equip_op??0)/$kpi_equip_total*100) ?>% du total</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px"><?= round(($kpi_equip_op??0)/$kpi_equip_total*100) ?>% du total</div>
         <?php endif; ?>
       </div>
     </div>
 
     <!-- DIAGRAMME EN CERCLE - ÉTATS -->
     <div style="padding:16px 20px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px">État des équipements</div>
+      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px">État des équipements</div>
       <div style="display:flex;align-items:center;gap:20px">
         <div style="width:100px;height:100px;flex-shrink:0">
           <canvas id="chartEtatKpi"></canvas>
@@ -598,7 +598,7 @@ include __DIR__ . '/../templates/header.php';
             <div style="width:10px;height:10px;border-radius:50%;background:<?= $col ?>;flex-shrink:0"></div>
             <span style="color:var(--text);flex:1"><?= $lbl ?></span>
             <span style="font-family:'Montserrat',sans-serif;font-weight:700;color:var(--navy)"><?= $e['total'] ?></span>
-            <span style="color:var(--muted);font-size:11px;min-width:30px;text-align:right"><?= $pct ?>%</span>
+            <span style="color:var(--muted);font-size:12px;min-width:30px;text-align:right"><?= $pct ?>%</span>
           </div>
           <?php endforeach; ?>
         </div>
@@ -616,7 +616,7 @@ include __DIR__ . '/../templates/header.php';
   <div style="background:white;border:1px solid var(--border);border-radius:12px;overflow:hidden">
     <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
       <div>
-        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Interventions</div>
+        <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px">Interventions</div>
         <div style="font-size:12px;color:var(--muted)">Ce mois-ci · par site</div>
       </div>
       <a href="<?= APP_URL ?>/pages/interventions.php" style="font-size:12px;color:var(--blue);text-decoration:none;font-weight:600">Voir tout →</a>
@@ -675,11 +675,11 @@ include __DIR__ . '/../templates/header.php';
       <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 20px;border-bottom:1px solid var(--border)">
         <div>
           <div style="font-size:13px;font-weight:600;color:var(--navy)"><?= h($bs['site_nom']) ?></div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px"><?= fmt_number($bs['total_films']) ?> films restants</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px"><?= fmt_number($bs['total_films']) ?> films restants</div>
         </div>
         <div style="text-align:right">
           <div style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:800;color:var(--blue)"><?= $bs['nb_bobines'] ?></div>
-          <div style="font-size:10px;color:var(--muted)">bobines</div>
+          <div style="font-size:12px;color:var(--muted)">bobines</div>
         </div>
       </div>
       <?php endforeach; ?>
@@ -704,19 +704,19 @@ include __DIR__ . '/../templates/header.php';
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
         <?php foreach([['gonflable','🔵','Gonflables',$rv_gonfl,'#e3f2fd','#1565c0'],['eclate','🔴','Éclatés',$rv_eclate,'#fce4ec','#880e4f']] as [$t,$ic,$lb,$qty,$bg,$col]): ?>
         <div style="background:<?= $bg ?>;border-radius:12px;padding:14px 16px">
-          <div style="font-size:11px;font-weight:700;color:<?= $col ?>;margin-bottom:4px"><?= $ic ?> <?= $lb ?></div>
+          <div style="font-size:12px;font-weight:700;color:<?= $col ?>;margin-bottom:4px"><?= $ic ?> <?= $lb ?></div>
           <div style="font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900;color:<?= $qty<100?'#e74c3c':($qty<500?'#f39c12':$col) ?>"><?= fmt_number($qty) ?></div>
-          <div style="font-size:11px;color:<?= $col ?>;opacity:.7">en stock</div>
+          <div style="font-size:12px;color:<?= $col ?>;opacity:.7">en stock</div>
         </div>
         <?php endforeach; ?>
       </div>
       <?php if(!empty($pj_rivets_recents)): ?>
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Consommation récente</div>
+      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Consommation récente</div>
       <?php foreach($pj_rivets_recents as $pj):
         $lbl=['point_9h'=>'9h','point_13h'=>'13h','point_18h'=>'18h','final'=>'Final','intermediaire'=>'Interm.'][$pj['type_point']]??$pj['type_point'];
       ?>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border);font-size:12px">
-        <div style="color:var(--muted)"><?= fmt_date($pj['date_point'],'d/m') ?> <span style="font-size:11px;background:var(--lighter);padding:1px 6px;border-radius:8px"><?= $lbl ?></span></div>
+        <div style="color:var(--muted)"><?= fmt_date($pj['date_point'],'d/m') ?> <span style="font-size:12px;background:var(--lighter);padding:1px 6px;border-radius:8px"><?= $lbl ?></span></div>
         <div style="display:flex;gap:10px">
           <?php if($pj['rivets_gonflables']>0||$pj['rivets_eclates']>0): ?>
           <span style="color:#1565c0">🔵 <?= $pj['rivets_gonflables'] ?></span>
@@ -778,7 +778,7 @@ include __DIR__ . '/../templates/header.php';
   <div class="dash-card">
     <div class="dash-card-header">
       <h3>⚠️ Équipements en fin de cycle</h3>
-      <span style="font-size:11px;color:var(--muted)">60 prochains jours</span>
+      <span style="font-size:12px;color:var(--muted)">60 prochains jours</span>
     </div>
     <div class="dash-card-body" style="padding:12px 20px">
       <?php if (empty($fin_cycle_list)): ?>

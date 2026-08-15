@@ -248,10 +248,10 @@ include __DIR__ . '/../templates/header.php';
 .ik{background:white;border:1px solid var(--border);border-radius:14px;padding:16px 20px;border-left:4px solid var(--blue)}
 .ik.green{border-left-color:var(--success)} .ik.orange{border-left-color:#f39c12} .ik.purple{border-left-color:#8e44ad}
 .ik-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:28px;font-weight:900;color:var(--navy);line-height:1}
-.ik-lbl{font-size:11px;color:var(--muted);margin-top:4px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
-.type-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.ik-lbl{font-size:12px;color:var(--muted);margin-top:4px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.type-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
 .type-journalier{background:#e8f4f9;color:var(--blue)} .type-mensuel{background:#f3e8ff;color:#6b21a8}
-.statut-inv{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.statut-inv{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
 .statut-brouillon{background:#fef9e7;color:#9a6c00} .statut-valide{background:#d5f5e3;color:#1e7e40}
 .fsel{padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none;cursor:pointer}
 .session-banner{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;
@@ -350,7 +350,7 @@ include __DIR__ . '/../templates/header.php';
           <td style="text-align:center">
             <?php if($ecart_emuci!=0): ?>
             <span style="font-weight:700;color:<?= $ecart_emuci>0?'#e74c3c':'#f39c12' ?>"><?= $ecart_emuci>0?'+':'' ?><?= $ecart_emuci ?> films</span>
-            <?php else: ?><span class="badge badge-success" style="font-size:11px">✅ OK</span><?php endif; ?>
+            <?php else: ?><span class="badge badge-success" style="font-size:12px">✅ OK</span><?php endif; ?>
           </td>
           <td><span class="statut-inv statut-<?= $inv['statut'] ?>"><?= $inv['statut']==='valide'?'✅ Validé':'⏳ En cours' ?></span></td>
           <td style="font-size:12px;color:var(--muted)"><?= h($inv['createur']??'—') ?></td>

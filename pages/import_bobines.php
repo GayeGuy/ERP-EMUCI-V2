@@ -236,7 +236,7 @@ include __DIR__ . '/../templates/header.php';
 .site-arrow{color:var(--muted);font-size:16px;flex-shrink:0}
 .alert-success{background:#eafaf1;border:1px solid #a9dfbf;border-radius:10px;padding:16px 20px;font-size:13px;color:#1e8449}
 .alert-danger{background:#fdf0ef;border:1px solid #f5c6cb;border-radius:10px;padding:12px 16px;font-size:13px;color:#c0392b;margin-bottom:16px}
-.format-chip{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#e3f2fd;color:#1565c0;margin:2px}
+.format-chip{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600;background:#e3f2fd;color:#1565c0;margin:2px}
 </style>
 
 <div style="max-width:860px">
@@ -335,7 +335,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="site-row">
       <div class="site-nom">
         <?= h($sf) ?>
-        <div style="font-size:11px;color:var(--muted);font-weight:400"><?= $nb_bobs ?> bob · <?= number_format($nb_films) ?> films</div>
+        <div style="font-size:12px;color:var(--muted);font-weight:400"><?= $nb_bobs ?> bob · <?= number_format($nb_films) ?> films</div>
       </div>
       <div class="site-arrow">→</div>
       <div style="flex:1">
@@ -347,7 +347,7 @@ include __DIR__ . '/../templates/header.php';
         </select>
       </div>
       <?php if($auto_id): ?>
-      <span style="font-size:11px;color:var(--success-d);font-weight:600;white-space:nowrap">✅ Auto-mappé</span>
+      <span style="font-size:12px;color:var(--success-d);font-weight:600;white-space:nowrap">✅ Auto-mappé</span>
       <?php endif; ?>
     </div>
     <?php endforeach; ?>

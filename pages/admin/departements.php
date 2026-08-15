@@ -139,7 +139,7 @@ include __DIR__ . '/../../templates/header.php';
 .dept-card.active .dept-ico{background:var(--navy);color:white}
 .dept-meta{flex:1;min-width:0}
 .dept-name{font-weight:700;font-size:13px;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.dept-count{font-size:11px;color:var(--muted);margin-top:2px}
+.dept-count{font-size:12px;color:var(--muted);margin-top:2px}
 .dept-empty{padding:40px 20px;text-align:center;color:var(--muted);font-size:13px}
 .btn-add{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:var(--navy);color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit}
 .btn-sm{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:#f8fafc;color:#374151;font-family:inherit}
@@ -153,11 +153,11 @@ include __DIR__ . '/../../templates/header.php';
 .member-ava{width:34px;height:34px;border-radius:50%;background:#eef0f8;color:var(--navy);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0}
 .member-info{flex:1;min-width:0}
 .member-name{font-weight:700;font-size:13px;color:var(--navy)}
-.member-role{font-size:11px;color:var(--muted)}
-.badge-n1{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:800;background:#dcfce7;color:#16a34a;margin-left:6px}
+.member-role{font-size:12px;color:var(--muted)}
+.badge-n1{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:800;background:#dcfce7;color:#16a34a;margin-left:6px}
 .detail-hdr{display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap}
 .detail-ttl{font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:900;color:var(--navy);flex:1}
-.section-lbl{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:18px 0 10px}
+.section-lbl{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;margin:18px 0 10px}
 .add-form{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px;background:#f8fafc;border:1px solid var(--border);border-radius:10px;margin-top:12px}
 .add-form select{flex:1;min-width:180px;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:white;font-family:inherit}
 .add-form label{display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:#374151;white-space:nowrap}
@@ -334,7 +334,7 @@ function renderDetail(data) {
 
         ${available.length ? `
         <div class="section-lbl">Ajouter / transférer un compte</div>
-        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Les comptes marqués <strong>[Département]</strong> seront transférés automatiquement.</div>
+        <div style="font-size:12px;color:var(--muted);margin-bottom:8px">Les comptes marqués <strong>[Département]</strong> seront transférés automatiquement.</div>
         <div class="add-form">
             <select id="sel-user"><option value="">— Sélectionner un compte —</option>${availOpts}</select>
             <label><input type="checkbox" id="chk-n1"> N+1</label>

@@ -128,7 +128,7 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
       position: absolute; top: -5px; right: -5px;
       min-width: 18px; height: 18px; padding: 0 4px;
       background: #EF4444; color: white;
-      font-size: 10px; font-weight: 700;
+      font-size: 12px; font-weight: 700;
       border-radius: 9px; display: flex; align-items: center; justify-content: center;
       font-family: 'Plus Jakarta Sans', sans-serif;
     }
@@ -153,7 +153,7 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
     .notif-item:hover { background: #F8FAFC; }
     .notif-item:last-child { border-bottom: none; }
     .notif-item .n-titre { font-size: 13px; font-weight: 600; color: var(--navy); }
-    .notif-item .n-date  { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .notif-item .n-date  { font-size: 12px; color: var(--muted); margin-top: 3px; }
     .notif-empty { padding: 28px; text-align: center; color: var(--muted); font-size: 13px; }
 
     /* ── User chip (dropdown) ── */
@@ -283,7 +283,7 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
       margin-bottom: 4px; transition: color .2s; line-height: 1.2;
     }
     .groupe-text p {
-      font-size: 11px; color: var(--muted);
+      font-size: 12px; color: var(--muted);
       line-height: 1.4; transition: color .2s;
     }
 

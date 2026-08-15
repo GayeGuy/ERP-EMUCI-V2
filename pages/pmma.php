@@ -390,11 +390,11 @@ include __DIR__ . '/../templates/header.php';
 .pmma-head{padding:12px 16px;background:var(--navy);display:flex;justify-content:space-between;align-items:center}
 .pmma-site{color:white;font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700}
 .pmma-body{padding:14px 16px}
-.pmma-alert{background:#fee2e2;color:#991b1b;padding:5px 10px;border-radius:8px;font-size:11px;margin-top:8px;font-weight:600}
+.pmma-alert{background:#fee2e2;color:#991b1b;padding:5px 10px;border-radius:8px;font-size:12px;margin-top:8px;font-weight:600}
 .kpi-bar{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px}
 .kpi{background:white;border:1px solid var(--border);border-radius:12px;padding:14px 16px}
 .kpi-val{font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900;line-height:1}
-.kpi-lbl{font-size:11px;color:var(--muted);font-weight:600;margin-top:3px}
+.kpi-lbl{font-size:12px;color:var(--muted);font-weight:600;margin-top:3px}
 .filter-bar{background:white;border:1px solid var(--border);border-radius:12px;padding:14px 18px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:20px}
 .filter-bar label{font-size:12px;font-weight:600;color:var(--navy);display:block;margin-bottom:4px}
 .filter-bar input,.filter-bar select{padding:8px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:white;outline:none}
@@ -522,13 +522,13 @@ include __DIR__ . '/../templates/header.php';
       <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
         <div>
           <div style="font-size:13px;font-weight:600;color:var(--navy)"><?= h($item['type_pmma']) ?></div>
-          <div style="font-size:11px;color:var(--muted)">Seuil : <?= (int)($item['seuil_alerte'] ?? 10) ?></div>
+          <div style="font-size:12px;color:var(--muted)">Seuil : <?= (int)($item['seuil_alerte'] ?? 10) ?></div>
         </div>
         <div style="text-align:right">
           <div style="font-family:'Montserrat',sans-serif;font-size:26px;font-weight:900;color:<?= $item['quantite'] < ($item['seuil_alerte'] ?? 10) ? 'var(--danger-d)' : 'var(--blue)' ?>">
             <?= (int)$item['quantite'] ?>
           </div>
-          <div style="font-size:10px;color:var(--muted)">unités</div>
+          <div style="font-size:12px;color:var(--muted)">unités</div>
         </div>
       </div>
       <?php if ($item['quantite'] < ($item['seuil_alerte'] ?? 10)): ?>
@@ -571,7 +571,7 @@ include __DIR__ . '/../templates/header.php';
         <tr>
           <td><?= h(fmt_date($c['date_point'])) ?></td>
           <?php if (!$site_force): ?><td><?= h($c['site_nom']) ?></td><?php endif; ?>
-          <td><span style="background:#e0f0ff;color:#0d5c8a;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700">
+          <td><span style="background:#e0f0ff;color:#0d5c8a;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:700">
             <?= h($c['type_pmma'] ?: 'Standard') ?>
           </span></td>
           <td style="text-align:center;font-weight:700;color:var(--blue)"><?= (int)$c['utilises'] ?></td>

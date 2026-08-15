@@ -88,9 +88,9 @@ include __DIR__ . '/../templates/header.php';
   .di-head h2{margin:0 0 3px;font-size:21px;font-weight:800;color:var(--navy,#06033A);letter-spacing:-.2px}
   .di-head p{margin:0;font-size:13.5px;color:#475569;line-height:1.5}
   .di-circuit{display:flex;align-items:center;flex-wrap:wrap;gap:8px;padding:13px 16px;margin-bottom:20px;background:#f4f6fd;border:1px solid #e6eaf8;border-radius:13px}
-  .di-circuit-lbl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#5a6678;margin-right:2px}
+  .di-circuit-lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#5a6678;margin-right:2px}
   .di-cstep{display:inline-flex;align-items:center;gap:7px;background:#fff;border:1px solid #dfe4fb;border-radius:9px;padding:5px 12px 5px 6px;font-size:12.5px;font-weight:600;color:#3B4FBE}
-  .di-cnum{width:19px;height:19px;border-radius:6px;background:#3B4FBE;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700}
+  .di-cnum{width:19px;height:19px;border-radius:6px;background:#3B4FBE;color:#fff;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700}
   .di-carrow{color:#b9c2e6;font-size:13px}
   /* ══════════════════════════════════════════════════════════════
      LE FORMULAIRE, EN DOCUMENT RÉGLÉ

@@ -120,18 +120,18 @@ $unread = count($notifs);
       font-size: 20px; flex-shrink: 0;
       box-shadow: 0 4px 14px rgba(124,146,255,.4);
     }
-    .brand-text h1 {
+    .brand-text p {
       font-family: 'Plus Jakarta Sans', sans-serif;
       font-size: 16px; font-weight: 800; color: white;
-      letter-spacing: -.3px;
+      letter-spacing: -.3px; margin: 0;
     }
-    .brand-text span { font-size: 11px; color: rgba(165,216,255,.6); }
+    .brand-text span { font-size: 12px; color: rgba(165,216,255,.6); }
 
     .sidebar-nav { flex: 1; padding: 12px 0; }
 
     .nav-section {
       padding: 16px 20px 5px;
-      font-size: 10px; font-weight: 700; letter-spacing: 1.4px;
+      font-size: 12px; font-weight: 700; letter-spacing: 1.4px;
       color: rgba(255,255,255,.35);
       text-transform: uppercase;
     }
@@ -180,7 +180,7 @@ $unread = count($notifs);
     .nav-badge {
       margin-left: auto;
       background: var(--primary-d);
-      color: white; font-size: 10px; font-weight: 700;
+      color: white; font-size: 12px; font-weight: 700;
       padding: 2px 7px; border-radius: 20px;
     }
 
@@ -242,7 +242,7 @@ $unread = count($notifs);
     }
     .topbar-title {
       font-family: 'Plus Jakarta Sans', sans-serif;
-      font-size: 17px; font-weight: 700;
+      font-size: 17px; font-weight: 700; margin: 0;
       color: var(--navy); flex: 1; min-width: 0;
       /* Pas de white-space:nowrap ici : la sous-ligne <small> (dashboard.php,
          dashboard_legacy.php) est un bloc à part, un nowrap sur le parent la
@@ -272,7 +272,7 @@ $unread = count($notifs);
     .notif-count {
       position: absolute; top: -5px; right: -5px;
       background: var(--danger-d); color: white;
-      font-size: 10px; font-weight: 700;
+      font-size: 12px; font-weight: 700;
       width: 18px; height: 18px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
     }
@@ -302,7 +302,7 @@ $unread = count($notifs);
     .notif-item:hover { background: var(--tertiary); }
     .notif-item:last-child { border-bottom: none; }
     .notif-item .n-titre { font-size: 13px; font-weight: 600; color: var(--navy); }
-    .notif-item .n-date  { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .notif-item .n-date  { font-size: 12px; color: var(--muted); margin-top: 3px; }
     .notif-empty { padding: 28px; text-align: center; color: var(--muted); font-size: 13px; }
 
     /* ===== PAGE CONTENT ===== */
@@ -349,7 +349,7 @@ $unread = count($notifs);
       background: var(--tertiary) !important;
       color: var(--muted) !important;
       padding: 12px 16px;
-      font-size: 11px; font-weight: 700; letter-spacing: .8px;
+      font-size: 12px; font-weight: 700; letter-spacing: .8px;
       text-align: left;
       border-bottom: 1.5px solid var(--border);
       white-space: nowrap;
@@ -481,7 +481,7 @@ $unread = count($notifs);
   .nav-group-label {
     display: flex; align-items: center; gap: 8px;
     padding: 14px 20px 6px;
-    font-size: 10px; font-weight: 700; letter-spacing: 1.4px;
+    font-size: 12px; font-weight: 700; letter-spacing: 1.4px;
     color: rgba(255,255,255,.35);
     text-transform: uppercase;
     border-top: 1px solid rgba(255,255,255,.07);
@@ -717,7 +717,7 @@ $unread = count($notifs);
       </svg>
     </div>
     <div class="brand-text">
-      <h1>ERP EMUCI</h1>
+      <p>ERP EMUCI</p>
       <span>by EMUCI</span>
     </div>
   </div>
@@ -781,12 +781,12 @@ $unread = count($notifs);
 
   <!-- TOP BAR -->
   <header class="topbar">
-    <div class="topbar-title">
+    <h1 class="topbar-title">
       <?= h($page_title ?? 'Dashboard') ?>
       <?php if (!empty($page_subtitle)): ?>
         <small><?= h($page_subtitle) ?></small>
       <?php endif; ?>
-    </div>
+    </h1>
     <div class="topbar-actions">
 
       <!-- Notifications -->

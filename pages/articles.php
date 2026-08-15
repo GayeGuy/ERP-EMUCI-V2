@@ -353,10 +353,10 @@ include __DIR__ . '/../templates/header.php';
 .art-card.alerte{border-left:4px solid var(--danger)}
 .art-card.warning{border-left:4px solid var(--warning)}
 .ac-header{padding:13px 15px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
-.ac-type-badge{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;background:var(--primary-l);color:var(--primary-d)}
-.ac-code{width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#06033A,#1B75BC);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:white;letter-spacing:.5px;text-align:center;padding:4px;flex-shrink:0}
+.ac-type-badge{padding:2px 8px;border-radius:20px;font-size:12px;font-weight:700;background:var(--primary-l);color:var(--primary-d)}
+.ac-code{width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#06033A,#1B75BC);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:white;letter-spacing:.5px;text-align:center;padding:4px;flex-shrink:0}
 .ac-info h4{font-size:13px;font-weight:700;color:var(--navy);margin-bottom:2px}
-.ac-info span{font-size:11px;color:var(--muted)}
+.ac-info span{font-size:12px;color:var(--muted)}
 .ac-stock{padding:12px 15px;display:flex;align-items:center;gap:12px}
 .ac-stock-num{font-size:26px;font-weight:800;color:var(--navy);line-height:1;font-family:'Plus Jakarta Sans',sans-serif}
 .stock-bar{height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:4px}
@@ -375,7 +375,7 @@ include __DIR__ . '/../templates/header.php';
 .mclose{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:none;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
 .mbody{padding:22px}
 .mfoot{padding:13px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;background:white}
-.flux-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700}
+.flux-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:12px;font-weight:700}
 .flux-badge.reception{background:#e8f5e9;color:#2e7d32}
 .flux-badge.distribution{background:#e3f2fd;color:#1565c0}
 </style>
@@ -454,7 +454,7 @@ include __DIR__ . '/../templates/header.php';
         <h4><?= h($a['libelle']) ?></h4>
         <div style="display:flex;gap:5px;align-items:center">
           <span class="ac-type-badge"><?= $TYPES_ARTICLE[$a['type_article']]??$a['type_article'] ?></span>
-          <span style="font-size:11px;color:var(--muted)"><?= $UNITES[$a['unite']]??$a['unite'] ?></span>
+          <span style="font-size:12px;color:var(--muted)"><?= $UNITES[$a['unite']]??$a['unite'] ?></span>
         </div>
       </div>
       <?php if($ratio<=0): ?><span style="font-size:18px">🔴</span>
@@ -469,12 +469,12 @@ include __DIR__ . '/../templates/header.php';
         <div style="font-size:10.5px;color:var(--muted)"><?= $UNITES[$a['unite']]??$a['unite'] ?></div>
       </div>
       <div style="flex:1">
-        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
           <span style="color:var(--muted)">Seuil : <?= $a['seuil_alerte'] ?></span>
           <span style="color:<?= $cls?'var(--danger-d)':'var(--success-d)' ?>;font-weight:700"><?= round($pct) ?>%</span>
         </div>
         <div class="stock-bar"><div class="stock-fill" style="width:<?= $pct ?>%;background:<?= $fill ?>"></div></div>
-        <div style="font-size:10px;color:var(--muted);margin-top:3px;display:flex;gap:8px">
+        <div style="font-size:12px;color:var(--muted);margin-top:3px;display:flex;gap:8px">
           <?php if($a['receptions_30j']>0): ?><span>+<?= fmt_number($a['receptions_30j']) ?> reçus</span><?php endif; ?>
           <?php if($a['distributions_30j']>0): ?><span>-<?= fmt_number($a['distributions_30j']) ?> distrib.</span><?php endif; ?>
         </div>
@@ -525,7 +525,7 @@ include __DIR__ . '/../templates/header.php';
           <div style="padding:12px;border-radius:9px;background:var(--tertiary);border:1px solid var(--border);display:flex;align-items:center;gap:12px" id="recStockIndicator">
             <div style="font-size:22px;font-weight:800;color:var(--navy);font-family:'Plus Jakarta Sans',sans-serif" id="recStockVal">0</div>
             <div>
-              <div style="font-size:11px;color:var(--muted);font-weight:600">Stock actuel</div>
+              <div style="font-size:12px;color:var(--muted);font-weight:600">Stock actuel</div>
               <div style="font-size:12px" id="recStockMsg"></div>
             </div>
           </div>
@@ -590,7 +590,7 @@ include __DIR__ . '/../templates/header.php';
           <div style="padding:12px;border-radius:9px;display:flex;align-items:center;gap:12px" id="distStockIndicator">
             <div style="font-size:22px;font-weight:800;font-family:'Plus Jakarta Sans',sans-serif" id="distStockVal">0</div>
             <div>
-              <div style="font-size:11px;color:var(--muted);font-weight:600">Disponible en stock central</div>
+              <div style="font-size:12px;color:var(--muted);font-weight:600">Disponible en stock central</div>
               <div style="font-size:12px" id="distStockMsg"></div>
             </div>
           </div>
@@ -625,7 +625,7 @@ include __DIR__ . '/../templates/header.php';
         <div class="form-group" style="background:#fff8e7;border:2px dashed #f59e0b;border-radius:10px;padding:13px;margin-bottom:13px">
           <label style="font-size:13px;font-weight:700;color:#b7791f;display:block;margin-bottom:6px">
             <i class="ph-duotone ph-paperclip"></i> Bon de livraison <span style="color:var(--danger-d)">*</span>
-            <span style="font-size:11px;font-weight:400;color:var(--muted)"> — PDF ou image obligatoire</span>
+            <span style="font-size:12px;font-weight:400;color:var(--muted)"> — PDF ou image obligatoire</span>
           </label>
           <input type="file" id="distFichierBL" accept=".pdf,.jpg,.jpeg,.png,.webp"
             style="width:100%;padding:8px;border:1.5px solid #f59e0b;border-radius:8px;font-size:13px;background:white">
@@ -686,7 +686,7 @@ include __DIR__ . '/../templates/header.php';
             <td><strong style="font-size:11.5px;color:var(--navy)"><?= h($h['art_code']) ?></strong> <?= h($h['art_lib']) ?></td>
             <td style="text-align:right;font-weight:800;font-size:15px;color:<?= $h['type_op']==='reception'?'var(--success-d)':'var(--primary-d)' ?>">
               <?= $h['type_op']==='reception'?'+':'-' ?><?= fmt_number($h['quantite']) ?>
-              <span style="font-size:11px;font-weight:400;color:var(--muted)"><?= $h['unite'] ?></span>
+              <span style="font-size:12px;font-weight:400;color:var(--muted)"><?= $h['unite'] ?></span>
             </td>
             <td style="font-size:12px"><?= $h['type_op']==='reception' ? h($h['ref1']??'—') : h($h['site_nom']??'—') ?></td>
             <td style="font-size:12px"><?= h($h['agent']??'—') ?></td>
@@ -913,7 +913,7 @@ function viewArticle(id){
            ['Prix unitaire',r.prix_unitaire>0?r.prix_unitaire.toLocaleString('fr-FR')+' FCFA':'—'],
            ['Seuil alerte',r.seuil_alerte]
           ].map(([l,v])=>`<div style="padding:6px 0;border-bottom:1px solid var(--border)">
-            <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">${l}</div>
+            <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">${l}</div>
             <div style="font-size:13.5px">${v}</div></div>`).join('')}
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">

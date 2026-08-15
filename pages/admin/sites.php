@@ -395,13 +395,13 @@ $type_colors = [
 ?>
 <style>
 .filter-bar{background:white;border:1px solid var(--border);border-radius:12px;padding:12px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:18px}
-.filter-bar label{font-size:11px;font-weight:700;color:var(--navy);display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.4px}
+.filter-bar label{font-size:12px;font-weight:700;color:var(--navy);display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.4px}
 .filter-bar input,.filter-bar select{padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:white;outline:none;min-width:140px}
 .filter-bar input:focus,.filter-bar select:focus{border-color:var(--blue)}
 .stats-dash{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:18px}
 .stat-tile{position:relative;overflow:hidden;background:white;border:1px solid var(--border);border-radius:12px;padding:11px 14px 11px 18px;cursor:default}
 .stat-tile::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent,var(--muted))}
-.stat-tile-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.stat-tile-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
 .stat-tile-value{font-family:'Plus Jakarta Sans',sans-serif;font-size:22px;font-weight:700;color:var(--navy)}
 .stat-tile-empty{opacity:.5}
 .stat-tile-total{background:var(--navy);border-color:var(--navy)}
@@ -416,7 +416,7 @@ $type_colors = [
 .sites-table thead th{position:sticky;top:0;z-index:1}
 .sites-table tr:hover td{background:#f8fafc}
 .sites-table tr.inactive td{opacity:.55}
-.type-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.type-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
 /* Compteurs Équip./Util. : nombre nu, lisible d'un coup d'œil.
    Les pastilles bleu pâle précédentes plafonnaient à 4.25:1 (sous le seuil AA). */
 .count-cell{font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700;color:var(--navy);padding:6px 8px;background:white;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;min-width:40px}
@@ -584,7 +584,7 @@ $type_colors = [
               </div>
               <div>
                 <div style="font-weight:700;color:var(--navy);font-size:13.5px"><?= h($s['nom']) ?></div>
-                <div style="font-size:11px;color:var(--muted);font-family:monospace"><?= h($s['code']) ?></div>
+                <div style="font-size:12px;color:var(--muted);font-family:monospace"><?= h($s['code']) ?></div>
               </div>
             </div>
           </td>
@@ -592,7 +592,7 @@ $type_colors = [
             <span class="type-badge" style="background:<?= $tc['bg'] ?>;color:<?= $tc['color'] ?>">
               <?= $types_labels[$s['type']] ?? $s['type'] ?>
               <?php if (!empty($s['option_caisse'])): ?>
-              <span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:8px;margin-left:3px">💰</span>
+              <span style="font-size:12px;background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:8px;margin-left:3px">💰</span>
               <?php endif; ?>
             </span>
           </td>
@@ -667,7 +667,7 @@ $type_colors = [
       <div id="mSAlert"></div>
       <input type="hidden" id="sId">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-        <div class="form-group"><label>Code * <span style="font-size:11px;color:var(--muted)">(ex: ABJ-01)</span></label>
+        <div class="form-group"><label>Code * <span style="font-size:12px;color:var(--muted)">(ex: ABJ-01)</span></label>
           <input type="text" class="form-control" id="sCode" placeholder="ABJ-01" oninput="this.value=this.value.toUpperCase()">
         </div>
         <div class="form-group"><label>Type *</label>
@@ -701,7 +701,7 @@ $type_colors = [
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;background:var(--lighter);border-radius:8px;border:1px solid var(--border)">
           <input type="checkbox" id="sCaisse">
           <div><div style="font-weight:600;font-size:13px">💰 Option Caisse</div>
-          <div style="font-size:11px;color:var(--muted)">Ce site encaisse directement</div></div>
+          <div style="font-size:12px;color:var(--muted)">Ce site encaisse directement</div></div>
         </label>
       </div>
       <div id="sActifWrap" style="display:none">
@@ -892,18 +892,18 @@ function viewS(id){
     document.getElementById('sdT').textContent=r.code+' — '+r.nom;
     const equips=r.equip_par_type.map(e=>`
       <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
-        <span style="font-size:10px;font-weight:700;background:var(--lighter);border:1px solid var(--border);border-radius:5px;padding:2px 6px">${e.code}</span>
+        <span style="font-size:12px;font-weight:700;background:var(--lighter);border:1px solid var(--border);border-radius:5px;padding:2px 6px">${e.code}</span>
         <span style="flex:1;font-size:13px">${e.libelle}</span>
         <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">${e.total}</span>
       </div>`).join('')||'<p style="color:var(--muted);font-size:13px">Aucun équipement.</p>';
     const users=r.utilisateurs.map(u=>`
       <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
         <div class="resp-avatar">${u.nom.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase()}</div>
-        <div><div style="font-size:13px;font-weight:500">${u.nom}</div><div style="font-size:11px;color:var(--muted)">${u.email} · ${u.role}</div></div>
+        <div><div style="font-size:13px;font-weight:500">${u.nom}</div><div style="font-size:12px;color:var(--muted)">${u.email} · ${u.role}</div></div>
       </div>`).join('')||'<p style="color:var(--muted);font-size:13px">Aucun utilisateur.</p>';
     document.getElementById('sdB').innerHTML=`
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 18px;margin-bottom:18px">
-        ${[['Code',r.code],['Type',r.type],['Ville',r.ville||'—'],['Responsable',r.responsable_nom||'—'],['Adresse',r.adresse||'—'],['Statut',r.actif==1?'✅ Actif':'❌ Inactif']].map(([l,v])=>`<div style="padding:6px 0;border-bottom:1px solid var(--border)"><div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">${l}</div><div style="font-size:13px">${v}</div></div>`).join('')}
+        ${[['Code',r.code],['Type',r.type],['Ville',r.ville||'—'],['Responsable',r.responsable_nom||'—'],['Adresse',r.adresse||'—'],['Statut',r.actif==1?'✅ Actif':'❌ Inactif']].map(([l,v])=>`<div style="padding:6px 0;border-bottom:1px solid var(--border)"><div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">${l}</div><div style="font-size:13px">${v}</div></div>`).join('')}
       </div>
       <h4 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;margin-bottom:8px">Équipements (${r.equip_par_type.reduce((s,e)=>s+parseInt(e.total),0)})</h4>
       ${equips}
@@ -925,9 +925,9 @@ function calcCapa(type){
     const rows=details.map(r=>{
       const pct=r.requis>0?Math.min(100,r.disponible/r.requis*100):100;
       return `<div class="capa-row">
-        <span style="width:55px;font-size:10px;font-weight:700;color:var(--muted)">${r.code}</span>
-        <span style="flex:1;font-size:12px">${r.libelle}${r.optionnel?' <em style="font-size:10px;color:var(--muted)">(opt.)</em>':''}</span>
-        <span style="font-size:11px;color:var(--muted);margin:0 8px">${r.disponible}/${r.requis}</span>
+        <span style="width:55px;font-size:12px;font-weight:700;color:var(--muted)">${r.code}</span>
+        <span style="flex:1;font-size:12px">${r.libelle}${r.optionnel?' <em style="font-size:12px;color:var(--muted)">(opt.)</em>':''}</span>
+        <span style="font-size:12px;color:var(--muted);margin:0 8px">${r.disponible}/${r.requis}</span>
         <div class="capa-bar"><div class="capa-fill" style="width:${Math.min(pct,100)}%;background:${r.ok?'var(--success)':'var(--danger)'}"></div></div>
         <span style="margin-left:8px;font-size:16px;width:18px">${r.ok?'✓':'✗'}</span>
         <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;font-weight:800;width:30px;text-align:right;color:var(--navy)">${r.couvre}</span>
@@ -956,13 +956,13 @@ function renderCfg(type){
   c.innerHTML=rows.map((r,i)=>{
     const d=STOCK_DISPO[r.nomenclature_id]||0;
     return `<div class="cfg-row">
-      <span style="width:55px;font-size:10px;font-weight:700;color:var(--muted)">${r.code}</span>
+      <span style="width:55px;font-size:12px;font-weight:700;color:var(--muted)">${r.code}</span>
       <span style="flex:1;font-size:12.5px">${r.libelle}</span>
       <input type="number" class="form-control" style="width:68px" value="${r.quantite}" min="1" onchange="cfgData['${type}'][${i}].quantite=this.value">
-      <label style="font-size:11px;display:flex;align-items:center;gap:4px;white-space:nowrap">
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;white-space:nowrap">
         <input type="checkbox" ${r.optionnel?'checked':''} onchange="cfgData['${type}'][${i}].optionnel=this.checked"> Opt.
       </label>
-      <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:${d>=r.quantite?'#d5f5e3':'#fdf0ef'};color:${d>=r.quantite?'#1e8449':'#922b21'}">${d} dispo</span>
+      <span style="font-size:12px;font-weight:700;padding:2px 8px;border-radius:10px;background:${d>=r.quantite?'#d5f5e3':'#fdf0ef'};color:${d>=r.quantite?'#1e8449':'#922b21'}">${d} dispo</span>
       <button class="btn btn-danger btn-sm" onclick="rmCfgRow('${type}',${i})">✕</button>
     </div>`;}).join('');
 }
@@ -1004,7 +1004,7 @@ function saveCfg(type){
       <?php foreach ($sites_inconnus_emuci as $si): ?>
       <tr>
         <td style="font-weight:700;color:var(--navy)"><?= h($si['nom_emuci']) ?></td>
-        <td><span style="background:<?= $si['type_import']==='optoplate'?'#DBEAFE':'#D1FAE5' ?>;color:<?= $si['type_import']==='optoplate'?'#1D4ED8':'#065F46' ?>;padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700"><?= strtoupper($si['type_import']) ?></span></td>
+        <td><span style="background:<?= $si['type_import']==='optoplate'?'#DBEAFE':'#D1FAE5' ?>;color:<?= $si['type_import']==='optoplate'?'#1D4ED8':'#065F46' ?>;padding:2px 9px;border-radius:12px;font-size:12px;font-weight:700"><?= strtoupper($si['type_import']) ?></span></td>
         <td style="text-align:center;font-weight:700"><?= $si['nb_occurrences'] ?>×</td>
         <td style="font-size:12px;color:var(--muted)"><?= fmt_datetime($si['derniere_apparition']) ?></td>
         <td style="text-align:center">

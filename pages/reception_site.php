@@ -331,7 +331,7 @@ include __DIR__ . '/../templates/header.php';
               <?php if($r['quantite']): ?><span style="color:var(--muted);font-size:12px"> · <?= fmt_number($r['quantite'],1) ?> <?= h($r['unite']??'') ?></span><?php endif; ?>
             <?php else: ?>
               <?= h($r['equip_type']??'—') ?>
-              <?php if($r['equip_numero']): ?><br><span style="font-family:monospace;font-size:11px;color:var(--muted)"><?= h($r['equip_numero']) ?></span><?php endif; ?>
+              <?php if($r['equip_numero']): ?><br><span style="font-family:monospace;font-size:12px;color:var(--muted)"><?= h($r['equip_numero']) ?></span><?php endif; ?>
             <?php endif; ?>
           </td>
           <td style="text-align:right;font-weight:700;font-family:'Montserrat',sans-serif">
@@ -391,7 +391,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="form-group" style="margin-bottom:14px">
       <label style="font-size:13px;font-weight:600;color:var(--text);display:block;margin-bottom:6px">
         📎 Fiche signée <span style="color:var(--danger-d)">*</span>
-        <span style="font-size:11px;font-weight:400;color:var(--muted)">(PDF ou image — obligatoire)</span>
+        <span style="font-size:12px;font-weight:400;color:var(--muted)">(PDF ou image — obligatoire)</span>
       </label>
       <input type="file" id="recFiche" accept=".pdf,.jpg,.jpeg,.png,.webp"
              style="width:100%;padding:8px;border:2px dashed var(--border);border-radius:8px;font-size:13px;cursor:pointer;background:var(--lighter)">
@@ -503,24 +503,24 @@ function openDetail(id){
 
       let html = `
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
-          <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Site</div><div style="font-weight:700">${rec.site_nom}</div></div>
-          <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Statut</div>
+          <div><div style="font-size:12px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Site</div><div style="font-weight:700">${rec.site_nom}</div></div>
+          <div><div style="font-size:12px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Statut</div>
             <span style="padding:3px 10px;border-radius:6px;font-size:12px;font-weight:700;background:${statutBg};color:${statutColor}">${statutLabel}</span>
           </div>
-          <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Date réception</div><div>${rec.date_reception}</div></div>
-          <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Type</div>
+          <div><div style="font-size:12px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Date réception</div><div>${rec.date_reception}</div></div>
+          <div><div style="font-size:12px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Type</div>
             <div>${rec.type_reception==='consommable'?'🧴 Consommable':'💻 Équipement'}</div>
           </div>`;
 
       if(rec.type_reception==='consommable'){
-        html += `<div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Article</div>
+        html += `<div><div style="font-size:12px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Article</div>
           <div style="font-weight:600">${rec.conso_lib||'—'} <small style="color:var(--muted)">(${rec.conso_code||''})</small></div></div>
-          <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Quantité</div>
+          <div><div style="font-size:12px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Quantité</div>
           <div style="font-weight:700;font-size:16px">${rec.quantite||'—'} <small>${rec.unite||''}</small></div></div>`;
       } else {
-        html += `<div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Équipement</div>
+        html += `<div><div style="font-size:12px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Équipement</div>
           <div style="font-weight:600">${rec.equip_type||'—'}</div></div>
-          <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">N° Série</div>
+          <div><div style="font-size:12px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">N° Série</div>
           <div style="font-family:monospace;font-size:12px">${rec.equip_num||'—'}</div></div>`;
       }
       html += `</div>`;
@@ -550,7 +550,7 @@ function openDetail(id){
         const cont = document.getElementById('litMessages');
         cont.innerHTML = msgs.length ? msgs.map(m=>`
           <div style="background:var(--lighter);padding:8px 12px;border-radius:8px;font-size:12.5px">
-            <strong>${m.auteur}</strong> <span style="color:var(--muted);font-size:11px">(${m.role_nom}) · ${m.created_at}</span><br>
+            <strong>${m.auteur}</strong> <span style="color:var(--muted);font-size:12px">(${m.role_nom}) · ${m.created_at}</span><br>
             ${m.message}
           </div>`).join('') : '<div style="color:var(--muted);font-size:12px;text-align:center">Aucun message encore.</div>';
         cont.scrollTop = cont.scrollHeight;
@@ -569,7 +569,7 @@ async function sendMessage(){
     document.getElementById('litMsg').value='';
     const cont = document.getElementById('litMessages');
     cont.innerHTML += `<div style="background:#e8f4fd;padding:8px 12px;border-radius:8px;font-size:12.5px">
-      <strong>${d.data.nom}</strong> <span style="color:var(--muted);font-size:11px">· ${d.data.heure}</span><br>${d.data.msg}</div>`;
+      <strong>${d.data.nom}</strong> <span style="color:var(--muted);font-size:12px">· ${d.data.heure}</span><br>${d.data.msg}</div>`;
     cont.scrollTop = cont.scrollHeight;
   }
 }

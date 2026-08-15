@@ -697,13 +697,13 @@ include __DIR__ . '/../templates/header.php';
 .stat-card.orange{border-left-color:#f39c12}
 .stat-card.red{border-left-color:var(--danger)}
 .stat-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:26px;font-weight:900;color:var(--navy);line-height:1}
-.stat-lbl{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
+.stat-lbl{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
 
 .ecart-pos{color:#e74c3c;font-weight:700}
 .ecart-neg{color:#f39c12;font-weight:700}
 .ecart-zero{color:var(--success-d);font-weight:700}
 
-.statut-badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700}
+.statut-badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:12px;font-weight:700}
 .s-in_use{background:#d1fae5;color:#065f46}
 .s-reserved{background:#dbeafe;color:#1d4ed8}
 .s-declared_broken{background:#fee2e2;color:#991b1b}
@@ -1087,7 +1087,7 @@ include __DIR__ . '/../templates/header.php';
           <td style="text-align:center" class="<?= $ecart_cls ?>">
             <?= $b['bobine_id'] ? ($ecart > 0 ? '+' : '') . $ecart : '<span style="color:var(--warning-d)">Inconnue</span>' ?>
           </td>
-          <td style="text-align:center;font-size:11px">
+          <td style="text-align:center;font-size:12px">
             <?php
             if ($b['state'] == 7) echo '<span class="statut-badge" style="background:#f1f5f9;color:#475569">Retirée</span>';
             elseif ($b['qty_optotrace'] == 0) echo '<span class="statut-badge" style="background:#fee2e2;color:#991b1b">Épuisée</span>';
@@ -1180,11 +1180,11 @@ include __DIR__ . '/../templates/header.php';
         <?php else: foreach($historique as $h): ?>
         <tr>
           <td style="font-weight:700"><?= fmt_date($h['date_import'],'d/m/Y') ?></td>
-          <td><span style="padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700;background:var(--primary-l);color:var(--primary-d)"><?= h($h['type_import']) ?></span></td>
+          <td><span style="padding:2px 9px;border-radius:12px;font-size:12px;font-weight:700;background:var(--primary-l);color:var(--primary-d)"><?= h($h['type_import']) ?></span></td>
           <td style="text-align:center"><?= $h['nb_lignes_optoplate']>0?fmt_number($h['nb_lignes_optoplate']):'—' ?></td>
           <td style="text-align:center"><?= $h['nb_lignes_optotrace']>0?fmt_number($h['nb_lignes_optotrace']):'—' ?></td>
           <td style="text-align:center;color:<?= $h['nb_erreurs']>0?'var(--danger-d)':'var(--muted)' ?>"><?= $h['nb_erreurs'] ?></td>
-          <td><span style="padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700;background:<?= $h['statut']==='termine'?'#d1fae5':'#fee2e2' ?>;color:<?= $h['statut']==='termine'?'#065f46':'#991b1b' ?>"><?= $h['statut']==='termine'?'✅ Terminé':'❌ Erreur' ?></span></td>
+          <td><span style="padding:2px 9px;border-radius:12px;font-size:12px;font-weight:700;background:<?= $h['statut']==='termine'?'#d1fae5':'#fee2e2' ?>;color:<?= $h['statut']==='termine'?'#065f46':'#991b1b' ?>"><?= $h['statut']==='termine'?'✅ Terminé':'❌ Erreur' ?></span></td>
           <td style="font-size:12px;color:var(--muted)"><?= h($h['importeur']??'—') ?></td>
           <td style="font-size:12px;color:var(--muted)"><?= fmt_datetime($h['created_at']) ?></td>
         </tr>

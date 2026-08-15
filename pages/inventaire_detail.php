@@ -659,7 +659,7 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
 .ecart-neg{color:#e74c3c}
 .ecart-zero{color:#27ae60}
 
-.badge-connu{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;white-space:nowrap}
+.badge-connu{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;white-space:nowrap}
 </style>
 
 <!-- TOOLBAR -->
@@ -846,8 +846,8 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
 
         <!-- Type -->
         <td style="padding:9px 14px;text-align:center">
-          <span style="background:#f1f5f9;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600"><?= h($l['type_code']) ?></span>
-          <?php if($l['format']): ?><br><span style="font-size:10px;color:#94a3b8"><?= h($l['format']) ?></span><?php endif; ?>
+          <span style="background:#f1f5f9;padding:2px 7px;border-radius:4px;font-size:12px;font-weight:600"><?= h($l['type_code']) ?></span>
+          <?php if($l['format']): ?><br><span style="font-size:12px;color:#94a3b8"><?= h($l['format']) ?></span><?php endif; ?>
         </td>
 
         <!-- Site -->
@@ -912,7 +912,7 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
               <?= number_format($stock_rt) ?>
             </span>
             <?php if($saisi && $stock_rt !== $stock_phy): ?>
-            <span style="font-size:10px;color:<?= $stock_rt<$stock_phy?'#e74c3c':'#27ae60' ?>">
+            <span style="font-size:12px;color:<?= $stock_rt<$stock_phy?'#e74c3c':'#27ae60' ?>">
               <?= $stock_rt<$stock_phy ? '▼' : '▲' ?> <?= abs($stock_rt - $stock_phy) ?> depuis inventaire
             </span>
             <?php endif; ?>
@@ -942,7 +942,7 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
         <?php if($can_edit): ?>
         <td style="padding:9px 14px;text-align:center;white-space:nowrap">
           <span id="etat-<?= $l['id'] ?>"
-                style="display:<?= $saisi ? 'inline' : 'none' ?>;font-size:11px;font-weight:700;
+                style="display:<?= $saisi ? 'inline' : 'none' ?>;font-size:12px;font-weight:700;
                        color:<?= $saisi ? '#1e8449' : '#b7791f' ?>;margin-right:8px">
             <?= $saisi ? '✅ Sauvegardé' : '🟠 En cours' ?>
           </span>
@@ -956,10 +956,10 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
           <?php if ($demande_active && $demande_active['type'] === 'demande_site'): ?>
             <!-- Flux direct : admin/responsable de session -> site, réponse immédiate -->
             <div style="background:#fff8e7;border:1px solid #f0d999;border-radius:8px;padding:8px 10px;margin-bottom:6px">
-              <div style="font-size:11px;font-weight:700;color:#b7791f">🔶 Demandé par <?= h($demande_active['demandeur_nom'] ?? '—') ?></div>
+              <div style="font-size:12px;font-weight:700;color:#b7791f">🔶 Demandé par <?= h($demande_active['demandeur_nom'] ?? '—') ?></div>
               <div style="font-size:12px;color:#5a4a1f;margin-top:2px"><?= h($demande_active['motif']) ?></div>
               <?php if ($demande_active['valeur_proposee'] !== null): ?>
-              <div style="font-size:11px;color:#5a4a1f;margin-top:2px">Valeur proposée : <strong><?= (int)$demande_active['valeur_proposee'] ?></strong></div>
+              <div style="font-size:12px;color:#5a4a1f;margin-top:2px">Valeur proposée : <strong><?= (int)$demande_active['valeur_proposee'] ?></strong></div>
               <?php endif; ?>
             </div>
             <?php if ($can_edit): ?>
@@ -970,10 +970,10 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
           <?php elseif ($demande_active && $demande_active['type'] === 'demande_autorisation' && $demande_active['statut'] === 'en_attente'): ?>
             <!-- Le coordinateur a demandé l'autorisation de l'admin -->
             <div style="background:#eaf2fb;border:1px solid #90caf9;border-radius:8px;padding:8px 10px;margin-bottom:6px">
-              <div style="font-size:11px;font-weight:700;color:#1565c0">⏳ Demandé par <?= h($demande_active['demandeur_nom'] ?? '—') ?> — en attente d'autorisation</div>
+              <div style="font-size:12px;font-weight:700;color:#1565c0">⏳ Demandé par <?= h($demande_active['demandeur_nom'] ?? '—') ?> — en attente d'autorisation</div>
               <div style="font-size:12px;color:#1a3a5c;margin-top:2px"><?= h($demande_active['motif']) ?></div>
               <?php if ($demande_active['valeur_proposee'] !== null): ?>
-              <div style="font-size:11px;color:#1a3a5c;margin-top:2px">Valeur proposée : <strong><?= (int)$demande_active['valeur_proposee'] ?></strong></div>
+              <div style="font-size:12px;color:#1a3a5c;margin-top:2px">Valeur proposée : <strong><?= (int)$demande_active['valeur_proposee'] ?></strong></div>
               <?php endif; ?>
             </div>
             <?php if ($can_demander_site): ?>
@@ -984,13 +984,13 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
                       onclick="ouvrirModalMotif('refuser_modif',<?= (int)$demande_active['id'] ?>)">❌ Refuser</button>
             </div>
             <?php else: ?>
-            <span style="font-size:11px;color:#94a3b8">En attente de réponse de l'administrateur</span>
+            <span style="font-size:12px;color:#94a3b8">En attente de réponse de l'administrateur</span>
             <?php endif; ?>
 
           <?php elseif ($demande_active && $demande_active['type'] === 'demande_autorisation' && $demande_active['statut'] === 'autorise'): ?>
             <!-- Autorisation accordée : le site peut maintenant corriger -->
             <div style="background:#eafaf1;border:1px solid #bfe6d0;border-radius:8px;padding:8px 10px;margin-bottom:6px">
-              <div style="font-size:11px;font-weight:700;color:#1e8449">✅ Autorisation accordée</div>
+              <div style="font-size:12px;font-weight:700;color:#1e8449">✅ Autorisation accordée</div>
               <div style="font-size:12px;color:#1e5c3a;margin-top:2px">Corrigez la quantité physique puis confirmez.</div>
             </div>
             <?php if ($can_edit): ?>
@@ -1000,11 +1000,11 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
 
           <?php elseif ($saisi): ?>
             <?php if ($demande_close && $demande_close['statut'] === 'traite'): ?>
-            <div style="font-size:11px;color:#1e8449;margin-bottom:6px">
+            <div style="font-size:12px;color:#1e8449;margin-bottom:6px">
               ✅ Modifiée suite à demande (<?= h($demande_close['demandeur_nom'] ?? '—') ?> → <?= (int)$demande_close['valeur_finale'] ?>)
             </div>
             <?php elseif ($demande_close && $demande_close['statut'] === 'refuse'): ?>
-            <div style="font-size:11px;color:#c0392b;margin-bottom:6px">
+            <div style="font-size:12px;color:#c0392b;margin-bottom:6px">
               ❌ Autorisation refusée<?= $demande_close['reponse'] ? ' : ' . h($demande_close['reponse']) : '' ?>
             </div>
             <?php endif; ?>

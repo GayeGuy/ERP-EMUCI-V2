@@ -195,10 +195,10 @@ include __DIR__ . '/../templates/header.php';
 .ses-k{background:white;border:1px solid var(--border);border-radius:14px;padding:16px 20px;border-left:4px solid var(--blue)}
 .ses-k.green{border-left-color:var(--success)} .ses-k.orange{border-left-color:#f39c12}
 .ses-k-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:26px;font-weight:900;color:var(--navy);line-height:1}
-.ses-k-lbl{font-size:11px;color:var(--muted);margin-top:4px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
-.statut-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.ses-k-lbl{font-size:12px;color:var(--muted);margin-top:4px;font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+.statut-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
 .statut-ouverte{background:#e8f4f9;color:#1565c0} .statut-cloturee{background:#d5f5e3;color:#1e7e40}
-.site-statut{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.site-statut{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
 .site-statut.non_commence{background:#f1f5f9;color:#64748b}
 .site-statut.en_cours{background:#fef9e7;color:#9a6c00}
 .site-statut.cloture{background:#d5f5e3;color:#1e7e40}

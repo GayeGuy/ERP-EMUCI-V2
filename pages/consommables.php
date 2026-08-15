@@ -314,7 +314,7 @@ include __DIR__ . '/../templates/header.php';
 .conso-card.alerte{border-left:4px solid var(--danger)}
 .conso-card.warning{border-left:4px solid var(--warning)}
 .cc-header{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
-.cc-code{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--blue),var(--blue-mid,#1a56a0));display:flex;align-items:center;justify-content:center;font-family:'Montserrat',sans-serif;font-size:9px;font-weight:800;color:white;letter-spacing:.5px;text-align:center;padding:4px;flex-shrink:0}
+.cc-code{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--blue),var(--blue-mid,#1a56a0));display:flex;align-items:center;justify-content:center;font-family:'Montserrat',sans-serif;font-size:12px;font-weight:800;color:white;letter-spacing:.5px;text-align:center;padding:4px;flex-shrink:0}
 .cc-info h4{font-family:'Montserrat',sans-serif;font-size:13.5px;font-weight:700;color:var(--navy);margin-bottom:2px}
 .cc-info span{font-size:11.5px;color:var(--muted)}
 .cc-stock{padding:12px 16px;display:flex;align-items:center;gap:12px}
@@ -330,7 +330,7 @@ include __DIR__ . '/../templates/header.php';
 .tab-pane{display:none}.tab-pane.active{display:block}
 
 /* Flux indicator */
-.flux-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.flux-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
 .flux-badge.reception{background:#e8f5e9;color:#2e7d32}
 .flux-badge.distribution{background:#e3f2fd;color:#1565c0}
 
@@ -428,7 +428,7 @@ include __DIR__ . '/../templates/header.php';
         <div class="cc-stock-num" style="color:<?= $ratio<=0?'var(--danger-d)':($ratio<=1?'var(--warning-d)':'var(--navy)') ?>">
           <?= fmt_number($c['stock_global'],1) ?>
         </div>
-        <div style="font-size:11px;color:var(--muted)"><?= $unites[$c['unite']]??$c['unite'] ?></div>
+        <div style="font-size:12px;color:var(--muted)"><?= $unites[$c['unite']]??$c['unite'] ?></div>
       </div>
       <div style="flex:1">
         <div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:4px">
@@ -488,7 +488,7 @@ include __DIR__ . '/../templates/header.php';
         <div id="recStockInfo" style="display:none;margin-bottom:16px">
           <div class="stock-indicator" id="recStockIndicator">
             <div>
-              <div style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:600;margin-bottom:2px">Stock actuel</div>
+              <div style="font-size:12px;color:var(--muted);text-transform:uppercase;font-weight:600;margin-bottom:2px">Stock actuel</div>
               <div class="si-val" id="recStockVal">0</div>
               <div style="font-size:12px;color:var(--muted)" id="recStockUnite"></div>
             </div>
@@ -563,7 +563,7 @@ include __DIR__ . '/../templates/header.php';
         <div id="distStockInfo" style="display:none;margin-bottom:16px">
           <div class="stock-indicator" id="distStockIndicator">
             <div>
-              <div style="font-size:11px;color:var(--muted);text-transform:uppercase;font-weight:600;margin-bottom:2px">Disponible en stock</div>
+              <div style="font-size:12px;color:var(--muted);text-transform:uppercase;font-weight:600;margin-bottom:2px">Disponible en stock</div>
               <div class="si-val" id="distStockVal">0</div>
               <div style="font-size:12px;color:var(--muted)" id="distStockUnite"></div>
             </div>
@@ -607,7 +607,7 @@ include __DIR__ . '/../templates/header.php';
         <div class="form-group" style="background:#fff8e7;border:2px dashed #f39c12;border-radius:10px;padding:14px;margin-bottom:14px">
           <label style="font-size:13px;font-weight:700;color:#b7791f;display:block;margin-bottom:6px">
             📎 Bon de livraison <span style="color:var(--danger-d)">*</span>
-            <span style="font-size:11px;font-weight:400;color:var(--muted)"> — PDF ou image obligatoire pour valider la livraison</span>
+            <span style="font-size:12px;font-weight:400;color:var(--muted)"> — PDF ou image obligatoire pour valider la livraison</span>
           </label>
           <input type="file" id="distFichierBL" accept=".pdf,.jpg,.jpeg,.png,.webp"
                  style="width:100%;padding:8px;border:1.5px solid #f39c12;border-radius:8px;font-size:13px;cursor:pointer;background:white">
@@ -660,7 +660,7 @@ include __DIR__ . '/../templates/header.php';
             <td><span style="font-family:monospace;font-size:11.5px;font-weight:700;color:var(--navy)"><?= h($h['conso_code']) ?></span> <?= h($h['conso_lib']) ?></td>
             <td style="text-align:right;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;color:<?= $h['type_op']==='reception'?'var(--success-d)':'var(--blue-mid,#1a56a0)' ?>">
               <?= $h['type_op']==='reception'?'+':'-' ?><?= fmt_number($h['quantite'],1) ?>
-              <span style="font-size:11px;font-weight:400;color:var(--muted)"><?= $h['unite'] ?></span>
+              <span style="font-size:12px;font-weight:400;color:var(--muted)"><?= $h['unite'] ?></span>
             </td>
             <td style="text-align:right;font-size:12px;color:var(--muted)"><?= $h['prix_unitaire']>0?fmt_number($h['prix_unitaire'],0).' FCFA':'—' ?></td>
             <td style="text-align:right;font-size:12.5px;font-weight:600;color:var(--navy)"><?= $h['prix_total']>0?fmt_number($h['prix_total'],0).' FCFA':'—' ?></td>
@@ -944,7 +944,7 @@ function viewConso(id){
            ['Valeur stock',r.prix_unitaire>0?'<strong>'+(r.stock_global*r.prix_unitaire).toLocaleString('fr-FR')+' FCFA</strong>':'—'],
            ['Seuil alerte',r.seuil_alerte],['Description',r.description||'—']
           ].map(([l,v])=>`<div style="padding:7px 0;border-bottom:1px solid var(--border)">
-            <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${l}</div>
+            <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${l}</div>
             <div style="font-size:13.5px">${v}</div></div>`).join('')}
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">

@@ -43,7 +43,7 @@ function di_statut_effectif(array $demande): string {
 
 function di_badge(string $s): string {
     [$lbl,$c,$bg] = di_statut_label($s);
-    return '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;color:'.$c.';background:'.$bg.'">'.h($lbl).'</span>';
+    return '<span style="font-size:12px;font-weight:700;padding:3px 10px;border-radius:10px;color:'.$c.';background:'.$bg.'">'.h($lbl).'</span>';
 }
 
 // ── Charge le circuit (étapes ordonnées) d'un type de demande

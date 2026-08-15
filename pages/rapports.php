@@ -318,7 +318,7 @@ include __DIR__ . '/../templates/header.php';
 
 /* TABLE MATRICE */
 .matrice-table{font-size:12px}
-.matrice-table th{background:var(--navy);color:white;padding:7px 10px;font-size:10px;white-space:nowrap}
+.matrice-table th{background:var(--navy);color:white;padding:7px 10px;font-size:12px;white-space:nowrap}
 .matrice-table td{padding:6px 10px;border:1px solid var(--border);text-align:right}
 .matrice-table td.site-name{text-align:left;font-weight:500;background:var(--lighter)}
 
@@ -326,7 +326,7 @@ include __DIR__ . '/../templates/header.php';
 .fc-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px}
 .fc-row:last-child{border-bottom:none}
 .fc-row-wide{padding:12px 0;font-size:13.5px}
-.fc-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;flex-shrink:0}
+.fc-badge{font-size:12px;font-weight:700;padding:2px 7px;border-radius:5px;flex-shrink:0}
 .fc-badge.exp{background:#fdf0ef;color:var(--danger-d)}
 .fc-badge.soon{background:#fef9e7;color:var(--warning-d)}
 .fc-badge.ok{background:#eafaf1;color:var(--success-d)}
@@ -338,9 +338,9 @@ include __DIR__ . '/../templates/header.php';
 .cout-kpi.green::before{background:var(--success,#27ae60)}
 .cout-kpi.orange::before{background:var(--warning,#f39c12)}
 .cout-kpi.red::before{background:var(--danger,#e74c3c)}
-.cout-kpi .ck-label{font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:500;text-transform:uppercase;letter-spacing:.4px}
+.cout-kpi .ck-label{font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500;text-transform:uppercase;letter-spacing:.4px}
 .cout-kpi .ck-val{font-family:'Montserrat',sans-serif;font-size:20px;font-weight:800;color:var(--navy);line-height:1.1}
-.cout-kpi .ck-sub{font-size:11px;color:var(--muted);margin-top:4px}
+.cout-kpi .ck-sub{font-size:12px;color:var(--muted);margin-top:4px}
 
 .site-cout-bar{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
 .site-cout-bar:last-child{border-bottom:none}
@@ -348,7 +348,7 @@ include __DIR__ . '/../templates/header.php';
 .site-cout-bar .scb-bar{flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden}
 .site-cout-bar .scb-fill{height:100%;border-radius:4px;background:var(--blue-mid,#1a56a0)}
 .site-cout-bar .scb-val{min-width:110px;text-align:right;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;color:var(--navy)}
-.site-cout-bar .scb-pct{min-width:40px;text-align:right;font-size:11px;color:var(--muted)}
+.site-cout-bar .scb-pct{min-width:40px;text-align:right;font-size:12px;color:var(--muted)}
 
 .bilan-section{margin-bottom:16px}
 .bilan-site-hdr{display:flex;justify-content:space-between;align-items:center;background:var(--navy);color:white;padding:9px 14px;border-radius:8px 8px 0 0;font-size:13px;font-weight:700;cursor:pointer}
@@ -356,7 +356,7 @@ include __DIR__ . '/../templates/header.php';
 .bilan-site-body{border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;overflow:hidden}
 .bilan-site-body table{width:100%;border-collapse:collapse;font-size:12.5px}
 .bilan-site-body thead tr{background:var(--lighter,#f8fafc)}
-.bilan-site-body th{padding:7px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);border-bottom:1px solid var(--border)}
+.bilan-site-body th{padding:7px 12px;text-align:left;font-size:12px;font-weight:700;color:var(--muted);border-bottom:1px solid var(--border)}
 .bilan-site-body td{padding:7px 12px;border-bottom:1px solid var(--border)}
 .bilan-site-body tr:last-child td{border-bottom:none}
 .bilan-site-body tr:hover{background:var(--lighter,#f8fafc)}
@@ -578,14 +578,14 @@ include __DIR__ . '/../templates/header.php';
         <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:4px">
           <div>
             <strong><?= h($u['nom']) ?></strong>
-            <span style="font-size:11px;color:var(--muted);margin-left:6px"><?= h($u['role']) ?></span>
+            <span style="font-size:12px;color:var(--muted);margin-left:6px"><?= h($u['role']) ?></span>
           </div>
           <div style="font-family:'Montserrat',sans-serif;font-weight:800;color:var(--navy)"><?= $u['nb_actions'] ?></div>
         </div>
         <div style="height:5px;background:var(--border);border-radius:3px">
           <div style="width:<?= $pct ?>%;height:100%;background:var(--blue-mid, #1a56a0);border-radius:3px"></div>
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">Dernière action : <?= fmt_datetime($u['derniere_action']) ?></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">Dernière action : <?= fmt_datetime($u['derniere_action']) ?></div>
       </div>
       <?php endforeach; endif; ?>
     </div>
@@ -704,7 +704,7 @@ include __DIR__ . '/../templates/header.php';
               <div style="flex:1;height:6px;background:var(--border);border-radius:3px">
                 <div style="width:<?= $ph ?>%;height:100%;background:var(--blue-mid,#1a56a0);border-radius:3px"></div>
               </div>
-              <span style="font-size:11px;color:var(--muted);min-width:30px"><?= $ph ?>%</span>
+              <span style="font-size:12px;color:var(--muted);min-width:30px"><?= $ph ?>%</span>
             </div>
           </td>
         </tr>
@@ -801,7 +801,7 @@ include __DIR__ . '/../templates/header.php';
             $part = $data['total']>0?round($a['cout_total']/$data['total']*100,1):0;
           ?>
             <tr>
-              <td style="font-family:monospace;font-size:11px;color:var(--muted)"><?= h($a['code']) ?></td>
+              <td style="font-family:monospace;font-size:12px;color:var(--muted)"><?= h($a['code']) ?></td>
               <td style="font-weight:500"><?= h($a['article']) ?></td>
               <td style="color:var(--muted);font-size:12px"><?= $a['unite'] ?></td>
               <td style="text-align:right"><?= fmt_number($a['qte'],1) ?></td>

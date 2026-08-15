@@ -349,7 +349,7 @@ include __DIR__ . '/../templates/header.php';
 .s-expedie{background:#FFF7ED}.s-expedie .sv{color:#C2410C}
 .s-recu{background:#D1FAE5}.s-recu .sv{color:#065F46}
 
-.st-badge{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+.st-badge{padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap}
 .detail-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:7px;
   font-size:11.5px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);
   background:white;color:var(--navy);transition:all .15s}
@@ -435,7 +435,7 @@ include __DIR__ . '/../templates/header.php';
           <td style="font-family:monospace;font-weight:700;color:var(--primary-d);font-size:12px"><?= h($cmd['numero']) ?></td>
           <td>
             <div style="font-weight:700;color:var(--navy)"><?= h($cmd['type_bobine']) ?></div>
-            <div style="font-size:11px;color:var(--muted)"><?= h($cmd['libelle_type']) ?></div>
+            <div style="font-size:12px;color:var(--muted)"><?= h($cmd['libelle_type']) ?></div>
             <?php if($cmd['numeros_bobines']): ?>
             <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:3px">
               <?php foreach(explode(', ', $cmd['numeros_bobines']) as $num): ?>
@@ -658,26 +658,26 @@ async function voirDetailCommande(cmdId, numCmd){
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px">
       <div style="text-align:center;padding:11px;background:var(--tertiary);border-radius:10px">
         <div style="font-size:20px;font-weight:900;color:var(--navy)">${lignes.length}</div>
-        <div style="font-size:11px;color:var(--muted);font-weight:600">Bobines affectées</div>
+        <div style="font-size:12px;color:var(--muted);font-weight:600">Bobines affectées</div>
       </div>
       <div style="text-align:center;padding:11px;background:var(--tertiary);border-radius:10px">
         <div style="font-size:13px;font-weight:700;color:var(--navy)">${cmd.site_nom}</div>
-        <div style="font-size:11px;color:var(--muted);font-weight:600">Site</div>
+        <div style="font-size:12px;color:var(--muted);font-weight:600">Site</div>
       </div>
       <div style="text-align:center;padding:11px;background:var(--tertiary);border-radius:10px">
         <div style="font-size:13px;font-weight:700;color:var(--navy)">${cmd.gsb_nom||'—'}</div>
-        <div style="font-size:11px;color:var(--muted);font-weight:600">Préparé par</div>
+        <div style="font-size:12px;color:var(--muted);font-weight:600">Préparé par</div>
       </div>
     </div>
     <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">🎞️ Numéros de bobines affectées</div>
     <div style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden">
       <table style="width:100%;border-collapse:collapse">
         <thead><tr style="background:#06033A">
-          <th style="padding:9px 12px;color:white;font-size:11px;text-align:left">N° Bobine</th>
-          <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Qté livrée</th>
-          <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Films restants</th>
-          <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Consommé</th>
-          <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Statut</th>
+          <th style="padding:9px 12px;color:white;font-size:12px;text-align:left">N° Bobine</th>
+          <th style="padding:9px 12px;color:white;font-size:12px;text-align:center">Qté livrée</th>
+          <th style="padding:9px 12px;color:white;font-size:12px;text-align:center">Films restants</th>
+          <th style="padding:9px 12px;color:white;font-size:12px;text-align:center">Consommé</th>
+          <th style="padding:9px 12px;color:white;font-size:12px;text-align:center">Statut</th>
         </tr></thead>
         <tbody>`;
 
@@ -692,7 +692,7 @@ async function voirDetailCommande(cmdId, numCmd){
       <td style="padding:9px 12px;text-align:center;font-weight:700;color:${restants===0?'#DC2626':restants<100?'#D97706':'#065F46'}">${restants}</td>
       <td style="padding:9px 12px;text-align:center">
         <span style="font-weight:700;color:#1D4ED8">${consomme}</span>
-        ${pct>0?`<span style="color:var(--muted);font-size:10px"> (${pct}%)</span>`:''}
+        ${pct>0?`<span style="color:var(--muted);font-size:12px"> (${pct}%)</span>`:''}
       </td>
       <td style="padding:9px 12px;text-align:center">
         ${l.statut_ligne==='recu'
@@ -790,12 +790,12 @@ async function ouvrirPreparation(cmdId, num, type, siteId){
   }
   let html='<table style="width:100%;border-collapse:collapse">';
   html+=`<thead><tr style="background:#F8FAFC">
-    <th style="padding:9px 12px;font-size:11px;font-weight:700;color:var(--muted);text-align:center;width:44px">
+    <th style="padding:9px 12px;font-size:12px;font-weight:700;color:var(--muted);text-align:center;width:44px">
       <input type="checkbox" id="selectAll" onchange="toggleAll(this)">
     </th>
-    <th style="padding:9px 12px;font-size:11px;font-weight:700;color:var(--muted)">N° Bobine</th>
-    <th style="padding:9px 12px;font-size:11px;font-weight:700;color:var(--muted)">Format</th>
-    <th style="padding:9px 12px;font-size:11px;font-weight:700;color:var(--muted);text-align:center">Films restants</th>
+    <th style="padding:9px 12px;font-size:12px;font-weight:700;color:var(--muted)">N° Bobine</th>
+    <th style="padding:9px 12px;font-size:12px;font-weight:700;color:var(--muted)">Format</th>
+    <th style="padding:9px 12px;font-size:12px;font-weight:700;color:var(--muted);text-align:center">Films restants</th>
   </tr></thead><tbody>`;
   bobines.forEach((b,i)=>{
     html+=`<tr style="border-top:1px solid var(--border);background:${i%2===0?'white':'#F8FAFC'}">

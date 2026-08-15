@@ -147,7 +147,7 @@ include __DIR__ . '/../templates/header.php';
 .pill-ecart{background:#fff3e0;color:#e65100;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}
 .pill-neg  {background:#fce4ec;color:#c62828;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600}
 .pill-nd   {background:#f3f4f6;color:#9ca3af;padding:3px 10px;border-radius:20px;font-size:12px}
-.corr-badge{background:#e3f2fd;color:#1565c0;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;cursor:pointer}
+.corr-badge{background:#e3f2fd;color:#1565c0;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600;cursor:pointer}
 .btn-correct{background:#1976d2;color:#fff;border:none;border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;font-weight:600;white-space:nowrap}
 .btn-correct:hover{background:#1565c0}
 .btn-annul{background:#f3f4f6;color:#555;border:none;border-radius:8px;padding:7px 12px;font-size:12px;cursor:pointer}
@@ -157,7 +157,7 @@ include __DIR__ . '/../templates/header.php';
 
 <div class="page-header">
   <div>
-    <h1 class="page-title">📊 Point EMUCI</h1>
+    <h2 class="page-title" style="font-size:22px;font-weight:800;color:var(--navy);margin:0">📊 Point EMUCI</h2>
     <p style="color:var(--muted);margin:4px 0 0;font-size:14px">
       Comparaison plaques posées (coordinateur) vs import OptoPlate
     </p>
@@ -242,7 +242,7 @@ include __DIR__ . '/../templates/header.php';
         <?php if ($r['declared'] !== null): ?>
           <span style="font-weight:600;font-size:15px"><?= $r['declared'] ?></span>
           <?php if ($r['corrected'] !== null): ?>
-            <div style="font-size:11px;color:var(--muted);text-decoration:line-through"><?= $r['declared'] ?></div>
+            <div style="font-size:12px;color:var(--muted);text-decoration:line-through"><?= $r['declared'] ?></div>
           <?php endif; ?>
         <?php else: ?>
           <span class="no-pj">Pas de point</span>

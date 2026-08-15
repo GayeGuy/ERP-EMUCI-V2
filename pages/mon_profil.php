@@ -129,7 +129,7 @@ include __DIR__ . '/../templates/header.php';
 .profil-role-pill {
   display: inline-block;
   background: var(--primary-l); color: var(--primary-d);
-  font-size: 11px; font-weight: 700;
+  font-size: 12px; font-weight: 700;
   padding: 3px 12px; border-radius: 20px;
   letter-spacing: .3px; margin-bottom: 18px;
 }
@@ -161,7 +161,7 @@ include __DIR__ . '/../templates/header.php';
 }
 .theme-opt .t-em  { font-size: 30px; margin-bottom: 8px; line-height: 1; display: block; }
 .theme-opt .t-lbl { font-size: 13px; font-weight: 700; color: var(--navy); display: block; }
-.theme-opt .t-sub { font-size: 11px; color: var(--muted); margin-top: 3px; display: block; }
+.theme-opt .t-sub { font-size: 12px; color: var(--muted); margin-top: 3px; display: block; }
 .theme-opt.active .t-lbl { color: var(--primary-d); }
 
 /* ── Force mot de passe ────────────────────────────────────── */
@@ -193,7 +193,7 @@ include __DIR__ . '/../templates/header.php';
 .sig-pad:hover { border-color: var(--primary); }
 .sig-toolbar { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
 .sig-current { margin-top: 16px; padding: 12px 14px; background: var(--tertiary); border-radius: 10px; border: 1px solid var(--border); }
-.sig-current-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); letter-spacing: .4px; margin-bottom: 8px; }
+.sig-current-lbl { font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--muted); letter-spacing: .4px; margin-bottom: 8px; }
 [data-theme="dark"] .sig-pad { border-color: #4B6A9A; background: #ffffff; }
 </style>
 
@@ -341,14 +341,14 @@ include __DIR__ . '/../templates/header.php';
               <input type="password" class="form-control" name="new_password"
                      id="inp-npw" required minlength="8" autocomplete="new-password">
               <div class="pw-track"><div class="pw-fill" id="pw-bar"></div></div>
-              <div style="font-size:11px;margin-top:4px;font-weight:600;min-height:16px"
+              <div style="font-size:12px;margin-top:4px;font-weight:600;min-height:16px"
                    id="pw-strength-lbl"></div>
             </div>
             <div class="form-group">
               <label for="inp-cpw">Confirmer le nouveau mot de passe</label>
               <input type="password" class="form-control" name="confirm_password"
                      id="inp-cpw" required autocomplete="new-password">
-              <div style="font-size:11px;margin-top:4px;font-weight:600;min-height:16px"
+              <div style="font-size:12px;margin-top:4px;font-weight:600;min-height:16px"
                    id="pw-match-lbl"></div>
             </div>
           </div>

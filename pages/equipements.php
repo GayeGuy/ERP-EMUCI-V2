@@ -210,10 +210,10 @@ include __DIR__ . '/../templates/header.php';
 .ek{background:white;border-radius:13px;border:1px solid var(--border);padding:14px 16px;border-left:4px solid var(--blue)}
 .ek.green{border-left-color:var(--success)} .ek.red{border-left-color:var(--danger)} .ek.orange{border-left-color:#f39c12} .ek.purple{border-left-color:#8e44ad}
 .ek-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:24px;font-weight:900;color:var(--navy)}
-.ek-lbl{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
+.ek-lbl{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
 
 
-.etat-badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700}
+.etat-badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:12px;font-weight:700}
 .etat-neuf{background:#d1fae5;color:#065f46} .etat-bon{background:#dbeafe;color:#1d4ed8}
 .etat-usage{background:#fef3c7;color:#92400e} .etat-endomage,.etat-endommage{background:#fee2e2;color:#991b1b}
 .etat-hs{background:#1a1a1a;color:white}
@@ -336,13 +336,13 @@ include __DIR__ . '/../templates/header.php';
           <td style="text-align:center">
             <?php if($nb_int > 0): ?>
             <span class="<?= $taux_cls ?>"><?= $taux ?>%</span>
-            <div style="font-size:10px;color:var(--muted)"><?= $nb_cur ?>/<?= $nb_int ?> int.</div>
+            <div style="font-size:12px;color:var(--muted)"><?= $nb_cur ?>/<?= $nb_int ?> int.</div>
             <?php else: ?><span style="color:var(--muted)">—</span><?php endif; ?>
           </td>
           <td style="text-align:center;font-size:12px;font-weight:600">
             <?php if($e['valeur_residuelle'] !== null): ?>
             <?= fmt_number($e['valeur_residuelle']) ?> FCFA
-            <div style="font-size:10px;color:var(--muted)"><?= $e['pct_amorti'] ?>% amorti</div>
+            <div style="font-size:12px;color:var(--muted)"><?= $e['pct_amorti'] ?>% amorti</div>
             <?php else: ?><span style="color:var(--muted)">—</span><?php endif; ?>
           </td>
           <td style="text-align:center;font-size:12px">
@@ -353,7 +353,7 @@ include __DIR__ . '/../templates/header.php';
             <?php else: ?><span style="color:var(--muted)">—</span><?php endif; ?>
           </td>
           <td style="text-align:center">
-            <span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:<?= ($e['statut_stock']??'')==='en_stock'?'#e8f4f9':'#f0f0f0' ?>;color:<?= ($e['statut_stock']??'')==='en_stock'?'var(--blue)':'#666' ?>">
+            <span style="padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700;background:<?= ($e['statut_stock']??'')==='en_stock'?'#e8f4f9':'#f0f0f0' ?>;color:<?= ($e['statut_stock']??'')==='en_stock'?'var(--blue)':'#666' ?>">
               <?= ($e['statut_stock']??'affecte')==='en_stock'?'📦 Stock':'✅ Affecté' ?>
             </span>
           </td>

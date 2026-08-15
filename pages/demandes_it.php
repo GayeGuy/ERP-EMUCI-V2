@@ -69,7 +69,7 @@ include __DIR__ . '/../templates/header.php';
     border:1.5px solid var(--border,#e2e8f0);border-radius:16px}
   .di-section{font-size:13px;font-weight:700;color:var(--navy,#06033A);margin:26px 0 10px;
     display:flex;align-items:center;gap:10px}
-  .di-count{font-size:11px;font-weight:700;padding:2px 9px;border-radius:9px;background:#e8f8f5;color:#16a085}
+  .di-count{font-size:12px;font-weight:700;padding:2px 9px;border-radius:9px;background:#e8f8f5;color:#16a085}
   .di-count.done{background:#eafaf1;color:#1f9d5b}
 
   .fbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;

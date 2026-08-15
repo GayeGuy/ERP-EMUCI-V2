@@ -96,11 +96,11 @@ include __DIR__ . '/../templates/header.php';
   .di-tbl tr:hover td{background:var(--input,#f8fafc);cursor:pointer}
   .di-empty{text-align:center;padding:36px 20px;color:var(--muted,#7f8c8d);background:var(--card,#fff);
     border:1.5px solid var(--border,#e2e8f0);border-radius:16px}
-  .di-chip{font-size:11px;font-weight:700;padding:3px 9px;border-radius:9px;background:#eef1fc;color:#3B4FBE}
+  .di-chip{font-size:12px;font-weight:700;padding:3px 9px;border-radius:9px;background:#eef1fc;color:#3B4FBE}
   .di-chip.done{background:#eafaf1;color:#1f9d5b}
   .di-section{font-size:13px;font-weight:700;color:var(--navy,#06033A);margin:26px 0 10px;
     display:flex;align-items:center;gap:10px}
-  .di-count{font-size:11px;font-weight:700;padding:2px 9px;border-radius:9px;background:#eef1fc;color:#3B4FBE}
+  .di-count{font-size:12px;font-weight:700;padding:2px 9px;border-radius:9px;background:#eef1fc;color:#3B4FBE}
   .di-count.done{background:#eafaf1;color:#1f9d5b}
 
   /* ── Filtres */
@@ -122,7 +122,7 @@ include __DIR__ . '/../templates/header.php';
   /* Seconde barre : filtres sur le contenu */
   .fbar-2{margin-top:-10px}
   .fgrp{display:flex;flex-direction:column;gap:4px;min-width:0}
-  .fgrp .fbar-label{font-size:10px;text-transform:uppercase;letter-spacing:.4px}
+  .fgrp .fbar-label{font-size:12px;text-transform:uppercase;letter-spacing:.4px}
   .ftxt{min-width:180px}
   .fsel{min-width:150px;max-width:230px;cursor:pointer;
     text-overflow:ellipsis;padding-right:26px;appearance:none;-webkit-appearance:none;

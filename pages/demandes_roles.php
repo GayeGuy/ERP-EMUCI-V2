@@ -71,14 +71,14 @@ include __DIR__ . '/../templates/header.php';
   .dr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px}
   .dr-card{background:var(--card,#fff);border:1.5px solid var(--border,#e2e8f0);border-radius:14px;padding:16px 18px}
   .dr-card-head{display:flex;align-items:center;gap:10px;margin-bottom:12px}
-  .dr-badge{font-size:11px;font-weight:700;padding:2px 9px;border-radius:8px;background:#eef1fc;color:#3B4FBE;font-family:monospace}
+  .dr-badge{font-size:12px;font-weight:700;padding:2px 9px;border-radius:8px;background:#eef1fc;color:#3B4FBE;font-family:monospace}
   .dr-label{font-size:14px;font-weight:700}
   .dr-select{width:100%;padding:9px 12px;border:1.5px solid var(--border,#d5dde8);border-radius:9px;
     font-size:13px;font-family:inherit;background:var(--input,#f8fafc);margin-bottom:10px}
   .dr-members{font-size:12px;color:var(--muted,#7f8c8d);padding:8px 10px;background:var(--input,#f8fafc);border-radius:8px;min-height:28px}
   .dr-member{display:inline-flex;align-items:center;gap:4px;margin:2px 4px 2px 0;
-    background:#eef1fc;color:#3B4FBE;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:600}
-  .dr-n1{font-size:10px;background:#e8f8f5;color:#16a085;padding:1px 5px;border-radius:5px;margin-left:3px}
+    background:#eef1fc;color:#3B4FBE;padding:2px 8px;border-radius:8px;font-size:12px;font-weight:600}
+  .dr-n1{font-size:12px;background:#e8f8f5;color:#16a085;padding:1px 5px;border-radius:5px;margin-left:3px}
   #dr-toast{position:fixed;top:20px;right:20px;z-index:9999;padding:11px 18px;border-radius:10px;font-size:13px;
     font-weight:600;color:#fff;background:#27ae60;box-shadow:0 6px 20px rgba(0,0,0,.15);opacity:0;transition:.25s;pointer-events:none}
   #dr-toast.show{opacity:1}
@@ -99,7 +99,7 @@ include __DIR__ . '/../templates/header.php';
         <span class="dr-badge"><?= h($r['code']) ?></span>
         <span class="dr-label"><?= h($r['label']) ?></span>
         <?php if ($r['departement_id']): ?>
-          <span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:8px;background:#e8f8f5;color:#16a085;margin-left:auto">dept lié</span>
+          <span style="font-size:12px;font-weight:700;padding:2px 8px;border-radius:8px;background:#e8f8f5;color:#16a085;margin-left:auto">dept lié</span>
         <?php endif; ?>
       </div>
       <select class="dr-select" onchange="drSaveDept('<?= h($r['code']) ?>', this.value, this)">

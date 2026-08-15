@@ -1311,13 +1311,13 @@ $nb_avec_ecart  = count(array_filter($validations_jour, fn($v) => $v['statut'] !
 .vsm-kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px}
 .vsm-kpi{background:white;border-radius:14px;border:1px solid var(--border);padding:20px 24px}
 .vsm-kpi-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:36px;font-weight:900;line-height:1}
-.vsm-kpi-label{font-size:11px;color:var(--muted);font-weight:700;margin-top:6px;text-transform:uppercase;letter-spacing:.06em}
+.vsm-kpi-label{font-size:12px;color:var(--muted);font-weight:700;margin-top:6px;text-transform:uppercase;letter-spacing:.06em}
 .vsm-section{background:white;border-radius:14px;border:1px solid var(--border);margin-bottom:24px;overflow:hidden}
 .vsm-section-hdr{padding:15px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:#fafbfd}
 .vsm-section-title{font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:800;color:var(--navy);display:flex;align-items:center;gap:8px}
 .vsm-cnt{background:#e8edf8;color:var(--navy);border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700}
 .vsm-tbl{width:100%;border-collapse:collapse}
-.vsm-tbl thead th{background:#06033A;color:white;padding:11px 16px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;text-align:left;white-space:nowrap}
+.vsm-tbl thead th{background:#06033A;color:white;padding:11px 16px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;text-align:left;white-space:nowrap}
 .vsm-tbl thead th.tc{text-align:center}
 .vsm-tbl tbody td{padding:13px 16px;border-bottom:1px solid #f1f5f9;font-size:13px;color:var(--navy);vertical-align:middle}
 .vsm-tbl tbody tr:last-child td{border-bottom:none}
@@ -1346,7 +1346,7 @@ $nb_avec_ecart  = count(array_filter($validations_jour, fn($v) => $v['statut'] !
 .vsm-tab{padding:10px 22px;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;display:flex;align-items:center;gap:7px;transition:color .15s,border-color .15s;background:none;border-top:none;border-left:none;border-right:none}
 .vsm-tab:hover{color:var(--navy)}
 .vsm-tab.active{color:#1B75BC;border-bottom-color:#1B75BC}
-.vsm-tab-badge{background:#e8edf8;color:var(--navy);border-radius:20px;padding:1px 8px;font-size:11px;font-weight:700}
+.vsm-tab-badge{background:#e8edf8;color:var(--navy);border-radius:20px;padding:1px 8px;font-size:12px;font-weight:700}
 .vsm-tab.active .vsm-tab-badge{background:#dbeafe;color:#1d4ed8}
 /* ── BANDEAU INFO ── */
 .vsm-info-banner{background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:12px 18px;margin-bottom:18px;display:flex;align-items:center;gap:12px;font-size:13px;color:#1d4ed8}
@@ -1357,7 +1357,7 @@ $nb_avec_ecart  = count(array_filter($validations_jour, fn($v) => $v['statut'] !
 .vsm-filters label{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;margin-right:4px}
 /* ── LÉGENDE ── */
 .vsm-legend{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
-.vsm-legend-title{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.vsm-legend-title{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
 .vsm-legend-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;border-radius:20px;font-size:11.5px;font-weight:700}
 /* ── DÉCISION PAR BOBINE (modal de vérification) ── */
 .vsm-dec-group{display:inline-flex;gap:4px;align-items:center;justify-content:center}
@@ -1473,12 +1473,12 @@ $nb_total_bobines = count($coord_reajust_details);
   <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px">
     <thead>
       <tr style="background:#F8FAFC">
-        <th style="padding:9px 14px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:1.5px solid var(--border)">N° Bobine</th>
-        <th style="padding:9px 14px;text-align:center;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Valeur ERP EMUCI</th>
-        <th style="padding:9px 14px;text-align:center;font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase;border-bottom:1.5px solid var(--border)">Réajusté GSB</th>
-        <th style="padding:9px 14px;text-align:center;font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Valeur correcte *</th>
-        <th style="padding:9px 14px;text-align:left;font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Justification *</th>
-        <th style="padding:9px 14px;text-align:center;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Statut</th>
+        <th style="padding:9px 14px;text-align:left;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:1.5px solid var(--border)">N° Bobine</th>
+        <th style="padding:9px 14px;text-align:center;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Valeur ERP EMUCI</th>
+        <th style="padding:9px 14px;text-align:center;font-size:12px;font-weight:700;color:#1d4ed8;text-transform:uppercase;border-bottom:1.5px solid var(--border)">Réajusté GSB</th>
+        <th style="padding:9px 14px;text-align:center;font-size:12px;font-weight:700;color:var(--navy);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Valeur correcte *</th>
+        <th style="padding:9px 14px;text-align:left;font-size:12px;font-weight:700;color:var(--navy);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Justification *</th>
+        <th style="padding:9px 14px;text-align:center;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;border-bottom:1.5px solid var(--border)">Statut</th>
       </tr>
     </thead>
     <tbody>
@@ -1683,7 +1683,7 @@ $nb_total_bobines = count($coord_reajust_details);
     <?php foreach($sites_en_attente_correction as $v): ?>
     <tr style="background:#FFFBEB">
       <td><div class="vsm-site-name"><?= h($v['site_nom']) ?></div>
-          <div style="font-size:11px;color:var(--muted);margin-top:2px"><?= $v['gsb_at'] ? 'Traité le ' . date('H:i', strtotime($v['gsb_at'])) . ' par ' . h($v['gsb_nom'] ?: 'GSB') : 'Détecté par import' ?></div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px"><?= $v['gsb_at'] ? 'Traité le ' . date('H:i', strtotime($v['gsb_at'])) . ' par ' . h($v['gsb_nom'] ?: 'GSB') : 'Détecté par import' ?></div>
       </td>
       <td class="tc"><span class="vsm-ecart-chip">⚠️ <?= (int)$v['nb_ecarts'] ?> écart(s)</span></td>
       <td class="tc">
@@ -1767,10 +1767,10 @@ $nb_total_bobines = count($coord_reajust_details);
       <td><div class="vsm-site-name"><?= h($v['site_nom']) ?></div></td>
       <td class="tc">
         <div style="display:inline-flex;flex-direction:column;align-items:center;gap:3px">
-          <span style="background:<?= $date_col_bg ?>;color:<?= $date_col_color ?>;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700"><?= $date_label ?></span>
+          <span style="background:<?= $date_col_bg ?>;color:<?= $date_col_color ?>;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700"><?= $date_label ?></span>
           <span style="font-size:12px;color:var(--muted);font-weight:600"><?= fmt_date($v['date_validation'],'d/m/Y') ?></span>
           <?php if($v['gsb_at']): ?>
-          <span style="font-size:11px;color:var(--muted)">à <?= date('H:i', strtotime($v['gsb_at'])) ?></span>
+          <span style="font-size:12px;color:var(--muted)">à <?= date('H:i', strtotime($v['gsb_at'])) ?></span>
           <?php endif; ?>
         </div>
       </td>
@@ -1887,7 +1887,7 @@ $nb_total_bobines = count($coord_reajust_details);
         <div style="display:inline-flex;flex-direction:column;align-items:center;gap:2px">
           <span style="font-size:12.5px;font-weight:700;color:var(--navy)"><?= fmt_date($v['date_validation'],'d/m/Y') ?></span>
           <?php if($v['gsb_at']): ?>
-          <span style="font-size:11px;color:var(--muted)">à <?= date('H:i', strtotime($v['gsb_at'])) ?></span>
+          <span style="font-size:12px;color:var(--muted)">à <?= date('H:i', strtotime($v['gsb_at'])) ?></span>
           <?php endif; ?>
         </div>
       </td>
@@ -1926,11 +1926,11 @@ $nb_total_bobines = count($coord_reajust_details);
     <!-- Comparatif Films PJ vs EMUCI -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
       <div style="background:#f0f4ff;border-radius:10px;padding:12px;text-align:center">
-        <div style="font-size:10px;font-weight:700;color:#5b76ff;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Films saisie PJ</div>
+        <div style="font-size:12px;font-weight:700;color:#5b76ff;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Films saisie PJ</div>
         <div id="miniCorrFilmsPj" style="font-size:22px;font-weight:800;color:#1e2b4a">—</div>
       </div>
       <div style="background:#fff3e0;border-radius:10px;padding:12px;text-align:center">
-        <div style="font-size:10px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Films EMUCI</div>
+        <div style="font-size:12px;font-weight:700;color:#e65100;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Films EMUCI</div>
         <div id="miniCorrFilmsEmuci" style="font-size:22px;font-weight:800;color:#1e2b4a">—</div>
       </div>
     </div>
@@ -1939,7 +1939,7 @@ $nb_total_bobines = count($coord_reajust_details);
     <div style="margin-bottom:14px">
       <label style="font-size:13px;font-weight:700;color:var(--navy);display:block;margin-bottom:6px">
         Films proposés <span style="color:#e74c3c">*</span>
-        <span style="font-size:11px;font-weight:400;color:var(--muted);margin-left:6px">Valeur que vous proposez au coordinateur</span>
+        <span style="font-size:12px;font-weight:400;color:var(--muted);margin-left:6px">Valeur que vous proposez au coordinateur</span>
       </label>
       <input type="number" id="miniCorrFilmsProposes" min="0" class="form-control"
         style="text-align:center;font-size:20px;font-weight:800;color:var(--navy)">
@@ -2121,16 +2121,16 @@ async function verifierSite(siteId, siteNom) {
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px">
       <div style="text-align:center;padding:12px;background:#D1FAE5;border-radius:10px">
         <div style="font-size:24px;font-weight:900;color:#065F46">${d.nb_bobines}</div>
-        <div style="font-size:11px;color:#065F46;font-weight:700;text-transform:uppercase">Bobines vérifiées</div>
+        <div style="font-size:12px;color:#065F46;font-weight:700;text-transform:uppercase">Bobines vérifiées</div>
       </div>
       <div style="text-align:center;padding:12px;background:${(d.nb_ecarts_restants ?? d.nb_ecarts)>0?'#FEE2E2':'#D1FAE5'};border-radius:10px">
         <div style="font-size:24px;font-weight:900;color:${(d.nb_ecarts_restants ?? d.nb_ecarts)>0?'#991B1B':'#065F46'}">${d.nb_ecarts_restants ?? d.nb_ecarts}</div>
-        <div style="font-size:11px;color:${(d.nb_ecarts_restants ?? d.nb_ecarts)>0?'#991B1B':'#065F46'};font-weight:700;text-transform:uppercase">Écarts à traiter</div>
+        <div style="font-size:12px;color:${(d.nb_ecarts_restants ?? d.nb_ecarts)>0?'#991B1B':'#065F46'};font-weight:700;text-transform:uppercase">Écarts à traiter</div>
         ${d.nb_ecarts_traites ? `<div style="font-size:10.5px;color:#1D4ED8;font-weight:700;margin-top:4px">✔️ ${d.nb_ecarts_traites} traitée(s)</div>` : ''}
       </div>
       <div style="text-align:center;padding:12px;background:#F0F4FF;border-radius:10px">
         <div style="font-size:12.5px;font-weight:700;color:var(--navy)">${d.dernier_import ? (() => { const dt=new Date(d.dernier_import.replace(' ','T')); return dt.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'})+' à '+dt.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}); })() : '—'}</div>
-        <div style="font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase">Dernier import EMUCI</div>
+        <div style="font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase">Dernier import EMUCI</div>
       </div>
     </div>`;
 
@@ -2142,13 +2142,13 @@ async function verifierSite(siteId, siteNom) {
     <div style="border:1.5px solid var(--border);border-radius:10px;overflow-x:auto;margin-bottom:16px">
       <table style="width:100%;border-collapse:collapse;min-width:620px">
         <thead><tr style="background:#06033A">
-          <th style="padding:8px 10px;color:white;font-size:11px;text-align:left">N° Bobine</th>
-          <th style="padding:8px 10px;color:white;font-size:11px;text-align:left">Type</th>
-          ${d.dernier_import?`<th style="padding:8px 10px;color:white;font-size:11px;text-align:center">${thSub('Stock EMUCI','(Système)')}</th>`:''}
-          <th style="padding:8px 10px;color:white;font-size:11px;text-align:center">${thSub('Stock Physique','(ERP EMUCI)')}</th>
-          ${d.dernier_import?`<th style="padding:8px 10px;color:white;font-size:11px;text-align:center">Écart</th>`:''}
-          <th style="padding:8px 10px;color:white;font-size:11px;text-align:center">Statut</th>
-          ${canValider?`<th style="padding:8px 10px;color:white;font-size:11px;text-align:center">Décision</th>`:''}
+          <th style="padding:8px 10px;color:white;font-size:12px;text-align:left">N° Bobine</th>
+          <th style="padding:8px 10px;color:white;font-size:12px;text-align:left">Type</th>
+          ${d.dernier_import?`<th style="padding:8px 10px;color:white;font-size:12px;text-align:center">${thSub('Stock EMUCI','(Système)')}</th>`:''}
+          <th style="padding:8px 10px;color:white;font-size:12px;text-align:center">${thSub('Stock Physique','(ERP EMUCI)')}</th>
+          ${d.dernier_import?`<th style="padding:8px 10px;color:white;font-size:12px;text-align:center">Écart</th>`:''}
+          <th style="padding:8px 10px;color:white;font-size:12px;text-align:center">Statut</th>
+          ${canValider?`<th style="padding:8px 10px;color:white;font-size:12px;text-align:center">Décision</th>`:''}
         </tr></thead>
         <tbody>`;
 
@@ -2311,11 +2311,11 @@ async function verifierSite(siteId, siteNom) {
             <table style="width:100%;border-collapse:collapse;font-size:13px;background:white;border-radius:10px;overflow:hidden">
               <thead>
                 <tr style="background:#1D4ED8">
-                  <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:left">N° Bobine</th>
-                  <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:center">Valeur coord</th>
-                  <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:left">Justification coord</th>
-                  <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:left">Commentaire GSB</th>
-                  <th style="padding:9px 12px;color:white;font-size:11px;font-weight:700;text-transform:uppercase;text-align:center">Statut / Décision</th>
+                  <th style="padding:9px 12px;color:white;font-size:12px;font-weight:700;text-transform:uppercase;text-align:left">N° Bobine</th>
+                  <th style="padding:9px 12px;color:white;font-size:12px;font-weight:700;text-transform:uppercase;text-align:center">Valeur coord</th>
+                  <th style="padding:9px 12px;color:white;font-size:12px;font-weight:700;text-transform:uppercase;text-align:left">Justification coord</th>
+                  <th style="padding:9px 12px;color:white;font-size:12px;font-weight:700;text-transform:uppercase;text-align:left">Commentaire GSB</th>
+                  <th style="padding:9px 12px;color:white;font-size:12px;font-weight:700;text-transform:uppercase;text-align:center">Statut / Décision</th>
                 </tr>
               </thead>
               <tbody>${panelRows}</tbody>
@@ -2400,15 +2400,15 @@ function ouvrirDecisionBobine(bobineId, decision) {
   document.getElementById('decBobInfo').innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px">
       <div style="background:#f0f4ff;border-radius:10px;padding:11px;text-align:center">
-        <div style="font-size:10px;font-weight:700;color:#1B75BC;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Stock EMUCI</div>
+        <div style="font-size:12px;font-weight:700;color:#1B75BC;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Stock EMUCI</div>
         <div style="font-size:20px;font-weight:800;color:var(--navy)">${b.stock_systeme ?? '—'}</div>
       </div>
       <div style="background:#f0fdf4;border-radius:10px;padding:11px;text-align:center">
-        <div style="font-size:10px;font-weight:700;color:#065F46;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Stock ERP EMUCI</div>
+        <div style="font-size:12px;font-weight:700;color:#065F46;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Stock ERP EMUCI</div>
         <div style="font-size:20px;font-weight:800;color:var(--navy)">${b.films_restants ?? '—'}</div>
       </div>
       <div style="background:#fef2f2;border-radius:10px;padding:11px;text-align:center">
-        <div style="font-size:10px;font-weight:700;color:#991B1B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Écart</div>
+        <div style="font-size:12px;font-weight:700;color:#991B1B;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Écart</div>
         <div style="font-size:20px;font-weight:800;color:${b.ecart>0?'#DC2626':'#D97706'}">${b.ecart>0?'+':''}${b.ecart ?? 0}</div>
       </div>
     </div>`;
@@ -2601,15 +2601,15 @@ async function voirDetails(siteId, siteNom, nbEcarts, detailsJson, statut, comme
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px">
       <div style="text-align:center;padding:12px;background:var(--tertiary);border-radius:10px">
         <div style="font-size:22px;font-weight:900;color:var(--navy)">${nb_bobines}</div>
-        <div style="font-size:11px;color:var(--muted);font-weight:600">Bobines vérifiées</div>
+        <div style="font-size:12px;color:var(--muted);font-weight:600">Bobines vérifiées</div>
       </div>
       <div style="text-align:center;padding:12px;background:${nb_ecarts>0?'#fee2e2':'#d1fae5'};border-radius:10px">
         <div style="font-size:22px;font-weight:900;color:${nb_ecarts>0?'#991b1b':'#065f46'}">${nb_ecarts}</div>
-        <div style="font-size:11px;color:${nb_ecarts>0?'#991b1b':'#065f46'};font-weight:600">Écarts</div>
+        <div style="font-size:12px;color:${nb_ecarts>0?'#991b1b':'#065f46'};font-weight:600">Écarts</div>
       </div>
       <div style="text-align:center;padding:12px;background:var(--tertiary);border-radius:10px">
         <div style="font-size:12.5px;font-weight:700;color:var(--navy)">${fmtImport}</div>
-        <div style="font-size:11px;color:var(--muted);font-weight:600">Dernier import EMUCI</div>
+        <div style="font-size:12px;color:var(--muted);font-weight:600">Dernier import EMUCI</div>
       </div>
     </div>`;
 

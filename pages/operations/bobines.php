@@ -399,9 +399,9 @@ if ($is_coord):
 ?>
 <style>
 .coord-bob-table td,.coord-bob-table th{padding:11px 14px;font-size:13px}
-.coord-bob-table th{background:var(--navy);color:white;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+.coord-bob-table th{background:var(--navy);color:white;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .coord-bob-table tr:nth-child(even) td{background:#f8fafc}
-.bstat{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.bstat{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
 .bstat-en_cours{background:#DBEAFE;color:#1D4ED8}
 .bstat-en_stock{background:#D1FAE5;color:#065F46}
 .bstat-epuisee{background:#FEE2E2;color:#991B1B}
@@ -511,12 +511,12 @@ $coord_types = db_fetch_all("SELECT DISTINCT type_code FROM op_bobines WHERE sit
           <div style="height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:4px;width:80px;margin:4px auto 0">
             <div style="width:<?= $pct_rest ?>%;height:100%;background:<?= $bar_color ?>;border-radius:2px"></div>
           </div>
-          <div style="font-size:10px;color:var(--muted);margin-top:2px"><?= $pct_rest ?>%</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px"><?= $pct_rest ?>%</div>
         </td>
         <td style="text-align:center">
           <span style="font-weight:700;color:#1D4ED8"><?= fmt_number($consomme) ?></span>
           <?php if($pct_conso > 0): ?>
-          <div style="font-size:10px;color:var(--muted)"><?= $pct_conso ?>%</div>
+          <div style="font-size:12px;color:var(--muted)"><?= $pct_conso ?>%</div>
           <?php endif; ?>
         </td>
         <td style="text-align:center">
@@ -559,7 +559,7 @@ endif;
 // ── FIN VUE COORDINATEUR — suite : vue GSB/Admin
 ?>
 <style>
-.bobine-status{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.bobine-status{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
 .bobine-status.en_stock{background:#e8f5e9;color:#2e7d32}
 .bobine-status.en_cours{background:#e3f2fd;color:#1565c0}
 .bobine-status.epuisee{background:#fce4ec;color:#b71c1c}
@@ -602,12 +602,12 @@ endif;
 <!-- TABS -->
 <div class="tab-bar">
   <button class="tab-btn active" onclick="showTab('liste',this)">📋 Toutes les bobines</button>
-  <button class="tab-btn" onclick="showTab('en_cours',this)">▶️ En utilisation <span style="background:var(--blue);color:white;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px"><?= $stats_map['en_cours']['n']??0 ?></span></button>
-  <button class="tab-btn" onclick="showTab('en_stock',this)">📦 En stock <span style="background:var(--success);color:white;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px"><?= $stats_map['en_stock']['n']??0 ?></span></button>
+  <button class="tab-btn" onclick="showTab('en_cours',this)">▶️ En utilisation <span style="background:var(--blue);color:white;border-radius:10px;padding:1px 7px;font-size:12px;margin-left:4px"><?= $stats_map['en_cours']['n']??0 ?></span></button>
+  <button class="tab-btn" onclick="showTab('en_stock',this)">📦 En stock <span style="background:var(--success);color:white;border-radius:10px;padding:1px 7px;font-size:12px;margin-left:4px"><?= $stats_map['en_stock']['n']??0 ?></span></button>
   <button class="tab-btn" onclick="showTab('retiree',this)">🔄 Retirées</button>
-  <button class="tab-btn" onclick="showTab('perdue',this)">❌ Perdues <?= ($stats_map['perdue']['n']??0)>0?"<span style='background:#e65100;color:white;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px'>".($stats_map['perdue']['n']??0)."</span>":'' ?></button>
+  <button class="tab-btn" onclick="showTab('perdue',this)">❌ Perdues <?= ($stats_map['perdue']['n']??0)>0?"<span style='background:#e65100;color:white;border-radius:10px;padding:1px 7px;font-size:12px;margin-left:4px'>".($stats_map['perdue']['n']??0)."</span>":'' ?></button>
   <button class="tab-btn" onclick="showTab('ecarts',this)" id="tabEcartsBtn">
-    ⚠️ Écarts <?= $nb_ecarts_ouverts>0?"<span style='background:var(--danger);color:white;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px'>$nb_ecarts_ouverts</span>":'' ?>
+    ⚠️ Écarts <?= $nb_ecarts_ouverts>0?"<span style='background:var(--danger);color:white;border-radius:10px;padding:1px 7px;font-size:12px;margin-left:4px'>$nb_ecarts_ouverts</span>":'' ?>
   </button>
   <?php if(can('bobines','can_create') && !$is_coord): ?>
   <button class="tab-btn" onclick="showTab('conso',this)">📉 Consommation</button>
@@ -621,7 +621,7 @@ endif;
   if(in_array($role_slug,['gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation','admin','superadmin']) || ($is_coord && $nb_demandes_att>0)):
   ?>
   <button class="tab-btn" onclick="showTab('demandes',this)">
-    📬 Demandes <?= $nb_demandes_att>0?"<span style='background:var(--warning);color:white;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px'>$nb_demandes_att</span>":'' ?>
+    📬 Demandes <?= $nb_demandes_att>0?"<span style='background:var(--warning);color:white;border-radius:10px;padding:1px 7px;font-size:12px;margin-left:4px'>$nb_demandes_att</span>":'' ?>
   </button>
   <?php endif; ?>
 </div>
@@ -707,12 +707,12 @@ endif;
             <td style="text-align:center;font-size:12px;color:var(--muted);font-weight:600"><?= number_format($qte_init) ?></td>
             <td style="text-align:center">
               <span style="font-weight:700;color:#1D4ED8"><?= number_format($consomme) ?></span>
-              <div style="font-size:10px;color:var(--muted)"><?= $pct_conso ?>%</div>
+              <div style="font-size:12px;color:var(--muted)"><?= $pct_conso ?>%</div>
             </td>
             <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;color:<?= $bar_color ?>"><?= number_format($restants) ?></td>
             <td>
               <div class="stock-bar"><div class="stock-fill" style="width:<?= min(100,$pct) ?>%;background:<?= $bar_color ?>"></div></div>
-              <div style="font-size:10px;color:var(--muted);text-align:right"><?= $pct ?>% restant</div>
+              <div style="font-size:12px;color:var(--muted);text-align:right"><?= $pct ?>% restant</div>
             </td>
             <td><span class="bobine-status <?= $b['statut'] ?>"><?= ['en_stock'=>'📦 En stock','en_cours'=>'🎞️ En cours','epuisee'=>'❌ Épuisée','retiree'=>'⚫ Retirée'][$b['statut']]??$b['statut'] ?></span></td>
             <td style="text-align:center;white-space:nowrap">
@@ -835,7 +835,7 @@ endif;
         </select>
       </div>
       <div class="form-group" style="margin-bottom:14px">
-        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">Liste <span style="font-size:11px;font-weight:400;color:var(--muted)">(une par ligne : NUMERO;TYPE;FORMAT)</span></label>
+        <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">Liste <span style="font-size:12px;font-weight:400;color:var(--muted)">(une par ligne : NUMERO;TYPE;FORMAT)</span></label>
         <textarea class="form-control" id="importData" rows="8" placeholder="BOB-001;A001;A4" style="font-family:monospace;font-size:13px"></textarea>
       </div>
       <div style="display:flex;justify-content:flex-end">
@@ -875,7 +875,7 @@ endif;
         ?>
           <tr>
             <td style="font-family:monospace;font-weight:700"><?= h($b['numero']) ?></td>
-            <td><?= h($b['type_code']) ?> <span style="color:var(--muted);font-size:11px"><?= h($b['serie']) ?></span></td>
+            <td><?= h($b['type_code']) ?> <span style="color:var(--muted);font-size:12px"><?= h($b['serie']) ?></span></td>
             <td><?= h($b['site_nom']??'—') ?></td>
             <td style="text-align:center;font-weight:700"><?= fmt_number($b['stock_systeme']) ?></td>
             <td style="text-align:center">
@@ -924,7 +924,7 @@ endif;
         <?php else: foreach($bobines_en_stock as $b): ?>
           <tr>
             <td style="font-family:monospace;font-weight:700"><?= h($b['numero']) ?></td>
-            <td><?= h($b['type_code']) ?> <span style="color:var(--muted);font-size:11px"><?= h($b['serie']) ?></span></td>
+            <td><?= h($b['type_code']) ?> <span style="color:var(--muted);font-size:12px"><?= h($b['serie']) ?></span></td>
             <td><?= h($b['site_nom']??'—') ?></td>
             <td style="text-align:center;font-weight:700"><?= fmt_number($b['stock_systeme']) ?></td>
             <td style="text-align:center">
@@ -1055,15 +1055,15 @@ endif;
         ?>
           <tr style="<?= $dem['statut']==='en_attente'?'background:#fffbf0':'' ?>">
             <td style="font-size:12px;white-space:nowrap"><?= fmt_datetime($dem['created_at']) ?></td>
-            <td style="font-family:monospace;font-weight:700"><?= h($dem['bobine_num']) ?> <span style="font-size:11px;color:var(--muted)"><?= h($dem['type_code']) ?></span></td>
+            <td style="font-family:monospace;font-weight:700"><?= h($dem['bobine_num']) ?> <span style="font-size:12px;color:var(--muted)"><?= h($dem['type_code']) ?></span></td>
             <td><?= h($dem['site_nom']) ?></td>
             <td style="text-align:center;font-weight:700"><?= fmt_number($dem['films_restants']) ?></td>
             <td style="font-size:12px;max-width:180px"><?= h($dem['motif']) ?></td>
             <td style="font-size:12px;color:var(--muted)"><?= h($dem['demandeur']??'—') ?></td>
             <td style="text-align:center">
-              <span style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;background:<?= $sc ?>"><?= $sl ?></span>
+              <span style="padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;background:<?= $sc ?>"><?= $sl ?></span>
             </td>
-            <td style="font-size:11px;color:var(--muted);max-width:150px"><?= $dem['motif_reponse']?h($dem['motif_reponse']):'—' ?></td>
+            <td style="font-size:12px;color:var(--muted);max-width:150px"><?= $dem['motif_reponse']?h($dem['motif_reponse']):'—' ?></td>
             <?php if($is_gsb): ?>
             <td style="text-align:center;white-space:nowrap">
               <?php if($dem['statut']==='en_attente'): ?>
@@ -1071,7 +1071,7 @@ endif;
               <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5"
                       onclick="traiterDemande(<?= $dem['id'] ?>,'refusee','<?= h($dem['bobine_num']) ?>')">❌ Refuser</button>
               <?php else: ?>
-              <span style="font-size:11px;color:var(--muted)"><?= fmt_date($dem['traite_at'],'d/m') ?></span>
+              <span style="font-size:12px;color:var(--muted)"><?= fmt_date($dem['traite_at'],'d/m') ?></span>
               <?php endif; ?>
             </td>
             <?php endif; ?>
@@ -1346,10 +1346,10 @@ async function viewBobine(id){
   const pct=Math.round(parseInt(b.stock_systeme)/qteInit*100);
   const barColor=pct>50?'#27ae60':pct>20?'#f39c12':'#e74c3c';
   let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;font-size:13px">
-    <div><div style="font-size:11px;color:#94a3b8;text-transform:uppercase;margin-bottom:3px">Numéro</div><strong style="font-family:monospace;font-size:15px">${b.numero}</strong></div>
-    <div><div style="font-size:11px;color:#94a3b8;text-transform:uppercase;margin-bottom:3px">Type · Format</div><strong>${b.type_code}</strong>${b.format?' · '+b.format:''}</div>
-    <div><div style="font-size:11px;color:#94a3b8;text-transform:uppercase;margin-bottom:3px">Site</div><strong>${b.site_nom||'Non affectée'}</strong></div>
-    <div><div style="font-size:11px;color:#94a3b8;text-transform:uppercase;margin-bottom:3px">Statut</div>${statuts[b.statut]||b.statut}</div>
+    <div><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;margin-bottom:3px">Numéro</div><strong style="font-family:monospace;font-size:15px">${b.numero}</strong></div>
+    <div><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;margin-bottom:3px">Type · Format</div><strong>${b.type_code}</strong>${b.format?' · '+b.format:''}</div>
+    <div><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;margin-bottom:3px">Site</div><strong>${b.site_nom||'Non affectée'}</strong></div>
+    <div><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;margin-bottom:3px">Statut</div>${statuts[b.statut]||b.statut}</div>
   </div>
   <div style="background:#f8fafc;padding:14px;border-radius:10px;margin-bottom:16px">
     <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:13px">
@@ -1491,7 +1491,7 @@ async function chargerEcarts(){
       <div style="padding:12px 18px;background:${hasMissing?'#fff5f5':'#f0fdf4'};border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between">
         <div style="display:flex;align-items:center;gap:10px">
           <strong style="font-family:'Montserrat',sans-serif;font-size:14px;color:#0d1f35">🏢 ${site}</strong>
-          <span style="background:#e2e8f0;color:#64748b;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600">${nbEcarts} bobine${nbEcarts>1?'s':''} avec écart</span>
+          <span style="background:#e2e8f0;color:#64748b;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:600">${nbEcarts} bobine${nbEcarts>1?'s':''} avec écart</span>
         </div>
         <div style="display:flex;gap:12px;font-size:12px">
           ${data.total_manques>0?`<span style="color:#e74c3c;font-weight:700">▼ ${data.total_manques} films manquants</span>`:''}
@@ -1500,21 +1500,21 @@ async function chargerEcarts(){
       </div>
       <table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead><tr style="background:#f8fafc">
-          <th style="padding:8px 14px;text-align:left;font-size:11px;color:#64748b;font-weight:600">BOBINE</th>
-          <th style="padding:8px 14px;text-align:center;font-size:11px;color:#64748b;font-weight:600">TYPE</th>
-          <th style="padding:8px 14px;text-align:right;font-size:11px;color:#64748b;font-weight:600">QTÉ SYSTÈME</th>
-          <th style="padding:8px 14px;text-align:right;font-size:11px;color:#64748b;font-weight:600">QTÉ PHYSIQUE</th>
-          <th style="padding:8px 14px;text-align:right;font-size:11px;color:#64748b;font-weight:600">ÉCART</th>
-          <th style="padding:8px 14px;font-size:11px;color:#64748b;font-weight:600">MOTIF</th>
-          <th style="padding:8px 14px;text-align:center;font-size:11px;color:#64748b;font-weight:600">DATE</th>
-          <th style="padding:8px 14px;text-align:center;font-size:11px;color:#64748b;font-weight:600">ACTION</th>
+          <th style="padding:8px 14px;text-align:left;font-size:12px;color:#64748b;font-weight:600">BOBINE</th>
+          <th style="padding:8px 14px;text-align:center;font-size:12px;color:#64748b;font-weight:600">TYPE</th>
+          <th style="padding:8px 14px;text-align:right;font-size:12px;color:#64748b;font-weight:600">QTÉ SYSTÈME</th>
+          <th style="padding:8px 14px;text-align:right;font-size:12px;color:#64748b;font-weight:600">QTÉ PHYSIQUE</th>
+          <th style="padding:8px 14px;text-align:right;font-size:12px;color:#64748b;font-weight:600">ÉCART</th>
+          <th style="padding:8px 14px;font-size:12px;color:#64748b;font-weight:600">MOTIF</th>
+          <th style="padding:8px 14px;text-align:center;font-size:12px;color:#64748b;font-weight:600">DATE</th>
+          <th style="padding:8px 14px;text-align:center;font-size:12px;color:#64748b;font-weight:600">ACTION</th>
         </tr></thead><tbody>`;
     data.ecarts.forEach(ec=>{
       const c=ec.ecart<0?'#e74c3c':'#27ae60';
       const src={'inventaire':'📊 Inventaire','manuel':'✏️ Manuel','import':'📤 Import'}[ec.source]||ec.source;
       html+=`<tr style="border-top:1px solid #e2e8f0;background:${ec.ecart<0?'#fff8f8':'#f8fff8'}">
         <td style="padding:9px 14px;font-family:monospace;font-weight:700;color:#0d1f35">${ec.numero}</td>
-        <td style="padding:9px 14px;text-align:center"><span style="background:#f1f5f9;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600">${ec.type_code||'—'}</span></td>
+        <td style="padding:9px 14px;text-align:center"><span style="background:#f1f5f9;padding:2px 7px;border-radius:4px;font-size:12px;font-weight:600">${ec.type_code||'—'}</span></td>
         <td style="padding:9px 14px;text-align:right;font-family:'Montserrat',sans-serif;font-weight:700">${parseInt(ec.stock_systeme).toLocaleString('fr-FR')}</td>
         <td style="padding:9px 14px;text-align:right;font-family:'Montserrat',sans-serif;font-weight:700">${parseInt(ec.stock_physique).toLocaleString('fr-FR')}</td>
         <td style="padding:9px 14px;text-align:right;font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:${c}">${ec.ecart>0?'+':''}${ec.ecart}</td>
@@ -1522,7 +1522,7 @@ async function chargerEcarts(){
         <td style="padding:9px 14px;text-align:center;font-size:12px;color:#64748b">${ec.date_constat}</td>
         <td style="padding:9px 14px;text-align:center">
           ${IS_COORD
-            ? `<span style="font-size:11px;color:#94a3b8;font-style:italic">En attente GSB</span>`
+            ? `<span style="font-size:12px;color:#94a3b8;font-style:italic">En attente GSB</span>`
             : `<button style="background:#eafaf1;color:#1e8449;border:1px solid #a9dfbf;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600"
                        onclick="openResoudre(${ec.id},'${ec.numero}',${ec.ecart},${ec.stock_physique},${ec.stock_systeme},'${(ec.motif||'').replace(/'/g,"\\'")}')">✅ Résoudre</button>`}
         </td>

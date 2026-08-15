@@ -250,7 +250,7 @@
 
 /* Pastilles d'état */
 .dv2-p{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;
-  font-size:11px;font-weight:700;white-space:nowrap}
+  font-size:12px;font-weight:700;white-space:nowrap}
 .dv2-p-g{background:var(--d-green-l);color:var(--d-green)}
 .dv2-p-o{background:var(--d-amber-l);color:var(--d-amber)}
 .dv2-p-r{background:var(--d-red-l);color:var(--d-red)}

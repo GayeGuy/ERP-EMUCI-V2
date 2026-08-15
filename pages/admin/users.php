@@ -166,7 +166,7 @@ include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
 .user-avatar-sm{width:38px;height:38px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:700;flex-shrink:0}
-.role-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.5px}
+.role-badge{font-size:12px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.5px}
 .role-badge.superadmin{background:#fdf0ef;color:var(--danger-d)}
 .role-badge.admin{background:#fef9e7;color:var(--warning-d)}
 .role-badge.gestionnaire{background:#d6eaf8;color:#1a5276}
@@ -195,7 +195,7 @@ include __DIR__ . '/../../templates/header.php';
 .stats-dash{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px;margin-bottom:18px}
 .stat-tile{position:relative;overflow:hidden;background:white;border:1px solid var(--border);border-radius:12px;padding:11px 14px 11px 16px}
 .stat-tile::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent,var(--muted))}
-.stat-tile-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.stat-tile-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
 .stat-tile-value{font-family:'Plus Jakarta Sans',sans-serif;font-size:21px;font-weight:700;color:var(--navy)}
 .stat-tile-empty{opacity:.5}
 .stat-tile-total{background:var(--navy);border-color:var(--navy)}
@@ -360,7 +360,7 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
                oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)" onblur="uCheckTel(this)" onfocus="this.classList.remove('field-invalid')">
       </div>
       <div id="uPwdWrap">
-        <div class="form-group"><label>Mot de passe * <span style="font-size:11px;color:var(--muted)">(min. 8 car., 1 majuscule, 1 chiffre, 1 caractère spécial)</span></label>
+        <div class="form-group"><label>Mot de passe * <span style="font-size:12px;color:var(--muted)">(min. 8 car., 1 majuscule, 1 chiffre, 1 caractère spécial)</span></label>
           <input type="password" class="form-control" id="uPwd" placeholder="••••••••">
         </div>
       </div>
@@ -393,7 +393,7 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
       <input type="hidden" id="pwdUId">
       <div class="alert alert-warning" style="margin-bottom:16px">Vous allez réinitialiser le mot de passe de <strong id="pwdUNom"></strong>.</div>
       <div id="pwdAlert"></div>
-      <div class="form-group"><label>Nouveau mot de passe * <span style="font-size:11px;color:var(--muted)">(min. 8 car., 1 majuscule, 1 chiffre, 1 caractère spécial)</span></label>
+      <div class="form-group"><label>Nouveau mot de passe * <span style="font-size:12px;color:var(--muted)">(min. 8 car., 1 majuscule, 1 chiffre, 1 caractère spécial)</span></label>
         <input type="password" class="form-control" id="pwdNew" placeholder="••••••••">
       </div>
       <div class="form-group"><label>Confirmer</label>
@@ -488,7 +488,7 @@ function viewU(id){
            ['Équipements assignés',r.nb_equips+' équipement(s)'],
            ['Créé le',r.created_at]
           ].map(([l,v])=>`<div style="padding:7px 0;border-bottom:1px solid var(--border)">
-            <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${l}</div>
+            <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${l}</div>
             <div style="font-size:13.5px">${v}</div></div>`).join('')}
       </div>`;
   });

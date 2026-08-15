@@ -142,14 +142,14 @@ include __DIR__ . '/../../templates/header.php';
 .table-wrap thead th{position:sticky;top:0;z-index:2;background:var(--navy,#0d1f35);color:white}
 
 /* Ligne de séparation entre deux journées. */
-.audit-jour td{background:var(--lighter,#f0f4f8);font-size:11px;font-weight:700;
+.audit-jour td{background:var(--lighter,#f0f4f8);font-size:12px;font-weight:700;
   text-transform:uppercase;letter-spacing:.6px;color:var(--muted);padding:6px 12px}
 
 /* La description tient sur deux lignes plutôt que d'être coupée net. */
 .audit-desc{flex:1;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
   overflow:hidden;line-height:1.35}
 
-.role-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px}
+.role-badge{font-size:12px;font-weight:700;padding:2px 7px;border-radius:10px}
 .role-badge.superadmin{background:#fdf0ef;color:var(--danger-d)}
 .role-badge.admin{background:#fef9e7;color:var(--warning-d)}
 .role-badge.gestionnaire{background:#d6eaf8;color:#1a5276}
@@ -190,7 +190,7 @@ include __DIR__ . '/../../templates/header.php';
   <div style="padding:6px 12px;background:white;border:1px solid var(--border);border-radius:20px;display:flex;align-items:center;gap:6px">
     <span class="audit-action-badge <?= $a ?>"><?= h(audit_action_label($a)) ?></span>
     <strong style="font-size:13px"><?= $n ?></strong>
-    <span style="font-size:11px;color:var(--muted)">7j</span>
+    <span style="font-size:12px;color:var(--muted)">7j</span>
   </div>
   <?php endforeach; ?>
   <div style="padding:6px 12px;background:var(--lighter);border-radius:20px;font-size:12.5px;color:var(--muted)">
@@ -272,12 +272,12 @@ include __DIR__ . '/../../templates/header.php';
         <tr>
           <td style="white-space:nowrap">
             <div style="font-size:12.5px;font-weight:600"><?= date('d/m/Y', strtotime($l['created_at'])) ?></div>
-            <div style="font-size:11px;color:var(--muted)"><?= date('H:i:s', strtotime($l['created_at'])) ?></div>
+            <div style="font-size:12px;color:var(--muted)"><?= date('H:i:s', strtotime($l['created_at'])) ?></div>
           </td>
           <td>
             <?php if($l['user_nom']): ?>
             <div style="display:flex;align-items:center;gap:8px">
-              <div style="width:28px;height:28px;border-radius:50%;background:var(--navy,#1E2B4A);display:flex;align-items:center;justify-content:center;color:white;font-size:10px;font-weight:700;flex-shrink:0">
+              <div style="width:28px;height:28px;border-radius:50%;background:var(--navy,#1E2B4A);display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:700;flex-shrink:0">
                 <?= strtoupper(substr($l['user_nom'],0,2)) ?>
               </div>
               <div>
@@ -349,11 +349,11 @@ function viewLog(id){
              ['Date',r.created_at],['IP',r.ip_address||'—'],
              ['Description',r.description]
             ].map(([l,v])=>`<div style="padding:7px 0;border-bottom:1px solid var(--border)">
-              <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${l}</div>
+              <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${l}</div>
               <div style="font-size:13px">${v}</div></div>`).join('')}
         </div>
-        ${oldJson?`<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:var(--danger-d);margin-bottom:6px;text-transform:uppercase">📤 Ancienne valeur</div><div class="diff-block old">${escHtml(oldJson)}</div></div>`:''}
-        ${newJson?`<div><div style="font-size:11px;font-weight:700;color:var(--success-d);margin-bottom:6px;text-transform:uppercase">📥 Nouvelle valeur</div><div class="diff-block new">${escHtml(newJson)}</div></div>`:''}
+        ${oldJson?`<div style="margin-bottom:12px"><div style="font-size:12px;font-weight:700;color:var(--danger-d);margin-bottom:6px;text-transform:uppercase">📤 Ancienne valeur</div><div class="diff-block old">${escHtml(oldJson)}</div></div>`:''}
+        ${newJson?`<div><div style="font-size:12px;font-weight:700;color:var(--success-d);margin-bottom:6px;text-transform:uppercase">📥 Nouvelle valeur</div><div class="diff-block new">${escHtml(newJson)}</div></div>`:''}
         ${!oldJson&&!newJson?'<p style="color:var(--muted);text-align:center;padding:20px">Aucune donnée de modification enregistrée.</p>':''}`;
     });
 }

@@ -405,11 +405,11 @@ include __DIR__ . '/../templates/header.php';
         <?php if (!empty($detail['traite_it'])):
           $traiteur = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [(int)$detail['traite_par']]);
         ?>
-        <div style="font-size:11px;color:#16a085;margin-top:6px">
+        <div style="font-size:12px;color:#16a085;margin-top:6px">
           <i class="ph-duotone ph-check-circle"></i> Traité par <?= h($traiteur) ?><?= $detail['traite_date'] ? ' le '.date('d/m/Y', strtotime($detail['traite_date'])) : '' ?>
         </div>
         <?php if (!empty($detail['ticket_glpi'])): ?>
-        <div style="font-size:11px;font-weight:700;color:var(--navy,#06033A);margin-top:3px">
+        <div style="font-size:12px;font-weight:700;color:var(--navy,#06033A);margin-top:3px">
           Ticket GLPI n° <?= h($detail['ticket_glpi']) ?>
         </div>
         <?php endif; ?>
@@ -557,7 +557,7 @@ include __DIR__ . '/../templates/header.php';
     padding:0;margin-bottom:18px;display:grid;grid-template-columns:1fr 1px 1fr 1px 1fr;align-items:stretch;overflow:hidden">
     <!-- Rechercher -->
     <div style="padding:14px 18px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted,#7f8c8d);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Rechercher</div>
+      <div style="font-size:12px;font-weight:700;color:var(--muted,#7f8c8d);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Rechercher</div>
       <input type="text" name="q" value="<?= h($fil_search) ?>" placeholder="Nom, type, référence…"
         style="width:100%;border:none;outline:none;font-size:13px;font-family:inherit;background:transparent;color:var(--text,#2c3e50);padding:0"
         oninput="clearTimeout(this._t);this._t=setTimeout(()=>document.getElementById('fmes').submit(),500)">
@@ -565,7 +565,7 @@ include __DIR__ . '/../templates/header.php';
     <div style="background:var(--border,#e2e8f0)"></div>
     <!-- Type -->
     <div style="padding:14px 18px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted,#7f8c8d);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Type</div>
+      <div style="font-size:12px;font-weight:700;color:var(--muted,#7f8c8d);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Type</div>
       <select name="type" style="border:none;outline:none;font-size:13px;font-family:inherit;background:transparent;color:var(--text,#2c3e50);width:100%;cursor:pointer;padding:0"
         onchange="document.getElementById('fmes').submit()">
         <option value="">Tous les types</option>
@@ -577,7 +577,7 @@ include __DIR__ . '/../templates/header.php';
     <div style="background:var(--border,#e2e8f0)"></div>
     <!-- Statut -->
     <div style="padding:14px 18px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted,#7f8c8d);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Statut</div>
+      <div style="font-size:12px;font-weight:700;color:var(--muted,#7f8c8d);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Statut</div>
       <select name="statut" style="border:none;outline:none;font-size:13px;font-family:inherit;background:transparent;color:var(--text,#2c3e50);width:100%;cursor:pointer;padding:0"
         onchange="document.getElementById('fmes').submit()">
         <option value="">Tous les statuts</option>

@@ -1043,7 +1043,7 @@ include __DIR__ . '/../templates/header.php';
       <button class="pfw-q<?= $q===$pfw_quarter_def?' active':'' ?>" data-q="<?= $q ?>" onclick="pfwChangeQ(this)"><?= $ql ?></button>
       <?php endforeach; ?>
       <button onclick="document.getElementById('modal-ops').style.display='flex'"
-        style="padding:4px 11px;border:1.5px solid #e2e8f0;border-radius:16px;background:#f8fafc;font-size:11px;font-weight:700;color:#06033A;cursor:pointer;font-family:inherit;white-space:nowrap;margin-left:4px">
+        style="padding:4px 11px;border:1.5px solid #e2e8f0;border-radius:16px;background:#f8fafc;font-size:12px;font-weight:700;color:#06033A;cursor:pointer;font-family:inherit;white-space:nowrap;margin-left:4px">
         <i class="ph-duotone ph-arrows-out"></i> Détails
       </button>
     </div>
@@ -1234,7 +1234,7 @@ include __DIR__ . '/../templates/header.php';
         <div class="leg-item"><div class="leg-dot" style="background:#7c3aed"></div>En cours<span class="leg-val"><?= $bobines_stats['en_cours']??0 ?></span></div>
         <div class="leg-item"><div class="leg-dot" style="background:#1B75BC"></div>En stock<span class="leg-val"><?= $bobines_stats['en_stock']??0 ?></span></div>
         <div class="leg-item"><div class="leg-dot" style="background:#e2e8f0"></div>Épuisées<span class="leg-val"><?= $bobines_stats['epuisees']??0 ?></span></div>
-        <div style="margin-top:6px;padding-top:6px;border-top:1px solid #f1f5f9;font-size:11px;color:#5a6678">
+        <div style="margin-top:6px;padding-top:6px;border-top:1px solid #f1f5f9;font-size:12px;color:#5a6678">
           Films restants : <strong style="color:#06033A"><?= number_format((int)($bobines_stats['films_restants']??0),0,',',' ') ?></strong>
         </div>
       </div>
@@ -1251,7 +1251,7 @@ include __DIR__ . '/../templates/header.php';
         <div class="leg-item"><div class="leg-dot" style="background:#d97706"></div>En attente<span class="leg-val"><?= $cmd_stats['en_attente']??0 ?></span></div>
         <div class="leg-item"><div class="leg-dot" style="background:#1B75BC"></div>En livraison<span class="leg-val"><?= ($cmd_stats['a_livrer']??0)+($cmd_stats['en_route']??0) ?></span></div>
         <div class="leg-item"><div class="leg-dot" style="background:#16a34a"></div>Livrées <?= $periode_mot ?><span class="leg-val"><?= $cmd_stats['livrees_mois']??0 ?></span></div>
-        <div style="margin-top:6px;padding-top:6px;border-top:1px solid #f1f5f9;font-size:11px;color:#5a6678">
+        <div style="margin-top:6px;padding-top:6px;border-top:1px solid #f1f5f9;font-size:12px;color:#5a6678">
           Rivets posés : <strong style="color:#06033A"><?= number_format((int)($ops['rivets_utilises']??0),0,',',' ') ?></strong>
         </div>
       </div>
@@ -1342,7 +1342,7 @@ include __DIR__ . '/../templates/header.php';
 
     <!-- Stock résumé rapide -->
     <div style="margin-top:<?= empty($pts_attente)?'0':'18px' ?>">
-      <div style="font-size:11px;font-weight:700;color:#5a6678;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Résumé stock</div>
+      <div style="font-size:12px;font-weight:700;color:#5a6678;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Résumé stock</div>
       <div class="stock-stat-row">
         <span style="color:#06033A">Bobines actives</span>
         <span class="stock-val" style="color:#7c3aed"><?= $bobines_stats['en_cours']??0 ?></span>
@@ -1452,7 +1452,7 @@ include __DIR__ . '/../templates/header.php';
               <div style="width:8px;height:8px;border-radius:50%;background:<?= $col ?>;flex-shrink:0"></div>
               <div>
                 <div style="font-weight:700;color:#06033A"><?= h($s['nom']) ?></div>
-                <div style="font-size:11px;color:#5a6678"><?= h($s['type']??'') ?></div>
+                <div style="font-size:12px;color:#5a6678"><?= h($s['type']??'') ?></div>
               </div>
             </div>
           </td>
@@ -1461,7 +1461,7 @@ include __DIR__ . '/../templates/header.php';
               <div style="flex:1;background:#e2e8f0;border-radius:3px;height:5px;overflow:hidden">
                 <div style="height:100%;width:<?= $pct ?>%;background:<?= $col ?>;border-radius:3px"></div>
               </div>
-              <span style="font-size:11px;color:#5a6678;min-width:30px"><?= $pct ?>%</span>
+              <span style="font-size:12px;color:#5a6678;min-width:30px"><?= $pct ?>%</span>
             </div>
           </td>
           <td style="font-weight:800;font-family:'Montserrat',sans-serif;color:#06033A"><?= number_format((int)$s['engins'],0,',',' ') ?></td>
@@ -1948,7 +1948,7 @@ function openPmmaModal() {
                         html+=`<div style="display:flex;justify-content:space-between;gap:14px;color:${low?'#dc2626':'#374151'}">
                             <span>${s.site||'—'}</span><span style="font-weight:700">${fmtN(s.qty)}</span></div>`;
                     });
-                    if(pmmaBas[idx]>0) html+=`<div style="margin-top:5px;color:#dc2626;font-size:11px;font-weight:600">⚠ ${pmmaBas[idx]} site(s) stock bas</div>`;
+                    if(pmmaBas[idx]>0) html+=`<div style="margin-top:5px;color:#dc2626;font-size:12px;font-weight:600">⚠ ${pmmaBas[idx]} site(s) stock bas</div>`;
                     showTip(e, html);
                 } else hideTip();
             });

@@ -681,7 +681,7 @@ include __DIR__ . '/../templates/header.php';
 /* ── En-têtes sous-labels (Qté / Films) ── */
 .vue-table thead tr.row-sub th{
   background:#0f2144;color:rgba(255,255,255,.6);
-  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
   padding:5px 18px 8px;text-align:center;
   position:sticky;top:52px;z-index:2;
   border-bottom:2px solid rgba(255,255,255,.08);
@@ -749,10 +749,10 @@ include __DIR__ . '/../templates/header.php';
 
 /* ── Contenu cellule ── */
 .cell-nb{font-size:20px;font-weight:900;color:#06033A;line-height:1}
-.cell-films{font-size:11px;color:#9ca3af;margin-top:4px;letter-spacing:.2px}
+.cell-films{font-size:12px;color:#9ca3af;margin-top:4px;letter-spacing:.2px}
 .cell-empty{color:#d1d5db;font-size:16px}
 .tag-cours{display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:20px;
-  padding:2px 7px;font-size:10px;font-weight:700;margin-top:5px}
+  padding:2px 7px;font-size:12px;font-weight:700;margin-top:5px}
 .total-row .cell-nb{color:#fff;font-size:22px}
 .total-row .cell-films{color:rgba(255,255,255,.45)}
 .td-total .cell-nb{color:#1B75BC;font-size:22px}
@@ -767,7 +767,7 @@ include __DIR__ . '/../templates/header.php';
   box-shadow:0 1px 6px rgba(6,3,58,.06)}
 .kpi::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;background:var(--kpi-c,#1B75BC);border-radius:4px 0 0 4px}
 .kpi-v{font-size:30px;font-weight:900;color:var(--kpi-c,#06033A);line-height:1;margin-bottom:4px}
-.kpi-l{font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.kpi-l{font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
 .kpi-icon{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:28px;opacity:.12}
 /* Section titre */
 .page-banner{
@@ -775,7 +775,7 @@ include __DIR__ . '/../templates/header.php';
   border-radius:16px;padding:24px 28px;margin-bottom:24px;
   display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;
   box-shadow:0 4px 20px rgba(6,3,58,.2)}
-.page-banner h1{color:#fff;font-size:22px;font-weight:800;margin:0;display:flex;align-items:center;gap:10px}
+.page-banner h2{color:#fff;font-size:22px;font-weight:800;margin:0;display:flex;align-items:center;gap:10px}
 .page-banner p{color:rgba(255,255,255,.75);font-size:13px;margin:4px 0 0}
 .export-btn{
   display:inline-flex;align-items:center;gap:7px;padding:10px 18px;
@@ -799,7 +799,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- BANNIÈRE TITRE -->
 <div class="page-banner">
   <div>
-    <h1>🎞️ Vue Stock Bobines</h1>
+    <h2>🎞️ Vue Stock Bobines</h2>
     <p>Synthèse par site et par type — <?= date('d/m/Y') ?> · <?= $total_bobines ?> bobines · <?= number_format($total_films) ?> films</p>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">

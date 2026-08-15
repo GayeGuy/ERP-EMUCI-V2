@@ -233,8 +233,8 @@ include __DIR__ . '/../templates/header.php';
 .kk{background:white;border:1px solid var(--border);border-radius:14px;padding:16px 18px;border-left:4px solid var(--blue)}
 .kk.green{border-left-color:var(--success)} .kk.orange{border-left-color:#f39c12} .kk.red{border-left-color:var(--danger)} .kk.purple{border-left-color:#8e44ad}
 .kk-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:26px;font-weight:900;color:var(--navy);line-height:1}
-.kk-lbl{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
-.statut-pj{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.kk-lbl{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
+.statut-pj{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
 .s-valide{background:#d1fae5;color:#065f46} .s-brouillon{background:#fef3c7;color:#92400e} .s-refuse{background:#fee2e2;color:#991b1b} .s-en_attente_validation{background:#dbeafe;color:#1d4ed8}
 .fsel{padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none;cursor:pointer}
 </style>
@@ -324,7 +324,7 @@ include __DIR__ . '/../templates/header.php';
       <?php else: foreach($pj_jour as $p): ?>
         <tr>
           <td style="font-weight:600;color:var(--navy)"><?= h($p['site_nom']) ?></td>
-          <td><span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:<?= $p['type_point']==='final'?'#dbeafe':'#fef3c7' ?>;color:<?= $p['type_point']==='final'?'#1d4ed8':'#92400e' ?>"><?= ucfirst($p['type_point']) ?></span></td>
+          <td><span style="padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700;background:<?= $p['type_point']==='final'?'#dbeafe':'#fef3c7' ?>;color:<?= $p['type_point']==='final'?'#1d4ed8':'#92400e' ?>"><?= ucfirst($p['type_point']) ?></span></td>
           <td style="text-align:center"><?= $p['nb_vp']??0 ?></td>
           <td style="text-align:center"><?= $p['nb_camion']??0 ?></td>
           <td style="text-align:center"><?= $p['nb_semi']??0 ?></td>

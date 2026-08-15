@@ -354,7 +354,7 @@ function dash_carte_debut(array $bloc): void {
                 if ($lien2) {
                     echo '<a class="dv2-more" href="' . APP_URL . h($lien2[0]) . '"'
                        . ' title="' . h($lien2[1]) . '" aria-label="' . h($lien2[1]) . '"'
-                       . ' style="width:auto;padding:0 10px;font-size:11px;font-weight:700">'
+                       . ' style="width:auto;padding:0 10px;font-size:12px;font-weight:700">'
                        . h($lien2[1]) . '</a>';
                 }
                 echo '<a class="dv2-more" href="' . APP_URL . h($lien[0]) . '"'
@@ -1679,7 +1679,7 @@ function dash_registre(): array {
             foreach ($kpis as $k) {
                 echo '<div style="background:' . $k['bg'] . ';border-radius:12px;padding:14px 16px;min-width:0">'
                    . '<div style="font-size:26px;font-weight:900;color:' . $k['col'] . ';line-height:1;font-variant-numeric:tabular-nums">' . $k['val'] . '</div>'
-                   . '<div style="font-size:11px;font-weight:700;color:' . $k['col'] . ';opacity:.75;text-transform:uppercase;letter-spacing:.4px;margin-top:6px;line-height:1.3">' . h($k['lbl']) . '</div>'
+                   . '<div style="font-size:12px;font-weight:700;color:' . $k['col'] . ';opacity:.75;text-transform:uppercase;letter-spacing:.4px;margin-top:6px;line-height:1.3">' . h($k['lbl']) . '</div>'
                    . '</div>';
             }
             echo '</div>';
@@ -1725,7 +1725,7 @@ function dash_registre(): array {
             foreach ($kpis as $k) {
                 echo '<div style="background:' . $k['bg'] . ';border-radius:12px;padding:14px 16px;min-width:0">'
                    . '<div style="font-size:26px;font-weight:900;color:' . $k['col'] . ';line-height:1;font-variant-numeric:tabular-nums">' . $k['val'] . '</div>'
-                   . '<div style="font-size:11px;font-weight:700;color:' . $k['col'] . ';opacity:.75;text-transform:uppercase;letter-spacing:.4px;margin-top:6px;line-height:1.3">' . h($k['lbl']) . '</div>'
+                   . '<div style="font-size:12px;font-weight:700;color:' . $k['col'] . ';opacity:.75;text-transform:uppercase;letter-spacing:.4px;margin-top:6px;line-height:1.3">' . h($k['lbl']) . '</div>'
                    . '</div>';
             }
             echo '</div>';

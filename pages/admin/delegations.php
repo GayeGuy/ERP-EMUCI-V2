@@ -140,7 +140,7 @@ include __DIR__ . '/../../templates/header.php';
    restaient invisibles. */
 .deleg-avatar{width:40px;height:40px;border-radius:50%;background:var(--navy,#1E2B4A);display:flex;align-items:center;justify-content:center;font-weight:800;color:white;font-size:15px}
 .deleg-name{color:white;font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700}
-.deleg-site{color:#94c2d4;font-size:11px;margin-top:2px}
+.deleg-site{color:#94c2d4;font-size:12px;margin-top:2px}
 .deleg-body{padding:16px 20px}
 .task-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
 .task-row:last-child{border-bottom:none}
@@ -226,8 +226,8 @@ include __DIR__ . '/../../templates/header.php';
     <?php else: ?>
     <table style="width:100%;border-collapse:collapse">
       <thead><tr style="border-bottom:1.5px solid var(--border)">
-        <th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--muted);text-transform:uppercase">Utilisateur</th>
-        <th style="text-align:left;padding:8px 10px;font-size:11px;color:var(--muted);text-transform:uppercase">Profil</th>
+        <th style="text-align:left;padding:8px 10px;font-size:12px;color:var(--muted);text-transform:uppercase">Utilisateur</th>
+        <th style="text-align:left;padding:8px 10px;font-size:12px;color:var(--muted);text-transform:uppercase">Profil</th>
         <th style="width:80px"></th>
       </tr></thead>
       <tbody id="tblResponsables">

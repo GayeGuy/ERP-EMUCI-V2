@@ -180,14 +180,14 @@ include __DIR__ . '/../templates/header.php';
 <style>
 .audit-item { display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border); }
 .audit-item:last-child{border-bottom:none;}
-.audit-action-badge{font-size:10px;font-weight:700;padding:3px 7px;border-radius:5px;flex-shrink:0;margin-top:2px;text-transform:uppercase;letter-spacing:.5px;}
+.audit-action-badge{font-size:12px;font-weight:700;padding:3px 7px;border-radius:5px;flex-shrink:0;margin-top:2px;text-transform:uppercase;letter-spacing:.5px;}
 .audit-action-badge.CREATE{background:#d5f5e3;color:#1e8449;}
 .audit-action-badge.UPDATE{background:#d6eaf8;color:#1a5276;}
 .audit-action-badge.DELETE{background:#fdedec;color:#922b21;}
 .audit-action-badge.LOGIN{background:#fef9e7;color:#9a7d0a;}
 .audit-action-badge.LOGOUT{background:#eaecee;color:#424949;}
 .audit-desc{font-size:12.5px;flex:1;}
-.audit-meta{font-size:11px;color:var(--muted);margin-top:2px;}
+.audit-meta{font-size:12px;color:var(--muted);margin-top:2px;}
 </style>
 
 <script>

@@ -169,8 +169,8 @@ include __DIR__ . '/../templates/header.php';
 .ik{background:white;border-radius:14px;border:1px solid var(--border);padding:16px 20px;border-left:4px solid var(--blue)}
 .ik.orange{border-left-color:#f39c12} .ik.red{border-left-color:var(--danger)} .ik.green{border-left-color:var(--success)}
 .ik-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:26px;font-weight:900;color:var(--navy)}
-.ik-lbl{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
-.type-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.ik-lbl{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
+.type-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
 .type-preventive{background:#e8f4f9;color:var(--blue)} .type-curative{background:#fee2e2;color:#991b1b}
 .statut-planifiee{background:#dbeafe;color:#1d4ed8} .statut-en_cours{background:#fef3c7;color:#92400e}
 .statut-terminee{background:#d1fae5;color:#065f46} .statut-demandee{background:#fee2e2;color:#991b1b}
@@ -197,7 +197,7 @@ include __DIR__ . '/../templates/header.php';
   <button class="tab-btn <?= $onglet==='curative'?'active':'' ?>" onclick="showTab('curative',this)">🚨 Curatives</button>
   <?php if($nb_demandees>0): ?>
   <button class="tab-btn <?= $onglet==='demandes'?'active':'' ?>" onclick="showTab('demandes',this)">
-    📬 Demandes <span style="background:var(--danger);color:white;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px"><?= $nb_demandees ?></span>
+    📬 Demandes <span style="background:var(--danger);color:white;border-radius:10px;padding:1px 7px;font-size:12px;margin-left:4px"><?= $nb_demandees ?></span>
   </button>
   <?php endif; ?>
 </div>
@@ -261,7 +261,7 @@ foreach($types_onglets as $tab_key => $type_filtre):
             <td><span class="type-badge type-<?= $is_prev?'preventive':'curative' ?>"><?= $is_prev ? '🗓️ Préventive' : '🚨 Curative' ?></span></td>
             <td style="font-size:13px">
               <?= h($int['equip_nom']??'—') ?>
-              <?php if($int['numero_serie_interne']): ?><div style="font-size:11px;color:var(--muted)"><?= h($int['numero_serie_interne']) ?></div><?php endif; ?>
+              <?php if($int['numero_serie_interne']): ?><div style="font-size:12px;color:var(--muted)"><?= h($int['numero_serie_interne']) ?></div><?php endif; ?>
             </td>
             <td><?= h($int['site_nom']??'—') ?></td>
             <td style="font-size:12px;max-width:200px"><?= h($int['description']) ?></td>

@@ -162,10 +162,10 @@ include __DIR__ . '/../templates/header.php';
 .kpi-val{font-family:'Montserrat',sans-serif;font-size:28px;font-weight:800;color:var(--navy);line-height:1}
 .kpi-lbl{font-size:12px;color:var(--muted);margin-top:5px}
 .fsel{padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none;font-family:'DM Sans',sans-serif;cursor:pointer;color:var(--text)}
-.rbadge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.rbadge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
 .rbadge.valide{background:#d5f5e3;color:#1e7e40}
 .rbadge.brouillon{background:#fef9e7;color:#9a6c00}
-.statut-pill{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.statut-pill{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600}
 .statut-pill.resolu{background:#d5f5e3;color:#1e7e40}
 .statut-pill.partiel{background:#fef9e7;color:#9a6c00}
 .statut-pill.en_attente{background:#fdedec;color:#c0392b}

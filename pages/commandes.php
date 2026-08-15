@@ -1015,7 +1015,7 @@ include __DIR__ . '/../templates/header.php';
 .st-recu{background:#d1fae5;color:#065f46}
 .st-rejete{background:#fee2e2;color:#991b1b}
 .st-annule{background:#f1f5f9;color:#64748b}
-.st-badge{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+.st-badge{padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap}
 /* Tableau coordinateur */
 .coord-table th{background:#06033A;color:white}
 .coord-table td{vertical-align:middle}
@@ -1096,7 +1096,7 @@ include __DIR__ . '/../templates/header.php';
           <td style="text-align:center;font-weight:700">
             <?= $cmd['nb_lignes'] ?>
             <?php if($cmd['nb_rejets']>0): ?>
-              <span style="background:#FEE2E2;color:#991B1B;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700">❌<?= $cmd['nb_rejets'] ?></span>
+              <span style="background:#FEE2E2;color:#991B1B;padding:1px 6px;border-radius:8px;font-size:12px;font-weight:700">❌<?= $cmd['nb_rejets'] ?></span>
             <?php endif; ?>
           </td>
           <?php if($voir_prix): ?>
@@ -1207,12 +1207,12 @@ include __DIR__ . '/../templates/header.php';
     <div style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:16px">
       <table class="coord-table" style="width:100%;border-collapse:collapse" id="tblLignes">
         <thead><tr>
-          <th style="padding:10px 13px;font-size:11px;text-align:left">Article</th>
-          <th style="padding:10px 13px;font-size:11px;text-align:center">Cmd précédente</th>
-          <th style="padding:10px 13px;font-size:11px;text-align:center">Stock site</th>
-          <th style="padding:10px 13px;font-size:11px;text-align:center">Conso / semaine</th>
-          <th style="padding:10px 13px;font-size:11px;text-align:center">Qté demandée</th>
-          <?= $voir_prix ? '<th style="padding:10px 13px;font-size:11px;text-align:right">P.U.</th><th style="padding:10px 13px;font-size:11px;text-align:right">Total</th>' : '' ?>
+          <th style="padding:10px 13px;font-size:12px;text-align:left">Article</th>
+          <th style="padding:10px 13px;font-size:12px;text-align:center">Cmd précédente</th>
+          <th style="padding:10px 13px;font-size:12px;text-align:center">Stock site</th>
+          <th style="padding:10px 13px;font-size:12px;text-align:center">Conso / semaine</th>
+          <th style="padding:10px 13px;font-size:12px;text-align:center">Qté demandée</th>
+          <?= $voir_prix ? '<th style="padding:10px 13px;font-size:12px;text-align:right">P.U.</th><th style="padding:10px 13px;font-size:12px;text-align:right">Total</th>' : '' ?>
           <th style="padding:10px 13px;width:32px"></th>
         </tr></thead>
         <tbody id="lignesBody">
@@ -1314,7 +1314,7 @@ include __DIR__ . '/../templates/header.php';
     <!-- En-tête -->
     <div id="detail-header" style="background:#06033A;padding:18px 24px;display:flex;justify-content:space-between;align-items:center">
       <div>
-        <div style="color:rgba(255,255,255,.6);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:2px">Bon de Commande</div>
+        <div style="color:rgba(255,255,255,.6);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;margin-bottom:2px">Bon de Commande</div>
         <div id="detail-numero" style="color:#00AEEF;font-size:20px;font-weight:900;font-family:'Plus Jakarta Sans',sans-serif;letter-spacing:.5px"></div>
       </div>
       <div style="display:flex;align-items:center;gap:12px">
@@ -1336,23 +1336,23 @@ include __DIR__ . '/../templates/header.php';
         <!-- Grille infos -->
         <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:18px">
           <div style="background:var(--tertiary);border-radius:10px;padding:10px 13px;border:1px solid var(--border)">
-            <div style="font-size:9px;text-transform:uppercase;color:var(--muted);font-weight:700;letter-spacing:.5px;margin-bottom:3px">Site</div>
+            <div style="font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:700;letter-spacing:.5px;margin-bottom:3px">Site</div>
             <div id="detail-site" style="font-size:13px;font-weight:700;color:var(--navy)"></div>
           </div>
           <div style="background:var(--tertiary);border-radius:10px;padding:10px 13px;border:1px solid var(--border)">
-            <div style="font-size:9px;text-transform:uppercase;color:var(--muted);font-weight:700;letter-spacing:.5px;margin-bottom:3px">Date commande</div>
+            <div style="font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:700;letter-spacing:.5px;margin-bottom:3px">Date commande</div>
             <div id="detail-date" style="font-size:13px;font-weight:700;color:var(--navy)"></div>
           </div>
           <div style="background:var(--tertiary);border-radius:10px;padding:10px 13px;border:1px solid var(--border)">
-            <div style="font-size:9px;text-transform:uppercase;color:var(--muted);font-weight:700;letter-spacing:.5px;margin-bottom:3px">Demandeur</div>
+            <div style="font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:700;letter-spacing:.5px;margin-bottom:3px">Demandeur</div>
             <div id="detail-agent" style="font-size:13px;font-weight:700;color:var(--navy)"></div>
           </div>
           <div id="detail-validateur-box" style="background:var(--tertiary);border-radius:10px;padding:10px 13px;border:1px solid var(--border);display:none">
-            <div style="font-size:9px;text-transform:uppercase;color:var(--muted);font-weight:700;letter-spacing:.5px;margin-bottom:3px">Validé par</div>
+            <div style="font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:700;letter-spacing:.5px;margin-bottom:3px">Validé par</div>
             <div id="detail-validateur" style="font-size:13px;font-weight:700;color:var(--navy)"></div>
           </div>
           <div id="detail-notes-box" style="background:#f0f7ff;border-radius:10px;padding:10px 13px;border:1px solid #bfdbfe;grid-column:span 2;display:none">
-            <div style="font-size:9px;text-transform:uppercase;color:#1D4ED8;font-weight:700;letter-spacing:.5px;margin-bottom:3px">Notes / Observations</div>
+            <div style="font-size:12px;text-transform:uppercase;color:#1D4ED8;font-weight:700;letter-spacing:.5px;margin-bottom:3px">Notes / Observations</div>
             <div id="detail-notes" style="font-size:12.5px;color:var(--navy)"></div>
           </div>
         </div>
@@ -1475,12 +1475,12 @@ async function voirDetail(id, numero) {
   // En-têtes tableau
   const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   let thHtml = `<tr style="background:#06033A">
-    <th style="color:white;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;text-align:left">Article</th>
-    <th style="color:white;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;text-align:center">Qté dem.</th>`;
-  if (hasLiv) thHtml += `<th style="color:white;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;text-align:center">Qté livrée</th>
-    <th style="color:white;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase">Statut</th>`;
-  if (voirPrix) thHtml += `<th style="color:white;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;text-align:right">P.U.</th>
-    <th style="color:white;padding:8px 10px;font-size:10px;font-weight:700;text-transform:uppercase;text-align:right">Total</th>`;
+    <th style="color:white;padding:8px 10px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;text-align:left">Article</th>
+    <th style="color:white;padding:8px 10px;font-size:12px;font-weight:700;text-transform:uppercase;text-align:center">Qté dem.</th>`;
+  if (hasLiv) thHtml += `<th style="color:white;padding:8px 10px;font-size:12px;font-weight:700;text-transform:uppercase;text-align:center">Qté livrée</th>
+    <th style="color:white;padding:8px 10px;font-size:12px;font-weight:700;text-transform:uppercase">Statut</th>`;
+  if (voirPrix) thHtml += `<th style="color:white;padding:8px 10px;font-size:12px;font-weight:700;text-transform:uppercase;text-align:right">P.U.</th>
+    <th style="color:white;padding:8px 10px;font-size:12px;font-weight:700;text-transform:uppercase;text-align:right">Total</th>`;
   thHtml += '</tr>';
   document.getElementById('detail-thead').innerHTML = thHtml;
 
@@ -1500,7 +1500,7 @@ async function voirDetail(id, numero) {
     let row = `<tr>
       <td style="background:${bg};padding:8px 10px;border-bottom:1px solid var(--border);font-weight:700">
         ${esc(l.libelle)}
-        <div style="font-size:10px;color:var(--muted);font-weight:400">${esc(l.type_article||'article')} · ${esc(l.unite)}</div>
+        <div style="font-size:12px;color:var(--muted);font-weight:400">${esc(l.type_article||'article')} · ${esc(l.unite)}</div>
       </td>
       <td style="background:${bg};padding:8px 10px;border-bottom:1px solid var(--border);text-align:center;font-weight:800;font-size:14px;color:var(--navy)">${qte}</td>`;
 
@@ -1509,7 +1509,7 @@ async function voirDetail(id, numero) {
       row += `<td style="background:${bg};padding:8px 10px;border-bottom:1px solid var(--border);text-align:center;${ecartStyle}">${qLiv !== null ? qLiv : '—'}</td>
         <td style="background:${bg};padding:8px 10px;border-bottom:1px solid var(--border);font-size:12px">
           <span style="font-weight:700;color:${_LC[stLigne]||'var(--muted)'}">${_LS[stLigne]||'—'}</span>
-          ${motif ? `<div style="font-size:10px;color:var(--muted)">${esc(motif)}</div>` : ''}
+          ${motif ? `<div style="font-size:12px;color:var(--muted)">${esc(motif)}</div>` : ''}
         </td>`;
     }
     if (voirPrix) {
@@ -1625,7 +1625,7 @@ function renderLignes(){
       <td style="padding:9px 13px;text-align:center"><span class="hist-chip">${l.derniere ?? 0}</span></td>
       <td style="padding:9px 13px;text-align:center"><span class="hist-chip">${l.stockSite ?? 0}</span></td>
       <td style="padding:9px 13px;text-align:center"><span class="hist-chip">${l.conso ?? 0}/sem</span></td>
-      <td style="padding:9px 13px;text-align:center;font-weight:800;font-size:15px;color:var(--primary-d)">${l.quantite} <span style="font-size:11px;color:var(--muted)">${l.unite}</span></td>
+      <td style="padding:9px 13px;text-align:center;font-weight:800;font-size:15px;color:var(--primary-d)">${l.quantite} <span style="font-size:12px;color:var(--muted)">${l.unite}</span></td>
       ${voirPrix?`<td style="padding:9px 13px;text-align:right;font-size:12px">${(l.prix_unitaire||0).toLocaleString()} FCFA</td>
         <td style="padding:9px 13px;text-align:right;font-weight:700;font-size:12px">${lt.toLocaleString()} FCFA</td>`:''}
       <td style="padding:4px;text-align:center"><button onclick="suppLigne(${i})" style="background:#FEE2E2;color:#991B1B;border:none;border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12px">✕</button></td>
@@ -1663,10 +1663,10 @@ async function ouvrirValidation(cmdId,numCmd){
       <div style="display:grid;grid-template-columns:1fr 130px 1fr;gap:12px;align-items:start">
         <div>
           <div style="font-size:13.5px;font-weight:700;color:var(--navy)">${l.libelle}</div>
-          <div style="font-size:11px;color:var(--muted)">${l.type_article||'article'} · Qté : <strong>${l.quantite} ${l.unite||''}</strong></div>
+          <div style="font-size:12px;color:var(--muted)">${l.type_article||'article'} · Qté : <strong>${l.quantite} ${l.unite||''}</strong></div>
         </div>
         <div>
-          <label style="font-size:11px;font-weight:700;color:var(--navy);display:block;margin-bottom:4px">Décision</label>
+          <label style="font-size:12px;font-weight:700;color:var(--navy);display:block;margin-bottom:4px">Décision</label>
           <select class="form-control statut-ligne" data-idx="${i}" onchange="checkMotifRejet(${i})"
             style="padding:7px;border-radius:8px;font-size:13px">
             <option value="valide">✅ Valider</option>
@@ -1674,7 +1674,7 @@ async function ouvrirValidation(cmdId,numCmd){
           </select>
         </div>
         <div id="motifLigne${i}" style="display:none">
-          <label style="font-size:11px;font-weight:700;color:var(--danger-d);display:block;margin-bottom:4px">Motif rejet *</label>
+          <label style="font-size:12px;font-weight:700;color:var(--danger-d);display:block;margin-bottom:4px">Motif rejet *</label>
           <input type="text" class="form-control motif-ligne" data-idx="${i}"
             placeholder="Raison du rejet…" style="padding:7px;border-radius:8px;font-size:12px;border-color:var(--danger)">
         </div>
@@ -1726,11 +1726,11 @@ async function ouvrirLivraison(cmdId,numCmd){
       <div style="display:grid;grid-template-columns:1fr 110px 1fr;gap:12px;align-items:end">
         <div>
           <div style="font-size:13.5px;font-weight:700;color:var(--navy)">${l.libelle}</div>
-          <div style="font-size:11px;color:var(--muted)">Commandé : <strong>${l.quantite}</strong> ${l.unite||''} · ${l.type_article||'article'}</div>
+          <div style="font-size:12px;color:var(--muted)">Commandé : <strong>${l.quantite}</strong> ${l.unite||''} · ${l.type_article||'article'}</div>
           ${l.statut_ligne==='rejete'?'<span style="background:#FEE2E2;color:#991B1B;padding:2px 7px;border-radius:8px;font-size:10.5px;font-weight:700">❌ Ligne rejetée — '+l.motif_rejet+'</span>':''}
         </div>
         <div>
-          <label style="font-size:11px;font-weight:700;color:var(--navy);display:block;margin-bottom:4px">Qté livrée *</label>
+          <label style="font-size:12px;font-weight:700;color:var(--navy);display:block;margin-bottom:4px">Qté livrée *</label>
           <input type="number" class="form-control qte-liv"
             data-idx="${i}" data-qte="${l.quantite}" data-libelle="${l.libelle}"
             value="${l.quantite}" min="0" step="1" onchange="checkEcart(${i})"
@@ -1738,7 +1738,7 @@ async function ouvrirLivraison(cmdId,numCmd){
             ${l.statut_ligne==='rejete'?'disabled value="0"':''}>
         </div>
         <div id="motifGrp${i}" style="display:none">
-          <label style="font-size:11px;font-weight:700;color:var(--warning-d);display:block;margin-bottom:4px">Motif écart *</label>
+          <label style="font-size:12px;font-weight:700;color:var(--warning-d);display:block;margin-bottom:4px">Motif écart *</label>
           <input type="text" class="form-control motif-ecart" data-idx="${i}"
             placeholder="Justification…" style="border-radius:8px;font-size:12px;border-color:var(--warning)">
         </div>

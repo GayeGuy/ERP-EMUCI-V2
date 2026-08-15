@@ -113,14 +113,14 @@ include __DIR__ . '/../../templates/header.php';
 .nom-card{background:white;border:1px solid var(--border);border-radius:14px;overflow:hidden;transition:box-shadow .2s}
 .nom-card:hover{box-shadow:0 4px 20px rgba(0,0,0,.08)}
 .nom-card-top{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px}
-.nom-code{width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,var(--navy),#2563a8);display:flex;align-items:center;justify-content:center;font-family:'Plus Jakarta Sans',sans-serif;font-size:11px;font-weight:800;color:white;letter-spacing:.5px;flex-shrink:0}
+.nom-code{width:48px;height:48px;border-radius:12px;background:linear-gradient(135deg,var(--navy),#2563a8);display:flex;align-items:center;justify-content:center;font-family:'Plus Jakarta Sans',sans-serif;font-size:12px;font-weight:800;color:white;letter-spacing:.5px;flex-shrink:0}
 .nom-info h4{font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700;color:var(--navy)}
 .nom-info span{font-size:12px;color:var(--muted)}
 .nom-stats{display:flex}
 .nom-stat{flex:1;padding:12px;text-align:center;border-right:1px solid var(--border)}
 .nom-stat:last-child{border-right:none}
 .nom-stat .sv{font-family:'Plus Jakarta Sans',sans-serif;font-size:20px;font-weight:800;color:var(--navy)}
-.nom-stat .sl{font-size:11px;color:var(--muted);margin-top:2px}
+.nom-stat .sl{font-size:12px;color:var(--muted);margin-top:2px}
 .nom-actions{padding:10px 18px;display:flex;gap:6px;background:var(--lighter);flex-wrap:wrap}
 .modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(13,31,53,.5);backdrop-filter:blur(4px);align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
@@ -189,7 +189,7 @@ include __DIR__ . '/../../templates/header.php';
       <div id="mNAlert"></div>
       <input type="hidden" id="nId">
       <div class="form-row cols-2">
-        <div class="form-group"><label>Code * <span style="font-size:11px;color:var(--muted)">(ex: CLV, ECR, UC)</span></label>
+        <div class="form-group"><label>Code * <span style="font-size:12px;color:var(--muted)">(ex: CLV, ECR, UC)</span></label>
           <input type="text" class="form-control" id="nCode" placeholder="CLV" maxlength="10" oninput="this.value=this.value.toUpperCase()">
         </div>
         <div class="form-group"><label>Libellé *</label>
@@ -197,7 +197,7 @@ include __DIR__ . '/../../templates/header.php';
         </div>
       </div>
       <div class="form-row cols-2">
-        <div class="form-group"><label>Durée de vie (mois) <span style="font-size:11px;color:var(--muted)">0 = illimitée</span></label>
+        <div class="form-group"><label>Durée de vie (mois) <span style="font-size:12px;color:var(--muted)">0 = illimitée</span></label>
           <input type="number" class="form-control" id="nDuree" min="0" placeholder="36">
         </div>
         <div class="form-group"><label>Seuil d'alerte stock</label>
@@ -277,7 +277,7 @@ function viewN(id){
            ['Seuil alerte stock',r.seuil_alerte],
            ['Description',r.description||'—']
           ].map(([l,v])=>`<div style="padding:7px 0;border-bottom:1px solid var(--border)">
-            <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${l}</div>
+            <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${l}</div>
             <div style="font-size:13.5px">${v}</div></div>`).join('')}
       </div>
       <h4 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;margin-bottom:10px">🔗 Composition du poste</h4>

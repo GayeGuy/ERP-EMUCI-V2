@@ -678,7 +678,7 @@ include __DIR__ . '/../../templates/header.php';
 .kpi-card{background:white;border:1px solid var(--border);border-radius:12px;padding:14px 18px;display:flex;align-items:center;gap:12px}
 .kpi-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0}
 .kpi-val{font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:var(--navy);line-height:1}
-.kpi-lbl{font-size:11px;color:var(--muted);margin-top:2px}
+.kpi-lbl{font-size:12px;color:var(--muted);margin-top:2px}
 
 /* ── POINTS CARDS ── */
 .pj-card{background:white;border:1px solid var(--border);border-radius:14px;padding:14px 18px;display:grid;grid-template-columns:64px 1fr auto;gap:14px;align-items:center;transition:box-shadow .18s,border-color .18s;cursor:default}
@@ -686,8 +686,8 @@ include __DIR__ . '/../../templates/header.php';
 .pj-card.today{border-left:4px solid #1a56a0}
 .pj-date-block{text-align:center}
 .pj-date-block .pjd{font-family:'Montserrat',sans-serif;font-size:26px;font-weight:900;color:var(--navy);line-height:1}
-.pj-date-block .pjm{font-size:10px;text-transform:uppercase;color:var(--muted);letter-spacing:.5px}
-.pj-type-pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;margin-top:5px}
+.pj-date-block .pjm{font-size:12px;text-transform:uppercase;color:var(--muted);letter-spacing:.5px}
+.pj-type-pill{display:inline-block;padding:2px 8px;border-radius:20px;font-size:12px;font-weight:700;margin-top:5px}
 .pj-pills{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .pj-pill{padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
 .pj-pill.engins{background:#e3f2fd;color:#1565c0}
@@ -696,7 +696,7 @@ include __DIR__ . '/../../templates/header.php';
 .pj-pill.prod{background:#fff3e0;color:#e65100}
 .pj-pill.veh{background:#f8fafc;color:#475569;border:1px solid #e2e8f0}
 .pj-actions{display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
-.pj-status{padding:4px 11px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap;margin-bottom:6px;text-align:center}
+.pj-status{padding:4px 11px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap;margin-bottom:6px;text-align:center}
 
 /* ── FORM POINT ── */
 .point-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -705,9 +705,9 @@ include __DIR__ . '/../../templates/header.php';
 .veh-card .vc-header{display:flex;align-items:center;gap:10px;margin-bottom:10px}
 .veh-card .vc-icon{width:40px;height:40px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
 .veh-card .vc-title{font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:var(--navy)}
-.veh-card .vc-sub{font-size:11px;color:var(--muted)}
+.veh-card .vc-sub{font-size:12px;color:var(--muted)}
 .veh-card .vc-badges{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap}
-.badge-info{background:#e3f2fd;color:#1565c0;padding:2px 7px;border-radius:6px;font-size:11px;font-weight:600}
+.badge-info{background:#e3f2fd;color:#1565c0;padding:2px 7px;border-radius:6px;font-size:12px;font-weight:600}
 .nb-input{width:100%;padding:14px;text-align:center;font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900;border:2px solid var(--border);border-radius:10px;outline:none;color:var(--navy);transition:border-color .2s}
 .nb-input:focus{border-color:#1a56a0;box-shadow:0 0 0 3px rgba(26,86,160,.1)}
 .nb-input:not([value="0"]):not(:placeholder-shown){border-color:#1a56a0;color:#1a56a0}
@@ -720,7 +720,7 @@ include __DIR__ . '/../../templates/header.php';
 .calc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
 .calc-item{text-align:center}
 .calc-item .cv{font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:white;line-height:1}
-.calc-item .cl{font-size:10px;color:rgba(255,255,255,.5);margin-top:3px;text-transform:uppercase;letter-spacing:.5px}
+.calc-item .cl{font-size:12px;color:rgba(255,255,255,.5);margin-top:3px;text-transform:uppercase;letter-spacing:.5px}
 .calc-item.warn .cv{color:#fbbf24}
 .calc-item.danger .cv{color:#f87171}
 .calc-item.success .cv{color:#34d399}
@@ -728,7 +728,7 @@ include __DIR__ . '/../../templates/header.php';
 /* ── SECTION HEADERS IN MODAL ── */
 .form-section{margin-bottom:24px}
 .form-section-title{display:flex;align-items:center;gap:8px;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid var(--border)}
-.form-section-num{width:24px;height:24px;border-radius:50%;background:var(--navy);color:white;font-family:'Montserrat',sans-serif;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.form-section-num{width:24px;height:24px;border-radius:50%;background:var(--navy);color:white;font-family:'Montserrat',sans-serif;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .form-section-title h4{font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;color:var(--navy);margin:0}
 
 /* ── FILMS ── */
@@ -740,12 +740,12 @@ include __DIR__ . '/../../templates/header.php';
 .bobine-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
 .bobine-row:last-child{border-bottom:none}
 .bobine-num{font-family:monospace;font-weight:700;font-size:12px;color:var(--navy);min-width:120px}
-.bobine-restant{font-size:11px;color:var(--muted)}
+.bobine-restant{font-size:12px;color:var(--muted)}
 .bobine-input{width:72px;padding:6px;border:1.5px solid var(--border);border-radius:7px;text-align:center;font-size:13px;font-family:'Montserrat',sans-serif;font-weight:700;outline:none}
 .bobine-input:focus{border-color:var(--blue-mid,#1a56a0)}
 
 /* ── STATUS BADGES ── */
-.point-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.point-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
 .point-badge.valide{background:#d1fae5;color:#065f46}
 .point-badge.en_attente_validation{background:#dbeafe;color:#1d4ed8}
 .point-badge.brouillon{background:#fef3c7;color:#92400e}
@@ -768,12 +768,12 @@ include __DIR__ . '/../../templates/header.php';
 .point-preview h2{font-size:15px;font-weight:800;margin-bottom:4px;text-align:center}
 .point-preview .pp-date{text-align:center;opacity:.7;font-size:12px;margin-bottom:16px}
 .point-preview .pp-section{margin-bottom:14px}
-.point-preview .pp-title{font-size:10px;font-weight:700;opacity:.5;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
+.point-preview .pp-title{font-size:12px;font-weight:700;opacity:.5;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
 .point-preview .pp-row{display:flex;justify-content:space-between;font-size:13px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.08)}
 .point-preview .pp-total{display:flex;justify-content:space-between;font-size:15px;font-weight:800;padding:8px 0;border-top:2px solid rgba(255,255,255,.2);margin-top:6px}
 .point-preview .pp-stat{background:rgba(255,255,255,.1);border-radius:8px;padding:10px 14px;text-align:center}
 .point-preview .pp-stat .psv{font-size:22px;font-weight:900}
-.point-preview .pp-stat .psl{font-size:10px;opacity:.6;margin-top:2px}
+.point-preview .pp-stat .psl{font-size:12px;opacity:.6;margin-top:2px}
 @media(max-width:900px){.point-grid{grid-template-columns:minmax(0,1fr)}.calc-grid{grid-template-columns:repeat(2,1fr)}.kpi-bar{grid-template-columns:repeat(2,1fr)}.pj-card{grid-template-columns:minmax(0,1fr)}}
 </style>
 
@@ -849,11 +849,11 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead>
         <tr style="background:#fff5f5">
-          <th style="padding:8px 14px;text-align:left;font-size:11px;color:#7f1d1d;font-weight:700">BOBINE</th>
-          <th style="padding:8px 14px;text-align:center;font-size:11px;color:#7f1d1d;font-weight:700">FILMS DÉCLARÉS (PJ)</th>
-          <th style="padding:8px 14px;text-align:center;font-size:11px;color:#7f1d1d;font-weight:700">FILMS EMUCI</th>
-          <th style="padding:8px 14px;text-align:center;font-size:11px;color:#7f1d1d;font-weight:700">ÉCART</th>
-          <th style="padding:8px 14px;font-size:11px;color:#7f1d1d;font-weight:700">NOTE DU GSB</th>
+          <th style="padding:8px 14px;text-align:left;font-size:12px;color:#7f1d1d;font-weight:700">BOBINE</th>
+          <th style="padding:8px 14px;text-align:center;font-size:12px;color:#7f1d1d;font-weight:700">FILMS DÉCLARÉS (PJ)</th>
+          <th style="padding:8px 14px;text-align:center;font-size:12px;color:#7f1d1d;font-weight:700">FILMS EMUCI</th>
+          <th style="padding:8px 14px;text-align:center;font-size:12px;color:#7f1d1d;font-weight:700">ÉCART</th>
+          <th style="padding:8px 14px;font-size:12px;color:#7f1d1d;font-weight:700">NOTE DU GSB</th>
         </tr>
       </thead>
       <tbody>
@@ -863,7 +863,7 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
         <tr style="border-top:1px solid #fecaca">
           <td style="padding:9px 14px;font-family:monospace;font-weight:700;color:#0d1f35">
             <?= h($corr['numero']) ?>
-            <span style="font-size:10px;color:#6b7280;margin-left:4px"><?= h($corr['type_code']) ?></span>
+            <span style="font-size:12px;color:#6b7280;margin-left:4px"><?= h($corr['type_code']) ?></span>
           </td>
           <td style="padding:9px 14px;text-align:center;font-weight:700"><?= $corr['films_pj'] ?></td>
           <td style="padding:9px 14px;text-align:center;font-weight:700"><?= $corr['films_emuci'] ?></td>
@@ -934,13 +934,13 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead>
         <tr style="background:#fffbeb">
-          <th style="padding:9px 14px;text-align:left;font-size:11px;color:#78350f;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Bobine</th>
-          <th style="padding:9px 14px;text-align:center;font-size:11px;color:#78350f;font-weight:700;text-transform:uppercase">Films déclarés (PJ)</th>
-          <th style="padding:9px 14px;text-align:center;font-size:11px;color:#78350f;font-weight:700;text-transform:uppercase">Films proposés (GSB)</th>
-          <th style="padding:9px 14px;text-align:left;font-size:11px;color:#78350f;font-weight:700;text-transform:uppercase">Motif GSB</th>
-          <th style="padding:9px 14px;text-align:left;font-size:11px;color:#78350f;font-weight:700;text-transform:uppercase">Demandé par</th>
-          <th style="padding:9px 14px;text-align:left;font-size:11px;color:#78350f;font-weight:700;text-transform:uppercase">Date</th>
-          <th style="padding:9px 14px;text-align:center;font-size:11px;color:#78350f;font-weight:700;text-transform:uppercase">Actions</th>
+          <th style="padding:9px 14px;text-align:left;font-size:12px;color:#78350f;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Bobine</th>
+          <th style="padding:9px 14px;text-align:center;font-size:12px;color:#78350f;font-weight:700;text-transform:uppercase">Films déclarés (PJ)</th>
+          <th style="padding:9px 14px;text-align:center;font-size:12px;color:#78350f;font-weight:700;text-transform:uppercase">Films proposés (GSB)</th>
+          <th style="padding:9px 14px;text-align:left;font-size:12px;color:#78350f;font-weight:700;text-transform:uppercase">Motif GSB</th>
+          <th style="padding:9px 14px;text-align:left;font-size:12px;color:#78350f;font-weight:700;text-transform:uppercase">Demandé par</th>
+          <th style="padding:9px 14px;text-align:left;font-size:12px;color:#78350f;font-weight:700;text-transform:uppercase">Date</th>
+          <th style="padding:9px 14px;text-align:center;font-size:12px;color:#78350f;font-weight:700;text-transform:uppercase">Actions</th>
         </tr>
       </thead>
       <tbody>
@@ -973,7 +973,7 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
 <!-- STOCK RIVETS RAPIDE — visible coordinateur uniquement -->
 <?php if(!empty($stock_rivets_all) && $role_slug_pj === 'coordinateur_site'): ?>
 <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
-  <span style="font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Stock rivets :</span>
+  <span style="font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.5px">Stock rivets :</span>
   <?php foreach($stock_rivets_all as $sr):
     $label = $sr['type_rivet'] === 'eclate' ? 'Éclatés' : 'Gonflables';
     $icon  = $sr['type_rivet'] === 'eclate' ? '🔴' : '🔵';
@@ -1044,7 +1044,7 @@ foreach($points as $p):
     <div style="font-size:13px;font-weight:600;color:var(--navy);margin-bottom:6px">
       <?= h($p['site_nom']) ?>
       <?php if($p['agent']): ?>
-      <span style="font-size:11px;color:var(--muted);font-weight:400"> · <?= h($p['agent']) ?></span>
+      <span style="font-size:12px;color:var(--muted);font-weight:400"> · <?= h($p['agent']) ?></span>
       <?php endif; ?>
     </div>
     <div class="pj-pills">
@@ -1100,7 +1100,7 @@ foreach($points as $p):
       <div class="calc-panel">
         <div class="calc-panel-top">
           <h3>Calcul en temps réel</h3>
-          <div style="font-size:11px;color:rgba(255,255,255,.4)" id="c-stock-info"></div>
+          <div style="font-size:12px;color:rgba(255,255,255,.4)" id="c-stock-info"></div>
         </div>
         <div class="calc-grid">
           <div class="calc-item">
@@ -1220,33 +1220,33 @@ foreach($points as $p):
           <div style="font-size:12px;font-weight:700;color:#1565c0;margin-bottom:10px">🔵 Rivets Gonflables</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
             <div class="form-group" style="margin:0">
-              <label style="font-size:11px;color:#1565c0">Posés</label>
+              <label style="font-size:12px;color:#1565c0">Posés</label>
               <input type="number" class="form-control" id="p-gonfl-util" min="0" value="0"
                      oninput="recalcule()" style="text-align:center;font-size:16px;font-weight:800">
             </div>
             <div class="form-group" style="margin:0">
-              <label style="font-size:11px;color:#e65100">Endommagés</label>
+              <label style="font-size:12px;color:#e65100">Endommagés</label>
               <input type="number" class="form-control" id="p-gonfl-end" min="0" value="0"
                      oninput="recalcule()" style="text-align:center;border-color:#f39c12">
             </div>
           </div>
-          <div id="info-gonfl" style="font-size:11px;margin-top:8px;color:#1565c0;font-weight:600">Stock: — | Sortis: 0</div>
+          <div id="info-gonfl" style="font-size:12px;margin-top:8px;color:#1565c0;font-weight:600">Stock: — | Sortis: 0</div>
         </div>
         <div style="background:#fce4ec;border-radius:12px;padding:14px;border:1.5px solid #f48fb1">
           <div style="font-size:12px;font-weight:700;color:#880e4f;margin-bottom:10px">🔴 Rivets Éclatés</div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
             <div class="form-group" style="margin:0">
-              <label style="font-size:11px;color:#880e4f">Posés</label>
+              <label style="font-size:12px;color:#880e4f">Posés</label>
               <input type="number" class="form-control" id="p-eclate-util" min="0" value="0"
                      oninput="recalcule()" style="text-align:center;font-size:16px;font-weight:800">
             </div>
             <div class="form-group" style="margin:0">
-              <label style="font-size:11px;color:#e65100">Endommagés</label>
+              <label style="font-size:12px;color:#e65100">Endommagés</label>
               <input type="number" class="form-control" id="p-eclate-end" min="0" value="0"
                      oninput="recalcule()" style="text-align:center;border-color:#f39c12">
             </div>
           </div>
-          <div id="info-eclate" style="font-size:11px;margin-top:8px;color:#880e4f;font-weight:600">Stock: — | Sortis: 0</div>
+          <div id="info-eclate" style="font-size:12px;margin-top:8px;color:#880e4f;font-weight:600">Stock: — | Sortis: 0</div>
         </div>
       </div>
       <input type="hidden" id="p-riv-endomm" value="0">
@@ -1257,7 +1257,7 @@ foreach($points as $p):
         <div class="form-section-title">
           <div class="form-section-num">4</div>
           <h4>PMMA</h4>
-          <span style="margin-left:8px;font-size:11px;color:var(--muted)">Sélectionner et ajouter les types consommés</span>
+          <span style="margin-left:8px;font-size:12px;color:var(--muted)">Sélectionner et ajouter les types consommés</span>
         </div>
         <div id="pmma-container">
           <div style="text-align:center;color:var(--muted);padding:12px;font-size:13px">Chargement du stock PMMA...</div>
@@ -1269,7 +1269,7 @@ foreach($points as $p):
         <div class="form-section-title">
           <div class="form-section-num">5</div>
           <h4>Films utilisés par bobine</h4>
-          <span style="margin-left:8px;font-size:11px;color:var(--muted)">Uniquement les bobines en utilisation</span>
+          <span style="margin-left:8px;font-size:12px;color:var(--muted)">Uniquement les bobines en utilisation</span>
         </div>
         <div id="films-container">
           <div style="text-align:center;color:var(--muted);padding:20px;font-size:13px">Chargement des bobines...</div>
@@ -1355,11 +1355,11 @@ foreach($points as $p):
         <div style="font-weight:700;color:#92400e;margin-bottom:6px">Bobine : <span id="rc-bobine-num" style="font-family:monospace"></span></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
           <div style="text-align:center;background:white;border-radius:8px;padding:8px">
-            <div style="font-size:11px;color:#6b7280;text-transform:uppercase;font-weight:600;margin-bottom:4px">Films déclarés (vous)</div>
+            <div style="font-size:12px;color:#6b7280;text-transform:uppercase;font-weight:600;margin-bottom:4px">Films déclarés (vous)</div>
             <div id="rc-films-original" style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#0d1f35"></div>
           </div>
           <div style="text-align:center;background:#fef3c7;border-radius:8px;padding:8px">
-            <div style="font-size:11px;color:#92400e;text-transform:uppercase;font-weight:600;margin-bottom:4px">Films proposés (GSB)</div>
+            <div style="font-size:12px;color:#92400e;text-transform:uppercase;font-weight:600;margin-bottom:4px">Films proposés (GSB)</div>
             <div id="rc-films-proposes" style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#d97706"></div>
           </div>
         </div>
@@ -1372,21 +1372,21 @@ foreach($points as $p):
             <input type="radio" name="rc-reponse" value="approuvee" onchange="onRcReponseChange()">
             <div>
               <div style="font-size:13px;font-weight:700;color:#065f46">✅ Confirmer la proposition du GSB</div>
-              <div style="font-size:11px;color:#6b7280">Le stock sera ajusté à la valeur proposée par le GSB.</div>
+              <div style="font-size:12px;color:#6b7280">Le stock sera ajusté à la valeur proposée par le GSB.</div>
             </div>
           </label>
           <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer" id="rc-opt-contreproposee">
             <input type="radio" name="rc-reponse" value="contreproposee" onchange="onRcReponseChange()">
             <div>
               <div style="font-size:13px;font-weight:700;color:#b45309">🔄 Contre-proposer une autre valeur</div>
-              <div style="font-size:11px;color:#6b7280">Vous proposez un nombre de films différent, avec explication.</div>
+              <div style="font-size:12px;color:#6b7280">Vous proposez un nombre de films différent, avec explication.</div>
             </div>
           </label>
           <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer" id="rc-opt-refusee">
             <input type="radio" name="rc-reponse" value="refusee" onchange="onRcReponseChange()">
             <div>
               <div style="font-size:13px;font-weight:700;color:#991b1b">❌ Refuser la demande de correction</div>
-              <div style="font-size:11px;color:#6b7280">Votre saisie initiale est maintenue telle quelle.</div>
+              <div style="font-size:12px;color:#6b7280">Votre saisie initiale est maintenue telle quelle.</div>
             </div>
           </label>
         </div>
@@ -1585,14 +1585,14 @@ function ajouterLignePmma(){
   div.dataset.type = type;
   div.style.cssText='display:grid;grid-template-columns:1fr 110px 110px 32px;gap:8px;align-items:end;padding:8px 10px;background:var(--lighter);border-radius:9px;margin-bottom:6px';
   div.innerHTML=`
-    <div style="font-size:13px;font-weight:600;color:var(--navy);padding-bottom:2px">🪟 ${type} <span style="font-size:11px;color:var(--muted);font-weight:400">stock : ${stock}</span></div>
+    <div style="font-size:13px;font-weight:600;color:var(--navy);padding-bottom:2px">🪟 ${type} <span style="font-size:12px;color:var(--muted);font-weight:400">stock : ${stock}</span></div>
     <div>
-      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Utilisés</label>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px">Utilisés</label>
       <input type="number" data-kind="util" min="0" max="${stock}" value="0"
              class="form-control" style="font-size:13px;text-align:center">
     </div>
     <div>
-      <label style="font-size:11px;color:var(--muted);display:block;margin-bottom:3px">Endommagés</label>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px">Endommagés</label>
       <input type="number" data-kind="end" min="0" max="${stock}" value="0"
              class="form-control" style="font-size:13px;text-align:center">
     </div>
@@ -1632,7 +1632,7 @@ function ajouterObservation(type, texte){
   div.setAttribute('data-obs-row','1');
   div.style.cssText='display:flex;gap:8px;align-items:center;margin-bottom:6px;padding:6px 8px;border-radius:8px;border-left:3px solid';
   div.innerHTML = `
-    <span class="obs-num" style="font-size:11px;font-weight:700;color:var(--muted);flex:0 0 56px">Obs.</span>
+    <span class="obs-num" style="font-size:12px;font-weight:700;color:var(--muted);flex:0 0 56px">Obs.</span>
     <select class="form-control" style="flex:0 0 130px;font-size:12.5px" onchange="majCouleurObservation(this)">${optsHtml}</select>
     <input type="text" class="form-control" style="flex:1;font-size:13px" placeholder="Observation…" value="${escAttr(texte)}">
     <button type="button" onclick="this.closest('[data-obs-row]').remove();renumeroterObservations();"
@@ -1686,12 +1686,12 @@ function renderObservationsSection(raw){
   const rows = list.map(o=>{
     const cfg = OBS_TYPES[o.type] || OBS_TYPES.info;
     return `<div style="background:${cfg.bg};border-left:3px solid ${cfg.border};border-radius:8px;padding:8px 12px;margin-bottom:6px">
-      <span style="font-size:11px;font-weight:700;color:${cfg.text};text-transform:uppercase;letter-spacing:.4px">${cfg.icon} ${cfg.label}</span>
+      <span style="font-size:12px;font-weight:700;color:${cfg.text};text-transform:uppercase;letter-spacing:.4px">${cfg.icon} ${cfg.label}</span>
       <div style="font-size:13px;color:var(--navy);margin-top:2px">${escHtml(o.texte)}</div>
     </div>`;
   }).join('');
   return `<div style="margin-bottom:20px">
-    <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Observations</div>
+    <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Observations</div>
     ${rows}
   </div>`;
 }
@@ -1737,22 +1737,22 @@ function buildBobineRow(selectedBobineId, idx){
       align-items:center;background:var(--lighter);border-radius:12px;
       padding:12px 14px;margin-bottom:8px;border:1.5px solid var(--border)">
       <div>
-        <label style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Bobine en utilisation</label>
+        <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">Bobine en utilisation</label>
         <select class="form-control" id="bsel-${idx}" onchange="onBobineChange(${idx})" style="margin-top:4px">
           ${opts}
         </select>
-        <div id="binfo-${idx}" style="font-size:11px;color:var(--muted);margin-top:3px">
+        <div id="binfo-${idx}" style="font-size:12px;color:var(--muted);margin-top:3px">
           ${b.films_restants||0} films restants · ${b.type_code||''}
         </div>
       </div>
       <div>
-        <label style="font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px">Films utilisés</label>
+        <label style="font-size:12px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.5px">Films utilisés</label>
         <input type="number" class="form-control" id="butil-${idx}" min="0"
                max="${b.films_restants||500}" value="0"
                oninput="updateBobineRestants(${idx})" style="margin-top:4px;text-align:center;font-size:16px;font-weight:700">
       </div>
       <div>
-        <label style="font-size:11px;font-weight:700;color:var(--danger-d);text-transform:uppercase;letter-spacing:.5px">Endommagés</label>
+        <label style="font-size:12px;font-weight:700;color:var(--danger-d);text-transform:uppercase;letter-spacing:.5px">Endommagés</label>
         <input type="number" class="form-control" id="bendomm-${idx}" min="0" value="0"
                oninput="updateBobineRestants(${idx})"
                style="margin-top:4px;text-align:center;border-color:var(--danger)">
@@ -1953,7 +1953,7 @@ async function viewPoint(id){
     <div style="background:${nb>0?'#e3f2fd':'#f8fafc'};border-radius:10px;padding:12px;text-align:center;border:1px solid ${nb>0?'#90caf9':'#e2e8f0'}">
       <div style="font-size:20px">${ic}</div>
       <div style="font-family:'Montserrat',sans-serif;font-size:20px;font-weight:900;color:${nb>0?'#1565c0':'#cbd5e1'}">${nb}</div>
-      <div style="font-size:10px;color:${nb>0?'#1565c0':'#94a3b8'};font-weight:600;text-transform:uppercase">${lb}</div>
+      <div style="font-size:12px;color:${nb>0?'#1565c0':'#94a3b8'};font-weight:600;text-transform:uppercase">${lb}</div>
     </div>`).join('');
 
   // Rivets
@@ -1962,11 +1962,11 @@ async function viewPoint(id){
   const rivEnd  = parseInt(p.rivets_endommages)||0;
   const rivSection = (gonfl+eclate+rivEnd)>0 ? `
     <div style="margin-bottom:20px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">🔩 Rivets</div>
+      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">🔩 Rivets</div>
       <div style="display:grid;grid-template-columns:1fr 1fr${rivEnd>0?' 1fr':''};gap:10px">
-        ${gonfl>0?`<div style="background:#e3f2fd;border-radius:10px;padding:12px;text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#1565c0">${gonfl}</div><div style="font-size:10px;color:#1565c0;font-weight:700;text-transform:uppercase">🔵 Gonflables</div></div>`:''}
-        ${eclate>0?`<div style="background:#fce4ec;border-radius:10px;padding:12px;text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#880e4f">${eclate}</div><div style="font-size:10px;color:#880e4f;font-weight:700;text-transform:uppercase">🔴 Éclatés</div></div>`:''}
-        ${rivEnd>0?`<div style="background:#fff3e0;border-radius:10px;padding:12px;text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#e65100">${rivEnd}</div><div style="font-size:10px;color:#e65100;font-weight:700;text-transform:uppercase">⚠️ Endommagés</div></div>`:''}
+        ${gonfl>0?`<div style="background:#e3f2fd;border-radius:10px;padding:12px;text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#1565c0">${gonfl}</div><div style="font-size:12px;color:#1565c0;font-weight:700;text-transform:uppercase">🔵 Gonflables</div></div>`:''}
+        ${eclate>0?`<div style="background:#fce4ec;border-radius:10px;padding:12px;text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#880e4f">${eclate}</div><div style="font-size:12px;color:#880e4f;font-weight:700;text-transform:uppercase">🔴 Éclatés</div></div>`:''}
+        ${rivEnd>0?`<div style="background:#fff3e0;border-radius:10px;padding:12px;text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#e65100">${rivEnd}</div><div style="font-size:12px;color:#e65100;font-weight:700;text-transform:uppercase">⚠️ Endommagés</div></div>`:''}
       </div>
     </div>` : '';
 
@@ -1975,7 +1975,7 @@ async function viewPoint(id){
   const npUsag = parseInt(p.non_poses_usagers)||0;
   const npSection = (npConc+npUsag)>0 ? `
     <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:14px;margin-bottom:20px;display:flex;gap:20px">
-      <div style="font-size:11px;font-weight:700;color:#c2410c;text-transform:uppercase;align-self:center">🚫 Non posés</div>
+      <div style="font-size:12px;font-weight:700;color:#c2410c;text-transform:uppercase;align-self:center">🚫 Non posés</div>
       <div style="flex:1;display:flex;gap:16px">
         ${npConc>0?`<div><span style="font-family:'Montserrat',sans-serif;font-size:18px;font-weight:800;color:#c2410c">${npConc}</span> <span style="font-size:12px;color:#9a3412">Concess.</span></div>`:''}
         ${npUsag>0?`<div><span style="font-family:'Montserrat',sans-serif;font-size:18px;font-weight:800;color:#c2410c">${npUsag}</span> <span style="font-size:12px;color:#9a3412">Usagers</span></div>`:''}
@@ -1986,22 +1986,22 @@ async function viewPoint(id){
 
   const motifSection = p.motif_rejet ? `
     <div style="background:#fee2e2;border-radius:10px;padding:14px;margin-bottom:20px;border-left:3px solid #ef4444">
-      <div style="font-size:10px;font-weight:700;color:#991b1b;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">❌ Motif de rejet</div>
+      <div style="font-size:12px;font-weight:700;color:#991b1b;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">❌ Motif de rejet</div>
       <div style="font-size:13px;color:#7f1d1d">${p.motif_rejet}</div>
     </div>` : '';
 
   // Section PMMA
   const pmmaSection = pmmaList.length>0 ? `
     <div style="margin-bottom:20px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">🟦 PMMA consommé</div>
+      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">🟦 PMMA consommé</div>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${pmmaList.map(pm=>{
           const tot=(parseInt(pm.utilises)||0)+(parseInt(pm.endommages)||0);
           return `<div style="display:grid;grid-template-columns:1fr 90px 90px 80px;gap:8px;align-items:center;background:#f8fafc;border-radius:8px;padding:10px 12px">
             <div style="font-weight:600;font-size:13px;color:var(--navy)">${pm.type_pmma}</div>
-            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#1565c0">${pm.utilises}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase">Utilisés</div></div>
-            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#e65100">${pm.endommages}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase">Endommagés</div></div>
-            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800">${tot}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase">Total</div></div>
+            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#1565c0">${pm.utilises}</div><div style="font-size:12px;color:var(--muted);text-transform:uppercase">Utilisés</div></div>
+            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#e65100">${pm.endommages}</div><div style="font-size:12px;color:var(--muted);text-transform:uppercase">Endommagés</div></div>
+            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800">${tot}</div><div style="font-size:12px;color:var(--muted);text-transform:uppercase">Total</div></div>
           </div>`;
         }).join('')}
       </div>
@@ -2010,16 +2010,16 @@ async function viewPoint(id){
   // Section Films
   const filmsSection = filmsList.length>0 ? `
     <div style="margin-bottom:20px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">🎞️ Films utilisés par bobine</div>
+      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">🎞️ Films utilisés par bobine</div>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${filmsList.map(f=>`
           <div style="display:grid;grid-template-columns:1fr 90px 90px;gap:8px;align-items:center;background:#f8fafc;border-radius:8px;padding:10px 12px">
             <div>
               <div style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:800;color:#1565c0">Bobine #${f.bobine_num}</div>
-              <div style="font-size:11px;color:var(--muted)">${f.type_code||''}</div>
+              <div style="font-size:12px;color:var(--muted)">${f.type_code||''}</div>
             </div>
-            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#1565c0">${f.films_utilises}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase">Utilisés</div></div>
-            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#e65100">${f.films_endommages||0}</div><div style="font-size:9px;color:var(--muted);text-transform:uppercase">Endommagés</div></div>
+            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#1565c0">${f.films_utilises}</div><div style="font-size:12px;color:var(--muted);text-transform:uppercase">Utilisés</div></div>
+            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#e65100">${f.films_endommages||0}</div><div style="font-size:12px;color:var(--muted);text-transform:uppercase">Endommagés</div></div>
           </div>`).join('')}
       </div>
     </div>` : '';
@@ -2029,32 +2029,32 @@ async function viewPoint(id){
     <div style="background:linear-gradient(135deg,#0a1628,#163566);border-radius:14px;padding:20px 24px;margin-bottom:20px;color:white">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
         <div style="font-family:'Montserrat',sans-serif;font-size:18px;font-weight:900">${p.site_nom}</div>
-        <span style="padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;background:${sc.bg};color:${sc.col}">${sc.icon} ${sc.lbl}</span>
+        <span style="padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700;background:${sc.bg};color:${sc.col}">${sc.icon} ${sc.lbl}</span>
       </div>
       <div style="font-size:12px;opacity:.6;margin-bottom:16px">${typeLbl[p.type_point]||p.type_point} · ${dateStr}</div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">
         <div style="text-align:center">
           <div style="font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900">${p.total_engins}</div>
-          <div style="font-size:10px;opacity:.5;text-transform:uppercase">Engins</div>
+          <div style="font-size:12px;opacity:.5;text-transform:uppercase">Engins</div>
         </div>
         <div style="text-align:center">
           <div style="font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900">${p.total_plaques}</div>
-          <div style="font-size:10px;opacity:.5;text-transform:uppercase">Plaques</div>
+          <div style="font-size:12px;opacity:.5;text-transform:uppercase">Plaques</div>
         </div>
         <div style="text-align:center">
           <div style="font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900">${parseInt(p.rivets_utilises)||0}</div>
-          <div style="font-size:10px;opacity:.5;text-transform:uppercase">Rivets posés</div>
+          <div style="font-size:12px;opacity:.5;text-transform:uppercase">Rivets posés</div>
         </div>
         <div style="text-align:center">
           <div style="font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900">${p.moyenne_prod}</div>
-          <div style="font-size:10px;opacity:.5;text-transform:uppercase">V/H</div>
+          <div style="font-size:12px;opacity:.5;text-transform:uppercase">V/H</div>
         </div>
       </div>
     </div>
 
     <!-- Véhicules -->
     <div style="margin-bottom:20px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">🚗 Répartition véhicules</div>
+      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">🚗 Répartition véhicules</div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">${vehCards}</div>
       <div style="display:flex;justify-content:space-between;margin-top:10px;padding:10px 14px;background:#f8fafc;border-radius:8px;font-size:13px">
         <span style="color:var(--muted)">Total engins</span>

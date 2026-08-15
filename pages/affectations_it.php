@@ -96,20 +96,20 @@ include __DIR__ . '/../templates/header.php';
 .sit-head{background:var(--navy);padding:16px 20px;display:flex;align-items:center;gap:12px}
 .sit-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#1b75bc,#00aeef);display:flex;align-items:center;justify-content:center;font-weight:800;color:white;font-size:15px;flex-shrink:0}
 .sit-name{color:white;font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700}
-.sit-sub{color:#94c2d4;font-size:11px;margin-top:2px}
+.sit-sub{color:#94c2d4;font-size:12px;margin-top:2px}
 .sit-body{padding:16px 20px}
 .sr-row{display:grid;grid-template-columns:32px 1fr auto;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
 .sr-row:last-child{border-bottom:none}
 .sr-icon{font-size:20px;text-align:center}
 .sr-label{font-size:13px;font-weight:600;color:var(--navy)}
-.sr-desc{font-size:11px;color:var(--muted);margin-top:2px}
+.sr-desc{font-size:12px;color:var(--muted);margin-top:2px}
 .toggle-wrap{position:relative;width:44px;height:24px;cursor:pointer;flex-shrink:0}
 .toggle-wrap input{opacity:0;width:0;height:0;position:absolute}
 .toggle-track{position:absolute;inset:0;background:#ccc;border-radius:12px;transition:.2s}
 .toggle-thumb{position:absolute;top:3px;left:3px;width:18px;height:18px;background:white;border-radius:50%;transition:.2s;box-shadow:0 1px 4px rgba(0,0,0,.2)}
 .toggle-wrap input:checked ~ .toggle-track{background:var(--blue)}
 .toggle-wrap input:checked ~ .toggle-thumb{transform:translateX(20px)}
-.badge-sr{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:var(--primary-l);color:var(--primary-d)}
+.badge-sr{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700;background:var(--primary-l);color:var(--primary-d)}
 </style>
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:10px">

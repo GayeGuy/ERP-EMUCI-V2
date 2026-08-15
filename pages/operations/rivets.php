@@ -243,13 +243,13 @@ include __DIR__ . '/../../templates/header.php';
 .kpi-bar{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px}
 .kpi{background:white;border:1px solid var(--border);border-radius:12px;padding:14px 16px}
 .kpi-val{font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900;line-height:1}
-.kpi-lbl{font-size:11px;color:var(--muted);font-weight:600;margin-top:3px}
+.kpi-lbl{font-size:12px;color:var(--muted);font-weight:600;margin-top:3px}
 .pmma-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-bottom:24px}
 .pmma-card{background:white;border-radius:14px;border:1px solid var(--border);overflow:hidden}
 .pmma-head{padding:12px 16px;background:var(--navy);display:flex;justify-content:space-between;align-items:center}
 .pmma-site{color:white;font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700}
 .pmma-body{padding:14px 16px}
-.pmma-alert{background:#fee2e2;color:#991b1b;padding:5px 10px;border-radius:8px;font-size:11px;margin-top:8px;font-weight:600}
+.pmma-alert{background:#fee2e2;color:#991b1b;padding:5px 10px;border-radius:8px;font-size:12px;margin-top:8px;font-weight:600}
 .modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(10,22,40,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
 .modal{background:white;border-radius:16px;width:480px;max-width:95vw;max-height:92vh;overflow-y:auto;animation:mIn .25s cubic-bezier(.22,1,.36,1)}
@@ -367,11 +367,11 @@ foreach ($stocks as $r) {
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
       <div>
         <div style="font-size:13px;font-weight:600;color:var(--navy)"><?= $lbl ?></div>
-        <div style="font-size:11px;color:var(--muted)">Ce mois : <?= fmt_number($item['utilises_mois']) ?></div>
+        <div style="font-size:12px;color:var(--muted)">Ce mois : <?= fmt_number($item['utilises_mois']) ?></div>
       </div>
       <div style="text-align:right">
         <div style="font-family:'Montserrat',sans-serif;font-size:26px;font-weight:900;color:<?= $clr ?>"><?= fmt_number($qty) ?></div>
-        <div style="font-size:10px;color:var(--muted)">unités</div>
+        <div style="font-size:12px;color:var(--muted)">unités</div>
       </div>
     </div>
     <?php if ($low): ?>

@@ -184,7 +184,7 @@ include __DIR__ . '/../templates/header.php';
 ?>
 <style>
 .aff-layout{display:grid;grid-template-columns:1fr 1.8fr;gap:20px;align-items:start}
-.mouv-type{font-size:10px;font-weight:700;padding:3px 8px;border-radius:5px;text-transform:uppercase;letter-spacing:.5px}
+.mouv-type{font-size:12px;font-weight:700;padding:3px 8px;border-radius:5px;text-transform:uppercase;letter-spacing:.5px}
 .mouv-type.entree    {background:#d5f5e3;color:#1e8449}
 .mouv-type.sortie    {background:#fef9e7;color:#9a7d0a}
 .mouv-type.transfert {background:#d6eaf8;color:#1a5276}
@@ -195,7 +195,7 @@ include __DIR__ . '/../templates/header.php';
 .mouv-info{flex:1}
 .mouv-equip{font-family:monospace;font-weight:700;font-size:13px;color:var(--navy)}
 .mouv-detail{font-size:12px;color:var(--muted);margin-top:2px}
-.mouv-date{font-size:11px;color:var(--muted);white-space:nowrap}
+.mouv-date{font-size:12px;color:var(--muted);white-space:nowrap}
 
 .affecte-group{margin-bottom:16px}
 .affecte-site-title{font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:var(--navy);padding:8px 12px;background:var(--lighter);border-radius:8px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
@@ -208,7 +208,7 @@ include __DIR__ . '/../templates/header.php';
 .ac-item:last-child{border-bottom:none}
 .ac-item:hover{background:var(--lighter)}
 .ac-num{font-family:monospace;font-weight:700;color:var(--navy)}
-.ac-meta{font-size:11px;color:var(--muted);margin-top:2px}
+.ac-meta{font-size:12px;color:var(--muted);margin-top:2px}
 
 .modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(13,31,53,.5);backdrop-filter:blur(4px);align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
@@ -237,7 +237,7 @@ include __DIR__ . '/../templates/header.php';
 
         <!-- Recherche équipement -->
         <div class="form-group">
-          <label for="affSearch">Équipement * <span style="font-size:11px;color:var(--muted)">(tapez le N° série pour rechercher)</span></label>
+          <label for="affSearch">Équipement * <span style="font-size:12px;color:var(--muted)">(tapez le N° série pour rechercher)</span></label>
           <div class="autocomplete-wrap">
             <input type="text" class="form-control" id="affSearch" placeholder="Tapez le numéro série…" autocomplete="off" oninput="searchEquip(this.value)">
             <div class="autocomplete-results" id="affResults"></div>
@@ -283,7 +283,7 @@ include __DIR__ . '/../templates/header.php';
         <div id="affBLWrap" style="display:none;background:#fff8e7;border:2px dashed #f39c12;border-radius:10px;padding:14px;margin-bottom:14px">
           <label style="font-size:13px;font-weight:700;color:#b7791f;display:block;margin-bottom:6px">
             📎 Bon de livraison <span style="color:var(--danger-d)">*</span>
-            <span style="font-size:11px;font-weight:400;color:var(--muted)"> — obligatoire pour tout transfert vers un site</span>
+            <span style="font-size:12px;font-weight:400;color:var(--muted)"> — obligatoire pour tout transfert vers un site</span>
           </label>
           <input type="file" id="affFichierBL" accept=".pdf,.jpg,.jpeg,.png,.webp"
                  style="width:100%;padding:8px;border:1.5px solid #f39c12;border-radius:8px;font-size:13px;background:white">

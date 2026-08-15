@@ -190,7 +190,7 @@ include __DIR__ . '/../../templates/header.php';
 
 .perm-table{width:100%;border-collapse:separate;border-spacing:0}
 .perm-table thead{position:sticky;top:0;z-index:5}
-.perm-table th{padding:10px 14px;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:left;background:var(--lighter,#f0f4f8);border-bottom:1px solid var(--border)}
+.perm-table th{padding:10px 14px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:left;background:var(--lighter,#f0f4f8);border-bottom:1px solid var(--border)}
 .perm-table th.center{text-align:center}
 .perm-table td{padding:12px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
 .perm-table tr:last-child td{border-bottom:none}
@@ -249,7 +249,7 @@ include __DIR__ . '/../../templates/header.php';
   <?php foreach($roles as $i=>$r): ?>
   <button class="perm-tab <?= $i===0?'active':'' ?>" onclick="showPerm('role-<?= $r['id'] ?>',this)">
     <?= h($r['nom']) ?>
-    <span style="margin-left:6px;font-size:11px;opacity:.6">(<?= $users_by_role[$r['id']]??0 ?> user<?= ($users_by_role[$r['id']]??0)>1?'s':'' ?>)</span>
+    <span style="margin-left:6px;font-size:12px;opacity:.6">(<?= $users_by_role[$r['id']]??0 ?> user<?= ($users_by_role[$r['id']]??0)>1?'s':'' ?>)</span>
   </button>
   <?php endforeach; ?>
 </nav>
@@ -376,7 +376,7 @@ include __DIR__ . '/../../templates/header.php';
       <div class="form-group"><label>Nom du rôle *</label>
         <input type="text" class="form-control" id="rNom" placeholder="Ex: Superviseur">
       </div>
-      <div class="form-group"><label>Slug * <span style="font-size:11px;color:var(--muted)">(identifiant unique, lettres/chiffres)</span></label>
+      <div class="form-group"><label>Slug * <span style="font-size:12px;color:var(--muted)">(identifiant unique, lettres/chiffres)</span></label>
         <input type="text" class="form-control" id="rSlug" placeholder="superviseur" oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_]/g,'_')">
       </div>
       <div class="form-group"><label>Description</label>
