@@ -61,6 +61,7 @@ migration_achats_02_referentiels.sql
 migration_achats_03_permissions.sql
 migration_achats_04_bigint.sql
 migration_achats_05_arbitrage.sql
+migration_achats_06_derogation.sql
 "
 
 for f in $FICHIERS; do
