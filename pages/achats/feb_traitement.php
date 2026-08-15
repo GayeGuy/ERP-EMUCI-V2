@@ -102,9 +102,11 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'tout_servir_stock') {
         $lignes = db_fetch_all(
-            "SELECT fl.*, a.stock_global FROM feb_lignes fl
-             JOIN articles a ON a.id = fl.article_id
-             WHERE fl.feb_id=?", [$post_feb_id]
+            "SELECT fl.*, a.stock_global, COALESCE(ss.quantite, 0) AS stock_site
+               FROM feb_lignes fl
+               JOIN articles a ON a.id = fl.article_id
+               LEFT JOIN stock_site ss ON ss.article_id = fl.article_id AND ss.site_id = ?
+              WHERE fl.feb_id=?", [$feb['site_id'], $post_feb_id]
         );
         if (!$lignes) json_response(false, 'Aucune ligne arbitrable sur cette FEB.');
         foreach ($lignes as $l) {
@@ -117,8 +119,18 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 db_query("UPDATE feb_lignes SET arbitrage='stock' WHERE id=?", [$l['id']]);
             }
         }
-        audit_log($uid, 'UPDATE', 'achats', $post_feb_id, 'Toutes les lignes arbitrables servies sur stock');
-        json_response(true, 'Toutes les lignes sont arbitrées sur stock.');
+        // Le geste groupé cache le détail ligne à ligne : on rapporte combien
+        // d'entre elles supposent un transfert, sinon l'avertissement de la
+        // modale est contourné sans que personne ne le voie.
+        $transferts = 0;
+        foreach ($lignes as $l) {
+            if ((int)$l['stock_site'] < (int)$l['quantite']) $transferts++;
+        }
+        audit_log($uid, 'UPDATE', 'achats', $post_feb_id,
+            'Toutes les lignes arbitrables servies sur stock'
+            . ($transferts ? " — $transferts ligne(s) nécessitant un transfert entre sites" : ''));
+        json_response(true, 'Toutes les lignes sont arbitrées sur stock.'
+            . ($transferts ? " Attention : $transferts ligne(s) ne sont pas en stock sur le site demandeur et supposent un transfert." : ''));
     }
 
     if ($action === 'basculer') {
@@ -317,6 +329,12 @@ include __DIR__ . '/../../templates/header.php';
 .badge-stock{background:#D1FAE5;color:#065F46}
 .badge-achat{background:#FEF3C7;color:#92400E}
 .badge-libre{background:#F1F5F9;color:#475569}
+/* Transfert requis : le stock global couvre, le site demandeur non. On
+   avertit sans interdire — stock_site n'est renseigné que sur 4 sites sur
+   21, un refus strict rendrait l'arbitrage inutilisable partout ailleurs. */
+.stock-transfert{color:var(--warning-d,#8A5A00);font-weight:700;white-space:nowrap}
+.arb-avert{background:#FEF3C7;color:#8A5A00;border-left:3px solid #8A5A00;
+           padding:9px 12px;border-radius:6px;font-size:12.5px;margin-bottom:14px}
 .feb-actions-bar{display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:18px}
 .feb-commande-box{background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:14px 18px;margin-bottom:18px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .ach-modal-bg{display:none;position:fixed;inset:0;background:rgba(6,3,58,.45);z-index:2000;align-items:center;justify-content:center;padding:20px}
@@ -391,6 +409,10 @@ include __DIR__ . '/../../templates/header.php';
         $arbitrable = (bool)$l['article_id'];
         $couverte   = $arbitrable && (int)$l['stock_global'] >= (int)$l['quantite'];
         $partiel_ok = $arbitrable && (int)$l['stock_global'] > 0 && (int)$l['stock_global'] < (int)$l['quantite'];
+        // Le stock global couvre, mais pas celui du site demandeur : servir
+        // cette ligne suppose un transfert entre sites. On le dit, on ne le
+        // refuse pas.
+        $transfert  = $couverte && (int)$l['stock_site'] < (int)$l['quantite'];
         $badge_class = !$arbitrable ? 'badge-libre' : ($l['arbitrage'] === 'stock' ? 'badge-stock' : 'badge-achat');
         $badge_label = !$arbitrable ? 'Saisie libre — achat direct' : ($l['arbitrage'] === 'stock' ? 'Sur stock' : 'À acheter');
       ?>
@@ -398,7 +420,15 @@ include __DIR__ . '/../../templates/header.php';
         <td style="font-weight:700;color:var(--navy)"><?= h($l['designation']) ?></td>
         <td><?= (int)$l['quantite'] ?></td>
         <td><?= h($l['unite'] ?: '—') ?></td>
-        <td><?= $arbitrable ? (int)$l['stock_site'] : '—' ?></td>
+        <td>
+          <?php if (!$arbitrable): ?>—
+          <?php elseif ($transfert): ?>
+            <span class="stock-transfert"
+                  title="Transfert requis : <?= (int)$l['stock_global'] ?> disponible(s) ailleurs, <?= (int)$l['stock_site'] ?> sur ce site.">
+              <?= (int)$l['stock_site'] ?> <i class="ph ph-warning" aria-hidden="true"></i>
+            </span>
+          <?php else: ?><?= (int)$l['stock_site'] ?><?php endif; ?>
+        </td>
         <td><?= $arbitrable ? (int)$l['stock_global'] : '—' ?></td>
         <td><span class="ach-badge <?= $badge_class ?>"><?= h($badge_label) ?></span></td>
         <td>
@@ -408,6 +438,7 @@ include __DIR__ . '/../../templates/header.php';
                     "id"=>(int)$l["id"], "designation"=>$l["designation"], "quantite"=>(int)$l["quantite"],
                     "stock_global"=>(int)$l["stock_global"], "arbitrage"=>$l["arbitrage"],
                     "couverte"=>$couverte, "partiel_ok"=>$partiel_ok,
+                    "stock_site"=>(int)$l["stock_site"], "transfert"=>$transfert,
                   ], JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
             Arbitrer
           </button>
@@ -537,6 +568,7 @@ include __DIR__ . '/../../templates/header.php';
     <input type="hidden" id="arb-ligne-id" value="">
     <div class="feb-hdr-lbl">Désignation</div>
     <div class="feb-hdr-val" id="arb-designation" style="margin-bottom:14px"></div>
+    <div class="arb-avert" id="arb-transfert" style="display:none"></div>
     <div class="arb-choice">
       <label id="arb-lbl-achat"><input type="radio" name="arb-choix" value="achat"> Acheter</label>
       <label id="arb-lbl-stock"><input type="radio" name="arb-choix" value="stock"> Servir sur stock</label>
@@ -618,6 +650,18 @@ function febOuvrirArbitrage(l) {
   document.getElementById('arb-ligne-id').value = l.id;
   document.getElementById('arb-designation').textContent = l.designation + ' — qté ' + l.quantite + ' (stock global : ' + l.stock_global + ')';
   document.getElementById('arb-err').style.display = 'none';
+
+  // Avertissement de transfert : le stock existe, mais pas là où la FEB est
+  // émise. L'option reste ouverte, l'acheteur décide en connaissance de cause.
+  const avert = document.getElementById('arb-transfert');
+  if (l.transfert) {
+    avert.textContent = `Rien sur le site demandeur (${l.stock_site} en stock) alors que `
+      + `${l.stock_global} sont disponibles ailleurs. Servir cette ligne sur stock suppose `
+      + `un transfert entre sites.`;
+    avert.style.display = '';
+  } else {
+    avert.style.display = 'none';
+  }
 
   const lblStock = document.getElementById('arb-lbl-stock');
   const radios = document.querySelectorAll('input[name="arb-choix"]');
