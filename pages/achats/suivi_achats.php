@@ -62,6 +62,17 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         json_response(true, $n > 0 ? "N° BC appliqué à $n ligne(s) du lot." : "Aucune ligne à mettre à jour — le lot n'a pas de N° DA en attente ou est déjà pourvu.");
     }
 
+    // ── Clôture d'un reliquat (J8, Bloc 3) — réservée à l'acheteur qui
+    //    détient la FEB, contrôle fait dans ach_cloturer_reliquat() elle-même.
+    if ($action === 'cloturer_reliquat') {
+        $suivi_id = (int)($_POST['suivi_id'] ?? 0);
+        $motif    = trim($_POST['motif'] ?? '');
+        try {
+            ach_cloturer_reliquat($suivi_id, $motif, $user);
+            json_response(true, 'Reliquat clôturé.');
+        } catch (AchValidationException $e) { json_response(false, $e->getMessage()); }
+    }
+
     json_response(false, 'Action inconnue.');
 }
 
@@ -80,7 +91,7 @@ if ($f_departement) { $where[] = 'f.departement_id = ?';  $params[] = $f_departe
 if ($f_q !== '')     { $where[] = 'f.numero ILIKE ?';     $params[] = '%' . $f_q . '%'; }
 
 $lignes = db_fetch_all(
-    "SELECT fs.*, f.numero AS feb_numero, f.departement_id,
+    "SELECT fs.*, f.numero AS feb_numero, f.departement_id, f.acheteur_id,
             d.label AS departement_label,
             fl.designation, fl.lot, fl.unite, fl.fournisseur_id,
             fo.raison_sociale AS fournisseur_nom,
@@ -183,11 +194,14 @@ include __DIR__ . '/../../templates/header.php';
   <table class="ach-table">
     <thead><tr>
       <th>FEB</th><th>Article</th><th>Qté</th><th>Fournisseur</th><th>N° DA</th><th>N° BC</th>
-      <th>Livraison prévue</th><th>Statut</th>
+      <th>Livraison prévue</th><th>Reçu / Écart</th><th>Statut</th><th>Actions</th>
     </tr></thead>
     <tbody>
       <?php foreach ($lignes as $l):
         $st = ach_statuts_suivi()[$l['statut_calcule']] ?? ['label' => $l['statut_calcule'], 'bg' => '#F1F5F9', 'color' => '#475569'];
+        $ecart = (int)$l['quantite_commandee'] - (int)$l['quantite_recue'];
+        $reliquat_ouvert = $l['statut_calcule'] === 'livree' && !$l['cloture_reliquat'];
+        $peut_cloturer = $can_edit && $reliquat_ouvert && (int)$l['acheteur_id'] === (int)$user['id'];
       ?>
       <tr class="<?= $l['statut_calcule'] === 'en_retard' ? 'en_retard' : '' ?>">
         <td style="font-weight:700;color:var(--navy)"><?= h($l['feb_numero'] ?: '—') ?></td>
@@ -230,7 +244,20 @@ include __DIR__ . '/../../templates/header.php';
           <?php endif; ?>
         </td>
         <td><?= fmt_date($l['date_livraison_prevue']) ?></td>
+        <td>
+          <?= (int)$l['quantite_recue'] ?> / <?= (int)$l['quantite_commandee'] ?>
+          <?php if ($ecart > 0): ?>
+            <div style="font-size:11.5px;color:<?= $l['cloture_reliquat'] ? 'var(--muted)' : '#991B1B' ?>">
+              écart <?= $ecart ?><?= $l['cloture_reliquat'] ? ' (figé — clôturé)' : '' ?>
+            </div>
+          <?php endif; ?>
+        </td>
         <td><span class="ach-badge" style="background:<?= $st['bg'] ?>;color:<?= $st['color'] ?>"><?= h($st['label']) ?></span></td>
+        <td>
+          <?php if ($peut_cloturer): ?>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="suiviClorereliquat(<?= (int)$l['id'] ?>)">Clôturer le reliquat</button>
+          <?php else: ?>—<?php endif; ?>
+        </td>
       </tr>
       <?php endforeach; ?>
     </tbody>
@@ -288,6 +315,15 @@ function suiviEditerDA(suivi_id, btn) {
     <input type="text" id="da-${suivi_id}" value="${actuel === '—' ? '' : actuel}">
     <button type="button" class="btn btn-primary btn-sm" onclick="suiviSaisirDA(${suivi_id})">OK</button>
   </div></div>`;
+}
+function suiviClorereliquat(suivi_id) {
+  const motif = prompt("Motif de clôture du reliquat (rupture fournisseur, commande partiellement annulée…) :");
+  if (motif === null) return;
+  if (!motif.trim()) { toast('Le motif de clôture est obligatoire.', 'danger'); return; }
+  suiviPost({ action: 'cloturer_reliquat', suivi_id, motif: motif.trim() }).then(res => {
+    toast(res.message, res.success ? 'success' : 'danger');
+    if (res.success) setTimeout(() => location.reload(), 500);
+  });
 }
 </script>
 

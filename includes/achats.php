@@ -1080,22 +1080,32 @@ function ach_eclater_suivi(int $feb_id): void {
 }
 
 // ── Statut d'une ligne de suivi — jamais stocké, toujours recalculé à la
-//    lecture (Bloc 3). $ligne : une ligne feb_suivi (tableau associatif brut).
-//    livree/receptionnee sont posés maintenant mais ne seront vraiment
-//    alimentés qu'en J8 (écran de réception) : provisoirement, une ligne est
-//    considérée receptionnee si une quantité a été reçue, livree si la date
-//    réelle est connue mais qu'aucune quantité n'a encore été enregistrée —
-//    à affiner en J8 si l'écran de réception impose une autre distinction.
+//    lecture. Version définitive (J8, Bloc 4) — la version J7 était
+//    provisoire, comme noté dans son propre commentaire ; celle-ci
+//    remplace intégralement l'ancienne logique livree/receptionnee
+//    maintenant que la réception (ach_receptionner, ach_cloturer_reliquat)
+//    alimente réellement quantite_recue et cloture_reliquat.
+//    $ligne : une ligne feb_suivi (tableau associatif brut).
+//    Ordre volontaire : les deux états terminaux (receptionnee, y compris
+//    un reliquat clôturé de force) sont tranchés en premier, puis
+//    en_attente, puis en_retard AVANT livree — un reliquat partiellement
+//    reçu mais dont le délai est dépassé doit remonter en_retard, pas
+//    rester affiché livree comme si tout allait bien.
 function ach_statut_suivi_calcule(array $ligne): string {
-    if (!empty($ligne['date_livraison_reelle'])) {
-        return (int)($ligne['quantite_recue'] ?? 0) > 0 ? 'receptionnee' : 'livree';
-    }
+    $commandee = (int)($ligne['quantite_commandee'] ?? 0);
+    $recue     = (int)($ligne['quantite_recue'] ?? 0);
+
+    if (!empty($ligne['cloture_reliquat'])) return 'receptionnee';
+    if ($commandee > 0 && $recue >= $commandee) return 'receptionnee';
     if (empty($ligne['numero_da'])) return 'en_attente';
+
     if (!empty($ligne['date_livraison_prevue'])) {
         $seuil  = (int) ach_param('seuil_retard_jours', 5);
         $limite = (new DateTime($ligne['date_livraison_prevue']))->modify("+$seuil days");
         if (new DateTime() > $limite) return 'en_retard';
     }
+
+    if ($recue > 0) return 'livree';
     return 'commande';
 }
 
@@ -1175,4 +1185,159 @@ function ach_saisir_bc_lot(int $feb_id, string $lot, string $numero_bc, array $u
     );
     foreach ($lignes as $l) ach_saisir_bc((int)$l['id'], $numero_bc, $user, $date_livraison_prevue);
     return count($lignes);
+}
+
+// ── Réception d'une ligne de suivi (J8, Bloc 2) — une transaction. Une
+//    ligne feb_receptions par acte, jamais un écrasement : l'historique de
+//    plusieurs livraisons partielles doit rester lisible.
+function ach_receptionner(int $suivi_id, int $quantite, string $date, ?string $bl, string $observation, array $user): array {
+    $uid = (int)$user['id'];
+    if ($quantite <= 0) throw new AchValidationException('La quantité reçue doit être strictement positive.');
+
+    $ligne = db_fetch_one(
+        "SELECT fs.*, fl.article_id, fl.designation, f.numero AS feb_numero, f.acheteur_id, f.demandeur_id
+         FROM feb_suivi fs
+         JOIN feb_lignes fl ON fl.id = fs.feb_ligne_id
+         JOIN feb f         ON f.id  = fs.feb_id
+         WHERE fs.id = ?",
+        [$suivi_id]
+    );
+    if (!$ligne) throw new AchValidationException('Ligne de suivi introuvable.');
+    if (empty($ligne['numero_bc'])) throw new AchValidationException("Cette ligne n'a pas de N° BC — elle n'est pas réceptionnable.");
+    if (!empty($ligne['cloture_reliquat'])) throw new AchValidationException('Ce reliquat est clôturé — aucune réception supplémentaire possible.');
+
+    $commandee = (int)$ligne['quantite_commandee'];
+    $recue     = (int)$ligne['quantite_recue'];
+    $reste     = $commandee - $recue;
+    // Message chiffré (point 8) : pas une saisie corrigée en silence.
+    if ($quantite > $reste) {
+        throw new AchValidationException("Quantité reçue supérieure au reste à recevoir (reste $reste, saisi $quantite).");
+    }
+
+    $pdo = get_db();
+    $transaction_locale = !$pdo->inTransaction();
+    if ($transaction_locale) db_begin();
+    try {
+        $cumul = $recue + $quantite;
+        $ecart = $commandee - $cumul;  // positif = reliquat ouvert, zéro = ligne soldée
+
+        db_query(
+            "INSERT INTO feb_receptions (feb_suivi_id, quantite_recue, date_reception, bon_livraison, ecart, observation, recu_par)
+             VALUES (?,?,?,?,?,?,?)",
+            [$suivi_id, $quantite, $date, $bl, max(0, $ecart), $observation ?: null, $uid]
+        );
+
+        // date_livraison_reelle posée une seule fois, quand le cumul atteint
+        // la quantité commandée — pas à la première réception partielle.
+        if ($ecart <= 0) {
+            db_query(
+                "UPDATE feb_suivi SET quantite_recue=?, date_livraison_reelle = COALESCE(date_livraison_reelle, ?) WHERE id=?",
+                [$cumul, $date, $suivi_id]
+            );
+        } else {
+            db_query("UPDATE feb_suivi SET quantite_recue=? WHERE id=?", [$cumul, $suivi_id]);
+        }
+
+        // Bloc 0 : la réception alimente le stock global ET le stock du site
+        // de la FEB — pas seulement le global — sur le même motif que
+        // pages/commandes.php (réception de commande interne). Rien à faire
+        // pour une ligne en saisie libre (article_id NULL) : pas d'article à
+        // créditer.
+        if ($ligne['article_id']) {
+            db_query("UPDATE articles SET stock_global = stock_global + ? WHERE id=?", [$quantite, $ligne['article_id']]);
+            db_query(
+                "INSERT INTO stock_site (article_id, site_id, quantite) VALUES (?,?,?)
+                 ON CONFLICT (article_id, site_id) DO UPDATE SET quantite = stock_site.quantite + ?",
+                [$ligne['article_id'], $ligne['site_id'], $quantite, $quantite]
+            );
+        }
+
+        audit_log($uid, 'CREATE', 'achats_suivi', $suivi_id,
+            "Réception de $quantite sur « {$ligne['designation']} » (FEB {$ligne['feb_numero']}) — cumul $cumul, écart " . max(0, $ecart));
+
+        if ($transaction_locale) db_commit();
+    } catch (Exception $e) {
+        if ($transaction_locale) db_rollback();
+        throw $e;
+    }
+
+    if ($ligne['acheteur_id']) {
+        db_query(
+            "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','Réception',?,?)",
+            [(int)$ligne['acheteur_id'],
+             "Réception de $quantite sur « {$ligne['designation']} » (FEB {$ligne['feb_numero']}) — cumul $cumul, reste " . max(0, $ecart) . '.',
+             '/pages/achats/suivi_achats.php']
+        );
+    }
+    if ($ecart <= 0 && $ligne['demandeur_id']) {
+        db_query(
+            "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','Besoin couvert',?,?)",
+            [(int)$ligne['demandeur_id'],
+             "Votre besoin « {$ligne['designation']} » (FEB {$ligne['feb_numero']}) est intégralement réceptionné.",
+             '/pages/achats/mes_feb.php']
+        );
+    }
+
+    return ['cumul' => $cumul, 'ecart' => max(0, $ecart), 'solde' => $ecart <= 0];
+}
+
+// ── Clôture explicite d'un reliquat (J8, Bloc 3) — pour les cas où le solde
+//    n'arrivera jamais (rupture fournisseur, commande partiellement
+//    annulée). Réservée à l'acheteur qui détient la FEB. Enregistrée comme
+//    un acte de réception à quantité nulle (même table, même historique),
+//    avec le motif dans feb_receptions.motif_ecart — jamais confondu avec
+//    observation, réservée aux remarques de livraison normales.
+function ach_cloturer_reliquat(int $suivi_id, string $motif, array $user): void {
+    $uid   = (int)$user['id'];
+    $motif = trim($motif);
+    if ($motif === '') throw new AchValidationException('Le motif de clôture est obligatoire.');
+
+    $ligne = db_fetch_one(
+        "SELECT fs.*, fl.designation, f.numero AS feb_numero, f.acheteur_id
+         FROM feb_suivi fs
+         JOIN feb_lignes fl ON fl.id = fs.feb_ligne_id
+         JOIN feb f         ON f.id  = fs.feb_id
+         WHERE fs.id = ?",
+        [$suivi_id]
+    );
+    if (!$ligne) throw new AchValidationException('Ligne de suivi introuvable.');
+    if ((int)$ligne['acheteur_id'] !== $uid) throw new AchValidationException("Seul l'acheteur de cette FEB peut clôturer ce reliquat.");
+    if (!empty($ligne['cloture_reliquat'])) throw new AchValidationException('Ce reliquat est déjà clôturé.');
+
+    $ecart = (int)$ligne['quantite_commandee'] - (int)$ligne['quantite_recue'];
+    if ($ecart <= 0) throw new AchValidationException('Cette ligne est déjà entièrement reçue — rien à clôturer.');
+
+    $today = date('Y-m-d');
+    $pdo = get_db();
+    $transaction_locale = !$pdo->inTransaction();
+    if ($transaction_locale) db_begin();
+    try {
+        db_query(
+            "INSERT INTO feb_receptions (feb_suivi_id, quantite_recue, date_reception, ecart, motif_ecart, recu_par)
+             VALUES (?,0,?,?,?,?)",
+            [$suivi_id, $today, $ecart, $motif, $uid]
+        );
+        // Écart figé : quantite_recue n'est jamais forcée à quantite_commandee
+        // — la fiche doit rester lisible comme "clôturée avec écart", pas
+        // confondue avec une ligne totalement soldée.
+        db_query(
+            "UPDATE feb_suivi SET cloture_reliquat = 1, date_livraison_reelle = COALESCE(date_livraison_reelle, ?) WHERE id = ?",
+            [$today, $suivi_id]
+        );
+        audit_log($uid, 'UPDATE', 'achats_suivi', $suivi_id,
+            "Clôture du reliquat « {$ligne['designation']} » (FEB {$ligne['feb_numero']}) — écart figé à $ecart : $motif");
+        if ($transaction_locale) db_commit();
+    } catch (Exception $e) {
+        if ($transaction_locale) db_rollback();
+        throw $e;
+    }
+
+    if ($ligne['acheteur_id']) {
+        db_query(
+            "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','Reliquat clôturé',?,?)",
+            [(int)$ligne['acheteur_id'],
+             "Reliquat clôturé sur « {$ligne['designation']} » (FEB {$ligne['feb_numero']}) — écart figé à $ecart : $motif",
+             '/pages/achats/suivi_achats.php']
+        );
+    }
 }
