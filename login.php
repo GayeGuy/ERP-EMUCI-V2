@@ -307,7 +307,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
     /* ===== RESPONSIVE ===== */
     @media (max-width: 760px) {
-      .card-wrap { grid-template-columns: 1fr; max-width: 420px; width: 95%; }
+      .card-wrap { grid-template-columns: minmax(0,1fr); max-width: 420px; width: 95%; }
       .left-panel { display: none; }
       .right-panel { padding: 40px 28px; }
     }

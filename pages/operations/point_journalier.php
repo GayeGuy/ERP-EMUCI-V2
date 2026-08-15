@@ -774,16 +774,16 @@ include __DIR__ . '/../../templates/header.php';
 .point-preview .pp-stat{background:rgba(255,255,255,.1);border-radius:8px;padding:10px 14px;text-align:center}
 .point-preview .pp-stat .psv{font-size:22px;font-weight:900}
 .point-preview .pp-stat .psl{font-size:10px;opacity:.6;margin-top:2px}
-@media(max-width:900px){.point-grid{grid-template-columns:1fr}.calc-grid{grid-template-columns:repeat(2,1fr)}.kpi-bar{grid-template-columns:repeat(2,1fr)}.pj-card{grid-template-columns:1fr}}
+@media(max-width:900px){.point-grid{grid-template-columns:minmax(0,1fr)}.calc-grid{grid-template-columns:repeat(2,1fr)}.kpi-bar{grid-template-columns:repeat(2,1fr)}.pj-card{grid-template-columns:minmax(0,1fr)}}
 </style>
 
 <!-- HEADER BAR -->
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-    <form method="GET" style="display:flex;gap:8px">
+    <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;min-width:0">
       <?php if($role_slug_pj !== 'coordinateur_site'): ?>
       <select name="site" class="fsel" onchange="this.form.submit()"
-              style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;cursor:pointer;outline:none;font-family:'DM Sans',sans-serif">
+              style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;cursor:pointer;outline:none;font-family:'DM Sans',sans-serif;max-width:100%">
         <option value="0">Tous les sites</option>
         <?php foreach($sites_list as $s): ?>
         <option value="<?= $s['id'] ?>" <?= $f_site===$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>

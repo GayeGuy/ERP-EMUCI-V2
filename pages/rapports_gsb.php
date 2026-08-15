@@ -453,7 +453,7 @@ include __DIR__ . '/../templates/header.php';
 .rg-info-body{padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:24px}
 .rg-info-col h4{font-size:13px;font-weight:700;color:var(--navy);margin:0 0 10px}
 .rg-info-col ul{margin:0;padding:0 0 0 18px;color:var(--muted);font-size:13px;line-height:1.8}
-@media(max-width:800px){.rg-cards{grid-template-columns:1fr}.rg-info-body{grid-template-columns:1fr}}
+@media(max-width:800px){.rg-cards{grid-template-columns:minmax(0,1fr)}.rg-info-body{grid-template-columns:minmax(0,1fr)}}
 </style>
 
 <!-- BANNIÈRE -->

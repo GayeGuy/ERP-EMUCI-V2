@@ -370,7 +370,7 @@ include __DIR__ . '/../templates/header.php';
 
 @media(max-width:1000px){
   .rapport-kpi{grid-template-columns:repeat(2,1fr)}
-  .rapport-grid.c2,.rapport-grid.c32,.rapport-grid.c23{grid-template-columns:1fr}
+  .rapport-grid.c2,.rapport-grid.c32,.rapport-grid.c23{grid-template-columns:minmax(0,1fr)}
 }
 </style>
 

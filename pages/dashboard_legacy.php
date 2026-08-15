@@ -247,7 +247,7 @@ include __DIR__ . '/../templates/header.php';
 
 /* SECTION GRID */
 .dash-grid { display: grid; gap: 20px; margin-bottom: 20px; }
-.dash-grid.cols-1 { grid-template-columns: 1fr; }
+.dash-grid.cols-1 { grid-template-columns: minmax(0,1fr); }
 .dash-grid.cols-2 { grid-template-columns: 1fr 1fr; }
 .dash-grid.cols-3 { grid-template-columns: 2fr 1fr; }
 .dash-grid.cols-32 { grid-template-columns: 1fr 1.6fr; }
@@ -390,7 +390,7 @@ include __DIR__ . '/../templates/header.php';
 
 @media (max-width: 1100px) {
   .kpi-grid { grid-template-columns: repeat(2,1fr); }
-  .dash-grid.cols-2, .dash-grid.cols-3, .dash-grid.cols-32 { grid-template-columns: 1fr; }
+  .dash-grid.cols-2, .dash-grid.cols-3, .dash-grid.cols-32 { grid-template-columns: minmax(0,1fr); }
 }
 </style>
 

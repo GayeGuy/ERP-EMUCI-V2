@@ -220,7 +220,7 @@ include __DIR__ . '/../templates/header.php';
 .mbody{padding:24px}
 .mfoot{padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;background:white}
 
-@media(max-width:1000px){.aff-layout{grid-template-columns:1fr}}
+@media(max-width:1000px){.aff-layout{grid-template-columns:minmax(0,1fr)}}
 </style>
 
 <div class="aff-layout">
@@ -329,8 +329,8 @@ include __DIR__ . '/../templates/header.php';
   <div>
     <!-- FILTRES MOUVEMENTS -->
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
-      <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;flex:1">
-        <select name="site" class="fsel" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;cursor:pointer;outline:none;font-family:'DM Sans',sans-serif">
+      <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;flex:1;min-width:0">
+        <select name="site" class="fsel" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;cursor:pointer;outline:none;font-family:'DM Sans',sans-serif;max-width:100%">
           <option value="">Tous les sites</option>
           <?php foreach($sites_list as $s): ?>
           <option value="<?= $s['id'] ?>" <?= $f_site===$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>

@@ -181,8 +181,8 @@ include __DIR__ . '/../../templates/header.php';
 /* Sous 980px la colonne passe au-dessus, en rangee defilante : garder une
    liste verticale y mangerait toute la hauteur utile. */
 @media(max-width:980px){
-  .perm-layout{grid-template-columns:1fr;gap:16px}
-  .perm-tabs{flex-direction:row;position:static;max-height:none;overflow-x:auto;overflow-y:hidden;padding:6px}
+  .perm-layout{grid-template-columns:minmax(0,1fr);gap:16px}
+  .perm-tabs{flex-direction:row;position:static;max-height:none;overflow-x:auto;overflow-y:hidden;padding:6px;min-width:0}
   .perm-tab{width:auto;flex:0 0 auto;white-space:nowrap;flex-wrap:nowrap}
 }
 .perm-pane{display:none}

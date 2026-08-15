@@ -92,7 +92,7 @@ include __DIR__ . '/../templates/header.php';
 .tab-pane { display: none; padding: 24px; }
 .tab-pane.active { display: block; }
 
-@media(max-width:900px){ .profil-grid{ grid-template-columns:1fr; } }
+@media(max-width:900px){ .profil-grid{ grid-template-columns:minmax(0,1fr); } }
 </style>
 
 <div class="profil-grid">

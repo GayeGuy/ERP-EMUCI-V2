@@ -575,7 +575,7 @@ endif;
 .stock-fill{height:100%;border-radius:3px}
 .filter-bar{background:white;border:1px solid var(--border);border-radius:12px;padding:13px 18px;margin-bottom:20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .fsel{padding:7px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:white;cursor:pointer;outline:none;font-family:'DM Sans',sans-serif}
-.tab-bar{display:flex;gap:2px;background:var(--lighter);border-radius:10px;padding:4px;margin-bottom:20px;width:fit-content}
+.tab-bar{display:flex;gap:2px;background:var(--lighter);border-radius:10px;padding:4px;margin-bottom:20px;width:fit-content;max-width:100%;flex-wrap:wrap}
 .tab-btn{padding:8px 20px;border:none;background:transparent;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;color:var(--muted);transition:all .15s;font-family:'DM Sans',sans-serif}
 .tab-btn.active{background:white;color:var(--navy);font-weight:700;box-shadow:0 1px 4px rgba(0,0,0,.08)}
 /* Scroll interne au-delà de 9 lignes : hauteur = header (~40px) + 9 lignes (~54px/ligne) */

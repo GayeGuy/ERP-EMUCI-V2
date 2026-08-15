@@ -243,7 +243,13 @@ $unread = count($notifs);
     .topbar-title {
       font-family: 'Plus Jakarta Sans', sans-serif;
       font-size: 17px; font-weight: 700;
-      color: var(--navy); flex: 1;
+      color: var(--navy); flex: 1; min-width: 0;
+      /* Pas de white-space:nowrap ici : la sous-ligne <small> (dashboard.php,
+         dashboard_legacy.php) est un bloc à part, un nowrap sur le parent la
+         forcerait sur la même ligne. min-width:0 suffit à corriger le bug
+         (flex item qui refuse de rétrécir sous son contenu, cf. .main-wrap
+         plus haut) : le titre repasse à la ligne plutôt que de pousser les
+         actions de la barre du haut hors du viewport. */
     }
     .topbar-title small {
       display: block;
@@ -255,7 +261,7 @@ $unread = count($notifs);
 
     .notif-btn {
       position: relative;
-      width: 40px; height: 40px; border-radius: 12px;
+      width: 44px; height: 44px; border-radius: 12px;
       border: 1.5px solid var(--border);
       background: var(--tertiary);
       display: flex; align-items: center; justify-content: center;
@@ -300,7 +306,13 @@ $unread = count($notifs);
     .notif-empty { padding: 28px; text-align: center; color: var(--muted); font-size: 13px; }
 
     /* ===== PAGE CONTENT ===== */
-    .page-content { flex: 1; padding: 28px; }
+    /* min-width:0 : même raison que .main-wrap ci-dessus, un niveau plus bas.
+       Flex item par défaut refuse de descendre sous la largeur de son
+       contenu (min-width:auto) — un tableau large dans .page-content
+       l'étirait donc au-delà du viewport, entraînant tout .main-wrap (barre
+       du haut comprise) dans le débordement au lieu de rester contenu par
+       le overflow-x:auto de .table-wrap. */
+    .page-content { flex: 1; min-width: 0; padding: 28px; }
 
     /* ===== BADGES ===== */
     .badge { padding: 4px 11px; border-radius: 20px; font-size: 11.5px; font-weight: 600; letter-spacing: .2px; }
@@ -356,8 +368,9 @@ $unread = count($notifs);
 
     /* ===== BUTTONS ===== */
     .btn {
-      display: inline-flex; align-items: center; gap: 7px;
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
       padding: 10px 20px;
+      min-height: 44px; /* plancher tactile — cf. n° réunion ERP « adapt » */
       border-radius: var(--radius-sm);
       font-family: 'Manrope', sans-serif;
       font-size: 13px; font-weight: 700;
@@ -373,7 +386,13 @@ $unread = count($notifs);
     .btn-danger:hover  { background: var(--danger-d); color: white; border-color: var(--danger-d); }
     .btn-success   { background: #D1FAE5; color: #065F46; border: 1.5px solid #6EE7B7; }
     .btn-success:hover { background: var(--success-d); color: white; border-color: var(--success-d); }
-    .btn-sm { padding: 6px 13px; font-size: 12px; border-radius: 8px; }
+    /* Exception volontaire au plancher de 44px : action secondaire répétée
+       dans une colonne « Actions » de tableau (plusieurs par ligne, cf.
+       equipements.php, bobines.php, commandes.php...). Un plancher de 44px
+       y ferait exploser la hauteur de chaque ligne dans un tableau déjà
+       dense. À revoir si l'app doit un jour cibler l'usage tactile plutôt
+       que le clic souris pour ces écrans. */
+    .btn-sm { padding: 6px 13px; font-size: 12px; border-radius: 8px; min-height: 32px; }
 
     /* ===== FORMS ===== */
     .form-row { display: grid; gap: 16px; margin-bottom: 16px; }
@@ -402,7 +421,9 @@ $unread = count($notifs);
     /* ===== PAGINATION ===== */
     .pagination { display: flex; align-items: center; gap: 4px; padding: 16px; flex-wrap: wrap; }
     .page-btn {
-      padding: 8px 13px; border-radius: 10px;
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 8px 13px; min-height: 44px; min-width: 44px; box-sizing: border-box;
+      border-radius: 10px;
       border: 1.5px solid var(--border);
       font-size: 13px; color: var(--text);
       text-decoration: none; transition: all .15s;
@@ -426,7 +447,18 @@ $unread = count($notifs);
       .sidebar .nav-item span:not(.nav-icon), .sidebar .sidebar-footer .user-info,
       .sidebar .nav-badge { display: none; }
       .main-wrap { margin-left: 68px; }
-      .form-row.cols-2, .form-row.cols-3 { grid-template-columns: 1fr; }
+      .form-row.cols-2, .form-row.cols-3 { grid-template-columns: minmax(0,1fr); }
+      /* Rail réduit à 68px : le pied de sidebar (avatar + logout) ne
+         tenait déjà plus dans cette largeur avant même ce correctif — il
+         débordait silencieusement, masqué par overflow-x:hidden sur
+         .sidebar (donc invisible plutôt que planté). Le bouton logout est
+         redondant avec celui du menu utilisateur de la barre du haut : on
+         le masque ici plutôt que de le contraindre dans un espace qui n'a
+         jamais été prévu pour lui, et on retire le padding du user-card
+         pour que l'avatar (36px) tienne dans les 36px utiles du rail. */
+      .sidebar .sidebar-footer .logout-btn { display: none; }
+      .sidebar .sidebar-footer .user-card { padding: 0; justify-content: center; background: none; }
+      .sidebar .sidebar-footer .user-card-link { flex: 0 0 auto; padding: 0; margin: 0; }
     }
   </style>
   <script src="https://unpkg.com/@phosphor-icons/web@2.1.1/src/index.js"></script>

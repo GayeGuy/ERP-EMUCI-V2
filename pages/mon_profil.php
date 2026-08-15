@@ -170,7 +170,7 @@ include __DIR__ . '/../templates/header.php';
 
 /* ── Responsive ────────────────────────────────────────────── */
 @media (max-width: 720px) {
-  .profil-layout { grid-template-columns: 1fr; }
+  .profil-layout { grid-template-columns: minmax(0,1fr); }
   .theme-opts { flex-direction: column; }
   .theme-opt { min-width: 0; }
 }

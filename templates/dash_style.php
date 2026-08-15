@@ -56,7 +56,7 @@
 
 /* ── SITE PERFORMANCE SECTION */
 .perf-wrap{display:grid;grid-template-columns:1fr 1.6fr;gap:16px;margin-bottom:20px}
-@media(max-width:820px){.perf-wrap{grid-template-columns:1fr}}
+@media(max-width:820px){.perf-wrap{grid-template-columns:minmax(0,1fr)}}
 .card{background:#fff;border:1.5px solid var(--border,#e2e8f0);border-radius:18px;padding:20px 22px}
 .card-ttl{font-size:13px;font-weight:800;color:var(--navy,#06033A);margin:0 0 4px}
 .card-sub{font-size:12px;color:#475569;margin-bottom:18px}
@@ -98,7 +98,7 @@
 
 /* ── CHARTS ROW */
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
-@media(max-width:580px){.charts-row{grid-template-columns:1fr}}
+@media(max-width:580px){.charts-row{grid-template-columns:minmax(0,1fr)}}
 .ch-box{background:#fff;border:1.5px solid var(--border,#e2e8f0);border-radius:18px;padding:20px 22px}
 /* Sans min-width:0, une piste de grille ne descend pas sous la taille de
    son contenu : un canvas trop large élargit sa colonne et pousse les
@@ -120,11 +120,11 @@
 .pdg-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
 .pdg-grid > .plein{grid-column:1/-1}
 .pdg-grid > *{min-width:0}
-@media(max-width:820px){.pdg-grid{grid-template-columns:1fr}}
+@media(max-width:820px){.pdg-grid{grid-template-columns:minmax(0,1fr)}}
 
 /* ── BOTTOM ROW */
 .bottom-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
-@media(max-width:720px){.bottom-row{grid-template-columns:1fr}}
+@media(max-width:720px){.bottom-row{grid-template-columns:minmax(0,1fr)}}
 
 /* ── Demandes table */
 .dtbl{width:100%;border-collapse:collapse;font-size:12px}
@@ -168,7 +168,7 @@
 .pfw-leg-i{display:flex;align-items:center;gap:5px;font-weight:600}
 .pfw-leg-sq{width:10px;height:10px;border-radius:2px;flex-shrink:0}
 .pfw-body{display:grid;grid-template-columns:200px 1fr;min-height:250px}
-@media(max-width:700px){.pfw-body{grid-template-columns:1fr}}
+@media(max-width:700px){.pfw-body{grid-template-columns:minmax(0,1fr)}}
 .pfw-left{padding:22px 16px 22px 20px;display:flex;gap:10px;transition:background .35s;border-radius:0 0 0 18px}
 .pfw-vert{writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;font-weight:700;color:rgba(255,255,255,.55);letter-spacing:.8px;text-transform:uppercase;flex-shrink:0;align-self:center}
 .pfw-stats{flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px}
@@ -184,7 +184,7 @@
 .biz-hd-s{font-size:12px;color:var(--biz-muted)}
 
 .biz-lead{display:grid;grid-template-columns:1.4fr 1fr;gap:14px}
-@media(max-width:900px){.biz-lead{grid-template-columns:1fr}}
+@media(max-width:900px){.biz-lead{grid-template-columns:minmax(0,1fr)}}
 
 /* Carte de tête : taux de service */
 .biz-hero{background:var(--navy,#06033A);border-radius:18px;padding:22px 26px;color:#fff;position:relative;overflow:hidden}
@@ -208,7 +208,7 @@
 
 /* Quatre métriques compactes */
 .biz-mx{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-@media(max-width:580px){.biz-mx{grid-template-columns:1fr}}
+@media(max-width:580px){.biz-mx{grid-template-columns:minmax(0,1fr)}}
 .biz-m{background:#fff;border:1.5px solid var(--border,#e2e8f0);border-radius:18px;padding:16px 18px;display:flex;flex-direction:column}
 .biz-m-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;min-height:32px}
 .biz-m-lbl{font-size:10px;font-weight:700;color:var(--biz-muted);text-transform:uppercase;letter-spacing:.5px}
@@ -251,7 +251,7 @@
 
 /* Couverture + fiabilité */
 .biz-split{display:grid;grid-template-columns:1.15fr 1fr;gap:14px}
-@media(max-width:900px){.biz-split{grid-template-columns:1fr}}
+@media(max-width:900px){.biz-split{grid-template-columns:minmax(0,1fr)}}
 .biz-cov{display:flex;flex-direction:column;gap:2px}
 .biz-cov-r{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(70px,1.5fr) auto;align-items:center;gap:12px;
   padding:9px 0;border-bottom:1px solid #f1f5f9}
@@ -311,7 +311,7 @@
 .sq-hs{background:#dc2626}
 
 .eq-body{display:grid;grid-template-columns:210px 1fr;gap:22px;align-items:start}
-@media(max-width:820px){.eq-body{grid-template-columns:1fr}}
+@media(max-width:820px){.eq-body{grid-template-columns:minmax(0,1fr)}}
 .eq-stats{display:flex;flex-direction:column;gap:11px}
 .eq-big{font-size:40px;font-weight:900;color:var(--navy,#06033A);font-family:'Montserrat',sans-serif;
   line-height:1;font-variant-numeric:tabular-nums}
@@ -423,7 +423,7 @@
    à gauche et valeur à droite, plutôt que quatre cartes hautes empilées.
    Même information, moitié moins de hauteur avant d'atteindre le contenu. */
 @media(max-width:580px){
-  .biz-mx{grid-template-columns:1fr;gap:8px}
+  .biz-mx{grid-template-columns:minmax(0,1fr);gap:8px}
   .biz-m{flex-direction:row;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px}
   .biz-m-hd{min-height:0;flex-direction:row-reverse;align-items:center;justify-content:flex-end;
     gap:10px;flex:1;min-width:0}
