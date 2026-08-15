@@ -91,7 +91,7 @@ if ($f_departement) { $where[] = 'f.departement_id = ?';  $params[] = $f_departe
 if ($f_q !== '')     { $where[] = 'f.numero ILIKE ?';     $params[] = '%' . $f_q . '%'; }
 
 $lignes = db_fetch_all(
-    "SELECT fs.*, f.numero AS feb_numero, f.departement_id, f.acheteur_id,
+    "SELECT fs.*, f.numero AS feb_numero, f.departement_id, f.acheteur_id, f.fiche_validation_path,
             d.label AS departement_label,
             fl.designation, fl.lot, fl.unite, fl.fournisseur_id,
             fo.raison_sociale AS fournisseur_nom,
@@ -204,7 +204,14 @@ include __DIR__ . '/../../templates/header.php';
         $peut_cloturer = $can_edit && $reliquat_ouvert && (int)$l['acheteur_id'] === (int)$user['id'];
       ?>
       <tr class="<?= $l['statut_calcule'] === 'en_retard' ? 'en_retard' : '' ?>">
-        <td style="font-weight:700;color:var(--navy)"><?= h($l['feb_numero'] ?: '—') ?></td>
+        <td style="font-weight:700;color:var(--navy)">
+          <?= h($l['feb_numero'] ?: '—') ?>
+          <?php if (!empty($l['fiche_validation_path'])): ?>
+          <a href="feb_fiche_validation_pdf.php?id=<?= (int)$l['feb_id'] ?>" target="_blank" title="Fiche de validation archivée" style="margin-left:4px">
+            <i class="ph ph-seal-check" aria-hidden="true"></i>
+          </a>
+          <?php endif; ?>
+        </td>
         <td><?= h($l['designation']) ?></td>
         <td><?= (int)$l['quantite_commandee'] ?> <?= h($l['unite'] ?: '') ?></td>
         <td><?= h($l['fournisseur_nom'] ?: '—') ?></td>

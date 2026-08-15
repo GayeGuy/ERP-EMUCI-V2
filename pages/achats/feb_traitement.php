@@ -408,6 +408,16 @@ include __DIR__ . '/../../templates/header.php';
     <div><div class="feb-hdr-lbl">Urgence</div><div class="feb-hdr-val"><?= h(ach_urgences()[(int)$feb['urgence']] ?? 'Normale') ?></div></div>
     <div><div class="feb-hdr-lbl">Nombre de lignes</div><div class="feb-hdr-val"><?= count($lignes) ?></div></div>
   </div>
+  <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+    <a href="feb_fiche_pdf.php?id=<?= $feb_id ?>" target="_blank" class="btn btn-secondary btn-sm">
+      <i class="ph ph-printer" aria-hidden="true"></i> Fiche imprimable
+    </a>
+    <?php if (!empty($feb['fiche_validation_path'])): ?>
+    <a href="feb_fiche_validation_pdf.php?id=<?= $feb_id ?>" target="_blank" class="btn btn-secondary btn-sm">
+      <i class="ph ph-seal-check" aria-hidden="true"></i> Fiche de validation archivée
+    </a>
+    <?php endif; ?>
+  </div>
 </div>
 
 <?php if ($commande_liee): ?>

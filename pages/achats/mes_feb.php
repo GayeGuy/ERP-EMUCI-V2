@@ -50,7 +50,7 @@ $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 
 $total = (int)db_fetch_value("SELECT COUNT(*) FROM feb f $whereSql", $params);
 $febs  = db_fetch_all(
-    "SELECT f.id, f.numero, f.objet, f.statut, f.urgence, f.montant_total, f.date_creation, f.date_soumission,
+    "SELECT f.id, f.numero, f.objet, f.statut, f.urgence, f.montant_total, f.date_creation, f.date_soumission, f.fiche_validation_path,
             CONCAT(u.prenom,' ',u.nom) AS demandeur_nom
      FROM feb f
      LEFT JOIN users u ON u.id = f.demandeur_id
@@ -126,7 +126,7 @@ include __DIR__ . '/../../templates/header.php';
     <thead><tr>
       <th>Numéro</th><th>Objet</th>
       <?php if ($voit_tout): ?><th>Demandeur</th><?php endif; ?>
-      <th>Urgence</th><th>Date</th><th>Montant</th><th>Statut</th>
+      <th>Urgence</th><th>Date</th><th>Montant</th><th>Statut</th><th>Documents</th>
     </tr></thead>
     <tbody>
       <?php foreach ($febs as $f):
@@ -142,6 +142,18 @@ include __DIR__ . '/../../templates/header.php';
         <td><?= fmt_date($f['date_creation'], 'd/m/Y') ?></td>
         <td><?= fmt_number((float)$f['montant_total']) ?> XOF</td>
         <td><span class="ach-badge" style="background:<?= $s['bg'] ?>;color:<?= $s['color'] ?>"><?= h($s['label']) ?></span></td>
+        <td onclick="event.stopPropagation()" style="white-space:nowrap">
+          <?php if ($f['id']): ?>
+          <a href="feb_fiche_pdf.php?id=<?= $f['id'] ?>" target="_blank" class="btn btn-secondary btn-sm" title="Fiche imprimable">
+            <i class="ph ph-printer" aria-hidden="true"></i>
+          </a>
+          <?php endif; ?>
+          <?php if (!empty($f['fiche_validation_path'])): ?>
+          <a href="feb_fiche_validation_pdf.php?id=<?= $f['id'] ?>" target="_blank" class="btn btn-secondary btn-sm" title="Fiche de validation archivée">
+            <i class="ph ph-seal-check" aria-hidden="true"></i>
+          </a>
+          <?php endif; ?>
+        </td>
       </tr>
       <?php endforeach; ?>
     </tbody>
