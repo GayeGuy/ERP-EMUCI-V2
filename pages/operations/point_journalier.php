@@ -765,7 +765,7 @@ include __DIR__ . '/../../templates/header.php';
 
 /* ── APERÇU ── */
 .point-preview{font-family:'Montserrat',sans-serif;background:linear-gradient(135deg,#0a1628,#163566);color:white;border-radius:12px;padding:20px;margin-bottom:20px}
-.point-preview h2{font-size:15px;font-weight:800;margin-bottom:4px;text-align:center}
+.point-preview h4{font-size:15px;font-weight:800;margin-bottom:4px;text-align:center}
 .point-preview .pp-date{text-align:center;opacity:.7;font-size:12px;margin-bottom:16px}
 .point-preview .pp-section{margin-bottom:14px}
 .point-preview .pp-title{font-size:12px;font-weight:700;opacity:.5;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
@@ -1129,14 +1129,14 @@ foreach($points as $p):
           <h4>Informations générales</h4>
         </div>
         <div class="form-row cols-3">
-          <div class="form-group"><label>Site *</label>
+          <div class="form-group"><label for="p-site">Site</label>
             <?php if($role_slug_pj === 'coordinateur_site' && $user['site_id']): ?>
             <input type="hidden" id="p-site" value="<?= (int)$user['site_id'] ?>">
             <div class="form-control" style="background:var(--lighter);color:var(--navy);font-weight:600;cursor:default">
               <i class="ph ph-map-pin" aria-hidden="true"></i> <?= h(db_fetch_value("SELECT nom FROM sites WHERE id=?",[(int)$user['site_id']]) ?? '') ?>
             </div>
             <?php else: ?>
-            <select class="form-control" id="p-site" onchange="loadStockRivets();loadBobines();loadStockPMMA()">
+            <select class="form-control" id="p-site" required onchange="loadStockRivets();loadBobines();loadStockPMMA()">
               <option value="">— Sélectionner —</option>
               <?php foreach($sites_list as $s): ?>
               <option value="<?= $s['id'] ?>"><?= h($s['nom']) ?></option>
@@ -1144,10 +1144,10 @@ foreach($points as $p):
             </select>
             <?php endif; ?>
           </div>
-          <div class="form-group"><label>Date</label>
+          <div class="form-group"><label for="p-date">Date</label>
             <input type="date" class="form-control" id="p-date" value="<?= date('Y-m-d') ?>">
           </div>
-          <div class="form-group"><label>Type de point</label>
+          <div class="form-group"><label for="p-type">Type de point</label>
             <select class="form-control" id="p-type" onchange="onTypePointChange(this.value)">
               <option value="point_9h">🕘 Point 9h — Suivi matinée</option>
               <option value="point_13h">🕐 Point 13h — Suivi mi-journée</option>
@@ -1167,6 +1167,7 @@ foreach($points as $p):
           <h4>Véhicules posés</h4>
           <span style="margin-left:auto;font-size:12px;color:var(--muted)">⏱
             <input type="number" id="p-heures" value="8" min="0" max="24" step="0.5"
+                   aria-label="Heures de travail"
                    oninput="recalcule()"
                    style="width:52px;padding:3px 6px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;font-weight:700;text-align:center;outline:none;color:var(--navy)">
             h de travail
@@ -1193,6 +1194,7 @@ foreach($points as $p):
           </div>
           <input type="number" class="nb-input" id="nb-<?= $tv['code'] ?>"
                  min="0" value="0" placeholder="0"
+                 aria-label="Nombre de <?= h($tv['libelle']) ?> posés"
                  data-plaques="<?= $tv['nb_plaques'] ?>"
                  data-rivets="<?= $tv['nb_rivets'] ?>"
                  data-serie="<?= $tv['serie_bobine'] ?>"
@@ -1299,7 +1301,7 @@ foreach($points as $p):
 
       <!-- Aperçu en temps réel -->
       <div class="point-preview" id="point-preview" style="display:none">
-        <h2 id="prev-titre">Point Final</h2>
+        <h4 id="prev-titre">Point Final</h4>
         <div class="pp-date" id="prev-date"></div>
         <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px" id="prev-stats"></div>
         <div class="pp-section">

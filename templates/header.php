@@ -64,7 +64,7 @@ $unread = count($notifs);
       --lighter:    #F0F4FF;
       --white:      #ffffff;
       --text:       #1E2B4A;
-      --muted:      #64748B;
+      --muted:      #4B5563;
       --border:     #E2E8F0;
       --danger:     #F87171;
       --success:    #34D399;
@@ -257,7 +257,7 @@ $unread = count($notifs);
       font-size: 12px; font-weight: 400; color: var(--muted);
       margin-top: 1px;
     }
-    .topbar-actions { display: flex; align-items: center; gap: 10px; }
+    .topbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 
     .notif-btn {
       position: relative;
@@ -430,6 +430,28 @@ $unread = count($notifs);
     }
     select.form-control { cursor: pointer; }
     textarea.form-control { resize: vertical; min-height: 80px; }
+
+    /* Cible tactile : .btn a deja un plancher 44px (cf. P1 « adapt »), mais
+       .form-control (env. 37px avec son padding actuel) ne l'a pas. Limité
+       aux largeurs tactiles pour ne pas alourdir les formulaires/tableaux
+       denses en desktop — le critère WCAG cible le tactile, pas la souris. */
+    @media (max-width: 768px) {
+      .form-control:not(textarea) { min-height: 44px; box-sizing: border-box; }
+      /* .fsel : redéfini localement (padding différent) dans une dizaine de
+         pages plutôt que centralisé — un seul plancher ici, quelle que soit
+         la page, au lieu de reprendre chaque définition locale. */
+      .fsel { min-height: 44px !important; box-sizing: border-box !important; }
+    }
+
+    /* Anneau de focus clavier global : beaucoup de pages posent
+       outline:none localement (boutons, liens, .form-control, lignes de
+       tableau cliquables) sans le remplacer, ce qui rend la navigation au
+       clavier invisible. Un seul bloc ici plutôt qu'un correctif par page —
+       :focus-visible ne se déclenche qu'au clavier, jamais au clic souris. */
+    :focus-visible {
+      outline: 2px solid var(--primary-d) !important;
+      outline-offset: 2px !important;
+    }
 
     /* ===== PAGINATION ===== */
     .pagination { display: flex; align-items: center; gap: 4px; padding: 16px; flex-wrap: wrap; }
@@ -872,12 +894,51 @@ $unread = count($notifs);
   [data-theme="dark"] .main-wrap [style*="--kpi-c:#2e7d32"] { --kpi-c: #34D399; }
   [data-theme="dark"] .main-wrap [style*="--kpi-c:#7b1fa2"] { --kpi-c: #C084FC; }
 
+  /* templates/dash_style.php (dashboard.php + pdg_overview.php) — meme
+     famille de bugs que plus haut, propre a ce gabarit. */
+  [data-theme="dark"] .biz-hero { background: #1E2B4A !important; }
+  [data-theme="dark"] .biz-card, [data-theme="dark"] .kpi-m {
+    background: #1E293B !important;
+    border-color: #334155 !important;
+  }
+  [data-theme="dark"] .pdg-sub, [data-theme="dark"] .card-sub,
+  [data-theme="dark"] .ch-sub, [data-theme="dark"] .kpi-m-lbl {
+    color: #94A3B8 !important;
+  }
+  /* --biz-muted (local a .biz/.eq, ~18 classes) : meme redefinition que
+     --muted plus haut, portee sur cette variable locale au gabarit. */
+  [data-theme="dark"] .biz, [data-theme="dark"] .eq { --biz-muted: #94A3B8; }
+
   /* Garde-fou générique : tout fond blanc laissé en style="" inline sur une
      page non encore migrée individuellement (mêmes teintes que la carte). */
   [data-theme="dark"] .main-wrap [style*="background:#fff"]:not([style*="background:#fff5f5"]),
   [data-theme="dark"] .main-wrap [style*="background: #fff"]:not([style*="background: #fff5f5"]),
   [data-theme="dark"] .main-wrap [style*="background:#ffffff"],
   [data-theme="dark"] .main-wrap [style*="background: #ffffff"] {
+    background: #1E293B !important;
+    color: #E2E8F0 !important;
+  }
+  /* Fonds gris/bleu pale neutres (encarts d'info, badges de code) laisses en
+     dur — pas les teintes semantiques rouge/vert/jaune des badges de statut,
+     volontairement inchangees (texte sature deja lisible sur son propre
+     fond quel que soit le theme). */
+  [data-theme="dark"] .main-wrap [style*="background:#f8fafc"],
+  [data-theme="dark"] .main-wrap [style*="background:#f1f5f9"],
+  [data-theme="dark"] .main-wrap [style*="background:#f8f9fa"],
+  [data-theme="dark"] .main-wrap [style*="background:#f8f9fb"],
+  [data-theme="dark"] .main-wrap [style*="background:#e2e8f0"],
+  [data-theme="dark"] .main-wrap [style*="background:#e8f4fd"],
+  [data-theme="dark"] .main-wrap [style*="background:#e3f2fd"],
+  [data-theme="dark"] .main-wrap [style*="background:#eff6ff"],
+  [data-theme="dark"] .main-wrap [style*="background:#f0f4ff"],
+  [data-theme="dark"] .main-wrap [style*="background:#e8f4f9"],
+  [data-theme="dark"] .main-wrap [style*="background:#eaf2fb"],
+  [data-theme="dark"] .main-wrap [style*="background:#f0f7ff"],
+  [data-theme="dark"] .main-wrap [style*="background:#f0f9ff"],
+  [data-theme="dark"] .main-wrap [style*="background:#eef2ff"],
+  [data-theme="dark"] .main-wrap [style*="background:#e0f0ff"],
+  [data-theme="dark"] .main-wrap [style*="background:#e8f0fe"],
+  [data-theme="dark"] .main-wrap [style*="background:#eef0f8"] {
     background: #1E293B !important;
     color: #E2E8F0 !important;
   }
