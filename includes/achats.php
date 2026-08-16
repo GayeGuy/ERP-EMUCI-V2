@@ -48,6 +48,33 @@ function ach_peut_creer(?array $user = null): bool {
     return ($user['role_slug'] ?? '') !== 'lecteur';
 }
 
+// ── Qui exerce le métier d'acheteur : prise en charge, arbitrage, offres,
+//    lancement de la validation (étapes 2 à 4 du processus).
+//
+//    Pourquoi une règle métier et non une permission : le module « achats »
+//    est une seule case dans la matrice, et son droit can_update est
+//    partagé par sept rôles — dont RAF, DAF et le PDG, qui en ont besoin
+//    pour mes_visas.php (leur visa passe par le même droit). Le retirer
+//    casserait les visas ; il faut donc distinguer ici ce que la matrice ne
+//    sait pas exprimer : un valideur n'est pas un acheteur.
+//
+//    Un administrateur reste inclus — il doit pouvoir débloquer une FEB
+//    dont l'acheteur est absent (réattribution, réouverture).
+function ach_est_acheteur(?array $user = null): bool {
+    $user = $user ?? current_user();
+    return in_array($user['role_slug'] ?? '', ['superviseur_achat', 'admin', 'superadmin'], true);
+}
+
+// ── Barrière d'écran pour les pages réservées au service Achats. Même
+//    forme que require_permission() : 403 rendu, exécution arrêtée.
+function ach_require_acheteur(?array $user = null): void {
+    if (!ach_est_acheteur($user)) {
+        http_response_code(403);
+        include __DIR__ . '/../templates/403.php';
+        exit;
+    }
+}
+
 // ── Lecture d'un paramètre achat_parametres, avec valeur par défaut ──
 function ach_param(string $cle, $defaut = null) {
     $v = db_fetch_value("SELECT valeur FROM achat_parametres WHERE cle = ?", [$cle]);
@@ -431,6 +458,13 @@ function ach_anciennete_heures_ouvrees(string $depuis): float {
 //    séparés laisseraient une fenêtre ouverte entre les deux — c'est
 //    justement ce que ce test doit exclure (Bloc 5, point 35).
 function ach_prendre_en_charge(int $feb_id, array $user): bool {
+    // Seul le service Achats prend en charge (étape 2 du processus).
+    // Contrôlé ici en plus de l'écran : cette fonction est le point d'entrée
+    // de toute la suite du traitement — quiconque devient acheteur_id peut
+    // ensuite arbitrer, saisir des offres et lancer la validation.
+    if (!ach_est_acheteur($user)) {
+        throw new AchValidationException("Seul le service Achats peut prendre une FEB en charge.");
+    }
     $uid = (int)$user['id'];
     $now = date('Y-m-d H:i:s');
 

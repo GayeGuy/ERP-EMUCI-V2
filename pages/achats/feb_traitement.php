@@ -14,6 +14,10 @@ require_once __DIR__ . '/../../includes/achats.php';
 require_auth();
 $user = current_user();
 require_permission('achats', 'can_update');
+// Étapes 3 et 4 du processus : réservées au service Achats — cf.
+// ach_est_acheteur(). Un RAF pouvait jusqu'ici arbitrer et saisir des
+// offres, alors qu'il n'intervient qu'à l'étape 5 (visa).
+ach_require_acheteur($user);
 $uid = (int)$user['id'];
 $_SESSION['groupe_actif'] = 'ACHATS';
 

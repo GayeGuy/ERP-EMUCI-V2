@@ -13,6 +13,10 @@ require_once __DIR__ . '/../../includes/achats.php';
 require_auth();
 $user = current_user();
 require_permission('achats', 'can_update');
+// Étapes 2 à 4 du processus : réservées au service Achats. Le droit
+// can_update sur « achats » ne suffit pas à distinguer un acheteur d'un
+// valideur (RAF/DAF/PDG l'ont aussi, pour mes_visas.php).
+ach_require_acheteur($user);
 $uid      = (int)$user['id'];
 $is_admin = in_array($user['role_slug'] ?? '', ['admin', 'superadmin'], true);
 $_SESSION['groupe_actif'] = 'ACHATS';
