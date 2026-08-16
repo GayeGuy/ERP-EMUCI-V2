@@ -653,7 +653,7 @@ function ach_recalculer_montant_total(int $feb_id): void {
 //    3) audit de l'ancienne et de la nouvelle offre retenue (autorisé tant
 //       que la FEB reste en prise_en_charge — même contrôle que le reste de
 //       feb_traitement.php, refait ici pour rester utilisable isolément).
-function ach_retenir_offre_lot(int $offre_id, array $user): void {
+function ach_retenir_offre_lot(int $offre_id, array $user): array {
     $uid = (int)$user['id'];
 
     $offre = db_fetch_one("SELECT * FROM feb_offres WHERE id=?", [$offre_id]);
@@ -674,9 +674,17 @@ function ach_retenir_offre_lot(int $offre_id, array $user): void {
     try {
         db_query("UPDATE feb_offres SET retenue=0 WHERE feb_id=? AND lot=?", [$feb_id, $lot]);
         db_query("UPDATE feb_offres SET retenue=1 WHERE id=?", [$offre_id]);
-        db_query(
+        // RG-09 : une ligne dérogée garde son fournisseur choisi à la main.
+        // On compte les deux populations — l'appelant doit pouvoir dire la
+        // vérité à l'écran, y compris « reporté sur 0 ligne ».
+        $stmt = db_query(
             "UPDATE feb_lignes SET fournisseur_id=? WHERE feb_id=? AND lot=? AND fournisseur_derogation=0",
             [$offre['fournisseur_id'], $feb_id, $lot]
+        );
+        $reportees = $stmt->rowCount();
+        $derogees  = (int) db_fetch_value(
+            "SELECT COUNT(*) FROM feb_lignes WHERE feb_id=? AND lot=? AND fournisseur_derogation=1",
+            [$feb_id, $lot]
         );
         ach_recalculer_montant_total($feb_id);
 
@@ -690,6 +698,8 @@ function ach_retenir_offre_lot(int $offre_id, array $user): void {
         if ($transaction_locale) db_rollback();
         throw $e;
     }
+
+    return ['reportees' => $reportees, 'derogees' => $derogees];
 }
 
 // ── Vérifie la cohérence du comparatif avant de poursuivre : par lot ayant

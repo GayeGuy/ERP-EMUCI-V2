@@ -242,8 +242,18 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'retenir_offre') {
         $offre_id = (int)($_POST['offre_id'] ?? 0);
         try {
-            ach_retenir_offre_lot($offre_id, $user);
-            json_response(true, 'Offre retenue — fournisseur reporté sur les lignes du lot.');
+            $res = ach_retenir_offre_lot($offre_id, $user);
+            // Le message dit ce qui s'est réellement passé : annoncer un
+            // report alors que toutes les lignes sont dérogées laissait
+            // croire que le fournisseur avait changé sur la ligne.
+            $msg = $res['reportees'] > 0
+                ? "Offre retenue — fournisseur reporté sur {$res['reportees']} ligne(s)."
+                : 'Offre retenue.';
+            if ($res['derogees'] > 0) {
+                $msg .= " {$res['derogees']} ligne(s) dérogée(s) conservent leur fournisseur choisi à la main"
+                      . " — rechoisissez le fournisseur de l'offre retenue sur la ligne pour la réaligner.";
+            }
+            json_response(true, $msg);
         } catch (AchValidationException $e) {
             json_response(false, $e->getMessage());
         }
@@ -256,9 +266,27 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $l = db_fetch_one("SELECT * FROM feb_lignes WHERE id=? AND feb_id=?", [$ligne_id, $post_feb_id]);
         if (!$l) json_response(false, 'Ligne introuvable.');
         if (!$fournisseur_id) json_response(false, 'Choisissez un fournisseur.');
-        db_query("UPDATE feb_lignes SET fournisseur_id=?, fournisseur_derogation=1 WHERE id=?", [$fournisseur_id, $ligne_id]);
-        audit_log($uid, 'UPDATE', 'achats', $post_feb_id, "Dérogation fournisseur ligne #{$l['numero_ligne']} ({$l['designation']})");
-        json_response(true, 'Fournisseur dérogé sur cette ligne.');
+
+        // Choisir sur la ligne le fournisseur de l'offre retenue du lot n'est
+        // pas une dérogation : c'est un retour à la règle. Sans cette porte
+        // de sortie, une ligne dérogée par erreur le restait définitivement —
+        // le report du lot l'ignorant pour toujours (RG-09).
+        $offre_retenue = db_fetch_value(
+            "SELECT fournisseur_id FROM feb_offres WHERE feb_id=? AND lot=? AND retenue=1",
+            [$post_feb_id, $l['lot']]
+        );
+        $realignement = $offre_retenue && (int)$offre_retenue === $fournisseur_id;
+
+        db_query(
+            "UPDATE feb_lignes SET fournisseur_id=?, fournisseur_derogation=? WHERE id=?",
+            [$fournisseur_id, $realignement ? 0 : 1, $ligne_id]
+        );
+        audit_log($uid, 'UPDATE', 'achats', $post_feb_id, $realignement
+            ? "Réalignement ligne #{$l['numero_ligne']} ({$l['designation']}) sur l'offre retenue du lot"
+            : "Dérogation fournisseur ligne #{$l['numero_ligne']} ({$l['designation']})");
+        json_response(true, $realignement
+            ? "Ligne réalignée sur l'offre retenue du lot — elle suivra de nouveau les changements d'offre."
+            : 'Fournisseur dérogé sur cette ligne — elle ne suivra plus les changements d\'offre du lot.');
     }
 
     if ($action === 'update_ligne_montant') {
