@@ -66,6 +66,7 @@ migration_achats_07_visas.sql
 migration_achats_08_syscohada.sql
 migration_achats_10_reception.sql
 migration_achats_11_pdf_dashboard.sql
+migration_achats_12_stock_departement.sql
 "
 
 for f in $FICHIERS; do

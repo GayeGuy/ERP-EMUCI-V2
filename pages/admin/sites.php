@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $adresse = trim($_POST['adresse']         ?? '');
         $ville   = trim($_POST['ville']           ?? '');
         $resp_id = (int)($_POST['responsable_id'] ?? 0) ?: null;
-        $opt_caisse = in_array($type, ['entrepot','siege']) ? 0 : (int)($_POST['option_caisse'] ?? 0);
+        $opt_caisse = in_array($type, ['entrepot','siege','magasin']) ? 0 : (int)($_POST['option_caisse'] ?? 0);
         if (!$code || !$nom || !$type) json_response(false, 'Code, nom et type sont obligatoires.');
         if (db_fetch_value("SELECT COUNT(*) FROM sites WHERE code=?", [$code]) > 0)
             json_response(false, "Le code site $code existe déjà.");
@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $ville      = trim($_POST['ville']           ?? '');
         $actif      = (int)($_POST['actif']          ?? 1);
         $resp_id    = (int)($_POST['responsable_id'] ?? 0) ?: null;
-        $opt_caisse = in_array($type, ['entrepot','siege']) ? 0 : (int)($_POST['option_caisse'] ?? 0);
+        $opt_caisse = in_array($type, ['entrepot','siege','magasin']) ? 0 : (int)($_POST['option_caisse'] ?? 0);
         if (!$nom || !$type) json_response(false, 'Nom et type obligatoires.');
         $old = db_fetch_one("SELECT * FROM sites WHERE id=?", [$id]);
         db_query("UPDATE sites SET nom=?,type=?,option_caisse=?,adresse=?,ville=?,responsable_id=?,actif=? WHERE id=?",
@@ -267,7 +267,7 @@ $sites = db_fetch_all(
 // Stats globales (indépendantes des filtres)
 $stats_type = db_fetch_all(
     "SELECT type, COUNT(*) AS total, SUM(actif) AS actifs
-     FROM sites GROUP BY type ORDER BY array_position(ARRAY['saisie','pose','mixte','entrepot','siege']::text[], (type)::text)"
+     FROM sites GROUP BY type ORDER BY array_position(ARRAY['saisie','pose','mixte','entrepot','siege','magasin']::text[], (type)::text)"
 );
 $stats_ville = db_fetch_all(
     "SELECT ville, COUNT(*) AS n FROM sites WHERE actif=1 AND ville IS NOT NULL AND ville != ''
@@ -277,7 +277,7 @@ $total_actifs = (int)db_fetch_value("SELECT COUNT(*) FROM sites WHERE actif=1");
 $total_all    = (int)db_fetch_value("SELECT COUNT(*) FROM sites");
 
 $villes_list = db_fetch_all("SELECT DISTINCT ville FROM sites WHERE ville IS NOT NULL AND ville != '' ORDER BY ville");
-$types_labels = ['saisie'=>'Saisie','pose'=>'Pose','mixte'=>'Mixte','entrepot'=>'Entrepôt','siege'=>'Siège'];
+$types_labels = ['saisie'=>'Saisie','pose'=>'Pose','mixte'=>'Mixte','entrepot'=>'Entrepôt','siege'=>'Siège','magasin'=>'Magasin'];
 
 // Pour modals
 $users_list    = db_fetch_all("SELECT id,prenom,nom FROM users WHERE actif=1 ORDER BY prenom");
@@ -391,6 +391,7 @@ $type_colors = [
     'mixte'   => ['bg'=>'#fff3e8','color'=>'#9a3412','icon'=>'ph-arrows-left-right'],
     'entrepot'=> ['bg'=>'#e6f9f7','color'=>'#134e4a','icon'=>'ph-warehouse'],
     'siege'   => ['bg'=>'#fdeaea','color'=>'#991b1b','icon'=>'ph-buildings'],
+    'magasin' => ['bg'=>'#f3e8ff','color'=>'#6b21a8','icon'=>'ph-package'],
 ];
 ?>
 <style>
@@ -733,9 +734,10 @@ $type_colors = [
       <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Combien de sites de ce type puis-je créer avec le stock disponible ?</p>
       <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap">
         <?php
-        // Entrepôt et Siège n'ont pas de kit d'équipements type à respecter :
-        // le calculateur ne s'applique qu'aux types de site opérationnels.
-        $types_calculables = array_diff_key($types_labels, ['entrepot'=>1,'siege'=>1]);
+        // Entrepôt, Siège et Magasin n'ont pas de kit d'équipements type à
+        // respecter : le calculateur ne s'applique qu'aux types de site
+        // opérationnels.
+        $types_calculables = array_diff_key($types_labels, ['entrepot'=>1,'siege'=>1,'magasin'=>1]);
         foreach ($types_calculables as $k => $l): ?>
         <button class="btn btn-secondary" onclick="calcCapa('<?= $k ?>')" id="cb-<?= $k ?>"><?= $l ?></button>
         <?php endforeach; ?>
@@ -809,7 +811,7 @@ function applyFilters(){
 
 // ── SITE FORM
 function toggleCaisse(type){
-  const nonC=['entrepot','siege'];
+  const nonC=['entrepot','siege','magasin'];
   const w=document.getElementById('sCaisseWrap');
   w.style.display=nonC.includes(type)?'none':'block';
   if(nonC.includes(type))document.getElementById('sCaisse').checked=false;

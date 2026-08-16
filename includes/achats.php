@@ -193,21 +193,33 @@ function ach_urgences(): array {
     ];
 }
 
-// ── Stock consolidé entrepôt/siège pour un article — c'est le seul stock
-//    qu'un acheteur peut réellement mobiliser pour couvrir une FEB.
+// ── Stock consolidé des sites "magasin" pour un article — c'est le seul
+//    stock qu'un acheteur peut réellement mobiliser pour couvrir une FEB.
 //    articles.stock_global (utilisé ailleurs dans l'appli, hors Achats) agrège
-//    TOUS les sites, y compris les sites terrain (type 'saisie'/'pose'/'mixte') :
-//    du stock physiquement affecté à un site d'intervention n'est pas
-//    transférable en pratique pour servir une autre demande. L'arbitrage
-//    stock/achat compare donc au stock des seuls sites 'siege'/'entrepot',
-//    pas au total entreprise.
-function ach_stock_entrepot(int $article_id): int {
+//    TOUS les sites, y compris les sites terrain (type 'saisie'/'pose'/'mixte')
+//    et les sites 'siège' : du stock physiquement affecté à un site
+//    d'intervention, ou simplement administratif, n'est pas transférable en
+//    pratique pour servir une autre demande. L'arbitrage stock/achat compare
+//    donc au stock des seuls sites de type 'magasin', pas au total entreprise.
+function ach_stock_magasin(int $article_id): int {
     return (int) db_fetch_value(
         "SELECT COALESCE(SUM(ss.quantite), 0)
            FROM stock_site ss
            JOIN sites s ON s.id = ss.site_id
-          WHERE ss.article_id = ? AND s.type IN ('siege', 'entrepot') AND s.actif = 1",
+          WHERE ss.article_id = ? AND s.type = 'magasin' AND s.actif = 1",
         [$article_id]
+    );
+}
+
+// ── Crédite le stock d'un département — traçabilité de « qui détient quoi »
+//    quand plusieurs départements partagent un même site (le siège, en
+//    particulier). Purement informatif : n'entre jamais dans l'arbitrage
+//    stock/achat, qui reste sur ach_stock_magasin().
+function ach_crediter_stock_departement(int $article_id, int $departement_id, int $quantite): void {
+    db_query(
+        "INSERT INTO stock_departement (article_id, departement_id, quantite) VALUES (?,?,?)
+         ON CONFLICT (article_id, departement_id) DO UPDATE SET quantite = stock_departement.quantite + ?, updated_at = CURRENT_TIMESTAMP",
+        [$article_id, $departement_id, $quantite, $quantite]
     );
 }
 
@@ -1289,7 +1301,7 @@ function ach_receptionner(int $suivi_id, int $quantite, string $date, ?string $b
     if ($quantite <= 0) throw new AchValidationException('La quantité reçue doit être strictement positive.');
 
     $ligne = db_fetch_one(
-        "SELECT fs.*, fl.article_id, fl.designation, f.numero AS feb_numero, f.acheteur_id, f.demandeur_id
+        "SELECT fs.*, fl.article_id, fl.designation, f.numero AS feb_numero, f.acheteur_id, f.demandeur_id, f.departement_id
          FROM feb_suivi fs
          JOIN feb_lignes fl ON fl.id = fs.feb_ligne_id
          JOIN feb f         ON f.id  = fs.feb_id
@@ -1344,6 +1356,16 @@ function ach_receptionner(int $suivi_id, int $quantite, string $date, ?string $b
                  ON CONFLICT (article_id, site_id) DO UPDATE SET quantite = stock_site.quantite + ?",
                 [$ligne['article_id'], $ligne['site_id'], $quantite, $quantite]
             );
+            // Traçabilité par département : une FEB porte toujours un site ET
+            // un département (RG-06), mais plusieurs départements partagent
+            // souvent le même site (le siège). stock_site seul ne dit donc
+            // pas quel département détient l'équipement reçu — stock_departement
+            // le complète, sans remplacer ni influencer l'arbitrage (qui reste
+            // sur ach_stock_magasin() : ce stock-ci est déjà affecté, pas
+            // redisponible pour une autre demande).
+            if ($ligne['departement_id']) {
+                ach_crediter_stock_departement((int)$ligne['article_id'], (int)$ligne['departement_id'], $quantite);
+            }
         }
 
         audit_log($uid, 'CREATE', 'achats_suivi', $suivi_id,
