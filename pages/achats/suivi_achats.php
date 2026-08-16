@@ -228,7 +228,7 @@ include __DIR__ . '/../../templates/header.php';
               <input type="text" id="da-<?= $l['id'] ?>" placeholder="N° DA">
               <button type="button" class="btn btn-primary btn-sm" onclick="suiviSaisirDA(<?= (int)$l['id'] ?>)">OK</button>
             </div>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="suiviAppliquerLotDA(<?= (int)$l['feb_id'] ?>, <?= json_encode($l['lot']) ?>, <?= (int)$l['id'] ?>)">Appliquer à tout le lot</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick='suiviAppliquerLotDA(<?= (int)$l['feb_id'] ?>, <?= json_encode($l['lot'], JSON_HEX_APOS|JSON_HEX_QUOT) ?>, <?= (int)$l['id'] ?>)'>Appliquer à tout le lot</button>
           </div>
           <?php endif; ?>
         </td>
@@ -245,7 +245,7 @@ include __DIR__ . '/../../templates/header.php';
             </div>
             <div class="ref-input-row">
               <button type="button" class="btn btn-primary btn-sm" onclick="suiviSaisirBC(<?= (int)$l['id'] ?>)">OK</button>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="suiviAppliquerLotBC(<?= (int)$l['feb_id'] ?>, <?= json_encode($l['lot']) ?>, <?= (int)$l['id'] ?>)">Appliquer au lot</button>
+              <button type="button" class="btn btn-secondary btn-sm" onclick='suiviAppliquerLotBC(<?= (int)$l['feb_id'] ?>, <?= json_encode($l['lot'], JSON_HEX_APOS|JSON_HEX_QUOT) ?>, <?= (int)$l['id'] ?>)'>Appliquer au lot</button>
             </div>
           </div>
           <?php endif; ?>

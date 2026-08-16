@@ -208,7 +208,7 @@ include __DIR__ . '/../../templates/header.php';
               <i class="ph <?= $f['actif'] ? 'ph-prohibit' : 'ph-check-circle' ?>" aria-hidden="true"></i>
             </button>
             <button type="button" class="btn btn-secondary btn-sm" aria-label="Supprimer <?= h($f['libelle']) ?>"
-                    onclick="achSupprimerFamille(<?= $f['id'] ?>, <?= json_encode($f['libelle']) ?>)">
+                    onclick='achSupprimerFamille(<?= $f['id'] ?>, <?= json_encode($f['libelle'], JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
               <i class="ph ph-trash" aria-hidden="true"></i>
             </button>
           </td>

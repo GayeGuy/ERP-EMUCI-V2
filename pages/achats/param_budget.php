@@ -241,7 +241,7 @@ include __DIR__ . '/../../templates/header.php';
         $famille_pct = $l['enveloppe'] !== null && $l['enveloppe'] > 0 ? min(100, round($l['total_engage'] / $l['enveloppe'] * 100)) : null;
         $fill_color = $famille_pct === null ? '#94a3b8' : ($famille_pct >= 100 ? '#dc2626' : ($famille_pct >= 80 ? '#d97706' : '#16a34a'));
       ?>
-      <tr class="drill-row" onclick="pbDrillDown(<?= (int)$l['departement_id'] ?>, <?= (int)$l['famille_id'] ?>, <?= $exercice ?>, <?= json_encode($l['famille_libelle']) ?>)">
+      <tr class="drill-row" onclick='pbDrillDown(<?= (int)$l['departement_id'] ?>, <?= (int)$l['famille_id'] ?>, <?= $exercice ?>, <?= json_encode($l['famille_libelle'], JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
         <td style="font-weight:700;color:var(--navy)"><?= h($l['famille_libelle'] ?? '—') ?></td>
         <td style="font-family:monospace"><?= h($l['compte_comptable'] ?: '—') ?></td>
         <td><?= $l['enveloppe'] !== null ? h(number_format((float)$l['enveloppe'], 0, ',', ' ')) : '<span style="color:var(--muted)">Non plafonnée</span>' ?></td>

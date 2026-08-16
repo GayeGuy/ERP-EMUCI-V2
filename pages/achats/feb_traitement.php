@@ -624,7 +624,7 @@ include __DIR__ . '/../../templates/header.php';
   <?php if ($editable): ?>
   <div style="padding:14px 18px">
     <button type="button" class="btn btn-secondary btn-sm" <?= count($offres) >= 3 ? 'disabled title="Trois offres au maximum par lot."' : '' ?>
-            onclick="febOuvrirOffre(null, <?= json_encode($lot['lot']) ?>)">
+            onclick='febOuvrirOffre(null, <?= json_encode($lot['lot'], JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
       <i class="ph ph-plus" aria-hidden="true"></i> Ajouter une offre
     </button>
   </div>
