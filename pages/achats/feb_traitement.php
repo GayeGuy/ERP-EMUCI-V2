@@ -69,9 +69,9 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$l['article_id']) json_response(false, 'Une ligne en saisie libre part toujours en achat — elle n\'est pas arbitrable.');
 
         if ($choix === 'stock') {
-            $stock_global = (int)db_fetch_value("SELECT stock_global FROM articles WHERE id=?", [$l['article_id']]);
-            if ($stock_global < (int)$l['quantite']) {
-                json_response(false, "Couverture insuffisante ($stock_global disponible pour {$l['quantite']} demandé) — utilisez l'arbitrage partiel.");
+            $stock_entrepot = ach_stock_entrepot((int)$l['article_id']);
+            if ($stock_entrepot < (int)$l['quantite']) {
+                json_response(false, "Couverture insuffisante ($stock_entrepot disponible en entrepôt/siège pour {$l['quantite']} demandé) — utilisez l'arbitrage partiel.");
             }
         }
 
@@ -94,9 +94,9 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($quantite_stock < 1 || $quantite_stock >= $quantite_totale) {
             json_response(false, 'La quantité servie sur stock doit être strictement comprise entre 1 et la quantité demandée.');
         }
-        $stock_global = (int)db_fetch_value("SELECT stock_global FROM articles WHERE id=?", [$l['article_id']]);
-        if ($quantite_stock > $stock_global) {
-            json_response(false, "Stock disponible insuffisant ($stock_global) pour servir $quantite_stock.");
+        $stock_entrepot = ach_stock_entrepot((int)$l['article_id']);
+        if ($quantite_stock > $stock_entrepot) {
+            json_response(false, "Stock entrepôt/siège insuffisant ($stock_entrepot) pour servir $quantite_stock.");
         }
 
         db_begin();
@@ -124,7 +124,10 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'tout_servir_stock') {
         $lignes = db_fetch_all(
-            "SELECT fl.*, a.stock_global, COALESCE(ss.quantite, 0) AS stock_site
+            "SELECT fl.*,
+                    COALESCE((SELECT SUM(ss2.quantite) FROM stock_site ss2 JOIN sites s2 ON s2.id = ss2.site_id
+                               WHERE ss2.article_id = fl.article_id AND s2.type IN ('siege','entrepot') AND s2.actif = 1), 0) AS stock_entrepot,
+                    COALESCE(ss.quantite, 0) AS stock_site
                FROM feb_lignes fl
                JOIN articles a ON a.id = fl.article_id
                LEFT JOIN stock_site ss ON ss.article_id = fl.article_id AND ss.site_id = ?
@@ -132,7 +135,7 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         if (!$lignes) json_response(false, 'Aucune ligne arbitrable sur cette FEB.');
         foreach ($lignes as $l) {
-            if ((int)$l['stock_global'] < (int)$l['quantite']) {
+            if ((int)$l['stock_entrepot'] < (int)$l['quantite']) {
                 json_response(false, "Toutes les lignes ne sont pas couvertes par le stock — « {$l['designation']} » ne l'est pas.");
             }
         }
@@ -305,7 +308,9 @@ $demandeur = db_fetch_one(
 $site_nom = $feb['site_id'] ? db_fetch_value("SELECT nom FROM sites WHERE id=?", [$feb['site_id']]) : null;
 
 $lignes = db_fetch_all(
-    "SELECT fl.*, a.libelle AS article_libelle, a.stock_global,
+    "SELECT fl.*, a.libelle AS article_libelle,
+            COALESCE((SELECT SUM(ss2.quantite) FROM stock_site ss2 JOIN sites s2 ON s2.id = ss2.site_id
+                       WHERE ss2.article_id = fl.article_id AND s2.type IN ('siege','entrepot') AND s2.actif = 1), 0) AS stock_entrepot,
             COALESCE(ss.quantite, 0) AS stock_site
      FROM feb_lignes fl
      LEFT JOIN articles a ON a.id = fl.article_id
@@ -326,7 +331,7 @@ $au_moins_une_arbitrable = false;
 foreach ($lignes as $l) {
     if ($l['article_id']) {
         $au_moins_une_arbitrable = true;
-        if ((int)$l['stock_global'] < (int)$l['quantite']) $toutes_couvertes = false;
+        if ((int)$l['stock_entrepot'] < (int)$l['quantite']) $toutes_couvertes = false;
     }
 }
 
@@ -365,8 +370,8 @@ include __DIR__ . '/../../templates/header.php';
 .badge-stock{background:#D1FAE5;color:#065F46}
 .badge-achat{background:#FEF3C7;color:#92400E}
 .badge-libre{background:#F1F5F9;color:#475569}
-/* Transfert requis : le stock global couvre, le site demandeur non. On
-   avertit sans interdire — stock_site n'est renseigné que sur 4 sites sur
+/* Transfert requis : le stock entrepôt/siège couvre, le site demandeur non.
+   On avertit sans interdire — stock_site n'est renseigné que sur 4 sites sur
    21, un refus strict rendrait l'arbitrage inutilisable partout ailleurs. */
 .stock-transfert{color:var(--warning-d,#8A5A00);font-weight:700;white-space:nowrap}
 .arb-avert{background:#FEF3C7;color:#8A5A00;border-left:3px solid #8A5A00;
@@ -461,16 +466,16 @@ include __DIR__ . '/../../templates/header.php';
   <div style="overflow-x:auto">
   <table class="ach-table">
     <thead><tr>
-      <th>Désignation</th><th>Qté</th><th>Unité</th><th>Stock site</th><th>Stock global</th><th>Arbitrage</th><th>Actions</th>
+      <th>Désignation</th><th>Qté</th><th>Unité</th><th>Stock site</th><th>Stock entrepôt/siège</th><th>Arbitrage</th><th>Actions</th>
     </tr></thead>
     <tbody>
       <?php foreach ($lignes as $l):
         $arbitrable = (bool)$l['article_id'];
-        $couverte   = $arbitrable && (int)$l['stock_global'] >= (int)$l['quantite'];
-        $partiel_ok = $arbitrable && (int)$l['stock_global'] > 0 && (int)$l['stock_global'] < (int)$l['quantite'];
-        // Le stock global couvre, mais pas celui du site demandeur : servir
-        // cette ligne suppose un transfert entre sites. On le dit, on ne le
-        // refuse pas.
+        $couverte   = $arbitrable && (int)$l['stock_entrepot'] >= (int)$l['quantite'];
+        $partiel_ok = $arbitrable && (int)$l['stock_entrepot'] > 0 && (int)$l['stock_entrepot'] < (int)$l['quantite'];
+        // Le stock entrepôt/siège couvre, mais pas celui du site demandeur :
+        // servir cette ligne suppose un transfert entre sites. On le dit, on
+        // ne le refuse pas.
         $transfert  = $couverte && (int)$l['stock_site'] < (int)$l['quantite'];
         $badge_class = !$arbitrable ? 'badge-libre' : ($l['arbitrage'] === 'stock' ? 'badge-stock' : 'badge-achat');
         $badge_label = !$arbitrable ? 'Saisie libre — achat direct' : ($l['arbitrage'] === 'stock' ? 'Sur stock' : 'À acheter');
@@ -483,19 +488,19 @@ include __DIR__ . '/../../templates/header.php';
           <?php if (!$arbitrable): ?>—
           <?php elseif ($transfert): ?>
             <span class="stock-transfert"
-                  title="Transfert requis : <?= (int)$l['stock_global'] ?> disponible(s) ailleurs, <?= (int)$l['stock_site'] ?> sur ce site.">
+                  title="Transfert requis : <?= (int)$l['stock_entrepot'] ?> disponible(s) en entrepôt/siège, <?= (int)$l['stock_site'] ?> sur ce site.">
               <?= (int)$l['stock_site'] ?> <i class="ph ph-warning" aria-hidden="true"></i>
             </span>
           <?php else: ?><?= (int)$l['stock_site'] ?><?php endif; ?>
         </td>
-        <td><?= $arbitrable ? (int)$l['stock_global'] : '—' ?></td>
+        <td><?= $arbitrable ? (int)$l['stock_entrepot'] : '—' ?></td>
         <td><span class="ach-badge <?= $badge_class ?>"><?= h($badge_label) ?></span></td>
         <td>
           <?php if ($arbitrable && !$commande_liee && $editable): ?>
           <button type="button" class="btn btn-secondary btn-sm"
                   onclick='febOuvrirArbitrage(<?= json_encode([
                     "id"=>(int)$l["id"], "designation"=>$l["designation"], "quantite"=>(int)$l["quantite"],
-                    "stock_global"=>(int)$l["stock_global"], "arbitrage"=>$l["arbitrage"],
+                    "stock_entrepot"=>(int)$l["stock_entrepot"], "arbitrage"=>$l["arbitrage"],
                     "couverte"=>$couverte, "partiel_ok"=>$partiel_ok,
                     "stock_site"=>(int)$l["stock_site"], "transfert"=>$transfert,
                   ], JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
@@ -711,15 +716,16 @@ function febPost(data) {
 function febOuvrirArbitrage(l) {
   arbLigne = l;
   document.getElementById('arb-ligne-id').value = l.id;
-  document.getElementById('arb-designation').textContent = l.designation + ' — qté ' + l.quantite + ' (stock global : ' + l.stock_global + ')';
+  document.getElementById('arb-designation').textContent = l.designation + ' — qté ' + l.quantite + ' (stock entrepôt/siège : ' + l.stock_entrepot + ')';
   document.getElementById('arb-err').style.display = 'none';
 
-  // Avertissement de transfert : le stock existe, mais pas là où la FEB est
-  // émise. L'option reste ouverte, l'acheteur décide en connaissance de cause.
+  // Avertissement de transfert : le stock existe en entrepôt/siège, mais pas
+  // là où la FEB est émise. L'option reste ouverte, l'acheteur décide en
+  // connaissance de cause.
   const avert = document.getElementById('arb-transfert');
   if (l.transfert) {
     avert.textContent = `Rien sur le site demandeur (${l.stock_site} en stock) alors que `
-      + `${l.stock_global} sont disponibles ailleurs. Servir cette ligne sur stock suppose `
+      + `${l.stock_entrepot} sont disponibles en entrepôt/siège. Servir cette ligne sur stock suppose `
       + `un transfert entre sites.`;
     avert.style.display = '';
   } else {
@@ -746,9 +752,9 @@ function febMajPartiel() {
   if (!arbLigne || arbLigne.couverte || !arbLigne.partiel_ok) { box.style.display = 'none'; return; }
   box.style.display = '';
   const input = document.getElementById('arb-qte-stock');
-  input.max = Math.min(arbLigne.stock_global, arbLigne.quantite - 1);
+  input.max = Math.min(arbLigne.stock_entrepot, arbLigne.quantite - 1);
   document.getElementById('arb-partiel-hint').textContent =
-    `Couverture insuffisante pour la totalité (stock global : ${arbLigne.stock_global} / demandé : ${arbLigne.quantite}). `
+    `Couverture insuffisante pour la totalité (stock entrepôt/siège : ${arbLigne.stock_entrepot} / demandé : ${arbLigne.quantite}). `
     + `Renseignez la quantité à servir sur stock (maximum ${input.max}) — le reste part en achat.`;
 }
 function febFermerArbitrage() { document.getElementById('arb-modal').classList.remove('open'); }

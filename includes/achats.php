@@ -166,6 +166,24 @@ function ach_urgences(): array {
     ];
 }
 
+// ── Stock consolidé entrepôt/siège pour un article — c'est le seul stock
+//    qu'un acheteur peut réellement mobiliser pour couvrir une FEB.
+//    articles.stock_global (utilisé ailleurs dans l'appli, hors Achats) agrège
+//    TOUS les sites, y compris les sites terrain (type 'saisie'/'pose'/'mixte') :
+//    du stock physiquement affecté à un site d'intervention n'est pas
+//    transférable en pratique pour servir une autre demande. L'arbitrage
+//    stock/achat compare donc au stock des seuls sites 'siege'/'entrepot',
+//    pas au total entreprise.
+function ach_stock_entrepot(int $article_id): int {
+    return (int) db_fetch_value(
+        "SELECT COALESCE(SUM(ss.quantite), 0)
+           FROM stock_site ss
+           JOIN sites s ON s.id = ss.site_id
+          WHERE ss.article_id = ? AND s.type IN ('siege', 'entrepot') AND s.actif = 1",
+        [$article_id]
+    );
+}
+
 // ── Exception de validation FEB — porte le champ fautif pour que l'écran
 //    place le message à côté du champ concerné, pas dans une bannière
 //    générale (cf. Bloc 4 de la spécification).
