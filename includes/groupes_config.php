@@ -216,9 +216,8 @@ function _groupes_def(): array {
                 ['label'=>'Dashboard Achats',      'icon'=>'ph-gauge',
                  'url'=>'pages/achats/dashboard.php','active_keys'=>['achats_dashboard'],
                  'perm'=>['achats_dashboard','can_read']],
-                ['label'=>'Dashboard Direction',   'icon'=>'ph-presentation-chart',
-                 'url'=>'pages/achats/dashboard_direction.php','active_keys'=>['achats_dashboard_direction'],
-                 'perm'=>['achats_dashboard','can_read']],
+                // L'ex-Dashboard Direction est fusionné dans la Vue exécutive
+                // (pages/pdg_overview.php) : un seul dashboard pour le PDG.
                 ['label'=>'Mes FEB',               'icon'=>'ph-list-checks',
                  'url'=>'pages/achats/mes_feb.php','active_keys'=>['achats_mes_feb'],
                  'perm'=>['achats','can_read']],

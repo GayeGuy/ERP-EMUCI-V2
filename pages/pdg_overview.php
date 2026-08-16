@@ -6,6 +6,7 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
+require_once __DIR__ . '/../includes/achats.php';
 
 require_auth();
 $user = current_user();
@@ -712,6 +713,40 @@ try {
 $eq_type_nom = '';
 foreach ($eq_types as $t) if ((int)$t['id'] === $eq_type) $eq_type_nom = $t['libelle'];
 
+// ══════════════════════════════════════════════════════════
+//  ACHATS — VUE DIRECTION (fusionnée depuis dashboard_direction.php,
+//  pour n'avoir qu'un seul dashboard PDG). Réutilise le filtre de
+//  période déjà présent en haut de page (mois/année) plutôt que
+//  d'ajouter une seconde barre de filtres — l'achat n'a pas de notion
+//  de site, donc $site_id ne s'y applique pas.
+// ══════════════════════════════════════════════════════════
+$ach_visible = can('achats_dashboard', 'can_read');
+$ach_perimetre_vide = false;
+$ach_depense_totale = 0;
+$ach_budget_dept = [];
+$ach_kpis = null;
+if ($ach_visible) {
+    $ach_perimetre = ach_perimetre_departements($user);
+    $ach_perimetre_vide = is_array($ach_perimetre) && empty($ach_perimetre);
+    if ($periode === 'annuel') {
+        $ach_du = $annee . '-01-01';
+        $ach_au = $annee . '-12-31';
+    } else {
+        $ach_du = $mois . '-01';
+        $ach_au = date('Y-m-t', strtotime($ach_du));
+    }
+    if (!$ach_perimetre_vide) {
+        [$ach_clause, $ach_pd] = ach_clause_departement($ach_perimetre, 'f');
+        $ach_depense_totale = (int) db_fetch_value(
+            "SELECT COALESCE(SUM(fl.montant_ttc),0) FROM feb_lignes fl JOIN feb f ON f.id=fl.feb_id
+              WHERE fl.arbitrage='achat' AND f.date_soumission BETWEEN ? AND ?$ach_clause",
+            array_merge([$ach_du, $ach_au], $ach_pd)
+        );
+        $ach_budget_dept = ach_budget_departements($ach_perimetre, $annee_filtre);
+        $ach_kpis = ach_dashboard_kpis($user, $ach_perimetre, $ach_du, $ach_au);
+    }
+}
+
 include __DIR__ . '/../templates/header.php';
 ?>
 <?php include __DIR__ . '/../templates/dash_style.php'; ?>
@@ -1221,6 +1256,98 @@ include __DIR__ . '/../templates/header.php';
     </div>
   <?php endif; ?>
 </div>
+
+<?php if ($ach_visible): ?>
+<!-- ══════════ ACHATS — VUE DIRECTION ══════════ -->
+<style>
+.ach-hero{background:linear-gradient(135deg,#B45309 0%,#F59E0B 100%);border-radius:16px;padding:22px 26px;color:white;margin-bottom:20px}
+.ach-hero-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:34px;font-weight:900}
+.ach-hero-lbl{font-size:13px;opacity:.9;margin-top:4px}
+.ach-kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px}
+.ach-kpi-tile{background:white;border:1px solid var(--border,#e2e8f0);border-radius:14px;padding:16px 18px}
+.ach-kpi-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:24px;font-weight:900;color:var(--navy,#06033A);line-height:1}
+.ach-kpi-lbl{font-size:12px;color:var(--muted,#94a3b8);margin-top:6px}
+.ach-section-ttl{font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;font-weight:800;color:var(--navy,#06033A);margin:0 0 12px}
+.ach-panel{background:white;border:1px solid var(--border,#e2e8f0);border-radius:16px;padding:18px 20px;margin-bottom:20px}
+.ach-dept-row{display:grid;grid-template-columns:160px 1fr 90px;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border,#e2e8f0);font-size:13px}
+.ach-dept-row:last-child{border-bottom:none}
+.ach-dept-bar-track{height:10px;background:#e1e0d9;border-radius:5px;overflow:hidden}
+.ach-dept-bar-fill{height:100%;border-radius:5px}
+.ach-empty{padding:20px;text-align:center;color:var(--muted,#94a3b8);font-size:13px}
+</style>
+<div class="biz-card eq" style="margin-bottom:20px;padding:20px 22px">
+  <div class="eq-hd" style="margin-bottom:16px">
+    <div>
+      <div class="eq-t">Achats — Vue direction</div>
+      <div class="eq-s">Dépenses, délais et budget par département · <?= h($mois_display) ?></div>
+    </div>
+  </div>
+
+  <?php if ($ach_perimetre_vide): ?>
+    <div class="ach-empty">Aucun département dans votre périmètre.</div>
+  <?php else: ?>
+
+  <div class="ach-hero">
+    <div class="ach-hero-val"><?= fmt_number((float)$ach_depense_totale) ?> XOF</div>
+    <div class="ach-hero-lbl">Dépenses totales sur la période (<?= fmt_date($ach_du) ?> — <?= fmt_date($ach_au) ?>)</div>
+  </div>
+
+  <div class="ach-kpi-grid">
+    <div class="ach-kpi-tile">
+      <div class="ach-kpi-val">—</div>
+      <div class="ach-kpi-lbl">Économies réalisées</div>
+      <div style="font-size:11px;color:var(--muted,#94a3b8);margin-top:4px">Champ posé, calculé nul tant que les négociations ne sont pas historisées (V2).</div>
+    </div>
+    <div class="ach-kpi-tile">
+      <div class="ach-kpi-val"><?= $ach_kpis['taux_livraison_temps'] !== null ? $ach_kpis['taux_livraison_temps'] . '%' : '—' ?></div>
+      <div class="ach-kpi-lbl">Livraisons à temps et complètes</div>
+    </div>
+    <div class="ach-kpi-tile">
+      <div class="ach-kpi-val"><?= $ach_kpis['taux_service_stock'] !== null ? $ach_kpis['taux_service_stock'] . '%' : '—' ?></div>
+      <div class="ach-kpi-lbl">Taux de service sur stock</div>
+    </div>
+  </div>
+
+  <div class="ach-section-ttl">Performance des délais (moyenne / médiane, jours)</div>
+  <div class="ach-kpi-grid">
+    <div class="ach-kpi-tile">
+      <div class="ach-kpi-val"><?= $ach_kpis['delai_prise_charge']['moyenne'] ?? '—' ?> / <?= $ach_kpis['delai_prise_charge']['mediane'] ?? '—' ?></div>
+      <div class="ach-kpi-lbl">Prise en charge</div>
+    </div>
+    <div class="ach-kpi-tile">
+      <div class="ach-kpi-val"><?= $ach_kpis['delai_validation']['moyenne'] ?? '—' ?> / <?= $ach_kpis['delai_validation']['mediane'] ?? '—' ?></div>
+      <div class="ach-kpi-lbl">Validation</div>
+    </div>
+    <div class="ach-kpi-tile">
+      <div class="ach-kpi-val"><?= $ach_kpis['delai_livraison']['moyenne'] ?? '—' ?> / <?= $ach_kpis['delai_livraison']['mediane'] ?? '—' ?></div>
+      <div class="ach-kpi-lbl">Livraison</div>
+    </div>
+  </div>
+
+  <div class="ach-section-ttl">Budget consommé par département (exercice <?= $annee_filtre ?>)</div>
+  <div class="ach-panel" style="margin-bottom:0">
+    <?php if (empty($ach_budget_dept)): ?>
+      <div class="ach-empty">Aucun département actif.</div>
+    <?php else: foreach ($ach_budget_dept as $d):
+      $ach_pct = $d['taux'] !== null ? min(100, $d['taux']) : 0;
+      $ach_color = $d['taux'] === null ? '#94a3b8' : ($d['taux'] >= 100 ? '#dc2626' : ($d['taux'] >= 80 ? '#d97706' : '#16a34a'));
+    ?>
+      <div class="ach-dept-row">
+        <div style="font-weight:700;color:var(--navy,#06033A)"><?= h($d['label']) ?></div>
+        <div>
+          <div class="ach-dept-bar-track"><div class="ach-dept-bar-fill" style="width:<?= $ach_pct ?>%;background:<?= $ach_color ?>"></div></div>
+          <div style="font-size:11.5px;color:var(--muted,#94a3b8);margin-top:3px">
+            <?= fmt_number((float)$d['engage']) ?> XOF engagés <?= $d['enveloppe'] > 0 ? '/ ' . fmt_number((float)$d['enveloppe']) . ' XOF' : '(non plafonné)' ?>
+          </div>
+        </div>
+        <div style="text-align:right;font-weight:700;color:<?= $ach_color ?>"><?= $d['taux'] !== null ? $d['taux'] . '%' : '—' ?></div>
+      </div>
+    <?php endforeach; endif; ?>
+  </div>
+
+  <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <!-- ══════════ CHARTS ROW ══════════ -->
 <div class="charts-row">
