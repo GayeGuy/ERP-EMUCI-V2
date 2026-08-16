@@ -260,10 +260,13 @@ include __DIR__ . '/../../templates/header.php';
           <?php endif; ?>
         </td>
         <td><span class="ach-badge" style="background:<?= $st['bg'] ?>;color:<?= $st['color'] ?>"><?= h($st['label']) ?></span></td>
-        <td>
+        <td style="white-space:nowrap">
+          <a href="feb_detail.php?id=<?= (int)$l['feb_id'] ?>" class="btn btn-secondary btn-sm" title="Détails de la FEB" aria-label="Voir les détails de la FEB <?= h($l['feb_numero'] ?: '') ?>">
+            <i class="ph ph-eye" aria-hidden="true"></i> Voir
+          </a>
           <?php if ($peut_cloturer): ?>
             <button type="button" class="btn btn-secondary btn-sm" onclick="suiviClorereliquat(<?= (int)$l['id'] ?>)">Clôturer le reliquat</button>
-          <?php else: ?>—<?php endif; ?>
+          <?php endif; ?>
         </td>
       </tr>
       <?php endforeach; ?>
