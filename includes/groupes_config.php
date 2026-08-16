@@ -227,7 +227,12 @@ function _groupes_def(): array {
                  'roles_exclude'=>['lecteur']],
                 ['label'=>'File d\'attente Achats', 'icon'=>'ph-queue',
                  'url'=>'pages/achats/file_attente.php','active_keys'=>['achats_file_attente'],
-                 'perm'=>['achats','can_update']],
+                 'perm'=>['achats','can_update'],
+                 // can_update sur `achats` est aussi porté par les valideurs
+                 // (visa, mes_visas.php) — cf. ach_est_acheteur() dans
+                 // includes/achats.php : ils n'ouvrent plus la page (403),
+                 // exclus ici en plus pour ne pas leur laisser un lien mort.
+                 'roles_exclude'=>['raf','daf','directeur_general','lecteur']],
                 ['label'=>'Mes visas',             'icon'=>'ph-signature',
                  'url'=>'pages/achats/mes_visas.php','active_keys'=>['achats_mes_visas'],
                  'perm'=>['achats','can_update']],
