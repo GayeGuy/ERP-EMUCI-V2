@@ -115,7 +115,7 @@ if ($feb_id) {
 }
 
 $page_title  = $feb ? 'Modifier la FEB' : 'Nouvelle FEB';
-$active_page = 'achats_mes_feb';
+$active_page = 'achats_feb_fiche';
 
 // Préremplissage site/service depuis le profil (modifiable), sauf brouillon existant
 $user_departement_id = db_fetch_value(

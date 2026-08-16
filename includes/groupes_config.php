@@ -222,7 +222,7 @@ function _groupes_def(): array {
                  'url'=>'pages/achats/mes_feb.php','active_keys'=>['achats_mes_feb'],
                  'perm'=>['achats','can_read']],
                 ['label'=>'Nouvelle FEB',          'icon'=>'ph-plus-circle',
-                 'url'=>'pages/achats/feb_fiche.php','active_keys'=>['achats_mes_feb'],
+                 'url'=>'pages/achats/feb_fiche.php','active_keys'=>['achats_feb_fiche'],
                  'perm'=>['achats','can_read'],
                  'roles_exclude'=>['lecteur']],
                 ['label'=>'File d\'attente Achats', 'icon'=>'ph-queue',

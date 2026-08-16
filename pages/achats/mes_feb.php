@@ -126,7 +126,7 @@ include __DIR__ . '/../../templates/header.php';
     <thead><tr>
       <th>Numéro</th><th>Objet</th>
       <?php if ($voit_tout): ?><th>Demandeur</th><?php endif; ?>
-      <th>Urgence</th><th>Date</th><th>Montant</th><th>Statut</th><th>Documents</th>
+      <th>Urgence</th><th>Date</th><th>Montant</th><th>Statut</th><th>Actions</th>
     </tr></thead>
     <tbody>
       <?php foreach ($febs as $f):
@@ -143,6 +143,9 @@ include __DIR__ . '/../../templates/header.php';
         <td><?= fmt_number((float)$f['montant_total']) ?> XOF</td>
         <td><span class="ach-badge" style="background:<?= $s['bg'] ?>;color:<?= $s['color'] ?>"><?= h($s['label']) ?></span></td>
         <td onclick="event.stopPropagation()" style="white-space:nowrap">
+          <a href="feb_detail.php?id=<?= $f['id'] ?>" class="btn btn-secondary btn-sm" title="Détails" aria-label="Détails de la FEB <?= h($f['numero'] ?: $f['objet']) ?>">
+            <i class="ph ph-eye" aria-hidden="true"></i> Détails
+          </a>
           <?php if ($f['id']): ?>
           <a href="feb_fiche_pdf.php?id=<?= $f['id'] ?>" target="_blank" class="btn btn-secondary btn-sm" title="Fiche imprimable">
             <i class="ph ph-printer" aria-hidden="true"></i>
