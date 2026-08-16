@@ -204,6 +204,55 @@ function ach_html_fiche_imprimable(int $feb_id): string {
     $signatures_par_etape = [];
     foreach ($feb['signatures'] as $s) { $signatures_par_etape[$s['etape_label'] ?? ''] = $s; }
 
+    // ── Blocs repris du modèle papier « FEB FINALE DES ACHATS » (classeur
+    //    FEB EMUCI.xlsx). Chacun s'affiche en cases vides tant que la donnée
+    //    n'existe pas : c'est un formulaire, pas un rapport — une FEB en
+    //    brouillon doit pouvoir s'imprimer et se remplir à la main.
+    $urgence_label = ach_urgences()[(int)$feb['urgence']] ?? 'Normale';
+
+    // N° DA / N° BC (SAGE) — portés par les lignes de suivi, donc connus
+    // seulement après confirmation (J7). Dédupliqués : une même référence
+    // couvre souvent tout un lot.
+    $refs = db_fetch_all(
+        "SELECT DISTINCT numero_da, date_da, numero_bc, date_bc FROM feb_suivi
+          WHERE feb_id=? AND (numero_da IS NOT NULL OR numero_bc IS NOT NULL)",
+        [$feb_id]
+    );
+    $das = array_values(array_unique(array_filter(array_column($refs, 'numero_da'))));
+    $bcs = array_values(array_unique(array_filter(array_column($refs, 'numero_bc'))));
+
+    // Propositions fournisseurs — toutes les offres, la retenue marquée
+    // d'une croix dans la colonne CHOIX comme sur le papier.
+    $offres = db_fetch_all(
+        "SELECT o.*, f.raison_sociale FROM feb_offres o
+         LEFT JOIN fournisseurs f ON f.id = o.fournisseur_id
+         WHERE o.feb_id=? ORDER BY o.lot, o.id",
+        [$feb_id]
+    );
+
+    // Contrôle budgétaire — une ligne par famille achetée, sur le
+    // département de la FEB (clé retenue en J6).
+    $budget_rows = [];
+    if ($feb['departement_id']) {
+        $familles = db_fetch_all(
+            "SELECT famille_id, SUM(montant_ttc) AS montant FROM feb_lignes
+              WHERE feb_id=? AND arbitrage='achat' AND famille_id IS NOT NULL
+              GROUP BY famille_id",
+            [$feb_id]
+        );
+        foreach ($familles as $f) {
+            $sit = ach_budget_situation((int)$feb['departement_id'], (int)$f['famille_id'], (int)$feb['exercice'], $feb_id);
+            $budget_rows[] = [
+                'libelle'    => db_fetch_value("SELECT libelle FROM familles_achat WHERE id=?", [$f['famille_id']]),
+                'enveloppe'  => $sit['enveloppe'],
+                'engage'     => $sit['total_engage'],
+                'a_engager'  => (int)$f['montant'],
+                'reste'      => $sit['enveloppe'] !== null ? $sit['enveloppe'] - $sit['total_engage'] - (int)$f['montant'] : null,
+            ];
+        }
+    }
+    $fmt = fn($v) => $v === null ? '—' : number_format((float)$v, 0, ',', ' ') . ' XOF';
+
     $lignes_html = '';
     foreach ($lignes as $l) {
         $lignes_html .= "<tr>
@@ -261,6 +310,26 @@ function ach_html_fiche_imprimable(int $feb_id): string {
             <div style="font-weight:700"><?= h($site_nom ?: '—') ?> / <?= h($dept_nom ?: '—') ?></div>
           </td>
         </tr>
+        <tr>
+          <td style="width:50%;vertical-align:top;padding-top:8px">
+            <div style="font-size:9px;color:#888;text-transform:uppercase">Fonction</div>
+            <div style="font-weight:700"><?= h($feb['fonction'] ?: '—') ?></div>
+          </td>
+          <td style="width:50%;vertical-align:top;padding-top:8px">
+            <div style="font-size:9px;color:#888;text-transform:uppercase">Urgence</div>
+            <div style="font-weight:700"><?= h($urgence_label) ?></div>
+          </td>
+        </tr>
+        <tr>
+          <td style="width:50%;vertical-align:top;padding-top:8px">
+            <div style="font-size:9px;color:#888;text-transform:uppercase">N° DA (Sage)</div>
+            <div style="font-weight:700"><?= $das ? h(implode(', ', $das)) : '<span style="color:#bbb;font-weight:400">…………………………</span>' ?></div>
+          </td>
+          <td style="width:50%;vertical-align:top;padding-top:8px">
+            <div style="font-size:9px;color:#888;text-transform:uppercase">N° BC (Sage)</div>
+            <div style="font-weight:700"><?= $bcs ? h(implode(', ', $bcs)) : '<span style="color:#bbb;font-weight:400">…………………………</span>' ?></div>
+          </td>
+        </tr>
       </table>
       <div style="background:#f0f7ff;border:1px solid #bfdbfe;padding:9px 13px;margin-bottom:12px">
         <div style="font-size:9px;text-transform:uppercase;color:#1D4ED8;font-weight:700;margin-bottom:3px">Objet</div>
@@ -270,6 +339,54 @@ function ach_html_fiche_imprimable(int $feb_id): string {
       <table class="data">
         <thead><tr><th>Désignation</th><th>Qté</th><th>Code analytique</th><th>Type d'achat</th></tr></thead>
         <tbody><?= $lignes_html ?: '<tr><td colspan="4" style="padding:8px;text-align:center;color:#888">Aucune ligne.</td></tr>' ?></tbody>
+      </table>
+
+      <div style="font-size:10px;text-transform:uppercase;color:#888;margin-bottom:6px">Propositions fournisseurs <span style="text-transform:none">(**)</span></div>
+      <table class="data">
+        <thead><tr>
+          <th>Fournisseur</th><th>Délai liv.</th><th>Condition paie.</th>
+          <th style="text-align:right">Montant TTC</th><th style="text-align:center">Choix</th><th>Observations</th>
+        </tr></thead>
+        <tbody>
+        <?php if ($offres): foreach ($offres as $o): ?>
+          <tr>
+            <td style="padding:6px 9px;border:1px solid #d1d5db"><?= h($o['raison_sociale'] ?: '—') ?></td>
+            <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:center"><?= $o['delai_annonce'] !== null ? (int)$o['delai_annonce'] . ' j' : '—' ?></td>
+            <td style="padding:6px 9px;border:1px solid #d1d5db"><?= h($o['conditions_paiement'] ?: '—') ?></td>
+            <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right"><?= $fmt($o['montant_ttc']) ?></td>
+            <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:center;font-weight:700"><?= $o['retenue'] ? '✕' : '' ?></td>
+            <td style="padding:6px 9px;border:1px solid #d1d5db"><?= h($o['observation'] ?: '') ?></td>
+          </tr>
+        <?php endforeach; else: ?>
+          <?php for ($i = 0; $i < 3; $i++): ?>
+          <tr><?php for ($j = 0; $j < 6; $j++): ?><td style="padding:11px 9px;border:1px solid #d1d5db"></td><?php endfor; ?></tr>
+          <?php endfor; ?>
+        <?php endif; ?>
+        </tbody>
+      </table>
+
+      <div style="font-size:10px;text-transform:uppercase;color:#888;margin-bottom:6px">Contrôle budgétaire</div>
+      <table class="data">
+        <thead><tr>
+          <th>Ligne budgétaire</th>
+          <th style="text-align:right">Montant budget</th><th style="text-align:right">Montant engagé</th>
+          <th style="text-align:right">Montant à engager</th><th style="text-align:right">Reste à engager</th>
+        </tr></thead>
+        <tbody>
+        <?php if ($budget_rows): foreach ($budget_rows as $b): ?>
+          <tr>
+            <td style="padding:6px 9px;border:1px solid #d1d5db"><?= h($b['libelle'] ?: '—') ?></td>
+            <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right"><?= $b['enveloppe'] === null ? 'Non plafonné' : $fmt($b['enveloppe']) ?></td>
+            <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right"><?= $fmt($b['engage']) ?></td>
+            <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right"><?= $fmt($b['a_engager']) ?></td>
+            <td style="padding:6px 9px;border:1px solid #d1d5db;text-align:right;font-weight:700<?= ($b['reste'] !== null && $b['reste'] < 0) ? ';color:#991B1B' : '' ?>"><?= $b['reste'] === null ? '—' : $fmt($b['reste']) ?></td>
+          </tr>
+        <?php endforeach; else: ?>
+          <?php for ($i = 0; $i < 2; $i++): ?>
+          <tr><?php for ($j = 0; $j < 5; $j++): ?><td style="padding:11px 9px;border:1px solid #d1d5db"></td><?php endfor; ?></tr>
+          <?php endfor; ?>
+        <?php endif; ?>
+        </tbody>
       </table>
 
       <div style="font-size:10px;text-transform:uppercase;color:#888;margin-bottom:6px">Circuit de signature</div>
