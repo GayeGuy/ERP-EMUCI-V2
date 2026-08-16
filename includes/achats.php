@@ -666,12 +666,18 @@ function ach_retenir_offre_lot(int $offre_id, array $user): void {
 function ach_verifier_comparatif(int $feb_id): array {
     foreach (ach_lots_feb($feb_id) as $lot) {
         $offre = db_fetch_one("SELECT * FROM feb_offres WHERE feb_id=? AND lot=? AND retenue=1", [$feb_id, $lot['lot']]);
-        if ($offre) {
-            $somme = array_sum(array_map(fn($l) => (int)$l['montant_ttc'], $lot['lignes']));
-            if ($somme !== (int)$offre['montant_ttc']) {
-                return ['ok' => false, 'message' =>
-                    "Lot {$lot['lot']} : la somme des lignes ($somme XOF) ne correspond pas au montant de l'offre retenue ({$offre['montant_ttc']} XOF)."];
-            }
+        // Un lot arbitré « achat » sans aucune offre retenue laissait passer
+        // la validation avec des lignes à 0 XOF et sans fournisseur (montant
+        // jamais réconcilié faute d'offre à comparer) — désormais bloquant,
+        // pas seulement vérifié quand une offre existe déjà.
+        if (!$offre) {
+            return ['ok' => false, 'message' =>
+                "Lot {$lot['lot']} : aucune offre retenue — comparez au moins une offre fournisseur avant de poursuivre."];
+        }
+        $somme = array_sum(array_map(fn($l) => (int)$l['montant_ttc'], $lot['lignes']));
+        if ($somme !== (int)$offre['montant_ttc']) {
+            return ['ok' => false, 'message' =>
+                "Lot {$lot['lot']} : la somme des lignes ($somme XOF) ne correspond pas au montant de l'offre retenue ({$offre['montant_ttc']} XOF)."];
         }
         foreach ($lot['lignes'] as $l) {
             if (!$l['type_achat']) {
