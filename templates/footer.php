@@ -73,8 +73,10 @@ function refreshNotifs() {
     });
   }).catch(()=>{});
 }
-// Rafraîchir toutes les 60 secondes
-setInterval(refreshNotifs, 60000);
+// Rafraîchir toutes les 20 secondes — pause quand l'onglet n'est pas
+// visible, même principe que liveRefresh() ci-dessous : pas la peine
+// d'interroger le serveur pour un écran que personne ne regarde.
+setInterval(() => { if (!document.hidden) refreshNotifs(); }, 20000);
 
 // ===== RAFRAICHISSEMENT LIVE (polling léger) =====
 // Remplace périodiquement le contenu d'un conteneur par un fragment HTML
