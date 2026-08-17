@@ -12,12 +12,24 @@ require_once __DIR__ . '/../../includes/achats.php';
 require_auth();
 $user = current_user();
 require_permission('achats_param', 'can_read');
-$can_edit = can('achats_param', 'can_update');
+// can_update sur achats_param est désormais aussi porté par RAF/DAF (saisie
+// de leur budget) — le verrou par ligne (ach_budget_editable) et le
+// périmètre département (ach_perimetre_departements) sont appliqués plus
+// bas, pas ici : ce flag ne dit que "peut éditer des lignes en général".
+$can_edit    = can('achats_param', 'can_update');
+$can_valider = ach_est_validateur_budget($user);
+$is_admin    = in_array($user['role_slug'] ?? '', ['admin', 'superadmin'], true);
 $_SESSION['groupe_actif'] = 'ACHATS';
 $page_title  = 'Lignes budgétaires';
 $active_page = 'achats_param_budget';
 
 $COMPORTEMENTS = ['aucun' => 'Aucun contrôle', 'alerte' => 'Alerte au dépassement', 'blocage' => 'Blocage au dépassement'];
+$STATUTS_BUDGET = [
+    'brouillon' => ['label' => 'Brouillon',        'bg' => '#F1F5F9', 'color' => '#475569'],
+    'soumis'    => ['label' => 'Soumis — en attente','bg' => '#FEF3C7','color' => '#92400E'],
+    'valide'    => ['label' => 'Validé — verrouillé','bg' => '#D1FAE5','color' => '#065F46'],
+    'rejete'    => ['label' => 'Rejeté',            'bg' => '#FEE2E2', 'color' => '#991B1B'],
+];
 
 // ── AJAX ────────────────────────────────────────────────────
 if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -42,7 +54,46 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         json_response(true, '', $rows);
     }
 
+    // ── Cycle de validation du budget (département × exercice) — actions
+    //    propres (ach_soumettre_budget/ach_valider_budget/...) portant leur
+    //    propre contrôle d'habilitation : placées AVANT la porte can_edit
+    //    ci-dessous, sinon le PDG (lecture seule sur achats_param, jamais de
+    //    can_update) ne pourrait jamais valider ni rejeter.
+    if ($action === 'soumettre') {
+        if (!$can_edit) json_response(false, 'Action réservée.');
+        try {
+            ach_soumettre_budget((int)($_POST['departement_id'] ?? 0), (int)($_POST['exercice'] ?? 0), $user);
+            json_response(true, 'Budget soumis au PDG pour validation.');
+        } catch (AchValidationException $e) { json_response(false, $e->getMessage()); }
+    }
+
+    if ($action === 'valider_budget') {
+        try {
+            ach_valider_budget((int)($_POST['departement_id'] ?? 0), (int)($_POST['exercice'] ?? 0), $user);
+            json_response(true, 'Budget validé et verrouillé.');
+        } catch (AchValidationException $e) { json_response(false, $e->getMessage()); }
+    }
+
+    if ($action === 'rejeter_budget') {
+        try {
+            ach_rejeter_budget((int)($_POST['departement_id'] ?? 0), (int)($_POST['exercice'] ?? 0), trim($_POST['motif'] ?? ''), $user);
+            json_response(true, 'Budget rejeté — renvoyé en brouillon.');
+        } catch (AchValidationException $e) { json_response(false, $e->getMessage()); }
+    }
+
+    if ($action === 'reouvrir_budget') {
+        try {
+            ach_admin_reouvrir_budget((int)($_POST['departement_id'] ?? 0), (int)($_POST['exercice'] ?? 0), $user);
+            json_response(true, 'Budget rouvert — de nouveau modifiable.');
+        } catch (AchValidationException $e) { json_response(false, $e->getMessage()); }
+    }
+
     if (!$can_edit) json_response(false, 'Action réservée.');
+
+    // Périmètre RAF/DAF — même fonction que partout ailleurs dans le module
+    // (dashboard, suivi). null = portée globale (admin/superviseur_achat/
+    // RAF-DAF sans département explicite).
+    $perimetre = ach_perimetre_departements($user);
 
     if ($action === 'save') {
         $id             = (int)($_POST['id'] ?? 0);
@@ -55,6 +106,13 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$departement_id || !$famille_id || !$exercice) json_response(false, 'Département, famille et exercice sont obligatoires.');
         if (!isset($COMPORTEMENTS[$comport])) json_response(false, 'Comportement invalide.');
+        if (is_array($perimetre) && !in_array($departement_id, $perimetre, true)) {
+            json_response(false, "Ce département n'est pas dans votre périmètre.");
+        }
+        if (!ach_budget_editable($departement_id, $exercice)) {
+            json_response(false, 'Ce budget est soumis ou validé — il ne peut plus être modifié ' .
+                ($is_admin ? "sans réouverture administrative." : "tant qu'il n'est pas rejeté ou réouvert."));
+        }
 
         // Le sélecteur département se limite déjà aux départements actifs
         // côté écran (point 11) ; contrôle serveur redondant ici.
@@ -94,6 +152,14 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'toggle') {
         $id = (int)($_POST['id'] ?? 0);
         $nv = (int)($_POST['actif'] ?? 0) ? 1 : 0;
+        $ligne = db_fetch_one("SELECT departement_id, exercice FROM lignes_budgetaires WHERE id=?", [$id]);
+        if (!$ligne) json_response(false, 'Ligne introuvable.');
+        if (is_array($perimetre) && !in_array((int)$ligne['departement_id'], $perimetre, true)) {
+            json_response(false, "Ce département n'est pas dans votre périmètre.");
+        }
+        if (!ach_budget_editable((int)$ligne['departement_id'], (int)$ligne['exercice'])) {
+            json_response(false, 'Ce budget est soumis ou validé — il ne peut plus être modifié.');
+        }
         db_query("UPDATE lignes_budgetaires SET actif=? WHERE id=?", [$nv, $id]);
         audit_log($user['id'], 'UPDATE', 'achats_param', $id, $nv ? 'Réactivation ligne budgétaire' : 'Désactivation ligne budgétaire');
         json_response(true, $nv ? 'Ligne réactivée.' : 'Ligne désactivée.');
@@ -108,9 +174,20 @@ $exerciceActuel = (int)(date('Y'));
 $exercice = (int)($_GET['exercice'] ?? ($exercices[0]['exercice'] ?? $exerciceActuel));
 $f_departement = (int)($_GET['departement'] ?? 0);
 
+// Un RAF/DAF scopé à un ou plusieurs départements ne voit (et ne peut
+// soumettre) que les siens — même fonction que le reste du module.
+$perimetre = ach_perimetre_departements($user);
+
 $where  = ['lb.exercice = ?'];
 $params = [$exercice];
 if ($f_departement) { $where[] = 'lb.departement_id = ?'; $params[] = $f_departement; }
+if (is_array($perimetre)) {
+    // ach_clause_departement() renvoie " AND lb.departement_id IN (...)" (ou
+    // " AND 1=0" si le périmètre est vide) — préfixe " AND " ôté ici, le
+    // implode(' AND ', $where) plus bas le remet une seule fois.
+    [$clausePerim, $paramsPerim] = ach_clause_departement($perimetre, 'lb');
+    if ($clausePerim !== '') { $where[] = substr($clausePerim, 5); $params = array_merge($params, $paramsPerim); }
+}
 
 $lignes = db_fetch_all(
     "SELECT lb.*, d.label AS departement_label, d.code AS departement_code,
@@ -140,14 +217,24 @@ $grouped = [];
 foreach ($lignes as $l) {
     $key = (int)($l['departement_id'] ?: 0);
     if (!isset($grouped[$key])) {
-        $grouped[$key] = ['label' => $l['departement_label'] ?: '— (sans département)', 'lignes' => [], 'total_enveloppe' => 0, 'total_engage' => 0];
+        $grouped[$key] = [
+            'label' => $l['departement_label'] ?: '— (sans département)', 'lignes' => [],
+            'total_enveloppe' => 0, 'total_engage' => 0,
+            'validation' => $key ? ach_budget_validation($key, $exercice) : ['statut' => 'brouillon'],
+        ];
     }
     $grouped[$key]['lignes'][] = $l;
     if ($l['enveloppe'] !== null) $grouped[$key]['total_enveloppe'] += (int)$l['enveloppe'];
     $grouped[$key]['total_engage'] += (int)$l['total_engage'];
 }
 
-$departements_actifs = db_fetch_all("SELECT id, code, label FROM departements WHERE actif=1 ORDER BY label ASC");
+$dept_where = 'actif=1';
+$dept_params = [];
+if (is_array($perimetre)) {
+    if (!$perimetre) { $dept_where .= ' AND 1=0'; }
+    else { $dept_where .= ' AND id IN (' . implode(',', array_fill(0, count($perimetre), '?')) . ')'; $dept_params = $perimetre; }
+}
+$departements_actifs = db_fetch_all("SELECT id, code, label FROM departements WHERE $dept_where ORDER BY label ASC", $dept_params);
 $familles = db_fetch_all("SELECT id, code, libelle, compte_comptable FROM familles_achat WHERE actif=1 ORDER BY libelle ASC");
 
 include __DIR__ . '/../../templates/header.php';
@@ -221,20 +308,53 @@ include __DIR__ . '/../../templates/header.php';
   <div class="dept-card"><div class="ach-empty">Aucune ligne budgétaire pour ces filtres.</div></div>
 <?php else: foreach ($grouped as $dept_id => $g):
   $pct = $g['total_enveloppe'] > 0 ? min(100, round($g['total_engage'] / $g['total_enveloppe'] * 100)) : 0;
+  $statut_budget = $g['validation']['statut'];
+  $sb = $STATUTS_BUDGET[$statut_budget] ?? $STATUTS_BUDGET['brouillon'];
 ?>
 <div class="dept-card">
   <div class="dept-hdr">
-    <span class="dept-nom"><?= h($g['label']) ?></span>
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span class="dept-nom"><?= h($g['label']) ?></span>
+      <?php if ($dept_id): ?>
+      <span class="ach-badge" style="background:<?= $sb['bg'] ?>;color:<?= $sb['color'] ?>"><?= h($sb['label']) ?></span>
+      <?php endif; ?>
+    </div>
     <span class="dept-meta">
       <?= fmt_number((float)$g['total_engage']) ?> XOF engagés
       <?= $g['total_enveloppe'] > 0 ? ' / ' . fmt_number((float)$g['total_enveloppe']) . ' XOF (' . $pct . '%)' : '' ?>
     </span>
+    <?php if ($dept_id): ?>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <?php if ($can_edit && in_array($statut_budget, ['brouillon', 'rejete'], true)): ?>
+        <button type="button" class="btn btn-primary btn-sm" onclick="pbSoumettre(<?= $dept_id ?>, <?= $exercice ?>)">
+          <i class="ph ph-paper-plane-tilt" aria-hidden="true"></i> Soumettre au PDG
+        </button>
+      <?php endif; ?>
+      <?php if ($can_valider && $statut_budget === 'soumis'): ?>
+        <button type="button" class="btn btn-primary btn-sm" onclick="pbValider(<?= $dept_id ?>, <?= $exercice ?>)">
+          <i class="ph ph-check-circle" aria-hidden="true"></i> Valider
+        </button>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="pbRejeter(<?= $dept_id ?>, <?= $exercice ?>)">
+          <i class="ph ph-x-circle" aria-hidden="true"></i> Rejeter
+        </button>
+      <?php endif; ?>
+      <?php if ($is_admin && $statut_budget === 'valide'): ?>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="pbReouvrir(<?= $dept_id ?>, <?= $exercice ?>)">
+          <i class="ph ph-lock-open" aria-hidden="true"></i> Réouvrir (admin)
+        </button>
+      <?php endif; ?>
+    </div>
+    <?php if ($statut_budget === 'rejete' && !empty($g['validation']['motif_rejet'])): ?>
+    <div style="width:100%;font-size:12px;color:#991B1B">Motif du rejet : <?= h($g['validation']['motif_rejet']) ?></div>
+    <?php endif; ?>
+    <?php endif; ?>
   </div>
+  <?php $dept_editable = $dept_id ? in_array($statut_budget, ['brouillon', 'rejete'], true) : true; ?>
   <div style="overflow-x:auto">
   <table class="ach-table">
     <thead><tr>
       <th>Famille</th><th>Compte</th><th>Enveloppe</th><th>Engagé + réservé</th><th>Disponible</th><th>Comportement</th><th>Statut</th>
-      <?php if ($can_edit): ?><th>Actions</th><?php endif; ?>
+      <?php if ($can_edit && $dept_editable): ?><th>Actions</th><?php endif; ?>
     </tr></thead>
     <tbody>
       <?php foreach ($g['lignes'] as $l):
@@ -256,7 +376,7 @@ include __DIR__ . '/../../templates/header.php';
         </td>
         <td><span class="ach-badge <?= h($l['comportement']) ?>"><?= h($COMPORTEMENTS[$l['comportement']] ?? $l['comportement']) ?></span></td>
         <td><span class="ach-badge <?= $l['actif'] ? 'on' : 'off' ?>"><?= $l['actif'] ? 'Active' : 'Inactive' ?></span></td>
-        <?php if ($can_edit): ?>
+        <?php if ($can_edit && $dept_editable): ?>
         <td onclick="event.stopPropagation()" style="display:flex;gap:8px">
           <button type="button" class="btn btn-secondary btn-sm" aria-label="Modifier <?= h($l['famille_libelle'] ?? '') ?>"
                   onclick='achOpenEdit(<?= json_encode($l, JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
@@ -396,6 +516,37 @@ function achSave() {
 function achToggle(id, actif) {
   if (!confirm(actif ? 'Réactiver cette ligne ?' : 'Désactiver cette ligne ?')) return;
   achPost({ action: 'toggle', id, actif }).then(res => {
+    toast(res.message, res.success ? 'success' : 'danger');
+    if (res.success) setTimeout(() => location.reload(), 500);
+  });
+}
+
+function pbSoumettre(departement_id, exercice) {
+  if (!confirm('Soumettre ce budget au PDG pour validation ? Les lignes seront verrouillées tant qu\'il n\'est pas validé ou rejeté.')) return;
+  achPost({ action: 'soumettre', departement_id, exercice }).then(res => {
+    toast(res.message, res.success ? 'success' : 'danger');
+    if (res.success) setTimeout(() => location.reload(), 500);
+  });
+}
+function pbValider(departement_id, exercice) {
+  if (!confirm('Valider ce budget ? Il sera verrouillé et deviendra la référence du contrôle des dépenses.')) return;
+  achPost({ action: 'valider_budget', departement_id, exercice }).then(res => {
+    toast(res.message, res.success ? 'success' : 'danger');
+    if (res.success) setTimeout(() => location.reload(), 500);
+  });
+}
+function pbRejeter(departement_id, exercice) {
+  const motif = prompt('Motif du rejet :');
+  if (motif === null) return;
+  if (!motif.trim()) { toast('Le motif de rejet est obligatoire.', 'danger'); return; }
+  achPost({ action: 'rejeter_budget', departement_id, exercice, motif: motif.trim() }).then(res => {
+    toast(res.message, res.success ? 'success' : 'danger');
+    if (res.success) setTimeout(() => location.reload(), 500);
+  });
+}
+function pbReouvrir(departement_id, exercice) {
+  if (!confirm("Réouvrir ce budget validé ? Il redevient modifiable et devra être soumis puis validé à nouveau.")) return;
+  achPost({ action: 'reouvrir_budget', departement_id, exercice }).then(res => {
     toast(res.message, res.success ? 'success' : 'danger');
     if (res.success) setTimeout(() => location.reload(), 500);
   });

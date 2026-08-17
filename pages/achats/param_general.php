@@ -12,6 +12,14 @@ require_once __DIR__ . '/../../includes/achats.php';
 require_auth();
 $user = current_user();
 require_permission('achats_param', 'can_read');
+// RAF/DAF/PDG n'ont achats_param que pour le budget (param_budget.php) —
+// cf. migration_achats_13_budget_validation.sql. Les autres écrans de
+// paramétrage restent réservés à l'administration.
+if (in_array($user['role_slug'] ?? '', ['raf', 'daf', 'lecteur'], true)) {
+    http_response_code(403);
+    include __DIR__ . '/../../templates/403.php';
+    exit;
+}
 $can_edit = can('achats_param', 'can_update');
 $_SESSION['groupe_actif'] = 'ACHATS';
 $page_title  = 'Paramètres généraux';

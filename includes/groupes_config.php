@@ -245,21 +245,29 @@ function _groupes_def(): array {
                 ['label'=>'Stock par département', 'icon'=>'ph-buildings',
                  'url'=>'pages/achats/stock_departements.php','active_keys'=>['achats_stock_departements'],
                  'perm'=>['achats_suivi','can_read']],
+                // RAF/DAF/PDG (lecteur) portent achats_param can_read/can_update
+                // uniquement pour le budget (migration_achats_13) : exclus des
+                // 4 autres écrans, qui restent à l'administration (même 403
+                // côté page, cf. param_fournisseurs.php et consorts).
                 ['label'=>'Fournisseurs',          'icon'=>'ph-storefront',
                  'url'=>'pages/achats/param_fournisseurs.php','active_keys'=>['achats_param_fournisseurs'],
-                 'perm'=>['achats_param','can_read']],
+                 'perm'=>['achats_param','can_read'],
+                 'roles_exclude'=>['raf','daf','lecteur']],
                 ['label'=>'Familles & types',      'icon'=>'ph-tag',
                  'url'=>'pages/achats/param_familles.php','active_keys'=>['achats_param_familles'],
-                 'perm'=>['achats_param','can_read']],
+                 'perm'=>['achats_param','can_read'],
+                 'roles_exclude'=>['raf','daf','lecteur']],
                 ['label'=>'Paliers de validation',  'icon'=>'ph-stairs',
                  'url'=>'pages/achats/param_paliers.php','active_keys'=>['achats_param_paliers'],
-                 'perm'=>['achats_param','can_read']],
+                 'perm'=>['achats_param','can_read'],
+                 'roles_exclude'=>['raf','daf','lecteur']],
                 ['label'=>'Lignes budgétaires',     'icon'=>'ph-calculator',
                  'url'=>'pages/achats/param_budget.php','active_keys'=>['achats_param_budget'],
                  'perm'=>['achats_param','can_read']],
                 ['label'=>'Paramètres généraux',    'icon'=>'ph-gear',
                  'url'=>'pages/achats/param_general.php','active_keys'=>['achats_param_general'],
-                 'perm'=>['achats_param','can_read']],
+                 'perm'=>['achats_param','can_read'],
+                 'roles_exclude'=>['raf','daf','lecteur']],
             ],
         ],
 

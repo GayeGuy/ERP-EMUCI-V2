@@ -846,11 +846,157 @@ function ach_budget_situation(int $departement_id, int $famille_id, int $exercic
 //    Lève une AchValidationException en cas de dépassement bloquant ;
 //    retourne la liste des avertissements (dépassements en mode "alerte",
 //    ou familles sans ligne budgétaire — point 17) sinon.
+//
+// ── Cycle de vie du budget par département × exercice — retour observations
+//    spec (2026-08-17). RAF/DAF saisissent les lignes (brouillon) et
+//    soumettent ; le PDG valide. La validation EST la clôture : un seul
+//    geste verrouille les lignes et en fait la référence de contrôle —
+//    pas d'étape de clôture séparée (décision explicite de l'utilisateur).
+//    Un couple département/exercice sans ligne dans budget_validations est
+//    en brouillon implicite : évite de devoir pré-créer une ligne de suivi
+//    pour chaque département avant même la première saisie.
+function ach_budget_validation(int $departement_id, int $exercice): array {
+    $row = db_fetch_one(
+        "SELECT * FROM budget_validations WHERE departement_id=? AND exercice=?",
+        [$departement_id, $exercice]
+    );
+    return $row ?: [
+        'departement_id' => $departement_id, 'exercice' => $exercice, 'statut' => 'brouillon',
+        'soumis_par' => null, 'soumis_le' => null, 'valide_par' => null, 'valide_le' => null,
+        'motif_rejet' => null, 'rejete_par' => null, 'rejete_le' => null,
+    ];
+}
+
+// ── Une ligne budgétaire n'est modifiable/désactivable que tant que le
+//    budget de son département/exercice n'a pas été soumis ou validé.
+function ach_budget_editable(int $departement_id, int $exercice): bool {
+    return in_array(ach_budget_validation($departement_id, $exercice)['statut'], ['brouillon', 'rejete'], true);
+}
+
+// ── Qui propose (saisit/soumet) un budget — RAF/DAF nouvellement admis
+//    pour cette seule tâche, plus les rôles qui géraient déjà achats_param.
+function ach_est_proposant_budget(?array $user = null): bool {
+    $user = $user ?? current_user();
+    return in_array($user['role_slug'] ?? '', ['raf', 'daf', 'admin', 'superadmin', 'superviseur_achat'], true);
+}
+
+// ── Qui valide (verrouille) un budget soumis — le PDG, rôle technique
+//    'lecteur' (cf. migration_achats_03_permissions.sql), plus admin en
+//    secours. Jamais via can_update sur achats_param : un lecteur ne
+//    dépose/ne modifie jamais rien directement (ach_peut_creer()), la
+//    validation est une action métier distincte, pas une écriture libre.
+function ach_est_validateur_budget(?array $user = null): bool {
+    $user = $user ?? current_user();
+    return in_array($user['role_slug'] ?? '', ['lecteur', 'admin', 'superadmin'], true);
+}
+
+function ach_soumettre_budget(int $departement_id, int $exercice, array $user): void {
+    if (!ach_est_proposant_budget($user)) throw new AchValidationException("Vous n'êtes pas habilité à soumettre un budget.");
+    $depts = ach_perimetre_departements($user);
+    if (is_array($depts) && !in_array($departement_id, $depts, true)) {
+        throw new AchValidationException("Ce département n'est pas dans votre périmètre.");
+    }
+    $v = ach_budget_validation($departement_id, $exercice);
+    if (!in_array($v['statut'], ['brouillon', 'rejete'], true)) {
+        throw new AchValidationException('Ce budget est déjà soumis ou validé.');
+    }
+    $nb = (int) db_fetch_value(
+        "SELECT COUNT(*) FROM lignes_budgetaires WHERE departement_id=? AND exercice=? AND actif=1",
+        [$departement_id, $exercice]
+    );
+    if ($nb === 0) throw new AchValidationException('Aucune ligne budgétaire active à soumettre pour ce département et cet exercice.');
+
+    db_query(
+        "INSERT INTO budget_validations (departement_id, exercice, statut, soumis_par, soumis_le)
+         VALUES (?,?,'soumis',?,NOW())
+         ON CONFLICT (departement_id, exercice) DO UPDATE SET
+             statut = 'soumis', soumis_par = ?, soumis_le = NOW(), motif_rejet = NULL",
+        [$departement_id, $exercice, (int)$user['id'], (int)$user['id']]
+    );
+    audit_log((int)$user['id'], 'UPDATE', 'achats_param', $departement_id,
+        "Budget soumis pour validation — département #$departement_id, exercice $exercice");
+
+    $dept_label = db_fetch_value("SELECT label FROM departements WHERE id=?", [$departement_id]);
+    foreach (db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id = u.role_id WHERE r.slug='lecteur' AND u.actif=1") as $pdg) {
+        db_query(
+            "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?, 'info', 'Budget à valider', ?, ?)",
+            [(int)$pdg['id'], "Budget $exercice de $dept_label soumis à votre validation.", '/pages/achats/param_budget.php?exercice=' . $exercice]
+        );
+    }
+}
+
+function ach_valider_budget(int $departement_id, int $exercice, array $user): void {
+    if (!ach_est_validateur_budget($user)) throw new AchValidationException("Vous n'êtes pas habilité à valider un budget.");
+    $v = ach_budget_validation($departement_id, $exercice);
+    if ($v['statut'] !== 'soumis') throw new AchValidationException("Ce budget n'est pas en attente de validation.");
+
+    db_query(
+        "UPDATE budget_validations SET statut='valide', valide_par=?, valide_le=NOW() WHERE departement_id=? AND exercice=?",
+        [(int)$user['id'], $departement_id, $exercice]
+    );
+    audit_log((int)$user['id'], 'UPDATE', 'achats_param', $departement_id,
+        "Budget validé et verrouillé — département #$departement_id, exercice $exercice");
+
+    if ($v['soumis_par']) {
+        $dept_label = db_fetch_value("SELECT label FROM departements WHERE id=?", [$departement_id]);
+        db_query(
+            "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?, 'info', 'Budget validé', ?, ?)",
+            [(int)$v['soumis_par'], "Le budget $exercice de $dept_label est validé et verrouillé.", '/pages/achats/param_budget.php?exercice=' . $exercice]
+        );
+    }
+}
+
+function ach_rejeter_budget(int $departement_id, int $exercice, string $motif, array $user): void {
+    if (!ach_est_validateur_budget($user)) throw new AchValidationException("Vous n'êtes pas habilité à rejeter un budget.");
+    $motif = trim($motif);
+    if ($motif === '') throw new AchValidationException('Le motif de rejet est obligatoire.');
+    $v = ach_budget_validation($departement_id, $exercice);
+    if ($v['statut'] !== 'soumis') throw new AchValidationException("Ce budget n'est pas en attente de validation.");
+
+    db_query(
+        "UPDATE budget_validations SET statut='rejete', motif_rejet=?, rejete_par=?, rejete_le=NOW() WHERE departement_id=? AND exercice=?",
+        [$motif, (int)$user['id'], $departement_id, $exercice]
+    );
+    audit_log((int)$user['id'], 'UPDATE', 'achats_param', $departement_id,
+        "Budget rejeté — département #$departement_id, exercice $exercice : $motif");
+
+    if ($v['soumis_par']) {
+        $dept_label = db_fetch_value("SELECT label FROM departements WHERE id=?", [$departement_id]);
+        db_query(
+            "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?, 'info', 'Budget rejeté', ?, ?)",
+            [(int)$v['soumis_par'], "Le budget $exercice de $dept_label est rejeté : $motif", '/pages/achats/param_budget.php?exercice=' . $exercice]
+        );
+    }
+}
+
+// ── Réouverture administrative d'un budget déjà validé — même logique
+//    d'exception que ach_admin_reouvrir_validation() pour les FEB : porte
+//    de sortie tracée pour corriger une erreur après coup, réservée à
+//    l'administration, jamais un simple retour arrière silencieux.
+function ach_admin_reouvrir_budget(int $departement_id, int $exercice, array $user): void {
+    if (!in_array($user['role_slug'] ?? '', ['admin', 'superadmin'], true)) {
+        throw new AchValidationException('Réservé à un administrateur.');
+    }
+    $v = ach_budget_validation($departement_id, $exercice);
+    if ($v['statut'] !== 'valide') throw new AchValidationException("Ce budget n'est pas verrouillé.");
+
+    db_query("UPDATE budget_validations SET statut='brouillon' WHERE departement_id=? AND exercice=?", [$departement_id, $exercice]);
+    audit_log((int)$user['id'], 'UPDATE', 'achats_param', $departement_id,
+        "Réouverture administrative d'un budget validé — département #$departement_id, exercice $exercice");
+}
+
 function ach_controle_budget(int $feb_id): array {
     $feb = db_fetch_one("SELECT departement_id, exercice, numero FROM feb WHERE id=?", [$feb_id]);
     if (!$feb || !$feb['departement_id']) return ['avertissements' => []];
     $dept_id  = (int)$feb['departement_id'];
     $exercice = (int)$feb['exercice'];
+
+    // Référence de contrôle = le budget VALIDÉ (verrouillé par le PDG), pas
+    // un brouillon ou une soumission encore modifiable — un plafond qui
+    // peut changer la veille du contrôle n'en est pas un.
+    if (ach_budget_validation($dept_id, $exercice)['statut'] !== 'valide') {
+        return ['avertissements' => ["Budget $exercice non validé pour ce département — dépense non contrôlée."]];
+    }
 
     $familles = db_fetch_all(
         "SELECT famille_id, SUM(montant_ttc) AS montant FROM feb_lignes
@@ -1688,12 +1834,14 @@ function ach_score_fournisseur(int $fournisseur_id): array {
 function ach_budget_departements(?array $depts, int $exercice): array {
     [$clause, $pd] = ach_clause_departement($depts, 'd');
     $enveloppes = db_fetch_all(
-        "SELECT d.id, d.label, COALESCE(SUM(lb.enveloppe),0) AS enveloppe
+        "SELECT d.id, d.label, COALESCE(SUM(lb.enveloppe),0) AS enveloppe,
+                COALESCE(bv.statut, 'brouillon') AS statut
          FROM departements d
-         LEFT JOIN lignes_budgetaires lb ON lb.departement_id=d.id AND lb.exercice=? AND lb.actif=1
+         LEFT JOIN lignes_budgetaires lb  ON lb.departement_id=d.id AND lb.exercice=? AND lb.actif=1
+         LEFT JOIN budget_validations bv ON bv.departement_id=d.id AND bv.exercice=?
          WHERE d.actif=1$clause
-         GROUP BY d.id, d.label ORDER BY d.label",
-        array_merge([$exercice], $pd)
+         GROUP BY d.id, d.label, bv.statut ORDER BY d.label",
+        array_merge([$exercice, $exercice], $pd)
     );
     $engages = array_column(
         db_fetch_all(
