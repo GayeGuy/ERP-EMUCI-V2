@@ -23,6 +23,21 @@ $_SESSION['groupe_actif'] = 'ACHATS';
 $page_title  = 'Lignes budgétaires';
 $active_page = 'achats_param_budget';
 
+// ── Modèle CSV de l'import — téléchargement direct, hors flux AJAX.
+if (($_GET['template'] ?? '') === 'csv') {
+    if (!$can_edit) { http_response_code(403); exit; }
+    header('Content-Type: text/csv; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="modele_lignes_budgetaires.csv"');
+    echo "\xEF\xBB\xBF"; // BOM UTF-8, pour qu'Excel n'affiche pas les accents en charabia
+    // Virgule, pas point-virgule : c'est le séparateur par défaut du lecteur
+    // CSV de PhpSpreadsheet côté import_preview, non reconfiguré.
+    $out = fopen('php://output', 'w');
+    fputcsv($out, ['departement', 'famille', 'enveloppe', 'comportement']);
+    fputcsv($out, ['ADMINISTRATION', 'Fournitures de bureau', '500000', 'alerte']);
+    fclose($out);
+    exit;
+}
+
 $COMPORTEMENTS = ['aucun' => 'Aucun contrôle', 'alerte' => 'Alerte au dépassement', 'blocage' => 'Blocage au dépassement'];
 $STATUTS_BUDGET = [
     'brouillon' => ['label' => 'Brouillon',        'bg' => '#F1F5F9', 'color' => '#475569'],
@@ -163,6 +178,143 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         db_query("UPDATE lignes_budgetaires SET actif=? WHERE id=?", [$nv, $id]);
         audit_log($user['id'], 'UPDATE', 'achats_param', $id, $nv ? 'Réactivation ligne budgétaire' : 'Désactivation ligne budgétaire');
         json_response(true, $nv ? 'Ligne réactivée.' : 'Ligne désactivée.');
+    }
+
+    // ── Import en masse — deux temps : aperçu (résolution + contrôles,
+    //    rien n'est écrit), puis confirmation (écrit ce qui a été validé à
+    //    l'aperçu). Le fichier n'est jamais reparsé à la confirmation : le
+    //    résultat de l'aperçu est gardé en session, pour que ce que
+    //    l'utilisateur a validé soit exactement ce qui est écrit.
+    if ($action === 'import_preview') {
+        $imp_exercice = (int)($_POST['exercice'] ?? 0);
+        if (!$imp_exercice) json_response(false, "L'exercice est obligatoire pour l'import.");
+        if (empty($_FILES['fichier']) || $_FILES['fichier']['error'] !== UPLOAD_ERR_OK) {
+            json_response(false, 'Sélectionnez un fichier valide.');
+        }
+        $ext = strtolower(pathinfo($_FILES['fichier']['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, ['xlsx', 'xls', 'csv'], true)) {
+            json_response(false, 'Format invalide. Utilisez .xlsx, .xls ou .csv.');
+        }
+
+        $tmp_dest = sys_get_temp_dir() . '/budget_import_' . uniqid() . '.' . $ext;
+        move_uploaded_file($_FILES['fichier']['tmp_name'], $tmp_dest);
+        require_once __DIR__ . '/../../vendor/autoload.php';
+        try {
+            $rows = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmp_dest)->getActiveSheet()->toArray(null, true, true, false);
+        } catch (Exception $e) {
+            @unlink($tmp_dest);
+            json_response(false, 'Erreur de lecture du fichier : ' . $e->getMessage());
+        }
+        @unlink($tmp_dest);
+
+        if (empty($rows)) json_response(false, 'Fichier vide.');
+        $headers = array_map('strtolower', array_map('trim', $rows[0]));
+        $col = array_flip($headers);
+        foreach (['departement', 'famille'] as $need) {
+            if (!isset($col[$need])) json_response(false, "Colonne manquante : « $need ». Colonnes attendues : departement, famille, enveloppe, comportement.");
+        }
+
+        // Résolution par code OU libellé, insensible à la casse — l'utilisateur
+        // ne doit pas avoir à connaître l'identifiant technique.
+        $depts_all = db_fetch_all("SELECT id, code, label, actif FROM departements");
+        $fams_all  = db_fetch_all("SELECT id, code, libelle, actif, compte_comptable FROM familles_achat");
+        $find_dept = function (string $v) use ($depts_all) {
+            $v = mb_strtolower(trim($v));
+            foreach ($depts_all as $d) { if (mb_strtolower($d['code']) === $v || mb_strtolower($d['label']) === $v) return $d; }
+            return null;
+        };
+        $find_fam = function (string $v) use ($fams_all) {
+            $v = mb_strtolower(trim($v));
+            foreach ($fams_all as $f) { if (mb_strtolower($f['code']) === $v || mb_strtolower($f['libelle']) === $v) return $f; }
+            return null;
+        };
+
+        $editable_cache = [];
+        $lignes_preview = [];
+        for ($i = 1; $i < count($rows); $i++) {
+            $row     = $rows[$i];
+            $dep_raw = trim((string)($row[$col['departement']] ?? ''));
+            $fam_raw = trim((string)($row[$col['famille']] ?? ''));
+            if ($dep_raw === '' && $fam_raw === '') continue;
+
+            $erreurs = [];
+            $dept = $dep_raw !== '' ? $find_dept($dep_raw) : null;
+            if (!$dept) $erreurs[] = "département « $dep_raw » introuvable";
+            elseif (!$dept['actif']) $erreurs[] = "département « {$dept['label']} » inactif";
+            elseif (is_array($perimetre) && !in_array((int)$dept['id'], $perimetre, true)) $erreurs[] = "département « {$dept['label']} » hors de votre périmètre";
+
+            $fam = $fam_raw !== '' ? $find_fam($fam_raw) : null;
+            if (!$fam) $erreurs[] = "famille « $fam_raw » introuvable";
+            elseif (!$fam['actif']) $erreurs[] = "famille « {$fam['libelle']} » inactive";
+
+            if ($dept && !$erreurs) {
+                $dept_id = (int)$dept['id'];
+                if (!array_key_exists($dept_id, $editable_cache)) $editable_cache[$dept_id] = ach_budget_editable($dept_id, $imp_exercice);
+                if (!$editable_cache[$dept_id]) $erreurs[] = "budget « {$dept['label']} » soumis ou validé pour $imp_exercice — verrouillé";
+            }
+
+            $env_raw   = trim((string)($row[$col['enveloppe']] ?? ''));
+            $enveloppe = null;
+            if ($env_raw !== '') {
+                if (is_numeric($env_raw)) $enveloppe = (int)$env_raw;
+                else $erreurs[] = "enveloppe « $env_raw » non numérique";
+            }
+
+            $comport = strtolower(trim((string)($row[$col['comportement']] ?? ''))) ?: 'aucun';
+            if (!isset($COMPORTEMENTS[$comport])) { $erreurs[] = "comportement « $comport » inconnu (aucun/alerte/blocage)"; $comport = 'aucun'; }
+
+            $lignes_preview[] = [
+                'ligne_fichier'  => $i + 1,
+                'departement_id' => $dept['id'] ?? null,
+                'departement'    => $dept['label'] ?? $dep_raw,
+                'famille_id'     => $fam['id'] ?? null,
+                'famille'        => $fam['libelle'] ?? $fam_raw,
+                'enveloppe'      => $enveloppe,
+                'comportement'   => $comport,
+                'erreurs'        => $erreurs,
+            ];
+        }
+
+        if (!$lignes_preview) json_response(false, 'Aucune ligne exploitable dans le fichier.');
+
+        $_SESSION['budget_import'] = ['exercice' => $imp_exercice, 'lignes' => $lignes_preview];
+        json_response(true, '', [
+            'exercice' => $imp_exercice,
+            'total'    => count($lignes_preview),
+            'valides'  => count(array_filter($lignes_preview, fn($l) => !$l['erreurs'])),
+            'lignes'   => $lignes_preview,
+        ]);
+    }
+
+    if ($action === 'import_confirm') {
+        $session = $_SESSION['budget_import'] ?? null;
+        if (!$session) json_response(false, "Session d'import expirée — reprenez depuis le début.");
+        $imp_exercice = (int)$session['exercice'];
+        $creees = 0; $maj = 0; $ignorees = 0;
+        foreach ($session['lignes'] as $l) {
+            if ($l['erreurs']) { $ignorees++; continue; }
+            $fam  = db_fetch_one("SELECT * FROM familles_achat WHERE id=?", [$l['famille_id']]);
+            $dept = db_fetch_one("SELECT * FROM departements WHERE id=?", [$l['departement_id']]);
+            if (!$fam || !$dept) { $ignorees++; continue; }
+            $existe = db_fetch_value(
+                "SELECT id FROM lignes_budgetaires WHERE departement_id=? AND famille_id=? AND exercice=?",
+                [$l['departement_id'], $l['famille_id'], $imp_exercice]
+            );
+            db_query(
+                "INSERT INTO lignes_budgetaires (departement_id, famille_id, exercice, code_comptable, designation, enveloppe, comportement)
+                 VALUES (?,?,?,?,?,?,?)
+                 ON CONFLICT (departement_id, famille_id, exercice) DO UPDATE SET
+                    code_comptable=EXCLUDED.code_comptable, designation=EXCLUDED.designation,
+                    enveloppe=EXCLUDED.enveloppe, comportement=EXCLUDED.comportement",
+                [$l['departement_id'], $l['famille_id'], $imp_exercice,
+                 $fam['compte_comptable'] ?: $fam['code'], $dept['label'] . ' — ' . $fam['libelle'],
+                 $l['enveloppe'], $l['comportement']]
+            );
+            $existe ? $maj++ : $creees++;
+        }
+        unset($_SESSION['budget_import']);
+        audit_log($user['id'], 'CREATE', 'achats_param', null, "Import lignes budgétaires $imp_exercice : $creees créée(s), $maj mise(s) à jour, $ignorees ignorée(s)");
+        json_response(true, "$creees créée(s), $maj mise(s) à jour" . ($ignorees ? ", $ignorees ignorée(s)" : '') . '.');
     }
 
     json_response(false, 'Action inconnue.');
@@ -389,7 +541,11 @@ include __DIR__ . '/../../templates/header.php';
     <label for="ach-exercice" style="font-size:13px;font-weight:600;color:#374151">Exercice</label>
     <select id="ach-exercice" name="exercice" onchange="this.form.submit()">
       <?php
-      $exList = array_unique(array_merge(array_column($exercices, 'exercice'), [$exerciceActuel]));
+      // +1 : préparer le budget de l'année suivante avant qu'elle ne
+      // commence (saisie RAF/DAF, soumission, validation PDG) — sans quoi
+      // le filtre ne propose jamais d'exercice futur tant qu'aucune ligne
+      // n'y existe.
+      $exList = array_unique(array_merge(array_column($exercices, 'exercice'), [$exerciceActuel, $exerciceActuel + 1]));
       rsort($exList);
       foreach ($exList as $ex): ?>
         <option value="<?= $ex ?>" <?= $ex == $exercice ? 'selected' : '' ?>><?= $ex ?></option>
@@ -404,9 +560,14 @@ include __DIR__ . '/../../templates/header.php';
     </select>
   </form>
   <?php if ($can_edit): ?>
-  <button type="button" class="btn btn-primary" onclick="achOpenCreate()">
-    <i class="ph ph-plus" aria-hidden="true"></i> Nouvelle ligne
-  </button>
+  <div style="display:flex;gap:10px">
+    <button type="button" class="btn btn-secondary" onclick="ibOpenModal()">
+      <i class="ph ph-upload-simple" aria-hidden="true"></i> Importer
+    </button>
+    <button type="button" class="btn btn-primary" onclick="achOpenCreate()">
+      <i class="ph ph-plus" aria-hidden="true"></i> Nouvelle ligne
+    </button>
+  </div>
   <?php endif; ?>
 </div>
 
@@ -473,6 +634,51 @@ include __DIR__ . '/../../templates/header.php';
     </div>
     <div class="ach-modal-actions">
       <button type="button" class="btn btn-secondary" onclick="document.getElementById('drill-modal').classList.remove('open')">Fermer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALE import -->
+<div class="ach-modal-bg" id="import-modal">
+  <div class="ach-modal" role="dialog" aria-labelledby="import-modal-title" style="max-width:720px">
+    <h3 id="import-modal-title">Importer des lignes budgétaires</h3>
+
+    <div id="import-step-1">
+      <div class="ach-hint" style="margin-bottom:12px">
+        Fichier .xlsx, .xls ou .csv (séparateur virgule) avec les colonnes <code>departement</code>, <code>famille</code>,
+        <code>enveloppe</code> (facultative) et <code>comportement</code> (aucun/alerte/blocage, facultatif) —
+        le département et la famille peuvent être saisis par code ou par libellé.
+        <a href="?template=csv">Télécharger le modèle</a>.
+      </div>
+      <div class="ach-row2">
+        <div class="ach-fg">
+          <label for="ib-exercice">Exercice cible</label>
+          <select id="ib-exercice"></select>
+        </div>
+        <div class="ach-fg">
+          <label for="ib-fichier">Fichier</label>
+          <input type="file" id="ib-fichier" accept=".xlsx,.xls,.csv">
+        </div>
+      </div>
+      <div class="ach-err" id="import-err"></div>
+      <div class="ach-modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="ibCloseModal()">Annuler</button>
+        <button type="button" class="btn btn-primary" onclick="ibPreview()">Analyser le fichier</button>
+      </div>
+    </div>
+
+    <div id="import-step-2" style="display:none">
+      <div id="import-summary" style="font-size:13px;margin-bottom:12px"></div>
+      <div style="overflow-x:auto;max-height:340px;overflow-y:auto">
+        <table class="ach-table">
+          <thead><tr><th>Ligne</th><th>Département</th><th>Famille</th><th>Enveloppe</th><th>Comportement</th><th>Statut</th></tr></thead>
+          <tbody id="import-preview-tbody"></tbody>
+        </table>
+      </div>
+      <div class="ach-modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="ibRetour()">Retour</button>
+        <button type="button" class="btn btn-primary" id="ib-btn-confirm" onclick="ibConfirmer()">Importer les lignes valides</button>
+      </div>
     </div>
   </div>
 </div>
@@ -586,6 +792,64 @@ function pbDrillDown(departement_id, famille_id, exercice, familleLibelle) {
         <td>${Number(r.montant_ttc).toLocaleString('fr-FR')} XOF</td>
         <td>${esc(r.statut)}</td>
       </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:18px">Aucune FEB ne contribue à cette enveloppe pour l\'instant.</td></tr>';
+  });
+}
+
+// ── Import en masse ──────────────────────────────────────────
+function ibOpenModal() {
+  document.getElementById('import-err').style.display = 'none';
+  document.getElementById('ib-fichier').value = '';
+  const sel = document.getElementById('ib-exercice');
+  sel.innerHTML = '';
+  <?php foreach ($exList as $ex): ?>
+    sel.innerHTML += '<option value="<?= $ex ?>" <?= $ex == $exercice ? 'selected' : '' ?>><?= $ex ?></option>';
+  <?php endforeach; ?>
+  document.getElementById('import-step-1').style.display = '';
+  document.getElementById('import-step-2').style.display = 'none';
+  document.getElementById('import-modal').classList.add('open');
+}
+function ibCloseModal() { document.getElementById('import-modal').classList.remove('open'); }
+document.getElementById('import-modal').addEventListener('click', e => { if (e.target === e.currentTarget) ibCloseModal(); });
+
+function ibPreview() {
+  const err = document.getElementById('import-err');
+  err.style.display = 'none';
+  const fichier = document.getElementById('ib-fichier').files[0];
+  if (!fichier) { err.textContent = 'Sélectionnez un fichier.'; err.style.display = 'block'; return; }
+  const fd = new FormData();
+  fd.append('action', 'import_preview');
+  fd.append('exercice', document.getElementById('ib-exercice').value);
+  fd.append('fichier', fichier);
+  fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
+    .then(r => r.json())
+    .then(res => {
+      if (!res.success) { err.textContent = res.message; err.style.display = 'block'; return; }
+      const d = res.data;
+      document.getElementById('import-summary').innerHTML =
+        `<strong>${d.valides}</strong> ligne(s) valide(s) sur <strong>${d.total}</strong>, pour l'exercice <strong>${d.exercice}</strong>.`
+        + (d.valides < d.total ? ' Les lignes en erreur ne seront pas importées.' : '');
+      document.getElementById('import-preview-tbody').innerHTML = d.lignes.map(l => `
+        <tr>
+          <td>${l.ligne_fichier}</td>
+          <td>${esc(l.departement)}</td>
+          <td>${esc(l.famille)}</td>
+          <td>${l.enveloppe !== null ? Number(l.enveloppe).toLocaleString('fr-FR') : '—'}</td>
+          <td>${esc(l.comportement)}</td>
+          <td>${l.erreurs.length ? `<span style="color:#991B1B">${esc(l.erreurs.join(' ; '))}</span>` : '<span style="color:#16a34a">OK</span>'}</td>
+        </tr>`).join('');
+      document.getElementById('ib-btn-confirm').disabled = d.valides === 0;
+      document.getElementById('import-step-1').style.display = 'none';
+      document.getElementById('import-step-2').style.display = '';
+    });
+}
+function ibRetour() {
+  document.getElementById('import-step-1').style.display = '';
+  document.getElementById('import-step-2').style.display = 'none';
+}
+function ibConfirmer() {
+  achPost({ action: 'import_confirm' }).then(res => {
+    toast(res.message, res.success ? 'success' : 'danger');
+    if (res.success) { ibCloseModal(); setTimeout(() => location.reload(), 600); }
   });
 }
 

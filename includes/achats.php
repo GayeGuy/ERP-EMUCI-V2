@@ -1612,20 +1612,22 @@ function ach_cloturer_reliquat(int $suivi_id, string $motif, array $user): void 
 //    périmètre vide plutôt qu'une vue globale par défaut dangereuse.
 function ach_perimetre_departements(array $user): ?array {
     $role = $user['role_slug'] ?? '';
-    // Vocation globale par nature : direction, Achats, PDG.
-    if (in_array($role, ['admin', 'superadmin', 'superviseur_achat', 'directeur_general', 'lecteur'], true)) {
+    // Vocation globale par nature : direction, Achats, PDG, RAF, DAF.
+    // RAF/DAF couvrent tout le circuit financier sans exception — même s'ils
+    // sont par ailleurs rattachés à un département dans Admin → Départements
+    // (rattachement qui reste utilisé ailleurs, ex. circuits de demandes
+    // internes) : ce rattachement ne doit jamais réduire leur périmètre
+    // budgétaire. Règle changée le 2026-08-17 sur demande explicite —
+    // l'ancien comportement (scope si rattaché) était délibéré mais a créé
+    // une restriction non voulue en pratique dès qu'un RAF/DAF avait un
+    // département assigné pour une autre raison.
+    if (in_array($role, ['admin', 'superadmin', 'superviseur_achat', 'directeur_general', 'lecteur', 'raf', 'daf'], true)) {
         return null;
     }
-    $depts = array_map('intval', array_column(
+    return array_map('intval', array_column(
         db_fetch_all("SELECT DISTINCT departement_id FROM user_departements WHERE user_id=?", [(int)$user['id']]),
         'departement_id'
     ));
-    // RAF/DAF couvrent tout le circuit financier par défaut (comportement
-    // historique du rôle) — sauf s'ils sont explicitement rattachés à un ou
-    // plusieurs départements précis, auquel cas ils sont scopés comme
-    // n'importe quel responsable qui n'en couvre qu'un (point 11/21).
-    if (!$depts && in_array($role, ['raf', 'daf'], true)) return null;
-    return $depts;
 }
 
 // Fragment de clause + paramètres pour restreindre une requête sur feb à un
