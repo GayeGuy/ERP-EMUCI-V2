@@ -237,6 +237,112 @@ if (is_array($perimetre)) {
 $departements_actifs = db_fetch_all("SELECT id, code, label FROM departements WHERE $dept_where ORDER BY label ASC", $dept_params);
 $familles = db_fetch_all("SELECT id, code, libelle, compte_comptable FROM familles_achat WHERE actif=1 ORDER BY libelle ASC");
 
+// ── Rafraîchissement live — fragment HTML seul (les dept-card, pas la
+//    barre exercice/département), cf. le même mécanisme sur
+//    file_attente.php. isBusy par défaut couvre déjà les modales (édition,
+//    drill-down) de cet écran.
+function ach_pb_render_zone(array $grouped, bool $can_edit, bool $can_valider, bool $is_admin, int $exercice, array $COMPORTEMENTS, array $STATUTS_BUDGET): void {
+    if (empty($grouped)): ?>
+      <div class="dept-card"><div class="ach-empty">Aucune ligne budgétaire pour ces filtres.</div></div>
+    <?php else: foreach ($grouped as $dept_id => $g):
+      $pct = $g['total_enveloppe'] > 0 ? min(100, round($g['total_engage'] / $g['total_enveloppe'] * 100)) : 0;
+      $statut_budget = $g['validation']['statut'];
+      $sb = $STATUTS_BUDGET[$statut_budget] ?? $STATUTS_BUDGET['brouillon'];
+    ?>
+    <div class="dept-card">
+      <div class="dept-hdr">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span class="dept-nom"><?= h($g['label']) ?></span>
+          <?php if ($dept_id): ?>
+          <span class="ach-badge" style="background:<?= $sb['bg'] ?>;color:<?= $sb['color'] ?>"><?= h($sb['label']) ?></span>
+          <?php endif; ?>
+        </div>
+        <span class="dept-meta">
+          <?= fmt_number((float)$g['total_engage']) ?> XOF engagés
+          <?= $g['total_enveloppe'] > 0 ? ' / ' . fmt_number((float)$g['total_enveloppe']) . ' XOF (' . $pct . '%)' : '' ?>
+        </span>
+        <?php if ($dept_id): ?>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <?php if ($can_edit && in_array($statut_budget, ['brouillon', 'rejete'], true)): ?>
+            <button type="button" class="btn btn-primary btn-sm" onclick="pbSoumettre(<?= $dept_id ?>, <?= $exercice ?>)">
+              <i class="ph ph-paper-plane-tilt" aria-hidden="true"></i> Soumettre au PDG
+            </button>
+          <?php endif; ?>
+          <?php if ($can_valider && $statut_budget === 'soumis'): ?>
+            <button type="button" class="btn btn-primary btn-sm" onclick="pbValider(<?= $dept_id ?>, <?= $exercice ?>)">
+              <i class="ph ph-check-circle" aria-hidden="true"></i> Valider
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="pbRejeter(<?= $dept_id ?>, <?= $exercice ?>)">
+              <i class="ph ph-x-circle" aria-hidden="true"></i> Rejeter
+            </button>
+          <?php endif; ?>
+          <?php if ($is_admin && $statut_budget === 'valide'): ?>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="pbReouvrir(<?= $dept_id ?>, <?= $exercice ?>)">
+              <i class="ph ph-lock-open" aria-hidden="true"></i> Réouvrir (admin)
+            </button>
+          <?php endif; ?>
+        </div>
+        <?php if ($statut_budget === 'rejete' && !empty($g['validation']['motif_rejet'])): ?>
+        <div style="width:100%;font-size:12px;color:#991B1B">Motif du rejet : <?= h($g['validation']['motif_rejet']) ?></div>
+        <?php endif; ?>
+        <?php endif; ?>
+      </div>
+      <?php $dept_editable = $dept_id ? in_array($statut_budget, ['brouillon', 'rejete'], true) : true; ?>
+      <div style="overflow-x:auto">
+      <table class="ach-table">
+        <thead><tr>
+          <th>Famille</th><th>Compte</th><th>Enveloppe</th><th>Engagé + réservé</th><th>Disponible</th><th>Comportement</th><th>Statut</th>
+          <?php if ($can_edit && $dept_editable): ?><th>Actions</th><?php endif; ?>
+        </tr></thead>
+        <tbody>
+          <?php foreach ($g['lignes'] as $l):
+            $famille_pct = $l['enveloppe'] !== null && $l['enveloppe'] > 0 ? min(100, round($l['total_engage'] / $l['enveloppe'] * 100)) : null;
+            $fill_color = $famille_pct === null ? '#94a3b8' : ($famille_pct >= 100 ? '#dc2626' : ($famille_pct >= 80 ? '#d97706' : '#16a34a'));
+          ?>
+          <tr class="drill-row" onclick='pbDrillDown(<?= (int)$l['departement_id'] ?>, <?= (int)$l['famille_id'] ?>, <?= $exercice ?>, <?= json_encode($l['famille_libelle'], JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
+            <td style="font-weight:700;color:var(--navy)"><?= h($l['famille_libelle'] ?? '—') ?></td>
+            <td style="font-family:monospace"><?= h($l['compte_comptable'] ?: '—') ?></td>
+            <td><?= $l['enveloppe'] !== null ? h(number_format((float)$l['enveloppe'], 0, ',', ' ')) : '<span style="color:var(--muted)">Non plafonnée</span>' ?></td>
+            <td>
+              <?= fmt_number((float)$l['total_engage']) ?> XOF
+              <?php if ($famille_pct !== null): ?>
+              <div class="budget-bar" style="margin-top:4px"><div class="budget-fill" style="width:<?= $famille_pct ?>%;background:<?= $fill_color ?>"></div></div>
+              <?php endif; ?>
+            </td>
+            <td style="font-weight:700;color:<?= $l['disponible'] !== null && $l['disponible'] < 0 ? '#991B1B' : 'inherit' ?>">
+              <?= $l['disponible'] !== null ? fmt_number((float)$l['disponible']) . ' XOF' : '—' ?>
+            </td>
+            <td><span class="ach-badge <?= h($l['comportement']) ?>"><?= h($COMPORTEMENTS[$l['comportement']] ?? $l['comportement']) ?></span></td>
+            <td><span class="ach-badge <?= $l['actif'] ? 'on' : 'off' ?>"><?= $l['actif'] ? 'Active' : 'Inactive' ?></span></td>
+            <?php if ($can_edit && $dept_editable): ?>
+            <td onclick="event.stopPropagation()" style="display:flex;gap:8px">
+              <button type="button" class="btn btn-secondary btn-sm" aria-label="Modifier <?= h($l['famille_libelle'] ?? '') ?>"
+                      onclick='achOpenEdit(<?= json_encode($l, JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
+                <i class="ph ph-pencil-simple" aria-hidden="true"></i>
+              </button>
+              <button type="button" class="btn btn-secondary btn-sm" aria-label="<?= $l['actif'] ? 'Désactiver' : 'Réactiver' ?>"
+                      onclick="achToggle(<?= $l['id'] ?>, <?= $l['actif'] ? 0 : 1 ?>)">
+                <i class="ph <?= $l['actif'] ? 'ph-prohibit' : 'ph-check-circle' ?>" aria-hidden="true"></i>
+              </button>
+            </td>
+            <?php endif; ?>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+      </div>
+    </div>
+    <?php endforeach; endif;
+}
+
+if (is_ajax() && ($_GET['fragment'] ?? '') === '1') {
+    ach_pb_render_zone($grouped, $can_edit, $can_valider, $is_admin, $exercice, $COMPORTEMENTS, $STATUTS_BUDGET);
+    exit;
+}
+$fragmentQs = $_GET;
+$fragmentQs['fragment'] = '1';
+$fragmentUrl = APP_URL . '/pages/achats/param_budget.php?' . http_build_query($fragmentQs);
+
 include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
@@ -304,97 +410,9 @@ include __DIR__ . '/../../templates/header.php';
   <?php endif; ?>
 </div>
 
-<?php if (empty($grouped)): ?>
-  <div class="dept-card"><div class="ach-empty">Aucune ligne budgétaire pour ces filtres.</div></div>
-<?php else: foreach ($grouped as $dept_id => $g):
-  $pct = $g['total_enveloppe'] > 0 ? min(100, round($g['total_engage'] / $g['total_enveloppe'] * 100)) : 0;
-  $statut_budget = $g['validation']['statut'];
-  $sb = $STATUTS_BUDGET[$statut_budget] ?? $STATUTS_BUDGET['brouillon'];
-?>
-<div class="dept-card">
-  <div class="dept-hdr">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-      <span class="dept-nom"><?= h($g['label']) ?></span>
-      <?php if ($dept_id): ?>
-      <span class="ach-badge" style="background:<?= $sb['bg'] ?>;color:<?= $sb['color'] ?>"><?= h($sb['label']) ?></span>
-      <?php endif; ?>
-    </div>
-    <span class="dept-meta">
-      <?= fmt_number((float)$g['total_engage']) ?> XOF engagés
-      <?= $g['total_enveloppe'] > 0 ? ' / ' . fmt_number((float)$g['total_enveloppe']) . ' XOF (' . $pct . '%)' : '' ?>
-    </span>
-    <?php if ($dept_id): ?>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <?php if ($can_edit && in_array($statut_budget, ['brouillon', 'rejete'], true)): ?>
-        <button type="button" class="btn btn-primary btn-sm" onclick="pbSoumettre(<?= $dept_id ?>, <?= $exercice ?>)">
-          <i class="ph ph-paper-plane-tilt" aria-hidden="true"></i> Soumettre au PDG
-        </button>
-      <?php endif; ?>
-      <?php if ($can_valider && $statut_budget === 'soumis'): ?>
-        <button type="button" class="btn btn-primary btn-sm" onclick="pbValider(<?= $dept_id ?>, <?= $exercice ?>)">
-          <i class="ph ph-check-circle" aria-hidden="true"></i> Valider
-        </button>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="pbRejeter(<?= $dept_id ?>, <?= $exercice ?>)">
-          <i class="ph ph-x-circle" aria-hidden="true"></i> Rejeter
-        </button>
-      <?php endif; ?>
-      <?php if ($is_admin && $statut_budget === 'valide'): ?>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="pbReouvrir(<?= $dept_id ?>, <?= $exercice ?>)">
-          <i class="ph ph-lock-open" aria-hidden="true"></i> Réouvrir (admin)
-        </button>
-      <?php endif; ?>
-    </div>
-    <?php if ($statut_budget === 'rejete' && !empty($g['validation']['motif_rejet'])): ?>
-    <div style="width:100%;font-size:12px;color:#991B1B">Motif du rejet : <?= h($g['validation']['motif_rejet']) ?></div>
-    <?php endif; ?>
-    <?php endif; ?>
-  </div>
-  <?php $dept_editable = $dept_id ? in_array($statut_budget, ['brouillon', 'rejete'], true) : true; ?>
-  <div style="overflow-x:auto">
-  <table class="ach-table">
-    <thead><tr>
-      <th>Famille</th><th>Compte</th><th>Enveloppe</th><th>Engagé + réservé</th><th>Disponible</th><th>Comportement</th><th>Statut</th>
-      <?php if ($can_edit && $dept_editable): ?><th>Actions</th><?php endif; ?>
-    </tr></thead>
-    <tbody>
-      <?php foreach ($g['lignes'] as $l):
-        $famille_pct = $l['enveloppe'] !== null && $l['enveloppe'] > 0 ? min(100, round($l['total_engage'] / $l['enveloppe'] * 100)) : null;
-        $fill_color = $famille_pct === null ? '#94a3b8' : ($famille_pct >= 100 ? '#dc2626' : ($famille_pct >= 80 ? '#d97706' : '#16a34a'));
-      ?>
-      <tr class="drill-row" onclick='pbDrillDown(<?= (int)$l['departement_id'] ?>, <?= (int)$l['famille_id'] ?>, <?= $exercice ?>, <?= json_encode($l['famille_libelle'], JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
-        <td style="font-weight:700;color:var(--navy)"><?= h($l['famille_libelle'] ?? '—') ?></td>
-        <td style="font-family:monospace"><?= h($l['compte_comptable'] ?: '—') ?></td>
-        <td><?= $l['enveloppe'] !== null ? h(number_format((float)$l['enveloppe'], 0, ',', ' ')) : '<span style="color:var(--muted)">Non plafonnée</span>' ?></td>
-        <td>
-          <?= fmt_number((float)$l['total_engage']) ?> XOF
-          <?php if ($famille_pct !== null): ?>
-          <div class="budget-bar" style="margin-top:4px"><div class="budget-fill" style="width:<?= $famille_pct ?>%;background:<?= $fill_color ?>"></div></div>
-          <?php endif; ?>
-        </td>
-        <td style="font-weight:700;color:<?= $l['disponible'] !== null && $l['disponible'] < 0 ? '#991B1B' : 'inherit' ?>">
-          <?= $l['disponible'] !== null ? fmt_number((float)$l['disponible']) . ' XOF' : '—' ?>
-        </td>
-        <td><span class="ach-badge <?= h($l['comportement']) ?>"><?= h($COMPORTEMENTS[$l['comportement']] ?? $l['comportement']) ?></span></td>
-        <td><span class="ach-badge <?= $l['actif'] ? 'on' : 'off' ?>"><?= $l['actif'] ? 'Active' : 'Inactive' ?></span></td>
-        <?php if ($can_edit && $dept_editable): ?>
-        <td onclick="event.stopPropagation()" style="display:flex;gap:8px">
-          <button type="button" class="btn btn-secondary btn-sm" aria-label="Modifier <?= h($l['famille_libelle'] ?? '') ?>"
-                  onclick='achOpenEdit(<?= json_encode($l, JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
-            <i class="ph ph-pencil-simple" aria-hidden="true"></i>
-          </button>
-          <button type="button" class="btn btn-secondary btn-sm" aria-label="<?= $l['actif'] ? 'Désactiver' : 'Réactiver' ?>"
-                  onclick="achToggle(<?= $l['id'] ?>, <?= $l['actif'] ? 0 : 1 ?>)">
-            <i class="ph <?= $l['actif'] ? 'ph-prohibit' : 'ph-check-circle' ?>" aria-hidden="true"></i>
-          </button>
-        </td>
-        <?php endif; ?>
-      </tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table>
-  </div>
+<div id="budget-live-zone">
+<?php ach_pb_render_zone($grouped, $can_edit, $can_valider, $is_admin, $exercice, $COMPORTEMENTS, $STATUTS_BUDGET); ?>
 </div>
-<?php endforeach; endif; ?>
 
 <!-- MODALE création/édition -->
 <div class="ach-modal-bg" id="ach-modal">
@@ -570,6 +588,10 @@ function pbDrillDown(departement_id, famille_id, exercice, familleLibelle) {
       </tr>`).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:18px">Aucune FEB ne contribue à cette enveloppe pour l\'instant.</td></tr>';
   });
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  liveRefresh({ url: <?= json_encode($fragmentUrl) ?>, container: '#budget-live-zone', interval: 10000 });
+});
 </script>
 
 <?php include __DIR__ . '/../../templates/footer.php'; ?>

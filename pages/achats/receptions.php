@@ -87,6 +87,60 @@ $lignes = db_fetch_all(
     $params
 );
 
+// ── Rafraîchissement live — fragment HTML seul (le tableau), cf. le même
+//    mécanisme sur file_attente.php.
+function ach_rc_render_zone(array $lignes, bool $can_receptionner, int $site_force): void {
+    ?>
+    <div class="ach-table-wrap">
+      <?php if (empty($lignes)): ?>
+        <div class="ach-empty">Aucune ligne à réceptionner<?= $site_force ? ' pour votre site' : '' ?>.</div>
+      <?php else: ?>
+      <div style="overflow-x:auto">
+      <table class="ach-table">
+        <thead><tr>
+          <th>FEB</th><th>Article</th><th>Fournisseur</th><th>Commandée</th><th>Déjà reçue</th><th>Reste à recevoir</th>
+          <th>Livraison prévue</th><?php if ($can_receptionner): ?><th>Actions</th><?php endif; ?>
+        </tr></thead>
+        <tbody>
+          <?php foreach ($lignes as $l):
+            $reste = (int)$l['quantite_commandee'] - (int)$l['quantite_recue'];
+          ?>
+          <tr>
+            <td style="font-weight:700;color:var(--navy)"><?= h($l['feb_numero'] ?: '—') ?></td>
+            <td><?= h($l['designation']) ?></td>
+            <td><?= h($l['fournisseur_nom'] ?: '—') ?></td>
+            <td><?= (int)$l['quantite_commandee'] ?> <?= h($l['unite'] ?: '') ?></td>
+            <td><?= (int)$l['quantite_recue'] ?></td>
+            <td style="font-weight:700"><?= $reste ?></td>
+            <td><?= fmt_date($l['date_livraison_prevue']) ?></td>
+            <?php if ($can_receptionner): ?>
+            <td>
+              <button type="button" class="btn btn-primary btn-sm"
+                      onclick='rcOuvrir(<?= json_encode([
+                        "id"=>(int)$l["id"], "feb_numero"=>$l["feb_numero"], "designation"=>$l["designation"],
+                        "unite"=>$l["unite"], "reste"=>$reste, "commandee"=>(int)$l["quantite_commandee"],
+                        "recue"=>(int)$l["quantite_recue"],
+                      ], JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
+                Réceptionner
+              </button>
+            </td>
+            <?php endif; ?>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+      </div>
+      <?php endif; ?>
+    </div>
+    <?php
+}
+
+if (is_ajax() && ($_GET['fragment'] ?? '') === '1') {
+    ach_rc_render_zone($lignes, $can_receptionner, $site_force);
+    exit;
+}
+$fragmentUrl = APP_URL . '/pages/achats/receptions.php?fragment=1';
+
 include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
@@ -113,46 +167,8 @@ include __DIR__ . '/../../templates/header.php';
 @media (max-width:768px) { .ach-fg input, .ach-fg textarea, .btn { min-height:44px; } .rc-grid { grid-template-columns:minmax(0,1fr); } }
 </style>
 
-<div class="ach-table-wrap">
-  <?php if (empty($lignes)): ?>
-    <div class="ach-empty">Aucune ligne à réceptionner<?= $site_force ? ' pour votre site' : '' ?>.</div>
-  <?php else: ?>
-  <div style="overflow-x:auto">
-  <table class="ach-table">
-    <thead><tr>
-      <th>FEB</th><th>Article</th><th>Fournisseur</th><th>Commandée</th><th>Déjà reçue</th><th>Reste à recevoir</th>
-      <th>Livraison prévue</th><?php if ($can_receptionner): ?><th>Actions</th><?php endif; ?>
-    </tr></thead>
-    <tbody>
-      <?php foreach ($lignes as $l):
-        $reste = (int)$l['quantite_commandee'] - (int)$l['quantite_recue'];
-      ?>
-      <tr>
-        <td style="font-weight:700;color:var(--navy)"><?= h($l['feb_numero'] ?: '—') ?></td>
-        <td><?= h($l['designation']) ?></td>
-        <td><?= h($l['fournisseur_nom'] ?: '—') ?></td>
-        <td><?= (int)$l['quantite_commandee'] ?> <?= h($l['unite'] ?: '') ?></td>
-        <td><?= (int)$l['quantite_recue'] ?></td>
-        <td style="font-weight:700"><?= $reste ?></td>
-        <td><?= fmt_date($l['date_livraison_prevue']) ?></td>
-        <?php if ($can_receptionner): ?>
-        <td>
-          <button type="button" class="btn btn-primary btn-sm"
-                  onclick='rcOuvrir(<?= json_encode([
-                    "id"=>(int)$l["id"], "feb_numero"=>$l["feb_numero"], "designation"=>$l["designation"],
-                    "unite"=>$l["unite"], "reste"=>$reste, "commandee"=>(int)$l["quantite_commandee"],
-                    "recue"=>(int)$l["quantite_recue"],
-                  ], JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
-            Réceptionner
-          </button>
-        </td>
-        <?php endif; ?>
-      </tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table>
-  </div>
-  <?php endif; ?>
+<div id="rc-live-zone">
+<?php ach_rc_render_zone($lignes, $can_receptionner, $site_force); ?>
 </div>
 
 <!-- MODALE réception -->
@@ -234,6 +250,10 @@ function rcValider() {
       setTimeout(() => location.reload(), 600);
     });
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  liveRefresh({ url: <?= json_encode($fragmentUrl) ?>, container: '#rc-live-zone', interval: 10000 });
+});
 </script>
 
 <?php include __DIR__ . '/../../templates/footer.php'; ?>

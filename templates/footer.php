@@ -88,7 +88,16 @@ function liveRefresh(opts) {
   const container = typeof opts.container === 'string' ? document.querySelector(opts.container) : opts.container;
   if (!container) return;
   const interval = opts.interval || 10000;
-  const isBusy = opts.isBusy || (() => !!document.querySelector('.ach-modal-bg.open, .modal-overlay.show'));
+  // Par défaut : pause si une modale est ouverte, OU si le focus est
+  // actuellement sur un champ de saisie à l'intérieur du conteneur (ex.
+  // suivi_achats.php a des <input> de N° DA/BC directement dans le
+  // tableau, sans modale — remplacer le HTML sous un champ en cours de
+  // frappe effacerait ce que la personne est en train de taper).
+  const isBusy = opts.isBusy || (() => {
+    if (document.querySelector('.ach-modal-bg.open, .modal-overlay.show')) return true;
+    const active = document.activeElement;
+    return !!active && container.contains(active) && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName);
+  });
   let inFlight = false;
   function tick() {
     if (document.hidden || isBusy() || inFlight) return;

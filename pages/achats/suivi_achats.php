@@ -120,6 +120,112 @@ $sites_list        = db_fetch_all("SELECT id, nom FROM sites WHERE actif=1 ORDER
 $fournisseurs_list = db_fetch_all("SELECT id, raison_sociale FROM fournisseurs WHERE actif=1 ORDER BY raison_sociale");
 $departements_list = db_fetch_all("SELECT id, label FROM departements WHERE actif=1 ORDER BY label");
 
+// ── Rafraîchissement live — fragment HTML seul (le tableau, pas la barre
+//    de filtres), cf. le même mécanisme sur file_attente.php. isBusy par
+//    défaut (templates/footer.php) évite d'effacer un N° DA/BC en cours
+//    de frappe dans les <input> du tableau.
+function ach_suivi_render_zone(array $lignes, bool $can_edit, array $user): void {
+    ?>
+    <div class="ach-table-wrap">
+      <?php if (empty($lignes)): ?>
+        <div class="ach-empty">Aucune ligne de suivi pour ces filtres.</div>
+      <?php else: ?>
+      <div style="overflow-x:auto">
+      <table class="ach-table">
+        <thead><tr>
+          <th>FEB</th><th>Article</th><th>Qté</th><th>Fournisseur</th><th>N° DA</th><th>N° BC</th>
+          <th>Livraison prévue</th><th>Reçu / Écart</th><th>Statut</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          <?php foreach ($lignes as $l):
+            $st = ach_statuts_suivi()[$l['statut_calcule']] ?? ['label' => $l['statut_calcule'], 'bg' => '#F1F5F9', 'color' => '#475569'];
+            $ecart = (int)$l['quantite_commandee'] - (int)$l['quantite_recue'];
+            $reliquat_ouvert = $l['statut_calcule'] === 'livree' && !$l['cloture_reliquat'];
+            $peut_cloturer = $can_edit && $reliquat_ouvert && (int)$l['acheteur_id'] === (int)$user['id'];
+          ?>
+          <tr class="<?= $l['statut_calcule'] === 'en_retard' ? 'en_retard' : '' ?>">
+            <td style="font-weight:700;color:var(--navy)">
+              <?= h($l['feb_numero'] ?: '—') ?>
+              <?php if (!empty($l['fiche_validation_path'])): ?>
+              <a href="feb_fiche_validation_pdf.php?id=<?= (int)$l['feb_id'] ?>" target="_blank" title="Fiche de validation archivée" style="margin-left:4px">
+                <i class="ph ph-seal-check" aria-hidden="true"></i>
+              </a>
+              <?php endif; ?>
+            </td>
+            <td><?= h($l['designation']) ?></td>
+            <td><?= (int)$l['quantite_commandee'] ?> <?= h($l['unite'] ?: '') ?></td>
+            <td><?= h($l['fournisseur_nom'] ?: '—') ?></td>
+            <td>
+              <?php if (!$can_edit || $l['numero_da']): ?>
+                <?= h($l['numero_da'] ?: '—') ?>
+                <?php if ($can_edit && $l['numero_da']): ?>
+                  <button type="button" class="btn btn-secondary btn-sm" style="padding:2px 6px;font-size:11px" aria-label="Modifier le N° DA (administrateur)"
+                          onclick="suiviEditerDA(<?= (int)$l['id'] ?>, this)"><i class="ph ph-pencil-simple" aria-hidden="true"></i></button>
+                <?php endif; ?>
+              <?php else: ?>
+              <div class="ref-cell">
+                <div class="ref-input-row">
+                  <input type="text" id="da-<?= $l['id'] ?>" placeholder="N° DA">
+                  <button type="button" class="btn btn-primary btn-sm" onclick="suiviSaisirDA(<?= (int)$l['id'] ?>)">OK</button>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" onclick='suiviAppliquerLotDA(<?= (int)$l['feb_id'] ?>, <?= json_encode($l['lot'], JSON_HEX_APOS|JSON_HEX_QUOT) ?>, <?= (int)$l['id'] ?>)'>Appliquer à tout le lot</button>
+              </div>
+              <?php endif; ?>
+            </td>
+            <td>
+              <?php if (!$l['numero_da']): ?>
+                <span style="color:var(--muted);font-size:12px">— (N° DA requis)</span>
+              <?php elseif (!$can_edit || $l['numero_bc']): ?>
+                <?= h($l['numero_bc'] ?: '—') ?>
+              <?php else: ?>
+              <div class="ref-cell">
+                <div class="ref-input-row">
+                  <input type="text" id="bc-<?= $l['id'] ?>" placeholder="N° BC">
+                  <input type="date" id="bcdate-<?= $l['id'] ?>" class="date-input" title="Date de livraison prévue réelle (facultatif — sinon l'estimation est conservée)">
+                </div>
+                <div class="ref-input-row">
+                  <button type="button" class="btn btn-primary btn-sm" onclick="suiviSaisirBC(<?= (int)$l['id'] ?>)">OK</button>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick='suiviAppliquerLotBC(<?= (int)$l['feb_id'] ?>, <?= json_encode($l['lot'], JSON_HEX_APOS|JSON_HEX_QUOT) ?>, <?= (int)$l['id'] ?>)'>Appliquer au lot</button>
+                </div>
+              </div>
+              <?php endif; ?>
+            </td>
+            <td><?= fmt_date($l['date_livraison_prevue']) ?></td>
+            <td>
+              <?= (int)$l['quantite_recue'] ?> / <?= (int)$l['quantite_commandee'] ?>
+              <?php if ($ecart > 0): ?>
+                <div style="font-size:11.5px;color:<?= $l['cloture_reliquat'] ? 'var(--muted)' : '#991B1B' ?>">
+                  écart <?= $ecart ?><?= $l['cloture_reliquat'] ? ' (figé — clôturé)' : '' ?>
+                </div>
+              <?php endif; ?>
+            </td>
+            <td><span class="ach-badge" style="background:<?= $st['bg'] ?>;color:<?= $st['color'] ?>"><?= h($st['label']) ?></span></td>
+            <td style="white-space:nowrap">
+              <a href="feb_detail.php?id=<?= (int)$l['feb_id'] ?>" class="btn btn-secondary btn-sm" title="Détails de la FEB" aria-label="Voir les détails de la FEB <?= h($l['feb_numero'] ?: '') ?>">
+                <i class="ph ph-eye" aria-hidden="true"></i> Voir
+              </a>
+              <?php if ($peut_cloturer): ?>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="suiviClorereliquat(<?= (int)$l['id'] ?>)">Clôturer le reliquat</button>
+              <?php endif; ?>
+            </td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+      </div>
+      <?php endif; ?>
+    </div>
+    <?php
+}
+
+if (is_ajax() && ($_GET['fragment'] ?? '') === '1') {
+    ach_suivi_render_zone($lignes, $can_edit, $user);
+    exit;
+}
+$fragmentQs = $_GET;
+$fragmentQs['fragment'] = '1';
+$fragmentUrl = APP_URL . '/pages/achats/suivi_achats.php?' . http_build_query($fragmentQs);
+
 include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
@@ -186,94 +292,8 @@ include __DIR__ . '/../../templates/header.php';
   <button type="submit" class="btn btn-secondary">Filtrer</button>
 </form>
 
-<div class="ach-table-wrap">
-  <?php if (empty($lignes)): ?>
-    <div class="ach-empty">Aucune ligne de suivi pour ces filtres.</div>
-  <?php else: ?>
-  <div style="overflow-x:auto">
-  <table class="ach-table">
-    <thead><tr>
-      <th>FEB</th><th>Article</th><th>Qté</th><th>Fournisseur</th><th>N° DA</th><th>N° BC</th>
-      <th>Livraison prévue</th><th>Reçu / Écart</th><th>Statut</th><th>Actions</th>
-    </tr></thead>
-    <tbody>
-      <?php foreach ($lignes as $l):
-        $st = ach_statuts_suivi()[$l['statut_calcule']] ?? ['label' => $l['statut_calcule'], 'bg' => '#F1F5F9', 'color' => '#475569'];
-        $ecart = (int)$l['quantite_commandee'] - (int)$l['quantite_recue'];
-        $reliquat_ouvert = $l['statut_calcule'] === 'livree' && !$l['cloture_reliquat'];
-        $peut_cloturer = $can_edit && $reliquat_ouvert && (int)$l['acheteur_id'] === (int)$user['id'];
-      ?>
-      <tr class="<?= $l['statut_calcule'] === 'en_retard' ? 'en_retard' : '' ?>">
-        <td style="font-weight:700;color:var(--navy)">
-          <?= h($l['feb_numero'] ?: '—') ?>
-          <?php if (!empty($l['fiche_validation_path'])): ?>
-          <a href="feb_fiche_validation_pdf.php?id=<?= (int)$l['feb_id'] ?>" target="_blank" title="Fiche de validation archivée" style="margin-left:4px">
-            <i class="ph ph-seal-check" aria-hidden="true"></i>
-          </a>
-          <?php endif; ?>
-        </td>
-        <td><?= h($l['designation']) ?></td>
-        <td><?= (int)$l['quantite_commandee'] ?> <?= h($l['unite'] ?: '') ?></td>
-        <td><?= h($l['fournisseur_nom'] ?: '—') ?></td>
-        <td>
-          <?php if (!$can_edit || $l['numero_da']): ?>
-            <?= h($l['numero_da'] ?: '—') ?>
-            <?php if ($can_edit && $l['numero_da']): ?>
-              <button type="button" class="btn btn-secondary btn-sm" style="padding:2px 6px;font-size:11px" aria-label="Modifier le N° DA (administrateur)"
-                      onclick="suiviEditerDA(<?= (int)$l['id'] ?>, this)"><i class="ph ph-pencil-simple" aria-hidden="true"></i></button>
-            <?php endif; ?>
-          <?php else: ?>
-          <div class="ref-cell">
-            <div class="ref-input-row">
-              <input type="text" id="da-<?= $l['id'] ?>" placeholder="N° DA">
-              <button type="button" class="btn btn-primary btn-sm" onclick="suiviSaisirDA(<?= (int)$l['id'] ?>)">OK</button>
-            </div>
-            <button type="button" class="btn btn-secondary btn-sm" onclick='suiviAppliquerLotDA(<?= (int)$l['feb_id'] ?>, <?= json_encode($l['lot'], JSON_HEX_APOS|JSON_HEX_QUOT) ?>, <?= (int)$l['id'] ?>)'>Appliquer à tout le lot</button>
-          </div>
-          <?php endif; ?>
-        </td>
-        <td>
-          <?php if (!$l['numero_da']): ?>
-            <span style="color:var(--muted);font-size:12px">— (N° DA requis)</span>
-          <?php elseif (!$can_edit || $l['numero_bc']): ?>
-            <?= h($l['numero_bc'] ?: '—') ?>
-          <?php else: ?>
-          <div class="ref-cell">
-            <div class="ref-input-row">
-              <input type="text" id="bc-<?= $l['id'] ?>" placeholder="N° BC">
-              <input type="date" id="bcdate-<?= $l['id'] ?>" class="date-input" title="Date de livraison prévue réelle (facultatif — sinon l'estimation est conservée)">
-            </div>
-            <div class="ref-input-row">
-              <button type="button" class="btn btn-primary btn-sm" onclick="suiviSaisirBC(<?= (int)$l['id'] ?>)">OK</button>
-              <button type="button" class="btn btn-secondary btn-sm" onclick='suiviAppliquerLotBC(<?= (int)$l['feb_id'] ?>, <?= json_encode($l['lot'], JSON_HEX_APOS|JSON_HEX_QUOT) ?>, <?= (int)$l['id'] ?>)'>Appliquer au lot</button>
-            </div>
-          </div>
-          <?php endif; ?>
-        </td>
-        <td><?= fmt_date($l['date_livraison_prevue']) ?></td>
-        <td>
-          <?= (int)$l['quantite_recue'] ?> / <?= (int)$l['quantite_commandee'] ?>
-          <?php if ($ecart > 0): ?>
-            <div style="font-size:11.5px;color:<?= $l['cloture_reliquat'] ? 'var(--muted)' : '#991B1B' ?>">
-              écart <?= $ecart ?><?= $l['cloture_reliquat'] ? ' (figé — clôturé)' : '' ?>
-            </div>
-          <?php endif; ?>
-        </td>
-        <td><span class="ach-badge" style="background:<?= $st['bg'] ?>;color:<?= $st['color'] ?>"><?= h($st['label']) ?></span></td>
-        <td style="white-space:nowrap">
-          <a href="feb_detail.php?id=<?= (int)$l['feb_id'] ?>" class="btn btn-secondary btn-sm" title="Détails de la FEB" aria-label="Voir les détails de la FEB <?= h($l['feb_numero'] ?: '') ?>">
-            <i class="ph ph-eye" aria-hidden="true"></i> Voir
-          </a>
-          <?php if ($peut_cloturer): ?>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="suiviClorereliquat(<?= (int)$l['id'] ?>)">Clôturer le reliquat</button>
-          <?php endif; ?>
-        </td>
-      </tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table>
-  </div>
-  <?php endif; ?>
+<div id="suivi-live-zone">
+<?php ach_suivi_render_zone($lignes, $can_edit, $user); ?>
 </div>
 
 <script>
@@ -335,6 +355,10 @@ function suiviClorereliquat(suivi_id) {
     if (res.success) setTimeout(() => location.reload(), 500);
   });
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  liveRefresh({ url: <?= json_encode($fragmentUrl) ?>, container: '#suivi-live-zone', interval: 10000 });
+});
 </script>
 
 <?php include __DIR__ . '/../../templates/footer.php'; ?>

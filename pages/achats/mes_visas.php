@@ -120,6 +120,57 @@ unset($f);
 $total_a_viser  = count($a_viser);
 $anciennete_max = $a_viser ? max(array_column($a_viser, 'anciennete_h')) : 0.0;
 
+// ── Rafraîchissement live — fragment HTML seul (KPI + tableau), cf. le
+//    même mécanisme sur file_attente.php (templates/footer.php).
+function ach_mv_render_zone(int $total_a_viser, float $anciennete_max, array $a_viser): void {
+    ?>
+    <div class="ach-kpi">
+      <div class="ach-kpi-item">
+        <div class="ach-kpi-val"><?= $total_a_viser ?></div>
+        <div class="ach-kpi-lbl">FEB en attente de votre visa</div>
+      </div>
+      <div class="ach-kpi-item">
+        <div class="ach-kpi-val"><?= $a_viser ? fmt_number($anciennete_max, 1) . ' h' : '—' ?></div>
+        <div class="ach-kpi-lbl">Ancienneté de la plus ancienne (heures ouvrées)</div>
+      </div>
+    </div>
+
+    <div class="ach-table-wrap">
+      <?php if (empty($a_viser)): ?>
+        <div class="ach-empty">Aucune FEB en attente de votre visa.</div>
+      <?php else: ?>
+      <div style="overflow-x:auto">
+      <table class="ach-table">
+        <thead><tr>
+          <th>Numéro</th><th>Objet</th><th>Demandeur</th><th>Montant</th><th>Fournisseur retenu</th>
+          <th>Ancienneté</th><th>Pièces jointes</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          <?php foreach ($a_viser as $f): ?>
+          <tr>
+            <td style="font-weight:700;color:var(--navy)"><?= h($f['numero'] ?: '—') ?></td>
+            <td><?= h($f['objet']) ?></td>
+            <td><?= h($f['demandeur_nom'] ?: '—') ?></td>
+            <td style="font-weight:700"><?= fmt_number((float)$f['montant_total']) ?> XOF</td>
+            <td><?= h($f['fournisseur_retenu'] ?: '—') ?></td>
+            <td><?= fmt_number((float)$f['anciennete_h'], 1) ?> h</td>
+            <td><?= (int)$f['nb_pieces'] ?></td>
+            <td><button type="button" class="btn btn-primary btn-sm" onclick="mvOuvrir(<?= (int)$f['id'] ?>)">Examiner</button></td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+      </div>
+      <?php endif; ?>
+    </div>
+    <?php
+}
+
+if (is_ajax() && ($_GET['fragment'] ?? '') === '1') {
+    ach_mv_render_zone($total_a_viser, $anciennete_max, $a_viser);
+    exit;
+}
+
 include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
@@ -154,44 +205,8 @@ include __DIR__ . '/../../templates/header.php';
 .visa-actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
 </style>
 
-<div class="ach-kpi">
-  <div class="ach-kpi-item">
-    <div class="ach-kpi-val"><?= $total_a_viser ?></div>
-    <div class="ach-kpi-lbl">FEB en attente de votre visa</div>
-  </div>
-  <div class="ach-kpi-item">
-    <div class="ach-kpi-val"><?= $a_viser ? fmt_number($anciennete_max, 1) . ' h' : '—' ?></div>
-    <div class="ach-kpi-lbl">Ancienneté de la plus ancienne (heures ouvrées)</div>
-  </div>
-</div>
-
-<div class="ach-table-wrap">
-  <?php if (empty($a_viser)): ?>
-    <div class="ach-empty">Aucune FEB en attente de votre visa.</div>
-  <?php else: ?>
-  <div style="overflow-x:auto">
-  <table class="ach-table">
-    <thead><tr>
-      <th>Numéro</th><th>Objet</th><th>Demandeur</th><th>Montant</th><th>Fournisseur retenu</th>
-      <th>Ancienneté</th><th>Pièces jointes</th><th>Actions</th>
-    </tr></thead>
-    <tbody>
-      <?php foreach ($a_viser as $f): ?>
-      <tr>
-        <td style="font-weight:700;color:var(--navy)"><?= h($f['numero'] ?: '—') ?></td>
-        <td><?= h($f['objet']) ?></td>
-        <td><?= h($f['demandeur_nom'] ?: '—') ?></td>
-        <td style="font-weight:700"><?= fmt_number((float)$f['montant_total']) ?> XOF</td>
-        <td><?= h($f['fournisseur_retenu'] ?: '—') ?></td>
-        <td><?= fmt_number((float)$f['anciennete_h'], 1) ?> h</td>
-        <td><?= (int)$f['nb_pieces'] ?></td>
-        <td><button type="button" class="btn btn-primary btn-sm" onclick="mvOuvrir(<?= (int)$f['id'] ?>)">Examiner</button></td>
-      </tr>
-      <?php endforeach; ?>
-    </tbody>
-  </table>
-  </div>
-  <?php endif; ?>
+<div id="mv-live-zone">
+<?php ach_mv_render_zone($total_a_viser, $anciennete_max, $a_viser); ?>
 </div>
 
 <!-- MODALE visa -->
@@ -320,6 +335,10 @@ function mvViser(accepte) {
     setTimeout(() => location.reload(), 600);
   });
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  liveRefresh({ url: <?= json_encode(APP_URL . '/pages/achats/mes_visas.php?fragment=1') ?>, container: '#mv-live-zone', interval: 10000 });
+});
 </script>
 
 <?php include __DIR__ . '/../../templates/footer.php'; ?>
