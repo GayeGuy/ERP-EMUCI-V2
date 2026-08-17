@@ -76,6 +76,32 @@ function refreshNotifs() {
 // Rafraîchir toutes les 60 secondes
 setInterval(refreshNotifs, 60000);
 
+// ===== RAFRAICHISSEMENT LIVE (polling léger) =====
+// Remplace périodiquement le contenu d'un conteneur par un fragment HTML
+// renvoyé par le serveur (même page, ?fragment=1) — pas de connexion
+// persistante (l'hébergement actuel ne le permet pas), juste un appel
+// espacé. S'interrompt quand l'onglet n'est pas visible ou qu'une modale
+// est ouverte : on ne doit jamais remplacer l'écran sous les yeux de
+// quelqu'un qui a une fenêtre ouverte ou un champ en cours de saisie.
+// Usage : liveRefresh({ url, container: '#id', interval: 10000 }).
+function liveRefresh(opts) {
+  const container = typeof opts.container === 'string' ? document.querySelector(opts.container) : opts.container;
+  if (!container) return;
+  const interval = opts.interval || 10000;
+  const isBusy = opts.isBusy || (() => !!document.querySelector('.ach-modal-bg.open, .modal-overlay.show'));
+  let inFlight = false;
+  function tick() {
+    if (document.hidden || isBusy() || inFlight) return;
+    inFlight = true;
+    fetch(opts.url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(r => r.ok ? r.text() : Promise.reject())
+      .then(html => { container.innerHTML = html; if (opts.onUpdate) opts.onUpdate(); })
+      .catch(() => {})
+      .finally(() => { inFlight = false; });
+  }
+  setInterval(tick, interval);
+}
+
 // ===== SIDEBAR SCROLL RESTORE =====
 (function() {
   const sidebar = document.querySelector('.sidebar');

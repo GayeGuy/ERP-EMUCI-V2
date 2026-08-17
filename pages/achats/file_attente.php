@@ -215,6 +215,19 @@ if ($f_site)      $qs[] = 'site=' . $f_site;
 if ($f_urgence !== '') $qs[] = 'urgence=' . urlencode($f_urgence);
 if ($f_demandeur) $qs[] = 'demandeur=' . $f_demandeur;
 $qsSuffix = $qs ? ('?' . implode('&', $qs)) : '';
+$fragmentUrl = APP_URL . '/pages/achats/file_attente.php?' . implode('&', array_merge($qs, ['fragment=1']));
+
+// ── Rafraîchissement live — fragment HTML seul (KPI + les 4 sections),
+//    sans le chrome de page (header/footer/toolbar/modales), pour un
+//    remplacement périodique en arrière-plan (cf. liveRefresh() dans
+//    templates/footer.php). Les filtres de l'URL s'appliquent normalement,
+//    la fonction de rendu est définie plus bas mais PHP compile toutes les
+//    déclarations de fonction top-level avant d'exécuter le script — donc
+//    disponible ici malgré l'ordre d'apparition dans le fichier.
+if (is_ajax() && ($_GET['fragment'] ?? '') === '1') {
+    ach_fa_render_zone($total_attente, $plus_ancienne, $anciennete_max, $a_prendre, $prises_autres, $mes_feb, $en_validation, $is_admin);
+    exit;
+}
 
 include __DIR__ . '/../../templates/header.php';
 ?>
@@ -253,17 +266,6 @@ include __DIR__ . '/../../templates/header.php';
   .ach-consult-grid { grid-template-columns:minmax(0,1fr); }
 }
 </style>
-
-<div class="ach-kpi">
-  <div class="ach-kpi-item">
-    <div class="ach-kpi-val"><?= $total_attente ?></div>
-    <div class="ach-kpi-lbl">FEB en attente de prise en charge</div>
-  </div>
-  <div class="ach-kpi-item">
-    <div class="ach-kpi-val"><?= $plus_ancienne ? fmt_number($anciennete_max, 1) . ' h' : '—' ?></div>
-    <div class="ach-kpi-lbl">Ancienneté de la plus ancienne (heures ouvrées)</div>
-  </div>
-</div>
 
 <form class="ach-toolbar" method="GET">
   <div class="ach-fg">
@@ -354,13 +356,35 @@ function ach_fa_render_section(string $titre, array $feb_list, string $mode, boo
     </div>
     <?php
 }
-ach_fa_render_section('À prendre en charge', $a_prendre, 'a_prendre', $is_admin);
-ach_fa_render_section('Prises en charge', $prises_autres, 'autres', $is_admin);
-ach_fa_render_section('Les miennes', $mes_feb, 'mine', $is_admin);
-if ($is_admin) {
-    ach_fa_render_section('En circuit de validation (administration)', $en_validation, 'en_validation', $is_admin);
+
+// ── KPI + les 4 sections, tout ce que le rafraîchissement live doit
+//    reproduire à l'identique (cf. l'appel en fragment plus haut dans le
+//    fichier). Un seul point de vérité pour les deux usages.
+function ach_fa_render_zone(int $total_attente, ?string $plus_ancienne, float $anciennete_max, array $a_prendre, array $prises_autres, array $mes_feb, array $en_validation, bool $is_admin): void {
+    ?>
+    <div class="ach-kpi">
+      <div class="ach-kpi-item">
+        <div class="ach-kpi-val"><?= $total_attente ?></div>
+        <div class="ach-kpi-lbl">FEB en attente de prise en charge</div>
+      </div>
+      <div class="ach-kpi-item">
+        <div class="ach-kpi-val"><?= $plus_ancienne ? fmt_number($anciennete_max, 1) . ' h' : '—' ?></div>
+        <div class="ach-kpi-lbl">Ancienneté de la plus ancienne (heures ouvrées)</div>
+      </div>
+    </div>
+    <?php
+    ach_fa_render_section('À prendre en charge', $a_prendre, 'a_prendre', $is_admin);
+    ach_fa_render_section('Prises en charge', $prises_autres, 'autres', $is_admin);
+    ach_fa_render_section('Les miennes', $mes_feb, 'mine', $is_admin);
+    if ($is_admin) {
+        ach_fa_render_section('En circuit de validation (administration)', $en_validation, 'en_validation', $is_admin);
+    }
 }
 ?>
+
+<div id="fa-live-zone">
+<?php ach_fa_render_zone($total_attente, $plus_ancienne, $anciennete_max, $a_prendre, $prises_autres, $mes_feb, $en_validation, $is_admin); ?>
+</div>
 
 <!-- MODALE consultation (lecture seule) -->
 <div class="ach-modal-bg" id="consult-modal">
@@ -477,6 +501,12 @@ document.querySelectorAll('.ach-modal-bg').forEach(m => {
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') document.querySelectorAll('.ach-modal-bg.open').forEach(m => m.classList.remove('open'));
+});
+
+// Pilote du rafraîchissement live (liveRefresh() vit dans templates/footer.php,
+// chargé après ce bloc — DOMContentLoaded garantit qu'il est bien défini).
+document.addEventListener('DOMContentLoaded', () => {
+  liveRefresh({ url: <?= json_encode($fragmentUrl) ?>, container: '#fa-live-zone', interval: 10000 });
 });
 </script>
 
