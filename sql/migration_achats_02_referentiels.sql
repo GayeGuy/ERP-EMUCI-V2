@@ -63,7 +63,17 @@ FROM (VALUES
     ('6152', 'Maintenance',                'MAINTENANCE')
 ) AS v(code_comptable, designation, famille_code)
 JOIN familles_achat f ON f.code = v.famille_code
-ON CONFLICT (code_comptable, exercice) DO NOTHING;
+-- WHERE NOT EXISTS plutôt que ON CONFLICT (code_comptable, exercice) : cette
+-- contrainte n'existe qu'entre la migration 01, qui la crée, et la 08, qui la
+-- remplace par UNIQUE (departement_id, famille_id, exercice). Rejouer la
+-- chaîne complète faisait donc échouer cette insertion sur une contrainte
+-- disparue — et, la transaction étant avortée, l'insertion des paramètres
+-- généraux plus bas dans ce même fichier était sautée en silence.
+-- Même technique que la migration 08 sur departements.
+WHERE NOT EXISTS (
+    SELECT 1 FROM lignes_budgetaires lb
+     WHERE lb.code_comptable = v.code_comptable AND lb.exercice = 2026
+);
 
 -- ══════════════════════════════════════════════════════════════
 --  Paramètres généraux
