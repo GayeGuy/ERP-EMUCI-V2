@@ -64,14 +64,20 @@ function auth_login(string $email, string $password): array {
 /**
  * Déconnecte l'utilisateur courant.
  */
-function auth_logout(): void {
+function auth_logout(bool $timeout = false): void {
     $uid = $_SESSION['user_id'] ?? null;
     if ($uid) {
-        audit_log($uid, 'LOGOUT', 'auth', $uid, 'Déconnexion');
+        audit_log($uid, 'LOGOUT', 'auth', $uid,
+            $timeout ? 'Déconnexion pour inactivité' : 'Déconnexion');
     }
     $_SESSION = [];
     session_destroy();
-    header('Location: ' . APP_URL . '/login.php');
+    // La redirection est posée ici, et la fonction sort par exit : tout code
+    // placé après l'appel est mort. Le drapeau doit donc arriver en
+    // paramètre — logout.php avait tenté de le poser après coup, sans effet,
+    // et la page de connexion restait muette après une déconnexion pour
+    // inactivité.
+    header('Location: ' . APP_URL . '/login.php' . ($timeout ? '?timeout=1' : ''));
     exit;
 }
 
