@@ -26,12 +26,48 @@ function env(string $key, ?string $default = null): ?string {
 }
 
 // --- Configuration base de données -------------------------------------
-define('DB_HOST',    env('DB_HOST',    'localhost'));
-define('DB_PORT',    env('DB_PORT',    '5432'));
-define('DB_NAME',    env('DB_NAME',    'stockapp'));
-define('DB_USER',    env('DB_USER',    'postgres'));
-define('DB_PASS',    env('DB_PASS',    'postgres'));
-define('DB_SSLMODE', env('DB_SSLMODE', 'prefer'));   // Neon => require
+//
+// Neon, Render et la plupart des hébergeurs livrent la connexion sous forme
+// d'une seule chaîne (postgresql://user:motdepasse@hote/base?sslmode=require).
+// La découper à la main en cinq variables est fastidieux et se prête aux
+// fautes de recopie — sur un mot de passe, l'erreur ne se voit pas. DATABASE_URL
+// est donc acceptée telle quelle et décomposée ici.
+//
+// Les variables séparées restent prioritaires : une base déjà configurée avec
+// DB_HOST/DB_USER/... ne change pas de comportement.
+function env_url_bdd(): array {
+    $url = env('DATABASE_URL');
+    if (!$url) return [];
+    $p = parse_url($url);
+    if (!$p || empty($p['host'])) return [];
+
+    $parts = [
+        'DB_HOST' => $p['host'],
+        'DB_PORT' => isset($p['port']) ? (string)$p['port'] : null,
+        'DB_NAME' => isset($p['path']) ? ltrim($p['path'], '/') : null,
+        'DB_USER' => isset($p['user']) ? rawurldecode($p['user']) : null,
+        'DB_PASS' => isset($p['pass']) ? rawurldecode($p['pass']) : null,
+    ];
+    // sslmode voyage dans la query string chez Neon.
+    if (!empty($p['query'])) {
+        parse_str($p['query'], $q);
+        if (!empty($q['sslmode'])) $parts['DB_SSLMODE'] = $q['sslmode'];
+    }
+    return array_filter($parts, fn($v) => $v !== null && $v !== '');
+}
+
+$_bdd_url = env_url_bdd();
+function env_bdd(string $cle, string $defaut): string {
+    global $_bdd_url;
+    return env($cle) ?? ($_bdd_url[$cle] ?? $defaut);
+}
+
+define('DB_HOST',    env_bdd('DB_HOST',    'localhost'));
+define('DB_PORT',    env_bdd('DB_PORT',    '5432'));
+define('DB_NAME',    env_bdd('DB_NAME',    'stockapp'));
+define('DB_USER',    env_bdd('DB_USER',    'postgres'));
+define('DB_PASS',    env_bdd('DB_PASS',    'postgres'));
+define('DB_SSLMODE', env_bdd('DB_SSLMODE', 'prefer'));   // Neon => require
 
 // --- Configuration application -----------------------------------------
 define('APP_NAME',    'ERP EMUCI');
