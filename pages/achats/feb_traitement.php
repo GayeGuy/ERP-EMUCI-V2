@@ -267,6 +267,15 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$l) json_response(false, 'Ligne introuvable.');
         if (!$fournisseur_id) json_response(false, 'Choisissez un fournisseur.');
 
+        // Désigner un fournisseur à la main sur une ligne attribue le marché
+        // tout autant que retenir son offre : même exigence de dossier, sinon
+        // le contrôle posé sur la retenue se contournerait par ici.
+        try {
+            ach_exiger_fournisseur_conforme($fournisseur_id);
+        } catch (AchValidationException $e) {
+            json_response(false, $e->getMessage());
+        }
+
         // Choisir sur la ligne le fournisseur de l'offre retenue du lot n'est
         // pas une dérogation : c'est un retour à la règle. Sans cette porte
         // de sortie, une ligne dérogée par erreur le restait définitivement —

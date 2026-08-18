@@ -707,6 +707,46 @@ function ach_recalculer_montant_total(int $feb_id): void {
 //    3) audit de l'ancienne et de la nouvelle offre retenue (autorisé tant
 //       que la FEB reste en prise_en_charge — même contrôle que le reste de
 //       feb_traitement.php, refait ici pour rester utilisable isolément).
+// ── Pièces obligatoires du dossier de conformité fournisseur.
+//    Doit rester aligné sur FOURN_DOCS (pages/achats/param_fournisseurs.php),
+//    qui porte la même liste pour le formulaire de saisie — la règle métier
+//    vit ici parce qu'elle est appliquée hors de cet écran.
+const ACH_DOCS_OBLIGATOIRES = [
+    'doc_rccm' => 'RCCM',
+    'doc_dfe'  => 'DFE / identification fiscale',
+    'doc_rib'  => 'RIB / attestation bancaire',
+    'doc_pirl' => "PIRL / pièce d'identité du représentant légal",
+];
+
+// ── Un marché ne peut être attribué qu'à un fournisseur au dossier complet.
+//    Décision du 18/08. La règle ne porte que sur l'attribution : saisir et
+//    comparer les offres d'un fournisseur incomplet reste permis, c'est le
+//    moment de retenir l'une d'elles qui est bloqué — sinon l'acheteur ne
+//    pourrait plus consulter le marché avant d'avoir réuni les pièces.
+function ach_fournisseur_conforme(int $fournisseur_id): array {
+    $f = db_fetch_one("SELECT raison_sociale, " . implode(', ', array_keys(ACH_DOCS_OBLIGATOIRES))
+                    . " FROM fournisseurs WHERE id=?", [$fournisseur_id]);
+    if (!$f) return ['ok' => false, 'nom' => "#$fournisseur_id", 'manquants' => ['fournisseur introuvable']];
+
+    $manquants = [];
+    foreach (ACH_DOCS_OBLIGATOIRES as $col => $label) {
+        if (trim((string)($f[$col] ?? '')) === '') $manquants[] = $label;
+    }
+    return ['ok' => !$manquants, 'nom' => $f['raison_sociale'], 'manquants' => $manquants];
+}
+
+// ── Lève une exception nommant les pièces qui manquent — l'acheteur doit
+//    savoir quoi réclamer, pas seulement que c'est refusé.
+function ach_exiger_fournisseur_conforme(int $fournisseur_id): void {
+    $c = ach_fournisseur_conforme($fournisseur_id);
+    if ($c['ok']) return;
+    throw new AchValidationException(
+        "Dossier de conformité incomplet pour « {$c['nom']} » — pièce(s) manquante(s) : "
+        . implode(', ', $c['manquants'])
+        . ". Complétez le dossier dans Achats → Fournisseurs avant de lui attribuer le marché."
+    );
+}
+
 function ach_retenir_offre_lot(int $offre_id, array $user): array {
     $uid = (int)$user['id'];
 
@@ -719,6 +759,10 @@ function ach_retenir_offre_lot(int $offre_id, array $user): array {
     if (!$feb || (int)$feb['acheteur_id'] !== $uid || $feb['statut'] !== 'prise_en_charge') {
         throw new AchValidationException("Cette FEB n'est pas (ou plus) en cours de traitement par vous.");
     }
+
+    // Retenir une offre, c'est attribuer le marché — le dossier du
+    // fournisseur doit être complet à cet instant.
+    ach_exiger_fournisseur_conforme((int)$offre['fournisseur_id']);
 
     $ancienne = db_fetch_one("SELECT id, fournisseur_id FROM feb_offres WHERE feb_id=? AND lot=? AND retenue=1", [$feb_id, $lot]);
 
