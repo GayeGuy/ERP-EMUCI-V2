@@ -41,6 +41,12 @@ define('APP_TIMEZONE', env('APP_TIMEZONE', 'Africa/Abidjan'));
 
 date_default_timezone_set(APP_TIMEZONE);
 define('SESSION_LIFETIME', 28800);
+// Filet de sécurité côté serveur pour la déconnexion pour inactivité : le
+// minuteur JS (templates/footer.php) ne suffit pas seul, un onglet mis en
+// arrière-plan peut être déchargé par le navigateur (JS perdu, la page se
+// recharge simplement au retour sans passer par la déconnexion) — ce garde-
+// fou tranche sur la dernière requête reçue, indépendamment du JS.
+define('INACTIVITY_TIMEOUT', 900);   // 15 min — cf. le même délai côté JS dans templates/footer.php
 
 function get_db(): PDO {
     static $pdo = null;

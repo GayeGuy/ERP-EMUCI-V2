@@ -3,6 +3,12 @@
 //  includes/session.php — Authentification & Droits v3
 //  Gère : profils normaux + Support IT sous-rôles + délégations
 // ============================================================
+// audit_log() pour tracer la déconnexion pour inactivité (voir require_auth()).
+// audit.php ne déclare qu'une fonction et n'inclut rien : aucun cycle, et
+// db_query() y est déjà disponible puisque db.php précède toujours ce fichier
+// (SESSION_LIFETIME, utilisé juste en dessous, en vient).
+require_once __DIR__ . '/audit.php';
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start([
         'cookie_lifetime' => SESSION_LIFETIME,
@@ -61,6 +67,24 @@ function require_auth(): void {
         header('Location: ' . APP_URL . '/login.php');
         exit;
     }
+    // Déconnexion pour inactivité (garde-fou serveur, cf. INACTIVITY_TIMEOUT
+    // dans db.php) : les requêtes de fond (notifications, liveRefresh) ne
+    // sont jamais envoyées tant que l'onglet est masqué, donc last_activity
+    // ne progresse pas pendant ce temps — seul un vrai retour sur l'appli
+    // (onglet redevenu visible, rechargement) peut la faire avancer.
+    if (!empty($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > INACTIVITY_TIMEOUT) {
+        // Même trace que le chemin JS, qui passe par auth_logout(true) : sans
+        // elle, le cas le plus fréquent — l'onglet laissé de côté — n'apparaît
+        // nulle part, et l'audit ne montre que les déconnexions volontaires.
+        // On la pose avant de vider $_SESSION, sinon l'utilisateur est perdu.
+        audit_log($_SESSION['user_id'] ?? null, 'LOGOUT', 'auth',
+            $_SESSION['user_id'] ?? null, 'Déconnexion pour inactivité');
+        $_SESSION = [];
+        session_destroy();
+        header('Location: ' . APP_URL . '/login.php?timeout=1');
+        exit;
+    }
+    $_SESSION['last_activity'] = time();
 }
 
 // ── Vérifier si l'utilisateur a un droit sur un module

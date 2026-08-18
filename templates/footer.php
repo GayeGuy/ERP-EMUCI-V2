@@ -133,6 +133,28 @@ function liveRefresh(opts) {
   timer = setInterval(tick, interval);
 }
 
+// ===== DÉCONNEXION AUTOMATIQUE APRÈS INACTIVITÉ =====
+// Basé sur de vrais événements utilisateur (souris, clavier, tactile) —
+// jamais sur les requêtes de fond (refreshNotifs, liveRefresh) : sinon un
+// onglet resté ouvert et visible mais que personne ne touche ne se
+// déconnecterait jamais, à cause du polling qui tournerait quand même.
+(function() {
+  // 15 minutes — doit rester aligné sur INACTIVITY_TIMEOUT (includes/db.php) :
+  // deux délais différents donneraient une déconnexion qui dépend de l'onglet.
+  const DELAI_MS = 15 * 60 * 1000;
+  let timer = null;
+  function reinitialiser() {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      window.location.href = '<?= APP_URL ?>/logout.php?timeout=1';
+    }, DELAI_MS);
+  }
+  ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'].forEach(evt => {
+    document.addEventListener(evt, reinitialiser, { passive: true });
+  });
+  reinitialiser();
+})();
+
 // ===== SIDEBAR SCROLL RESTORE =====
 (function() {
   const sidebar = document.querySelector('.sidebar');
