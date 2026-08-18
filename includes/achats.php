@@ -211,6 +211,48 @@ function ach_stock_magasin(int $article_id): int {
     );
 }
 
+// ── Débite le stock magasin — contrepartie exacte de ach_stock_magasin(),
+//    qui somme les sites typés « magasin » pour décider l'arbitrage. Sans ce
+//    débit, expédier une commande interne ne retirait rien du magasin (seul
+//    articles.stock_global descendait, cf. pages/commandes.php) : les mêmes
+//    unités physiques restaient arbitrables sur la FEB suivante.
+//
+//    Un manque n'est pas bloquant : l'expédition constate un mouvement déjà
+//    fait sur le terrain, refuser de l'enregistrer ne remettrait pas la
+//    marchandise en rayon. Il est donc retourné pour être dit à l'écran et
+//    dans l'audit — jamais absorbé en silence.
+function ach_debiter_stock_magasin(int $article_id, int $quantite): array {
+    if ($quantite <= 0) return ['debite' => 0, 'manquant' => 0, 'sites' => []];
+
+    // Même filtre que ach_stock_magasin(), verrou posé sur les lignes de
+    // stock : deux expéditions simultanées du même article ne doivent pas
+    // lire le même disponible avant de le débiter chacune de leur côté.
+    $sites = db_fetch_all(
+        "SELECT ss.site_id, ss.quantite
+           FROM stock_site ss
+           JOIN sites s ON s.id = ss.site_id
+          WHERE ss.article_id = ? AND s.type = 'magasin' AND s.actif = 1 AND ss.quantite > 0
+          ORDER BY ss.quantite DESC, ss.site_id
+          FOR UPDATE OF ss",
+        [$article_id]
+    );
+
+    $reste = $quantite;
+    $pris  = [];
+    foreach ($sites as $s) {
+        if ($reste <= 0) break;
+        $q = min($reste, (int)$s['quantite']);
+        db_query(
+            "UPDATE stock_site SET quantite = quantite - ? WHERE article_id = ? AND site_id = ?",
+            [$q, $article_id, (int)$s['site_id']]
+        );
+        $pris[(int)$s['site_id']] = $q;
+        $reste -= $q;
+    }
+
+    return ['debite' => $quantite - $reste, 'manquant' => $reste, 'sites' => $pris];
+}
+
 // ── Crédite le stock d'un département — traçabilité de « qui détient quoi »
 //    quand plusieurs départements partagent un même site (le siège, en
 //    particulier). Purement informatif : n'entre jamais dans l'arbitrage

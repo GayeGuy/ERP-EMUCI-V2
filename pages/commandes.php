@@ -13,6 +13,8 @@ require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/audit.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
+// ach_debiter_stock_magasin() : contrepartie du décrément global à l'expédition.
+require_once __DIR__ . '/../includes/achats.php';
 
 require_auth();
 
@@ -223,6 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             );
             $dist_id = (int)db_last_id();
 
+            $manques = [];   // stock magasin insuffisant, dit et non absorbé
             foreach ($lignes_liv as $l) {
                 $q_liv = (int)($l['quantite_livree'] ?? $l['quantite']);
                 db_query(
@@ -241,6 +244,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     if (!empty($l['article_id'])) {
                         db_query("UPDATE articles SET stock_global = GREATEST(0, stock_global - ?) WHERE id=?",
                             [$q_liv, (int)$l['article_id']]);
+                        // …et sa contrepartie au magasin : le décrément global
+                        // seul laissait stock_site inchangé côté source, donc
+                        // ach_stock_magasin() proposait encore des unités déjà
+                        // parties.
+                        $deb = ach_debiter_stock_magasin((int)$l['article_id'], $q_liv);
+                        if ($deb['manquant'] > 0) {
+                            $manques[] = ($l['libelle'] ?? "article #{$l['article_id']}")
+                                       . " : {$deb['manquant']} non couvert(s) par le stock magasin";
+                        }
                     }
                 }
             }
@@ -261,9 +273,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                      "Votre commande est en route. Confirmez la réception à l'arrivée.",
                      '/pages/commandes.php']);
             }
-            audit_log($user['id'],'UPDATE','commandes',$cmd_id,"Livraison émise — bon $num_dist");
+            $ecart_magasin = $manques ? ' — stock magasin insuffisant : ' . implode(' ; ', $manques) : '';
+            audit_log($user['id'],'UPDATE','commandes',$cmd_id,"Livraison émise — bon $num_dist$ecart_magasin");
             db_commit();
-            json_response(true,'Livraison émise. Coordinateur notifié.');
+            json_response(true, 'Livraison émise. Coordinateur notifié.'
+                . ($manques ? ' Attention — ' . implode(' ; ', $manques) . '.' : ''));
         } catch(Exception $e){ db_rollback(); json_response(false,$e->getMessage()); }
     }
 
