@@ -3,10 +3,15 @@
 --  À coller dans l'éditeur SQL de Neon, sur une base VIDE.
 -- ============================================================
 --
---  Contenu : la structure complète (90 tables) et les seuls référentiels
---  utiles à la recette du module Achats. L'historique d'exploitation du
---  dump de juin — bobines, imports, points journaliers — a été retiré :
---  il pesait 1,9 Mo sur 2 Mo et n'apporte rien ici.
+--  Les données sont écrites en INSERT et non en COPY : les blocs
+--  « COPY ... FROM stdin » d'un pg_dump ordinaire sont une fonctionnalité
+--  du client psql, qu'un éditeur SQL web ne sait pas exécuter — la
+--  structure passerait, les données non, et les tables resteraient vides.
+--
+--  Contenu : structure complète (90 tables) et seuls référentiels utiles à
+--  la recette du module Achats. L'historique d'exploitation du dump de juin
+--  — bobines, imports, points journaliers — a été retiré : 1,9 Mo sur 2 Mo,
+--  sans usage ici.
 --
 --  Comptes créés, tous avec le mot de passe  Recette@2026
 --
@@ -18,12 +23,12 @@
 --     testoperation@gmail.com Demandeur  — crée les FEB
 --
 --  Les 11 autres comptes du dump partagent ce mot de passe.
---  C'est une instance d'essai : n'y mettez aucune donnée réelle.
+--  Instance d'essai : n'y mettez aucune donnée réelle.
 --
 --  Deux fournisseurs (DMD, INFOSOLUCES) sont créés SANS pièces de
---  conformité. C'est volontaire : depuis le 18/08, un marché ne peut être
---  attribué qu'à un fournisseur portant ses RCCM, DFE, RIB et PIRL.
---  Les déposer fait partie de la recette.
+--  conformité. C'est volontaire : un marché ne peut être attribué qu'à un
+--  fournisseur portant ses RCCM, DFE, RIB et PIRL. Les déposer fait partie
+--  de la recette.
 --
 --  Le magasin central est approvisionné (500 rivets, 80 paquets de papier,
 --  etc.) : sans stock, toute demande partirait intégralement en achat et
@@ -34,17 +39,21 @@
 -- PostgreSQL database dump
 --
 
-\restrict K4FtUqLZP901jgd6SvFhoCvC1ZZMgAi8WIUebZ6b2gnWkcaNmJ4hyafOO3iZrHi
 
 -- Dumped from database version 16.14
 -- Dumped by pg_dump version 16.14
+
+-- Les meta-commandes du client psql ont ete retirees : ce ne sont pas
+-- des instructions SQL, un editeur web les rejette.
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
-SELECT pg_catalog.set_config('search_path', '', false);
+-- search_path laisse sur public plutot que vide : apres execution, un
+-- simple « SELECT * FROM users » dans le meme onglet doit fonctionner.
+SELECT pg_catalog.set_config('search_path', 'public', false);
 SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
@@ -3879,1251 +3888,1097 @@ ALTER TABLE ONLY public.validations_stock_matin ALTER COLUMN id SET DEFAULT next
 -- Data for Name: achat_paliers; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.achat_paliers (id, borne_min, borne_max, libelle, signataires, ordre, actif) FROM stdin;
-1	0	500000	RAF seul	["raf"]	1	1
-2	500001	5000000	RAF + DAF	["raf", "daf"]	2	1
-3	5000001	\N	RAF + DAF + PDG	["raf", "daf", "dg"]	3	1
-\.
+INSERT INTO public.achat_paliers VALUES
+	(1, 0, 500000, 'RAF seul', '["raf"]', 1, 1),
+	(2, 500001, 5000000, 'RAF + DAF', '["raf", "daf"]', 2, 1),
+	(3, 5000001, NULL, 'RAF + DAF + PDG', '["raf", "daf", "dg"]', 3, 1);
 
 
 --
 -- Data for Name: achat_parametres; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.achat_parametres (cle, valeur, libelle, type, options, modifie_par, modifie_le) FROM stdin;
-devise	XOF	Devise	texte	\N	\N	2026-08-18 21:52:42.987466
-comportement_budget_defaut	alerte	Comportement par défaut sur dépassement	liste	aucun,alerte,blocage	\N	2026-08-18 21:52:42.987466
-delai_livraison_standard_jours	15	Délai de livraison standard (jours)	nombre	\N	\N	2026-08-18 21:52:42.987466
-seuil_retard_jours	5	Seuil de retard de livraison (jours)	nombre	\N	\N	2026-08-18 21:52:42.987466
-max_lignes_feb	14	Nombre maximum de lignes par FEB	nombre	\N	\N	2026-08-18 21:52:42.987466
-seuil_retard_validation_jours	5	Seuil d'alerte — FEB en attente de validation depuis (jours)	nombre	\N	\N	2026-08-18 21:52:43.376415
-\.
+INSERT INTO public.achat_parametres VALUES
+	('devise', 'XOF', 'Devise', 'texte', NULL, NULL, '2026-08-18 22:01:13.902893'),
+	('comportement_budget_defaut', 'alerte', 'Comportement par défaut sur dépassement', 'liste', 'aucun,alerte,blocage', NULL, '2026-08-18 22:01:13.902893'),
+	('delai_livraison_standard_jours', '15', 'Délai de livraison standard (jours)', 'nombre', NULL, NULL, '2026-08-18 22:01:13.902893'),
+	('seuil_retard_jours', '5', 'Seuil de retard de livraison (jours)', 'nombre', NULL, NULL, '2026-08-18 22:01:13.902893'),
+	('max_lignes_feb', '14', 'Nombre maximum de lignes par FEB', 'nombre', NULL, NULL, '2026-08-18 22:01:13.902893'),
+	('seuil_retard_validation_jours', '5', 'Seuil d''alerte — FEB en attente de validation depuis (jours)', 'nombre', NULL, NULL, '2026-08-18 22:01:14.261808');
 
 
 --
 -- Data for Name: achat_types; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.achat_types (id, code, libelle, actif) FROM stdin;
-1	DAF	Demande d'Achat Fournitures	1
-2	DAI	Demande d'Achat Immobilisation	1
-3	DAH	Demande d'Achat Hors-marché	1
-\.
+INSERT INTO public.achat_types VALUES
+	(1, 'DAF', 'Demande d''Achat Fournitures', 1),
+	(2, 'DAI', 'Demande d''Achat Immobilisation', 1),
+	(3, 'DAH', 'Demande d''Achat Hors-marché', 1);
 
 
 --
 -- Data for Name: affectations_equipements; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.affectations_equipements (id, equipement_id, site_dest_id, user_dest_id, statut, pdf_path, pdf_signe_n1, pdf_signe_site, notes, created_by, valide_n1_by, valide_n1_at, recu_by, recu_at, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: agents; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.agents (id, matricule, nom, prenom, email, telephone, fonction, departement, direction, site, grade, statut, created_at, updated_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: articles; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.articles (id, code, libelle, type_article, unite, description, seuil_alerte, prix_unitaire, stock_global, actif, created_at, updated_at, site_id, famille_id) FROM stdin;
-1	CAF	Café Moulu	autre	boite	nescafé	2	562	48	1	2026-04-02 06:17:16	2026-06-04 16:08:41	\N	8
-2	SCR	Sucre	autre	boite	Sucre pour le café ou le thé	3	3250	43	1	2026-04-02 09:22:25	2026-06-04 16:01:35	\N	8
-4	THE	LIPTON	autre	boite		2	1325	31	1	2026-04-03 04:29:52	2026-06-04 16:01:35	\N	8
-7	SAGE	huile	autre	litre		2	1000	25	1	2026-06-02 17:08:52	2026-06-04 16:01:35	\N	8
-5	PH	Papier toilette	autre	paquet	Papiers toilette	5	2000	83	1	2026-04-03 04:37:52	2026-06-04 16:01:35	\N	9
-6	LT	Lotus	autre	boite		5	1500	35	1	2026-04-03 04:56:14	2026-06-04 16:01:35	\N	9
-3	RVT	rivets	autre	paquet	rivets gonflabe	2	4500	705	1	2026-04-02 14:19:54	2026-06-04 16:01:35	\N	7
-\.
+INSERT INTO public.articles VALUES
+	(1, 'CAF', 'Café Moulu', 'autre', 'boite', 'nescafé', 2, 562, 48, 1, '2026-04-02 06:17:16', '2026-06-04 16:08:41', NULL, 8),
+	(2, 'SCR', 'Sucre', 'autre', 'boite', 'Sucre pour le café ou le thé', 3, 3250, 43, 1, '2026-04-02 09:22:25', '2026-06-04 16:01:35', NULL, 8),
+	(4, 'THE', 'LIPTON', 'autre', 'boite', '', 2, 1325, 31, 1, '2026-04-03 04:29:52', '2026-06-04 16:01:35', NULL, 8),
+	(7, 'SAGE', 'huile', 'autre', 'litre', '', 2, 1000, 25, 1, '2026-06-02 17:08:52', '2026-06-04 16:01:35', NULL, 8),
+	(5, 'PH', 'Papier toilette', 'autre', 'paquet', 'Papiers toilette', 5, 2000, 83, 1, '2026-04-03 04:37:52', '2026-06-04 16:01:35', NULL, 9),
+	(6, 'LT', 'Lotus', 'autre', 'boite', '', 5, 1500, 35, 1, '2026-04-03 04:56:14', '2026-06-04 16:01:35', NULL, 9),
+	(3, 'RVT', 'rivets', 'autre', 'paquet', 'rivets gonflabe', 2, 4500, 705, 1, '2026-04-02 14:19:54', '2026-06-04 16:01:35', NULL, 7);
 
 
 --
 -- Data for Name: audit_log; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.audit_log (id, user_id, action, module, entite_id, description, ancienne_valeur, nouvelle_valeur, ip_address, user_agent, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: bilans_mensuels_bobines; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.bilans_mensuels_bobines (id, site_id, mois, inventaire_id, stock_debut_mois, stock_fin_mois, total_films_consommes, total_films_emuci, ecart_mois, nb_inventaires_journaliers, nb_ajustements, statut, valide_par, valide_at, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: budget_validations; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.budget_validations (id, departement_id, exercice, statut, soumis_par, soumis_le, valide_par, valide_le, motif_rejet, rejete_par, rejete_le) FROM stdin;
-\.
 
 
 --
 -- Data for Name: commande_lignes; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.commande_lignes (id, commande_id, type_article, article_id, libelle, quantite, unite, prix_unitaire, quantite_livree, motif_ecart, statut_ligne, motif_rejet) FROM stdin;
-\.
 
 
 --
 -- Data for Name: commandes; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.commandes (id, numero_commande, site_id, statut, notes, notes_livraison, livraison_par, livraison_at, recu_par, recu_at, created_by, created_at, updated_at, valide_par, valide_at, motif_rejet_global, feb_id) FROM stdin;
-\.
 
 
 --
 -- Data for Name: commandes_bobines; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.commandes_bobines (id, numero, site_id, type_bobine, libelle_type, statut, notes, demande_par, superviseur_id, superviseur_at, motif_rejet, gsb_id, gsb_at, recu_par, recu_at, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: commandes_bobines_lignes; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.commandes_bobines_lignes (id, commande_id, bobine_id, numero_bobine, statut) FROM stdin;
-\.
 
 
 --
 -- Data for Name: comparaisons_stock; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.comparaisons_stock (id, site_id, date_comparaison, films_emuci, films_digistock, ajuste, ajuste_par, ajuste_at, notes_ajustement, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: config_postes_composants; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.config_postes_composants (id, poste_id, nomenclature_id, quantite) FROM stdin;
-\.
 
 
 --
 -- Data for Name: config_postes_types; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.config_postes_types (id, code, libelle, description) FROM stdin;
-\.
 
 
 --
 -- Data for Name: configurations_site; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.configurations_site (id, type_site, nomenclature_id, quantite, optionnel) FROM stdin;
-1	pose	1	1	0
-2	pose	5	1	0
-3	pose	6	1	0
-4	pose	7	1	0
-5	pose	2	1	0
-6	pose	3	1	0
-7	pose	9	1	0
-8	saisie	1	1	0
-9	saisie	6	1	0
-10	saisie	7	1	0
-11	saisie	3	1	0
-12	saisie	4	1	0
-13	mixte	1	1	0
-14	mixte	5	1	0
-15	mixte	6	1	0
-16	mixte	2	1	0
-17	mixte	8	1	0
-18	mixte	7	1	0
-19	mixte	9	1	0
-20	mixte	3	1	0
-21	mixte	4	1	0
-\.
+INSERT INTO public.configurations_site VALUES
+	(1, 'pose', 1, 1, 0),
+	(2, 'pose', 5, 1, 0),
+	(3, 'pose', 6, 1, 0),
+	(4, 'pose', 7, 1, 0),
+	(5, 'pose', 2, 1, 0),
+	(6, 'pose', 3, 1, 0),
+	(7, 'pose', 9, 1, 0),
+	(8, 'saisie', 1, 1, 0),
+	(9, 'saisie', 6, 1, 0),
+	(10, 'saisie', 7, 1, 0),
+	(11, 'saisie', 3, 1, 0),
+	(12, 'saisie', 4, 1, 0),
+	(13, 'mixte', 1, 1, 0),
+	(14, 'mixte', 5, 1, 0),
+	(15, 'mixte', 6, 1, 0),
+	(16, 'mixte', 2, 1, 0),
+	(17, 'mixte', 8, 1, 0),
+	(18, 'mixte', 7, 1, 0),
+	(19, 'mixte', 9, 1, 0),
+	(20, 'mixte', 3, 1, 0),
+	(21, 'mixte', 4, 1, 0);
 
 
 --
 -- Data for Name: consommables; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.consommables (id, code, libelle, unite, description, seuil_alerte, prix_unitaire, stock_global, created_at, updated_at, categorie) FROM stdin;
-1	CAF	Café Moulu	boite	nescafé	2.00	562.00	7.99	2026-04-02 06:17:16	2026-05-28 10:17:20	\N
-2	SCR	Sucre	boite	Sucre pour le café ou le thé	3.00	3250.00	13.00	2026-04-02 09:22:25	2026-04-03 05:00:06	\N
-3	RVT	rivets	paquet	rivets gonflabe	2.00	4500.00	1796.00	2026-04-02 14:19:54	2026-04-27 14:35:27	\N
-4	THE	LIPTON	boite		2.00	1325.00	6.00	2026-04-03 04:29:52	2026-04-20 12:21:41	\N
-5	PH	Papier toilette	paquet	Papiers toilette	5.00	2000.00	20.98	2026-04-03 04:37:52	2026-04-15 22:37:46	\N
-6	LT	Lotus	boite		5.00	1500.00	15.00	2026-04-03 04:56:14	2026-04-03 04:57:38	\N
-7	SAGE	huile	litre		2.00	1000.00	10.00	2026-06-02 17:08:52	2026-06-03 17:34:30	\N
-\.
+INSERT INTO public.consommables VALUES
+	(1, 'CAF', 'Café Moulu', 'boite', 'nescafé', 2.00, 562.00, 7.99, '2026-04-02 06:17:16', '2026-05-28 10:17:20', NULL),
+	(2, 'SCR', 'Sucre', 'boite', 'Sucre pour le café ou le thé', 3.00, 3250.00, 13.00, '2026-04-02 09:22:25', '2026-04-03 05:00:06', NULL),
+	(3, 'RVT', 'rivets', 'paquet', 'rivets gonflabe', 2.00, 4500.00, 1796.00, '2026-04-02 14:19:54', '2026-04-27 14:35:27', NULL),
+	(4, 'THE', 'LIPTON', 'boite', '', 2.00, 1325.00, 6.00, '2026-04-03 04:29:52', '2026-04-20 12:21:41', NULL),
+	(5, 'PH', 'Papier toilette', 'paquet', 'Papiers toilette', 5.00, 2000.00, 20.98, '2026-04-03 04:37:52', '2026-04-15 22:37:46', NULL),
+	(6, 'LT', 'Lotus', 'boite', '', 5.00, 1500.00, 15.00, '2026-04-03 04:56:14', '2026-04-03 04:57:38', NULL),
+	(7, 'SAGE', 'huile', 'litre', '', 2.00, 1000.00, 10.00, '2026-06-02 17:08:52', '2026-06-03 17:34:30', NULL);
 
 
 --
 -- Data for Name: consommations_bobines; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.consommations_bobines (id, bobine_id, site_id, date_conso, quantite, stock_avant, stock_apres, notes, created_by, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: corrections_bobines; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.corrections_bobines (id, point_id, bobine_id, site_id, date_point, films_original, films_proposes, motif_gsb, gsb_id, statut, coord_id, reponse_coord, films_final, traite_at, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: delegations; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.delegations (id, superviseur_id, gestionnaire_id, module, libelle, actif, created_at, updated_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: demandes_bobines; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.demandes_bobines (id, bobine_id, site_id, demande_par, motif, statut, traite_par, traite_at, motif_reponse, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: demandes_correction_saisie; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.demandes_correction_saisie (id, point_id, demande_par, motif, statut, traite_par, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: departements; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.departements (id, code, label, ordre, actif, created_at) FROM stdin;
-1	OPERATION	Opérations	0	1	2026-08-18 21:52:43.327509
-2	ADMINISTRATION	Administration	0	1	2026-08-18 21:52:43.327509
-3	ACHAT	Achats	0	1	2026-08-18 21:52:43.327509
-\.
+INSERT INTO public.departements VALUES
+	(1, 'OPERATION', 'Opérations', 0, 1, '2026-08-18 22:01:14.214591'),
+	(2, 'ADMINISTRATION', 'Administration', 0, 1, '2026-08-18 22:01:14.214591'),
+	(3, 'ACHAT', 'Achats', 0, 1, '2026-08-18 22:01:14.214591');
 
 
 --
 -- Data for Name: di_demandes; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.di_demandes (id, numero, type_code, statut, etape_actuelle, etape_rejet, demandeur_id, champs, historique, signatures, workflow_snapshot, priorite, traite_it, traite_par, traite_date, submitted_at, created_at, updated_at, n1_user_id, site_id, ticket_glpi) FROM stdin;
-\.
 
 
 --
 -- Data for Name: di_etapes; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.di_etapes (id, type_id, role_code, label, ordre) FROM stdin;
-1	1	dg	Visa Direction Generale	2
-2	1	gestionnaire	Visa Administration	1
-3	1	n1	Visa N+1	0
-4	2	dg	Visa Direction Generale	2
-5	2	it	Visa Responsable IT	1
-6	2	n1	Visa N+1	0
-7	3	dg	Visa Direction Generale	2
-8	3	it	Visa Responsable IT	1
-9	3	n1	Visa N+1	0
-10	4	it	Visa Service IT	1
-11	4	n1	Visa Responsable Hierarchique	0
-12	5	dg	Visa Direction Generale	3
-13	5	daf	Visa DAF	2
-14	5	raf	Visa RAF	1
-15	5	n1	Visa Responsable Hierarchique (N+1)	0
-16	6	dg	Visa Direction Generale	1
-17	6	it	Visa Responsable IT	0
-18	7	dg	Visa Direction Generale	1
-19	7	it	Visa Responsable IT	0
-20	8	dg	Validation PDG (si requise)	1
-21	8	gestionnaire	Visa Service Imputant	0
-22	9	dg	Visa Direction Generale	1
-23	9	n1	Visa N+1	0
-\.
+INSERT INTO public.di_etapes VALUES
+	(1, 1, 'dg', 'Visa Direction Generale', 2),
+	(2, 1, 'gestionnaire', 'Visa Administration', 1),
+	(3, 1, 'n1', 'Visa N+1', 0),
+	(4, 2, 'dg', 'Visa Direction Generale', 2),
+	(5, 2, 'it', 'Visa Responsable IT', 1),
+	(6, 2, 'n1', 'Visa N+1', 0),
+	(7, 3, 'dg', 'Visa Direction Generale', 2),
+	(8, 3, 'it', 'Visa Responsable IT', 1),
+	(9, 3, 'n1', 'Visa N+1', 0),
+	(10, 4, 'it', 'Visa Service IT', 1),
+	(11, 4, 'n1', 'Visa Responsable Hierarchique', 0),
+	(12, 5, 'dg', 'Visa Direction Generale', 3),
+	(13, 5, 'daf', 'Visa DAF', 2),
+	(14, 5, 'raf', 'Visa RAF', 1),
+	(15, 5, 'n1', 'Visa Responsable Hierarchique (N+1)', 0),
+	(16, 6, 'dg', 'Visa Direction Generale', 1),
+	(17, 6, 'it', 'Visa Responsable IT', 0),
+	(18, 7, 'dg', 'Visa Direction Generale', 1),
+	(19, 7, 'it', 'Visa Responsable IT', 0),
+	(20, 8, 'dg', 'Validation PDG (si requise)', 1),
+	(21, 8, 'gestionnaire', 'Visa Service Imputant', 0),
+	(22, 9, 'dg', 'Visa Direction Generale', 1),
+	(23, 9, 'n1', 'Visa N+1', 0);
 
 
 --
 -- Data for Name: di_plateformes; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.di_plateformes (code, label, ordre, actif) FROM stdin;
-brique_additionnelle	Brique Additionnelle	1	1
-nsiiv_enrolement	NSIIV Enrolement	2	1
-nsiiv_optoplate	NSIIV Optoplate	3	1
-nsiiv_optotrace	NSIIV Optotrace	4	1
-email_professionnel	E-mail professionnel	5	1
-bus_post	Bus POST	6	1
-\.
+INSERT INTO public.di_plateformes VALUES
+	('brique_additionnelle', 'Brique Additionnelle', 1, 1),
+	('nsiiv_enrolement', 'NSIIV Enrolement', 2, 1),
+	('nsiiv_optoplate', 'NSIIV Optoplate', 3, 1),
+	('nsiiv_optotrace', 'NSIIV Optotrace', 4, 1),
+	('email_professionnel', 'E-mail professionnel', 5, 1),
+	('bus_post', 'Bus POST', 6, 1);
 
 
 --
 -- Data for Name: di_roles; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.di_roles (code, label, ordre, departement_id) FROM stdin;
-n1	Responsable N+1	1	\N
-raf	RAF	2	\N
-daf	DAF	3	\N
-dg	Direction Generale	4	\N
-it	Responsable IT	5	\N
-gestionnaire	Service Administration	6	\N
-\.
+INSERT INTO public.di_roles VALUES
+	('n1', 'Responsable N+1', 1, NULL),
+	('raf', 'RAF', 2, NULL),
+	('daf', 'DAF', 3, NULL),
+	('dg', 'Direction Generale', 4, NULL),
+	('it', 'Responsable IT', 5, NULL),
+	('gestionnaire', 'Service Administration', 6, NULL);
 
 
 --
 -- Data for Name: di_types; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.di_types (id, code, label, description, actif, traitement_it, date_auto_jours, ordre) FROM stdin;
-1	autorisation_absence	Autorisation d'absence	Demander un conge	1	0	\N	0
-2	creation_acces	Creation d'acces NSIIV	Demander la creation d'acces aux plateformes NSIIV pour un agent	1	1	0	1
-3	basculement_acces	Basculement d'acces	Modifier les acces plateformes d'un agent	1	1	0	2
-4	basculement_compte	Basculement de compte EMUCI	Demander le changement de poste sur un compte EMUCI existant	1	1	0	3
-5	transfert_agent	Transfert d'agent	Demander le transfert d'un agent vers un autre site	1	1	7	4
-6	creation_site	Creation de site	Demander l'enregistrement d'un nouveau site dans le systeme NSIIV	1	1	0	5
-7	changement_geolocalisation	Changement de geolocalisation	Modifier les coordonnees GPS d'un site existant	1	1	0	6
-8	imputation_courrier	Imputation courrier entrant	Imputer un courrier entrant a un service ou une personne	1	0	0	7
-9	exceptionnel	Demande exceptionnelle	Demande hors cadre standard - motif obligatoire	1	0	\N	8
-\.
+INSERT INTO public.di_types VALUES
+	(1, 'autorisation_absence', 'Autorisation d''absence', 'Demander un conge', 1, 0, NULL, 0),
+	(2, 'creation_acces', 'Creation d''acces NSIIV', 'Demander la creation d''acces aux plateformes NSIIV pour un agent', 1, 1, 0, 1),
+	(3, 'basculement_acces', 'Basculement d''acces', 'Modifier les acces plateformes d''un agent', 1, 1, 0, 2),
+	(4, 'basculement_compte', 'Basculement de compte EMUCI', 'Demander le changement de poste sur un compte EMUCI existant', 1, 1, 0, 3),
+	(5, 'transfert_agent', 'Transfert d''agent', 'Demander le transfert d''un agent vers un autre site', 1, 1, 7, 4),
+	(6, 'creation_site', 'Creation de site', 'Demander l''enregistrement d''un nouveau site dans le systeme NSIIV', 1, 1, 0, 5),
+	(7, 'changement_geolocalisation', 'Changement de geolocalisation', 'Modifier les coordonnees GPS d''un site existant', 1, 1, 0, 6),
+	(8, 'imputation_courrier', 'Imputation courrier entrant', 'Imputer un courrier entrant a un service ou une personne', 1, 0, 0, 7),
+	(9, 'exceptionnel', 'Demande exceptionnelle', 'Demande hors cadre standard - motif obligatoire', 1, 0, NULL, 8);
 
 
 --
 -- Data for Name: di_user_roles; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.di_user_roles (user_id, role_code) FROM stdin;
-\.
 
 
 --
 -- Data for Name: distribution_lignes; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.distribution_lignes (id, distribution_id, article_id, commande_ligne_id, libelle, quantite_envoyee, quantite_recue, unite, statut) FROM stdin;
-\.
 
 
 --
 -- Data for Name: distributions_site; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.distributions_site (id, numero_distribution, commande_id, site_id, date_distribution, statut, notes, fichier_bl, created_by, expedie_at, recu_at, recu_par, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: ecarts_bobines; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.ecarts_bobines (id, bobine_id, date_constat, stock_systeme, stock_physique, ecart, motif, source, inventaire_id, statut, resolu_at, resolu_par, resolution_notes, created_by, created_at, updated_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: emuci_sites_inconnus; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.emuci_sites_inconnus (id, nom_emuci, type_import, nb_occurrences, premiere_apparition, derniere_apparition, statut, site_id_lie, traite_par, traite_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: equipements; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.equipements (id, numero_serie_interne, numero_serie_origine, numero_chrono, nomenclature_id, categorie, site_id, utilisateur_id, etat, date_acquisition, date_mise_en_service, date_fin_cycle, marque, modele, observations, actif, created_by, created_at, updated_at, duree_amortissement_mois, prix_achat, statut_stock) FROM stdin;
-\.
 
 
 --
 -- Data for Name: familles_achat; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.familles_achat (id, code, libelle, actif, compte_comptable) FROM stdin;
-1	FOURN_BUR	Fournitures de bureau	1	605
-2	CONSO_IT	Consommables informatiques	1	604
-3	EQUIP	Équipements	1	2442
-4	PRESTA_SVC	Prestations de services	1	638
-5	TRANSPORT	Transport / Logistique	1	611
-6	MAINTENANCE	Maintenance	1	624
-7	CONSO_OP	Consommables opérations (rivets)	1	604
-8	RESTAURATION	Restauration	1	605
-9	ENTRETIEN	Fournitures d'entretien	1	605
-10	ACHAT_MARCH	Achats de marchandises	1	601
-11	MATIERES_PREM	Achats de matières premières	1	602
-12	EMBALLAGES	Achats d'emballages	1	608
-13	TRANSPORT_VENTE	Transport sur ventes	1	612
-14	TRANSPORT_TIERS	Transport pour compte de tiers	1	613
-15	TRANSPORT_PERSO	Transport du personnel	1	614
-16	SOUS_TRAITANCE	Sous-traitance générale	1	621
-17	LOCATIONS	Locations et charges locatives	1	622
-18	ASSURANCES	Primes d'assurance	1	625
-19	ETUDES_DOC	Études, recherches et documentation	1	626
-20	PUBLICITE	Publicité, publications, relations publiques	1	627
-21	TELECOM	Frais de télécommunications	1	628
-22	FRAIS_BANCAIRES	Frais bancaires	1	631
-23	HONORAIRES	Rémunérations d'intermédiaires et honoraires	1	632
-24	FORMATION	Frais de formation du personnel	1	633
-25	LICENCES	Redevances pour brevets, licences, logiciels	1	634
-26	PERSONNEL_EXT	Rémunérations de personnel extérieur	1	637
-27	IMPOTS_DIRECTS	Impôts et taxes directs	1	641
-28	IMPOTS_INDIRECTS	Impôts et taxes indirects	1	645
-29	AUTRES_IMPOTS	Autres impôts et taxes	1	647
-30	CHARGES_DIVERSES	Charges diverses	1	658
-31	OUTILLAGE	Matériel et outillage industriel	1	241
-32	MATERIEL_BUREAU	Matériel de bureau	1	2441
-33	MOBILIER_BUREAU	Mobilier de bureau	1	2443
-34	VEHICULES	Matériel de transport	1	245
-35	AUTRE_MATERIEL	Autres matériels	1	248
-\.
+INSERT INTO public.familles_achat VALUES
+	(1, 'FOURN_BUR', 'Fournitures de bureau', 1, '605'),
+	(2, 'CONSO_IT', 'Consommables informatiques', 1, '604'),
+	(3, 'EQUIP', 'Équipements', 1, '2442'),
+	(4, 'PRESTA_SVC', 'Prestations de services', 1, '638'),
+	(5, 'TRANSPORT', 'Transport / Logistique', 1, '611'),
+	(6, 'MAINTENANCE', 'Maintenance', 1, '624'),
+	(7, 'CONSO_OP', 'Consommables opérations (rivets)', 1, '604'),
+	(8, 'RESTAURATION', 'Restauration', 1, '605'),
+	(9, 'ENTRETIEN', 'Fournitures d''entretien', 1, '605'),
+	(10, 'ACHAT_MARCH', 'Achats de marchandises', 1, '601'),
+	(11, 'MATIERES_PREM', 'Achats de matières premières', 1, '602'),
+	(12, 'EMBALLAGES', 'Achats d''emballages', 1, '608'),
+	(13, 'TRANSPORT_VENTE', 'Transport sur ventes', 1, '612'),
+	(14, 'TRANSPORT_TIERS', 'Transport pour compte de tiers', 1, '613'),
+	(15, 'TRANSPORT_PERSO', 'Transport du personnel', 1, '614'),
+	(16, 'SOUS_TRAITANCE', 'Sous-traitance générale', 1, '621'),
+	(17, 'LOCATIONS', 'Locations et charges locatives', 1, '622'),
+	(18, 'ASSURANCES', 'Primes d''assurance', 1, '625'),
+	(19, 'ETUDES_DOC', 'Études, recherches et documentation', 1, '626'),
+	(20, 'PUBLICITE', 'Publicité, publications, relations publiques', 1, '627'),
+	(21, 'TELECOM', 'Frais de télécommunications', 1, '628'),
+	(22, 'FRAIS_BANCAIRES', 'Frais bancaires', 1, '631'),
+	(23, 'HONORAIRES', 'Rémunérations d''intermédiaires et honoraires', 1, '632'),
+	(24, 'FORMATION', 'Frais de formation du personnel', 1, '633'),
+	(25, 'LICENCES', 'Redevances pour brevets, licences, logiciels', 1, '634'),
+	(26, 'PERSONNEL_EXT', 'Rémunérations de personnel extérieur', 1, '637'),
+	(27, 'IMPOTS_DIRECTS', 'Impôts et taxes directs', 1, '641'),
+	(28, 'IMPOTS_INDIRECTS', 'Impôts et taxes indirects', 1, '645'),
+	(29, 'AUTRES_IMPOTS', 'Autres impôts et taxes', 1, '647'),
+	(30, 'CHARGES_DIVERSES', 'Charges diverses', 1, '658'),
+	(31, 'OUTILLAGE', 'Matériel et outillage industriel', 1, '241'),
+	(32, 'MATERIEL_BUREAU', 'Matériel de bureau', 1, '2441'),
+	(33, 'MOBILIER_BUREAU', 'Mobilier de bureau', 1, '2443'),
+	(34, 'VEHICULES', 'Matériel de transport', 1, '245'),
+	(35, 'AUTRE_MATERIEL', 'Autres matériels', 1, '248');
 
 
 --
 -- Data for Name: feb; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.feb (id, numero, exercice, demandeur_id, site_id, departement_id, fonction, urgence, objet, statut, acheteur_id, montant_total, workflow_snapshot, date_creation, date_soumission, date_prise_charge, date_lancement_validation, date_confirmation, date_cloture, etape_actuelle, signatures, historique, etape_rejet, motif_rejet, fiche_validation_path) FROM stdin;
-\.
 
 
 --
 -- Data for Name: feb_compteurs; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.feb_compteurs (exercice, dernier_numero) FROM stdin;
-\.
 
 
 --
 -- Data for Name: feb_lignes; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.feb_lignes (id, feb_id, numero_ligne, designation, article_id, quantite, unite, famille_id, code_analytique, type_achat, lot, fournisseur_id, montant_ttc, observation, arbitrage, fournisseur_derogation) FROM stdin;
-\.
 
 
 --
 -- Data for Name: feb_offres; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.feb_offres (id, feb_id, lot, fournisseur_id, delai_annonce, conditions_paiement, montant_ttc, prix_initial, observation, retenue) FROM stdin;
-\.
 
 
 --
 -- Data for Name: feb_pieces_jointes; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.feb_pieces_jointes (id, feb_id, fichier, nom_origine, taille, mime, deposee_par, deposee_le) FROM stdin;
-\.
 
 
 --
 -- Data for Name: feb_receptions; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.feb_receptions (id, feb_suivi_id, reception_fournisseur_id, quantite_recue, date_reception, bon_livraison, ecart, motif_ecart, recu_par, observation) FROM stdin;
-\.
 
 
 --
 -- Data for Name: feb_suivi; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.feb_suivi (id, feb_id, feb_ligne_id, numero_da, date_da, numero_bc, date_bc, date_livraison_prevue, date_livraison_reelle, quantite_commandee, quantite_recue, statut, site_id, cloture_reliquat) FROM stdin;
-\.
 
 
 --
 -- Data for Name: fournisseurs; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.fournisseurs (id, raison_sociale, contact_nom, telephone, email, adresse, conditions_paiement, actif, cree_par, cree_le, modifie_le, numero_rccm, numero_dfe, numero_rib, coordonnees, doc_rccm, doc_idu, doc_dfe, doc_arf, doc_cnps, doc_rib, doc_pirl) FROM stdin;
-1	DMD	Service commercial	0102030405	contact@dmd.example	\N	\N	1	\N	2026-08-18 21:54:29.842238	2026-08-18 21:54:29.842238	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N
-2	INFOSOLUCES	Service commercial	0607080910	contact@infosoluces.example	\N	\N	1	\N	2026-08-18 21:54:29.842238	2026-08-18 21:54:29.842238	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N	\N
-\.
+INSERT INTO public.fournisseurs VALUES
+	(1, 'DMD', 'Service commercial', '0102030405', 'contact@dmd.example', NULL, NULL, 1, NULL, '2026-08-18 22:01:36.016815', '2026-08-18 22:01:36.016815', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL),
+	(2, 'INFOSOLUCES', 'Service commercial', '0607080910', 'contact@infosoluces.example', NULL, NULL, 1, NULL, '2026-08-18 22:01:36.016815', '2026-08-18 22:01:36.016815', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 
 
 --
 -- Data for Name: import_optoplate; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.import_optoplate (id, import_session_id, date_import, date_installation, numero_dossier, immatriculation, vin, type_plaque, statut_plaque, "position", num_consommable, num_bobine, site_id_emuci, site_nom_emuci, site_id, importe_par, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: import_optotrace; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.import_optotrace (id, import_session_id, date_import, plate_number, vin, case_number, category, site_nom_emuci, site_id, installation_date, is_last, is_deleted, importe_par, created_at, keyname, batch, project, article, format, box, quantity, type_trace, state, first_use, last_use, sended_on, received_on, canceled_on) FROM stdin;
-\.
 
 
 --
 -- Data for Name: import_sessions_emuci; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.import_sessions_emuci (id, date_import, type_import, nb_lignes_optoplate, nb_lignes_optotrace, nb_erreurs, statut, importe_par, notes, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: interventions_maintenance; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.interventions_maintenance (id, technicien_id, site_id, equipement_id, date_intervention, type_action, description, probleme_signale, solution_apportee, statut_apres, duree_minutes, pieces_changees, rapport_fichier, created_at, updated_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: inventaire_corrections; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.inventaire_corrections (id, detail_id, inventaire_id, bobine_id, site_id, stock_physique_actuel, valeur_proposee, motif, demandeur_id, statut, valeur_finale, reponse, traite_par, traite_at, created_at, type, autorise_par, autorise_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: inventaire_details_bobines; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.inventaire_details_bobines (id, inventaire_id, bobine_id, stock_systeme, stock_physique, ecart, conso_quotidienne_moy, jours_restants_systeme, jours_restants_physique, date_epuisement_estime, notes, qte_temps_reel, ecart_connu_avant, films_emuci_jour, ecart_emuci_digi) FROM stdin;
-\.
 
 
 --
 -- Data for Name: inventaire_session_sites; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.inventaire_session_sites (session_id, site_id) FROM stdin;
-\.
 
 
 --
 -- Data for Name: inventaire_sessions; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.inventaire_sessions (id, libelle, date_debut, date_fin, statut, notes, ouverte_par, ouverte_at, cloturee_par, cloturee_at, created_at, type_periode) FROM stdin;
-\.
 
 
 --
 -- Data for Name: inventaires_bobines; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.inventaires_bobines (id, site_id, date_inventaire, statut, nb_bobines, nb_ecarts, notes, cree_par, valide_par, valide_at, created_at, type_inventaire, total_films_systeme, total_films_physique, total_films_emuci, ecart_digistock_emuci, session_id) FROM stdin;
-\.
 
 
 --
 -- Data for Name: lignes_budgetaires; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.lignes_budgetaires (id, code_comptable, designation, exercice, enveloppe, comportement, famille_id, actif, departement_id) FROM stdin;
-1	6061	Fournitures de bureau	2026	\N	alerte	1	1	\N
-2	6068	Consommables informatiques	2026	\N	alerte	2	1	\N
-3	2183	Équipements informatiques	2026	\N	alerte	3	1	\N
-4	6226	Prestations de services	2026	\N	alerte	4	1	\N
-5	6241	Transport / Logistique	2026	\N	alerte	5	1	\N
-6	6152	Maintenance	2026	\N	alerte	6	1	\N
-\.
+INSERT INTO public.lignes_budgetaires VALUES
+	(1, '6061', 'Fournitures de bureau', 2026, NULL, 'alerte', 1, 1, NULL),
+	(2, '6068', 'Consommables informatiques', 2026, NULL, 'alerte', 2, 1, NULL),
+	(3, '2183', 'Équipements informatiques', 2026, NULL, 'alerte', 3, 1, NULL),
+	(4, '6226', 'Prestations de services', 2026, NULL, 'alerte', 4, 1, NULL),
+	(5, '6241', 'Transport / Logistique', 2026, NULL, 'alerte', 5, 1, NULL),
+	(6, '6152', 'Maintenance', 2026, NULL, 'alerte', 6, 1, NULL);
 
 
 --
 -- Data for Name: litige_messages; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.litige_messages (id, reception_id, user_id, message, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: livraisons_consommables; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.livraisons_consommables (id, consommable_id, site_id, type_mouvement, quantite, prix_unitaire, prix_total, date_livraison, bon_livraison, fichier_bl, notes, created_by, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: mouvements_bobines; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.mouvements_bobines (id, bobine_id, type, quantite, stock_avant, stock_apres, motif, ref_id, created_by, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: mouvements_equipements; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.mouvements_equipements (id, equipement_id, type, site_source_id, site_dest_id, user_dest_id, notes, fichier_bl, created_by, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: mouvements_stock; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.mouvements_stock (id, article_id, site_id, type_mouvement, quantite, solde_apres, reference, notes, created_by, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: nomenclature_liens; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.nomenclature_liens (id, parent_id, enfant_id, quantite) FROM stdin;
-\.
 
 
 --
 -- Data for Name: nomenclatures; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.nomenclatures (id, code, categorie, libelle, description, duree_vie_mois, seuil_alerte, created_at, duree_amortissement_mois) FROM stdin;
-1	CLV	informatique	Clavier	Les claviers des desktop	24	2	2026-04-02 06:11:05	36
-2	IMP	informatique	Imprimantes		24	5	2026-04-02 06:11:53	36
-3	SR	informatique	Souris		24	5	2026-04-02 09:16:25	36
-4	UNT	informatique	Unité centrale		24	5	2026-04-02 09:17:00	36
-5	CLD	informatique	Client lourd		24	5	2026-04-02 09:17:31	36
-6	ECR	informatique	Ecran		24	5	2026-04-02 09:18:01	36
-7	OND	informatique	Onduleurs		12	5	2026-04-02 09:18:21	36
-8	LPT	informatique	Laptop		36	5	2026-04-02 09:19:11	36
-9	PRS	informatique	Perceuse		36	5	2026-04-02 09:19:32	36
-\.
+INSERT INTO public.nomenclatures VALUES
+	(1, 'CLV', 'informatique', 'Clavier', 'Les claviers des desktop', 24, 2, '2026-04-02 06:11:05', 36),
+	(2, 'IMP', 'informatique', 'Imprimantes', '', 24, 5, '2026-04-02 06:11:53', 36),
+	(3, 'SR', 'informatique', 'Souris', '', 24, 5, '2026-04-02 09:16:25', 36),
+	(4, 'UNT', 'informatique', 'Unité centrale', '', 24, 5, '2026-04-02 09:17:00', 36),
+	(5, 'CLD', 'informatique', 'Client lourd', '', 24, 5, '2026-04-02 09:17:31', 36),
+	(6, 'ECR', 'informatique', 'Ecran', '', 24, 5, '2026-04-02 09:18:01', 36),
+	(7, 'OND', 'informatique', 'Onduleurs', '', 12, 5, '2026-04-02 09:18:21', 36),
+	(8, 'LPT', 'informatique', 'Laptop', '', 36, 5, '2026-04-02 09:19:11', 36),
+	(9, 'PRS', 'informatique', 'Perceuse', '', 36, 5, '2026-04-02 09:19:32', 36);
 
 
 --
 -- Data for Name: notifications; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.notifications (id, user_id, type, titre, message, lien, lu, email_envoye, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: op_bobines; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.op_bobines (id, numero, type_code, serie, type_vehicule_id, films_total, films_utilises, films_endommages, films_restants, site_id, statut, date_ouverture, created_by, created_at, qte_initiale, stock_systeme, stock_physique, dernier_inventaire_id, date_creation, format, notes_perte) FROM stdin;
-\.
 
 
 --
 -- Data for Name: op_films_utilises; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.op_films_utilises (id, point_id, bobine_id, type_vehicule_id, films_utilises, films_endommages) FROM stdin;
-\.
 
 
 --
 -- Data for Name: op_pmma_utilises; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.op_pmma_utilises (id, point_id, type_pmma, utilises, endommages, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: op_points_journaliers; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.op_points_journaliers (id, site_id, date_point, type_point, statut, nb_vp, nb_camion, nb_semi, nb_moto, total_engins, total_plaques, moyenne_prod, rivets_utilises, rivets_endommages, non_poses_concessionnaires, non_poses_usagers, nb_heures_travail, observations, created_by, validated_by, validated_at, created_at, updated_at, correction_gp, motif_correction_gp, corrected_by_gp, corrected_at, rivets_gonflables, rivets_eclates, motif_rejet) FROM stdin;
-\.
 
 
 --
 -- Data for Name: op_stock_rivets; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.op_stock_rivets (id, site_id, quantite, updated_at, type_rivet) FROM stdin;
-\.
 
 
 --
 -- Data for Name: op_types_bobines; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.op_types_bobines (id, code, libelle, serie, actif) FROM stdin;
-29	A001	Format Auto, version Privee	A   	1
-30	A002	Format Auto, version Transport Publique	A   	1
-31	A003	Format Auto, version Institution Internationale	A   	1
-32	A004	Format Auto, version Diplomatique	A   	1
-33	A005	Format Auto, version Gouvernementale	A   	1
-34	A006	Format Auto, version Temporaire	A   	1
-35	B001	Format Carre, version Privee	B   	1
-36	B002	Format Carre, version Transport Publique	B   	1
-37	B003	Format Carre, version Institution Internationale	B   	1
-38	B004	Format Carre, version Diplomatique	B   	1
-39	B005	Format Carre, version Gouvernementale	B   	1
-40	B006	Format Carre, version Temporaire	B   	1
-41	C001	Format Moto, version Privee	C   	1
-42	C002	Format Moto, version Transport Publique	C   	1
-43	C003	Format Moto, version Institution Internationale	C   	1
-44	C004	Format Moto, version Diplomatique	C   	1
-45	C005	Format Moto, version Gouvernementale	C   	1
-46	C006	Format Moto, version Temporaire	C   	1
-47	D001	Format MotoII, version Privee	D   	1
-48	D002	Format MotoII, version Transport Publique	D   	1
-49	D003	Format MotoII, version Institution Internationale	D   	1
-50	D004	Format MotoII, version Diplomatique	D   	1
-51	D005	Format MotoII, version Gouvernementale	D   	1
-52	D006	Format MotoII, version Temporaire	D   	1
-53	WSL001	Version Pare-brise - Privee	WSL 	1
-54	WSL002	Version Pare-brise - Transport Publique	WSL 	1
-55	TL001	Version Reservoir - Privee	TL  	1
-56	TL002	Version Reservoir - Transport Publique	TL  	1
-\.
+INSERT INTO public.op_types_bobines VALUES
+	(29, 'A001', 'Format Auto, version Privee', 'A   ', 1),
+	(30, 'A002', 'Format Auto, version Transport Publique', 'A   ', 1),
+	(31, 'A003', 'Format Auto, version Institution Internationale', 'A   ', 1),
+	(32, 'A004', 'Format Auto, version Diplomatique', 'A   ', 1),
+	(33, 'A005', 'Format Auto, version Gouvernementale', 'A   ', 1),
+	(34, 'A006', 'Format Auto, version Temporaire', 'A   ', 1),
+	(35, 'B001', 'Format Carre, version Privee', 'B   ', 1),
+	(36, 'B002', 'Format Carre, version Transport Publique', 'B   ', 1),
+	(37, 'B003', 'Format Carre, version Institution Internationale', 'B   ', 1),
+	(38, 'B004', 'Format Carre, version Diplomatique', 'B   ', 1),
+	(39, 'B005', 'Format Carre, version Gouvernementale', 'B   ', 1),
+	(40, 'B006', 'Format Carre, version Temporaire', 'B   ', 1),
+	(41, 'C001', 'Format Moto, version Privee', 'C   ', 1),
+	(42, 'C002', 'Format Moto, version Transport Publique', 'C   ', 1),
+	(43, 'C003', 'Format Moto, version Institution Internationale', 'C   ', 1),
+	(44, 'C004', 'Format Moto, version Diplomatique', 'C   ', 1),
+	(45, 'C005', 'Format Moto, version Gouvernementale', 'C   ', 1),
+	(46, 'C006', 'Format Moto, version Temporaire', 'C   ', 1),
+	(47, 'D001', 'Format MotoII, version Privee', 'D   ', 1),
+	(48, 'D002', 'Format MotoII, version Transport Publique', 'D   ', 1),
+	(49, 'D003', 'Format MotoII, version Institution Internationale', 'D   ', 1),
+	(50, 'D004', 'Format MotoII, version Diplomatique', 'D   ', 1),
+	(51, 'D005', 'Format MotoII, version Gouvernementale', 'D   ', 1),
+	(52, 'D006', 'Format MotoII, version Temporaire', 'D   ', 1),
+	(53, 'WSL001', 'Version Pare-brise - Privee', 'WSL ', 1),
+	(54, 'WSL002', 'Version Pare-brise - Transport Publique', 'WSL ', 1),
+	(55, 'TL001', 'Version Reservoir - Privee', 'TL  ', 1),
+	(56, 'TL002', 'Version Reservoir - Transport Publique', 'TL  ', 1);
 
 
 --
 -- Data for Name: op_types_vehicule; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.op_types_vehicule (id, code, libelle, nb_plaques, nb_rivets, serie_bobine, ordre) FROM stdin;
-1	VP	Véhicule Particulier	2	4	A	1
-2	CAM	Camion	2	4	B	2
-3	SEMI	Semi-remorque	1	2	C	3
-4	MOTO	Moto	1	2	D	4
-\.
+INSERT INTO public.op_types_vehicule VALUES
+	(1, 'VP', 'Véhicule Particulier', 2, 4, 'A', 1),
+	(2, 'CAM', 'Camion', 2, 4, 'B', 2),
+	(3, 'SEMI', 'Semi-remorque', 1, 2, 'C', 3),
+	(4, 'MOTO', 'Moto', 1, 2, 'D', 4);
 
 
 --
 -- Data for Name: permissions; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.permissions (id, role_id, module, can_create, can_read, can_update, can_delete, can_export) FROM stdin;
-462	2	equipements	1	1	1	1	1
-463	1	equipements	1	1	1	1	1
-464	2	sites	1	1	1	1	1
-465	1	sites	1	1	1	1	1
-466	2	affectations	1	1	1	1	1
-467	1	affectations	1	1	1	1	1
-468	2	receptions	1	1	1	1	1
-469	1	receptions	1	1	1	1	1
-470	2	bobines	1	1	1	1	1
-471	1	bobines	1	1	1	1	1
-472	2	inventaire_bobines	1	1	1	1	1
-473	1	inventaire_bobines	1	1	1	1	1
-474	2	consommables	1	1	1	1	1
-475	1	consommables	1	1	1	1	1
-476	2	rapports	1	1	1	1	1
-477	1	rapports	1	1	1	1	1
-478	2	interventions	1	1	1	1	1
-479	1	interventions	1	1	1	1	1
-480	2	point_emuci	1	1	1	1	1
-481	1	point_emuci	1	1	1	1	1
-482	2	import_emuci	1	1	1	1	1
-483	1	import_emuci	1	1	1	1	1
-484	2	nomenclatures	1	1	1	1	1
-485	1	nomenclatures	1	1	1	1	1
-486	2	users	1	1	1	1	1
-487	1	users	1	1	1	1	1
-488	2	audit	1	1	1	1	1
-489	1	audit	1	1	1	1	1
-490	2	delegations	1	1	1	1	1
-491	1	delegations	1	1	1	1	1
-492	2	rivets	1	1	1	1	1
-493	1	rivets	1	1	1	1	1
-525	8	equipements	0	1	0	0	1
-526	8	sites	0	1	0	0	1
-527	8	affectations	0	1	0	0	1
-528	8	receptions	1	1	1	0	1
-529	8	bobines	1	1	1	0	1
-530	8	inventaire_bobines	1	1	1	0	1
-531	8	consommables	0	1	0	0	1
-532	8	rapports	0	1	0	0	1
-534	8	point_emuci	1	1	1	0	1
-535	8	import_emuci	0	1	0	0	1
-537	8	delegations	1	1	1	1	0
-538	8	rivets	1	1	1	0	1
-540	6	equipements	0	1	0	0	0
-541	6	bobines	1	1	1	0	1
-542	6	inventaire_bobines	1	1	1	0	0
-543	6	receptions	1	1	1	0	1
-544	6	consommables	0	1	0	0	0
-545	6	rapports	0	1	0	0	1
-546	6	rivets	0	1	0	0	0
-547	5	equipements	1	1	1	0	1
-548	5	consommables	1	1	1	0	1
-549	5	receptions	1	1	1	0	1
-550	5	rapports	0	1	0	0	1
-551	5	sites	0	1	0	0	0
-552	2	pmma	1	1	1	0	1
-553	2	commandes	1	1	1	0	1
-554	1	pmma	1	1	1	0	1
-555	1	commandes	1	1	1	0	1
-556	15	pmma	1	1	1	0	1
-557	15	commandes	1	1	1	0	1
-558	8	pmma	1	1	1	0	1
-559	8	commandes	1	1	1	0	1
-567	6	pmma	1	1	1	0	0
-568	6	commandes	1	1	0	0	0
-570	5	commandes	0	1	1	0	1
-571	5	pmma	1	1	1	0	1
-572	17	commandes	0	1	1	0	1
-573	17	pmma	1	1	1	0	1
-588	14	commandes	0	1	0	0	0
-589	18	rapports	0	1	0	0	1
-590	19	rapports	0	1	0	0	1
-591	18	equipements	0	1	0	0	1
-592	19	equipements	0	1	0	0	1
-593	18	consommables	0	1	0	0	1
-594	19	consommables	0	1	0	0	1
-595	20	rapports	0	1	0	0	1
-598	1	operations	1	1	1	1	1
-599	2	operations	1	1	1	1	1
-600	1	validation_stock	1	1	1	1	1
-601	2	validation_stock	1	1	1	1	1
-602	1	demandes	1	1	1	1	1
-603	2	demandes	1	1	1	1	1
-604	1	commandes_bobines	1	1	1	1	1
-605	2	commandes_bobines	1	1	1	1	1
-606	1	rapports_gsb	1	1	1	1	1
-607	2	rapports_gsb	1	1	1	1	1
-608	1	stock_bobines	1	1	1	1	1
-609	2	stock_bobines	1	1	1	1	1
-610	1	rapport_journalier	1	1	1	1	1
-611	2	rapport_journalier	1	1	1	1	1
-612	1	departements	1	1	1	1	1
-613	2	departements	1	1	1	1	1
-614	1	affectations_it	1	1	1	1	1
-615	2	affectations_it	1	1	1	1	1
-617	4	sites	0	1	0	0	0
-618	4	equipements	0	1	0	0	0
-619	4	bobines	0	1	0	0	0
-620	4	inventaire_bobines	0	1	0	0	0
-621	4	operations	0	1	0	0	0
-622	4	commandes	0	1	0	0	0
-623	4	rivets	0	1	0	0	0
-624	4	pmma	0	1	0	0	0
-625	4	consommables	0	1	0	0	0
-626	4	demandes	0	1	0	0	0
-627	4	rapports	0	1	0	0	1
-628	4	rapports_gsb	0	1	0	0	1
-629	4	stock_bobines	0	1	0	0	0
-630	4	validation_stock	0	1	0	0	0
-631	5	affectations	0	1	0	0	0
-632	5	interventions	0	1	0	0	0
-633	5	bobines	1	1	1	0	1
-634	5	inventaire_bobines	1	1	1	0	0
-635	5	stock_bobines	0	1	0	0	1
-636	5	commandes_bobines	0	1	0	0	0
-637	5	rivets	0	1	0	0	0
-638	5	operations	0	1	0	0	0
-640	5	demandes	1	1	0	0	0
-641	5	rapports_gsb	0	1	0	0	1
-642	5	nomenclatures	0	1	0	0	0
-643	6	sites	0	1	0	0	0
-644	6	operations	1	1	1	0	1
-645	6	validation_stock	0	1	0	0	0
-646	6	stock_bobines	0	1	0	0	0
-647	6	commandes_bobines	1	1	0	0	0
-596	6	point_emuci	0	1	0	0	0
-649	6	demandes	1	1	0	0	0
-639	5	validation_stock	1	1	0	0	0
-536	8	audit	0	1	0	0	0
-650	7	equipements	0	1	1	0	1
-651	7	sites	0	1	0	0	0
-652	7	interventions	1	1	1	0	1
-653	7	nomenclatures	0	1	0	0	0
-654	7	affectations	0	1	0	0	0
-655	7	rapport_journalier	1	1	1	0	1
-656	7	demandes	1	1	0	0	0
-657	8	operations	1	1	1	0	1
-659	8	stock_bobines	0	1	0	0	1
-661	8	rapports_gsb	0	1	0	0	1
-662	8	demandes	1	1	1	0	0
-663	8	rapport_journalier	0	0	0	0	0
-664	8	departements	0	0	0	0	0
-665	8	affectations_it	0	0	0	0	0
-666	9	point_emuci	1	1	0	0	0
-667	9	import_emuci	0	1	0	0	0
-668	9	operations	1	1	0	0	0
-669	9	equipements	0	1	0	0	0
-670	9	sites	0	1	0	0	0
-671	9	bobines	0	1	0	0	0
-672	9	inventaire_bobines	0	1	0	0	0
-673	9	rivets	0	1	0	0	0
-674	9	stock_bobines	0	1	0	0	0
-675	9	demandes	1	1	0	0	0
-676	13	bobines	1	1	1	0	1
-677	13	inventaire_bobines	1	1	1	0	1
-678	13	validation_stock	1	1	1	0	1
-679	13	rapports_gsb	0	1	0	0	1
-680	13	stock_bobines	0	1	0	0	1
-681	13	commandes_bobines	1	1	1	0	0
-682	13	commandes	1	1	0	0	0
-683	13	consommables	0	1	0	0	0
-684	13	equipements	0	1	0	0	0
-685	13	sites	0	1	0	0	0
-686	13	point_emuci	0	1	0	0	0
-687	13	operations	0	1	0	0	0
-689	13	rivets	0	1	0	0	0
-690	13	rapports	0	1	0	0	1
-691	13	demandes	1	1	0	0	0
-597	14	point_emuci	0	1	1	0	0
-693	14	import_emuci	0	1	0	0	0
-694	14	operations	1	1	1	0	0
-695	14	equipements	0	1	0	0	0
-696	14	sites	0	1	0	0	0
-697	14	interventions	0	1	0	0	0
-698	14	bobines	0	1	0	0	0
-699	14	rivets	0	1	0	0	0
-700	14	stock_bobines	0	1	0	0	0
-701	14	validation_stock	0	1	0	0	0
-702	14	rapports	0	1	0	0	0
-703	14	demandes	1	1	0	0	0
-704	15	equipements	0	1	1	0	1
-705	15	sites	0	1	0	0	0
-706	15	nomenclatures	0	1	0	0	0
-707	15	affectations	1	1	1	0	0
-708	15	rapport_journalier	0	1	0	0	1
-709	15	affectations_it	1	1	1	1	0
-710	15	users	0	1	0	0	0
-711	15	audit	0	1	0	0	0
-712	15	departements	0	1	0	0	0
-713	15	demandes	1	1	0	0	0
-714	16	equipements	0	1	0	0	0
-715	16	sites	0	1	0	0	0
-716	16	bobines	0	1	0	0	0
-717	16	inventaire_bobines	0	1	0	0	0
-718	16	rapport_journalier	1	1	0	0	0
-719	16	demandes	1	1	0	0	0
-720	17	consommables	0	1	0	0	1
-721	17	equipements	0	1	0	0	0
-722	17	sites	0	1	0	0	0
-723	17	receptions	0	1	0	0	0
-724	17	rapports	0	1	0	0	1
-725	17	affectations	0	1	0	0	0
-726	17	demandes	1	1	0	0	0
-660	8	commandes_bobines	0	1	1	0	0
-688	13	pmma	1	1	1	0	1
-658	8	validation_stock	1	1	0	0	0
-729	15	validation_stock	1	1	0	0	0
-730	4	audit	0	1	0	0	0
-731	5	audit	0	1	0	0	0
-732	7	audit	0	1	0	0	0
-734	9	audit	0	1	0	0	0
-735	16	audit	0	1	0	0	0
-736	17	audit	0	1	0	0	0
-737	4	interventions	0	1	0	0	0
-533	8	interventions	0	1	0	0	0
-739	9	interventions	0	1	0	0	0
-577	15	interventions	1	1	1	0	1
-578	16	interventions	1	1	1	0	1
-742	17	interventions	0	1	0	0	0
-743	17	bobines	0	1	0	0	0
-744	17	rivets	0	1	0	0	0
-745	14	commandes_bobines	0	1	0	0	0
-746	4	ecarts_bobines	0	1	0	0	1
-747	5	ecarts_bobines	0	1	0	0	1
-748	8	ecarts_bobines	0	1	0	0	1
-749	9	ecarts_bobines	0	1	0	0	1
-750	13	ecarts_bobines	0	1	0	0	1
-764	20	achats	1	1	1	0	0
-753	5	achats	1	1	0	0	0
-754	6	achats	1	1	0	0	0
-755	8	achats	1	1	0	0	0
-756	9	achats	1	1	0	0	0
-757	13	achats	1	1	0	0	0
-758	14	achats	1	1	0	0	0
-759	15	achats	1	1	0	0	0
-760	16	achats	1	1	0	0	0
-766	7	achats	1	1	0	0	0
-751	1	achats	1	1	1	1	1
-752	2	achats	1	1	1	1	1
-784	1	achats_suivi	1	1	1	1	1
-785	2	achats_suivi	1	1	1	1	1
-786	1	achats_param	1	1	1	1	1
-787	2	achats_param	1	1	1	1	1
-788	1	achats_dashboard	1	1	1	1	1
-789	2	achats_dashboard	1	1	1	1	1
-761	17	achats	1	1	1	1	1
-791	17	achats_suivi	1	1	1	1	1
-792	17	achats_param	1	1	1	1	1
-793	17	achats_dashboard	1	1	1	1	1
-762	18	achats	1	1	1	0	0
-763	19	achats	1	1	1	0	0
-765	4	achats	0	1	1	0	0
-797	18	achats_suivi	0	1	0	0	0
-798	18	achats_dashboard	0	1	0	0	0
-799	19	achats_suivi	0	1	0	0	0
-800	19	achats_dashboard	0	1	0	0	0
-801	4	achats_suivi	0	1	0	0	0
-802	4	achats_dashboard	0	1	0	0	0
-803	5	achats_suivi	1	1	1	0	0
-805	6	achats_suivi	1	1	0	0	0
-806	18	achats_param	0	1	1	0	0
-807	19	achats_param	0	1	1	0	0
-808	4	achats_param	0	1	0	0	0
-\.
+INSERT INTO public.permissions VALUES
+	(462, 2, 'equipements', 1, 1, 1, 1, 1),
+	(463, 1, 'equipements', 1, 1, 1, 1, 1),
+	(464, 2, 'sites', 1, 1, 1, 1, 1),
+	(465, 1, 'sites', 1, 1, 1, 1, 1),
+	(466, 2, 'affectations', 1, 1, 1, 1, 1),
+	(467, 1, 'affectations', 1, 1, 1, 1, 1),
+	(468, 2, 'receptions', 1, 1, 1, 1, 1),
+	(469, 1, 'receptions', 1, 1, 1, 1, 1),
+	(470, 2, 'bobines', 1, 1, 1, 1, 1),
+	(471, 1, 'bobines', 1, 1, 1, 1, 1),
+	(472, 2, 'inventaire_bobines', 1, 1, 1, 1, 1),
+	(473, 1, 'inventaire_bobines', 1, 1, 1, 1, 1),
+	(474, 2, 'consommables', 1, 1, 1, 1, 1),
+	(475, 1, 'consommables', 1, 1, 1, 1, 1),
+	(476, 2, 'rapports', 1, 1, 1, 1, 1),
+	(477, 1, 'rapports', 1, 1, 1, 1, 1),
+	(478, 2, 'interventions', 1, 1, 1, 1, 1),
+	(479, 1, 'interventions', 1, 1, 1, 1, 1),
+	(480, 2, 'point_emuci', 1, 1, 1, 1, 1),
+	(481, 1, 'point_emuci', 1, 1, 1, 1, 1),
+	(482, 2, 'import_emuci', 1, 1, 1, 1, 1),
+	(483, 1, 'import_emuci', 1, 1, 1, 1, 1),
+	(484, 2, 'nomenclatures', 1, 1, 1, 1, 1),
+	(485, 1, 'nomenclatures', 1, 1, 1, 1, 1),
+	(486, 2, 'users', 1, 1, 1, 1, 1),
+	(487, 1, 'users', 1, 1, 1, 1, 1),
+	(488, 2, 'audit', 1, 1, 1, 1, 1),
+	(489, 1, 'audit', 1, 1, 1, 1, 1),
+	(490, 2, 'delegations', 1, 1, 1, 1, 1),
+	(491, 1, 'delegations', 1, 1, 1, 1, 1),
+	(492, 2, 'rivets', 1, 1, 1, 1, 1),
+	(493, 1, 'rivets', 1, 1, 1, 1, 1),
+	(525, 8, 'equipements', 0, 1, 0, 0, 1),
+	(526, 8, 'sites', 0, 1, 0, 0, 1),
+	(527, 8, 'affectations', 0, 1, 0, 0, 1),
+	(528, 8, 'receptions', 1, 1, 1, 0, 1),
+	(529, 8, 'bobines', 1, 1, 1, 0, 1),
+	(530, 8, 'inventaire_bobines', 1, 1, 1, 0, 1),
+	(531, 8, 'consommables', 0, 1, 0, 0, 1),
+	(532, 8, 'rapports', 0, 1, 0, 0, 1),
+	(534, 8, 'point_emuci', 1, 1, 1, 0, 1),
+	(535, 8, 'import_emuci', 0, 1, 0, 0, 1),
+	(537, 8, 'delegations', 1, 1, 1, 1, 0),
+	(538, 8, 'rivets', 1, 1, 1, 0, 1),
+	(540, 6, 'equipements', 0, 1, 0, 0, 0),
+	(541, 6, 'bobines', 1, 1, 1, 0, 1),
+	(542, 6, 'inventaire_bobines', 1, 1, 1, 0, 0),
+	(543, 6, 'receptions', 1, 1, 1, 0, 1),
+	(544, 6, 'consommables', 0, 1, 0, 0, 0),
+	(545, 6, 'rapports', 0, 1, 0, 0, 1),
+	(546, 6, 'rivets', 0, 1, 0, 0, 0),
+	(547, 5, 'equipements', 1, 1, 1, 0, 1),
+	(548, 5, 'consommables', 1, 1, 1, 0, 1),
+	(549, 5, 'receptions', 1, 1, 1, 0, 1),
+	(550, 5, 'rapports', 0, 1, 0, 0, 1),
+	(551, 5, 'sites', 0, 1, 0, 0, 0),
+	(552, 2, 'pmma', 1, 1, 1, 0, 1),
+	(553, 2, 'commandes', 1, 1, 1, 0, 1),
+	(554, 1, 'pmma', 1, 1, 1, 0, 1),
+	(555, 1, 'commandes', 1, 1, 1, 0, 1),
+	(556, 15, 'pmma', 1, 1, 1, 0, 1),
+	(557, 15, 'commandes', 1, 1, 1, 0, 1),
+	(558, 8, 'pmma', 1, 1, 1, 0, 1),
+	(559, 8, 'commandes', 1, 1, 1, 0, 1),
+	(567, 6, 'pmma', 1, 1, 1, 0, 0),
+	(568, 6, 'commandes', 1, 1, 0, 0, 0),
+	(570, 5, 'commandes', 0, 1, 1, 0, 1),
+	(571, 5, 'pmma', 1, 1, 1, 0, 1),
+	(572, 17, 'commandes', 0, 1, 1, 0, 1),
+	(573, 17, 'pmma', 1, 1, 1, 0, 1),
+	(588, 14, 'commandes', 0, 1, 0, 0, 0),
+	(589, 18, 'rapports', 0, 1, 0, 0, 1),
+	(590, 19, 'rapports', 0, 1, 0, 0, 1),
+	(591, 18, 'equipements', 0, 1, 0, 0, 1),
+	(592, 19, 'equipements', 0, 1, 0, 0, 1),
+	(593, 18, 'consommables', 0, 1, 0, 0, 1),
+	(594, 19, 'consommables', 0, 1, 0, 0, 1),
+	(595, 20, 'rapports', 0, 1, 0, 0, 1),
+	(598, 1, 'operations', 1, 1, 1, 1, 1),
+	(599, 2, 'operations', 1, 1, 1, 1, 1),
+	(600, 1, 'validation_stock', 1, 1, 1, 1, 1),
+	(601, 2, 'validation_stock', 1, 1, 1, 1, 1),
+	(602, 1, 'demandes', 1, 1, 1, 1, 1),
+	(603, 2, 'demandes', 1, 1, 1, 1, 1),
+	(604, 1, 'commandes_bobines', 1, 1, 1, 1, 1),
+	(605, 2, 'commandes_bobines', 1, 1, 1, 1, 1),
+	(606, 1, 'rapports_gsb', 1, 1, 1, 1, 1),
+	(607, 2, 'rapports_gsb', 1, 1, 1, 1, 1),
+	(608, 1, 'stock_bobines', 1, 1, 1, 1, 1),
+	(609, 2, 'stock_bobines', 1, 1, 1, 1, 1),
+	(610, 1, 'rapport_journalier', 1, 1, 1, 1, 1),
+	(611, 2, 'rapport_journalier', 1, 1, 1, 1, 1),
+	(612, 1, 'departements', 1, 1, 1, 1, 1),
+	(613, 2, 'departements', 1, 1, 1, 1, 1),
+	(614, 1, 'affectations_it', 1, 1, 1, 1, 1),
+	(615, 2, 'affectations_it', 1, 1, 1, 1, 1),
+	(617, 4, 'sites', 0, 1, 0, 0, 0),
+	(618, 4, 'equipements', 0, 1, 0, 0, 0),
+	(619, 4, 'bobines', 0, 1, 0, 0, 0),
+	(620, 4, 'inventaire_bobines', 0, 1, 0, 0, 0),
+	(621, 4, 'operations', 0, 1, 0, 0, 0),
+	(622, 4, 'commandes', 0, 1, 0, 0, 0),
+	(623, 4, 'rivets', 0, 1, 0, 0, 0),
+	(624, 4, 'pmma', 0, 1, 0, 0, 0),
+	(625, 4, 'consommables', 0, 1, 0, 0, 0),
+	(626, 4, 'demandes', 0, 1, 0, 0, 0),
+	(627, 4, 'rapports', 0, 1, 0, 0, 1),
+	(628, 4, 'rapports_gsb', 0, 1, 0, 0, 1),
+	(629, 4, 'stock_bobines', 0, 1, 0, 0, 0),
+	(630, 4, 'validation_stock', 0, 1, 0, 0, 0),
+	(631, 5, 'affectations', 0, 1, 0, 0, 0),
+	(632, 5, 'interventions', 0, 1, 0, 0, 0),
+	(633, 5, 'bobines', 1, 1, 1, 0, 1),
+	(634, 5, 'inventaire_bobines', 1, 1, 1, 0, 0),
+	(635, 5, 'stock_bobines', 0, 1, 0, 0, 1),
+	(636, 5, 'commandes_bobines', 0, 1, 0, 0, 0),
+	(637, 5, 'rivets', 0, 1, 0, 0, 0),
+	(638, 5, 'operations', 0, 1, 0, 0, 0),
+	(640, 5, 'demandes', 1, 1, 0, 0, 0),
+	(641, 5, 'rapports_gsb', 0, 1, 0, 0, 1),
+	(642, 5, 'nomenclatures', 0, 1, 0, 0, 0),
+	(643, 6, 'sites', 0, 1, 0, 0, 0),
+	(644, 6, 'operations', 1, 1, 1, 0, 1),
+	(645, 6, 'validation_stock', 0, 1, 0, 0, 0),
+	(646, 6, 'stock_bobines', 0, 1, 0, 0, 0),
+	(647, 6, 'commandes_bobines', 1, 1, 0, 0, 0),
+	(596, 6, 'point_emuci', 0, 1, 0, 0, 0),
+	(649, 6, 'demandes', 1, 1, 0, 0, 0),
+	(639, 5, 'validation_stock', 1, 1, 0, 0, 0),
+	(536, 8, 'audit', 0, 1, 0, 0, 0),
+	(650, 7, 'equipements', 0, 1, 1, 0, 1),
+	(651, 7, 'sites', 0, 1, 0, 0, 0),
+	(652, 7, 'interventions', 1, 1, 1, 0, 1),
+	(653, 7, 'nomenclatures', 0, 1, 0, 0, 0),
+	(654, 7, 'affectations', 0, 1, 0, 0, 0),
+	(655, 7, 'rapport_journalier', 1, 1, 1, 0, 1),
+	(656, 7, 'demandes', 1, 1, 0, 0, 0),
+	(657, 8, 'operations', 1, 1, 1, 0, 1),
+	(659, 8, 'stock_bobines', 0, 1, 0, 0, 1),
+	(661, 8, 'rapports_gsb', 0, 1, 0, 0, 1),
+	(662, 8, 'demandes', 1, 1, 1, 0, 0),
+	(663, 8, 'rapport_journalier', 0, 0, 0, 0, 0),
+	(664, 8, 'departements', 0, 0, 0, 0, 0),
+	(665, 8, 'affectations_it', 0, 0, 0, 0, 0),
+	(666, 9, 'point_emuci', 1, 1, 0, 0, 0),
+	(667, 9, 'import_emuci', 0, 1, 0, 0, 0),
+	(668, 9, 'operations', 1, 1, 0, 0, 0),
+	(669, 9, 'equipements', 0, 1, 0, 0, 0),
+	(670, 9, 'sites', 0, 1, 0, 0, 0),
+	(671, 9, 'bobines', 0, 1, 0, 0, 0),
+	(672, 9, 'inventaire_bobines', 0, 1, 0, 0, 0),
+	(673, 9, 'rivets', 0, 1, 0, 0, 0),
+	(674, 9, 'stock_bobines', 0, 1, 0, 0, 0),
+	(675, 9, 'demandes', 1, 1, 0, 0, 0),
+	(676, 13, 'bobines', 1, 1, 1, 0, 1),
+	(677, 13, 'inventaire_bobines', 1, 1, 1, 0, 1),
+	(678, 13, 'validation_stock', 1, 1, 1, 0, 1),
+	(679, 13, 'rapports_gsb', 0, 1, 0, 0, 1),
+	(680, 13, 'stock_bobines', 0, 1, 0, 0, 1),
+	(681, 13, 'commandes_bobines', 1, 1, 1, 0, 0),
+	(682, 13, 'commandes', 1, 1, 0, 0, 0),
+	(683, 13, 'consommables', 0, 1, 0, 0, 0),
+	(684, 13, 'equipements', 0, 1, 0, 0, 0),
+	(685, 13, 'sites', 0, 1, 0, 0, 0),
+	(686, 13, 'point_emuci', 0, 1, 0, 0, 0),
+	(687, 13, 'operations', 0, 1, 0, 0, 0),
+	(689, 13, 'rivets', 0, 1, 0, 0, 0),
+	(690, 13, 'rapports', 0, 1, 0, 0, 1),
+	(691, 13, 'demandes', 1, 1, 0, 0, 0),
+	(597, 14, 'point_emuci', 0, 1, 1, 0, 0),
+	(693, 14, 'import_emuci', 0, 1, 0, 0, 0),
+	(694, 14, 'operations', 1, 1, 1, 0, 0),
+	(695, 14, 'equipements', 0, 1, 0, 0, 0),
+	(696, 14, 'sites', 0, 1, 0, 0, 0),
+	(697, 14, 'interventions', 0, 1, 0, 0, 0),
+	(698, 14, 'bobines', 0, 1, 0, 0, 0),
+	(699, 14, 'rivets', 0, 1, 0, 0, 0),
+	(700, 14, 'stock_bobines', 0, 1, 0, 0, 0),
+	(701, 14, 'validation_stock', 0, 1, 0, 0, 0),
+	(702, 14, 'rapports', 0, 1, 0, 0, 0),
+	(703, 14, 'demandes', 1, 1, 0, 0, 0),
+	(704, 15, 'equipements', 0, 1, 1, 0, 1),
+	(705, 15, 'sites', 0, 1, 0, 0, 0),
+	(706, 15, 'nomenclatures', 0, 1, 0, 0, 0),
+	(707, 15, 'affectations', 1, 1, 1, 0, 0),
+	(708, 15, 'rapport_journalier', 0, 1, 0, 0, 1),
+	(709, 15, 'affectations_it', 1, 1, 1, 1, 0),
+	(710, 15, 'users', 0, 1, 0, 0, 0),
+	(711, 15, 'audit', 0, 1, 0, 0, 0),
+	(712, 15, 'departements', 0, 1, 0, 0, 0),
+	(713, 15, 'demandes', 1, 1, 0, 0, 0),
+	(714, 16, 'equipements', 0, 1, 0, 0, 0),
+	(715, 16, 'sites', 0, 1, 0, 0, 0),
+	(716, 16, 'bobines', 0, 1, 0, 0, 0),
+	(717, 16, 'inventaire_bobines', 0, 1, 0, 0, 0),
+	(718, 16, 'rapport_journalier', 1, 1, 0, 0, 0),
+	(719, 16, 'demandes', 1, 1, 0, 0, 0),
+	(720, 17, 'consommables', 0, 1, 0, 0, 1),
+	(721, 17, 'equipements', 0, 1, 0, 0, 0),
+	(722, 17, 'sites', 0, 1, 0, 0, 0);
+INSERT INTO public.permissions VALUES
+	(723, 17, 'receptions', 0, 1, 0, 0, 0),
+	(724, 17, 'rapports', 0, 1, 0, 0, 1),
+	(725, 17, 'affectations', 0, 1, 0, 0, 0),
+	(726, 17, 'demandes', 1, 1, 0, 0, 0),
+	(660, 8, 'commandes_bobines', 0, 1, 1, 0, 0),
+	(688, 13, 'pmma', 1, 1, 1, 0, 1),
+	(658, 8, 'validation_stock', 1, 1, 0, 0, 0),
+	(729, 15, 'validation_stock', 1, 1, 0, 0, 0),
+	(730, 4, 'audit', 0, 1, 0, 0, 0),
+	(731, 5, 'audit', 0, 1, 0, 0, 0),
+	(732, 7, 'audit', 0, 1, 0, 0, 0),
+	(734, 9, 'audit', 0, 1, 0, 0, 0),
+	(735, 16, 'audit', 0, 1, 0, 0, 0),
+	(736, 17, 'audit', 0, 1, 0, 0, 0),
+	(737, 4, 'interventions', 0, 1, 0, 0, 0),
+	(533, 8, 'interventions', 0, 1, 0, 0, 0),
+	(739, 9, 'interventions', 0, 1, 0, 0, 0),
+	(577, 15, 'interventions', 1, 1, 1, 0, 1),
+	(578, 16, 'interventions', 1, 1, 1, 0, 1),
+	(742, 17, 'interventions', 0, 1, 0, 0, 0),
+	(743, 17, 'bobines', 0, 1, 0, 0, 0),
+	(744, 17, 'rivets', 0, 1, 0, 0, 0),
+	(745, 14, 'commandes_bobines', 0, 1, 0, 0, 0),
+	(746, 4, 'ecarts_bobines', 0, 1, 0, 0, 1),
+	(747, 5, 'ecarts_bobines', 0, 1, 0, 0, 1),
+	(748, 8, 'ecarts_bobines', 0, 1, 0, 0, 1),
+	(749, 9, 'ecarts_bobines', 0, 1, 0, 0, 1),
+	(750, 13, 'ecarts_bobines', 0, 1, 0, 0, 1),
+	(764, 20, 'achats', 1, 1, 1, 0, 0),
+	(753, 5, 'achats', 1, 1, 0, 0, 0),
+	(754, 6, 'achats', 1, 1, 0, 0, 0),
+	(755, 8, 'achats', 1, 1, 0, 0, 0),
+	(756, 9, 'achats', 1, 1, 0, 0, 0),
+	(757, 13, 'achats', 1, 1, 0, 0, 0),
+	(758, 14, 'achats', 1, 1, 0, 0, 0),
+	(759, 15, 'achats', 1, 1, 0, 0, 0),
+	(760, 16, 'achats', 1, 1, 0, 0, 0),
+	(766, 7, 'achats', 1, 1, 0, 0, 0),
+	(751, 1, 'achats', 1, 1, 1, 1, 1),
+	(752, 2, 'achats', 1, 1, 1, 1, 1),
+	(784, 1, 'achats_suivi', 1, 1, 1, 1, 1),
+	(785, 2, 'achats_suivi', 1, 1, 1, 1, 1),
+	(786, 1, 'achats_param', 1, 1, 1, 1, 1),
+	(787, 2, 'achats_param', 1, 1, 1, 1, 1),
+	(788, 1, 'achats_dashboard', 1, 1, 1, 1, 1),
+	(789, 2, 'achats_dashboard', 1, 1, 1, 1, 1),
+	(761, 17, 'achats', 1, 1, 1, 1, 1),
+	(791, 17, 'achats_suivi', 1, 1, 1, 1, 1),
+	(792, 17, 'achats_param', 1, 1, 1, 1, 1),
+	(793, 17, 'achats_dashboard', 1, 1, 1, 1, 1),
+	(762, 18, 'achats', 1, 1, 1, 0, 0),
+	(763, 19, 'achats', 1, 1, 1, 0, 0),
+	(765, 4, 'achats', 0, 1, 1, 0, 0),
+	(797, 18, 'achats_suivi', 0, 1, 0, 0, 0),
+	(798, 18, 'achats_dashboard', 0, 1, 0, 0, 0),
+	(799, 19, 'achats_suivi', 0, 1, 0, 0, 0),
+	(800, 19, 'achats_dashboard', 0, 1, 0, 0, 0),
+	(801, 4, 'achats_suivi', 0, 1, 0, 0, 0),
+	(802, 4, 'achats_dashboard', 0, 1, 0, 0, 0),
+	(803, 5, 'achats_suivi', 1, 1, 1, 0, 0),
+	(805, 6, 'achats_suivi', 1, 1, 0, 0, 0),
+	(806, 18, 'achats_param', 0, 1, 1, 0, 0),
+	(807, 19, 'achats_param', 0, 1, 1, 0, 0),
+	(808, 4, 'achats_param', 0, 1, 0, 0, 0);
 
 
 --
 -- Data for Name: points_emuci; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.points_emuci (id, site_id, date_point, plaques_posees, plaques_reservees, notes, statut, saisi_par, valide_par, valide_at, created_at, updated_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: points_journaliers_info; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.points_journaliers_info (id, technicien_id, site_id, date_point, nb_equip_ok, nb_equip_hs, nb_interventions, observations, actions_preventives, statut, valide_par, valide_at, created_at, updated_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: rapports_journaliers_info; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.rapports_journaliers_info (id, technicien_id, site_id, date_rapport, nb_equip_ok, nb_equip_hs, nb_equip_maintenance, nb_interventions, observations, actions_preventives, statut, valide_par, valide_at, created_at, updated_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: reception_lignes; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.reception_lignes (id, reception_id, article_id, libelle, quantite_attendue, quantite_recue, unite, prix_unitaire, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: receptions_consommables; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.receptions_consommables (id, consommable_id, quantite, prix_unitaire, prix_total, date_reception, fournisseur, numero_bon, notes, created_by, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: receptions_fournisseur; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.receptions_fournisseur (id, numero_reception, fournisseur, date_reception, statut, notes, fichier_bl, created_by, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: receptions_site; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.receptions_site (id, site_id, type_reception, equipement_id, consommable_id, quantite, livraison_ref_id, mouvement_ref_id, date_reception, fichier_fiche, notes, statut, litige_motif, litige_traite_by, litige_traite_at, remplacement_id, remplacement_notes, created_by, created_at, updated_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: roles; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.roles (id, nom, slug, description, created_at) FROM stdin;
-1	Super Administrateur	superadmin	Accès total, lecture de tous les audits	2026-04-01 11:43:26
-2	Administrateur	admin	Gestion utilisateurs, équipements, sites	2026-04-01 11:43:26
-5	Gestionnaire de Stock	gestionnaire_stock	Gère tout le stock central : entrées, sorties, livraisons sites	2026-04-19 07:49:10
-6	Coordinateur de Site	coordinateur_site	Réceptionne les commandes sur son site, fait le point journalier	2026-04-19 07:49:10
-8	Superviseur Opération	superviseur_operation	Supervise les actions des coordinateurs de site	2026-04-19 07:49:10
-9	Contrôleur Production	controleur_production	Saisie quotidienne des plaques posées et réservées par site (données EMUCI)	2026-04-24 18:08:51
-13	Gestionnaire Stock Bobines	gestionnaire_stock_bobines	Validation stock matin, gestion demandes bobines, réajustements	2026-04-29 15:39:36
-14	Gestionnaire Opération	gestionnaire_operation	Second du Superviseur Opération — reçoit les tâches déléguées	2026-04-30 14:10:42
-15	Superviseur IT	superviseur_it	Accès complet informatique + supervise les Support IT	2026-04-30 14:10:42
-16	Support IT	support_it	Profil flexible — sous-rôles affectables : Maintenance, Contrôleur Production, Gestionnaire Bobines	2026-04-30 14:10:42
-17	Superviseur Achat	superviseur_achat	Suivi consommables, équipements, consommation des sites	2026-04-30 14:10:42
-18	Responsable Administratif et Financier	raf	Validation administrative et financière des demandes internes — étape RAF du circuit	2026-08-18 21:52:42.208876
-19	Directeur Administratif et Financier	daf	Validation DG des demandes financières — étape DAF du circuit	2026-08-18 21:52:42.208876
-20	Directeur General	directeur_general	Direction Generale — validation finale des demandes internes (etape DG du circuit)	2026-08-18 21:52:42.232549
-4	PDG	lecteur	Direction générale — supervision en lecture seule et visa DG	2026-04-01 11:43:26
-7	Maintenance Informatique	maintenance_info	Rattaché à Support IT (sous-rôle Maintenance) — conservé pour l'historique d'audit	2026-04-19 07:49:10
-\.
+INSERT INTO public.roles VALUES
+	(1, 'Super Administrateur', 'superadmin', 'Accès total, lecture de tous les audits', '2026-04-01 11:43:26'),
+	(2, 'Administrateur', 'admin', 'Gestion utilisateurs, équipements, sites', '2026-04-01 11:43:26'),
+	(5, 'Gestionnaire de Stock', 'gestionnaire_stock', 'Gère tout le stock central : entrées, sorties, livraisons sites', '2026-04-19 07:49:10'),
+	(6, 'Coordinateur de Site', 'coordinateur_site', 'Réceptionne les commandes sur son site, fait le point journalier', '2026-04-19 07:49:10'),
+	(8, 'Superviseur Opération', 'superviseur_operation', 'Supervise les actions des coordinateurs de site', '2026-04-19 07:49:10'),
+	(9, 'Contrôleur Production', 'controleur_production', 'Saisie quotidienne des plaques posées et réservées par site (données EMUCI)', '2026-04-24 18:08:51'),
+	(13, 'Gestionnaire Stock Bobines', 'gestionnaire_stock_bobines', 'Validation stock matin, gestion demandes bobines, réajustements', '2026-04-29 15:39:36'),
+	(14, 'Gestionnaire Opération', 'gestionnaire_operation', 'Second du Superviseur Opération — reçoit les tâches déléguées', '2026-04-30 14:10:42'),
+	(15, 'Superviseur IT', 'superviseur_it', 'Accès complet informatique + supervise les Support IT', '2026-04-30 14:10:42'),
+	(16, 'Support IT', 'support_it', 'Profil flexible — sous-rôles affectables : Maintenance, Contrôleur Production, Gestionnaire Bobines', '2026-04-30 14:10:42'),
+	(17, 'Superviseur Achat', 'superviseur_achat', 'Suivi consommables, équipements, consommation des sites', '2026-04-30 14:10:42'),
+	(18, 'Responsable Administratif et Financier', 'raf', 'Validation administrative et financière des demandes internes — étape RAF du circuit', '2026-08-18 22:01:13.143869'),
+	(19, 'Directeur Administratif et Financier', 'daf', 'Validation DG des demandes financières — étape DAF du circuit', '2026-08-18 22:01:13.143869'),
+	(20, 'Directeur General', 'directeur_general', 'Direction Generale — validation finale des demandes internes (etape DG du circuit)', '2026-08-18 22:01:13.164935'),
+	(4, 'PDG', 'lecteur', 'Direction générale — supervision en lecture seule et visa DG', '2026-04-01 11:43:26'),
+	(7, 'Maintenance Informatique', 'maintenance_info', 'Rattaché à Support IT (sous-rôle Maintenance) — conservé pour l''historique d''audit', '2026-04-19 07:49:10');
 
 
 --
 -- Data for Name: sessions; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.sessions (id, user_id, ip_address, user_agent, payload, last_activity) FROM stdin;
-\.
 
 
 --
 -- Data for Name: sites; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.sites (id, code, nom, type, option_caisse, adresse, ville, pays, responsable_id, actif, created_at, updated_at, mobile, date_debut_mission, date_fin_mission, latitude, longitude, nom_emuci) FROM stdin;
-1	ABJ-01	GUICHET UNIQUE ABIDJAN	pose	1	Guichet unique abidjan vridi	ABIDJAN	Côte d'Ivoire	7	1	2026-04-02 06:06:19	2026-06-05 11:36:11	0	\N	\N	\N	\N	GUICHET UNIQUE ABIDJAN
-2	ABJ-02	STAR AUTO	mixte	0		ABIDJAN	Côte d'Ivoire	\N	1	2026-04-02 06:06:49	2026-06-05 11:36:11	0	\N	\N	\N	\N	STAR AUTO
-3	ABJ-03	SITE CFAO	pose	0		ABIDJAN	Côte d'Ivoire	\N	1	2026-04-02 06:07:37	2026-06-05 11:36:11	0	\N	\N	\N	\N	SITE CFAO
-4	KGO-01	GUICHET UNIQUE KORHOGO	pose	0		KORHOGOO	Côte d'Ivoire	\N	1	2026-04-02 06:08:13	2026-06-05 11:36:11	0	\N	\N	\N	\N	GUICHET UNIQUE KORHOGO
-5	BKE-01	GUICHET UNIQUE BOUAKE	pose	0		BOUAKE	Côte d'Ivoire	\N	1	2026-04-02 06:08:34	2026-06-05 11:36:11	0	\N	\N	\N	\N	GUICHET UNIQUE BOUAKE
-6	ABJ-04	SITE DE TEST	saisie	0		ABIDJAN	Côte d'Ivoire	\N	1	2026-04-03 04:18:17	2026-04-03 04:18:17	0	\N	\N	\N	\N	\N
-7	ABJ-05	CASERNE AKOUEDO FDS	pose	1		ABIDJAN	Côte d'Ivoire	\N	1	2026-04-03 04:22:59	2026-06-05 11:37:05	0	\N	\N	\N	\N	CASERNE AKOUEDO FDS
-8	ENT	Administration centrale	entrepot	0		ABIDJAN	Côte d'Ivoire	\N	1	2026-04-03 04:45:47	2026-06-05 11:36:11	0	\N	\N	\N	\N	Administration centrale
-9	ADM	ADMINISTRATION (Siége)	siege	0		ABIDJAN Zone4	Côte d'Ivoire	\N	1	2026-04-03 04:46:43	2026-04-03 04:46:43	0	\N	\N	\N	\N	\N
-10	ABJ-06	FDS AKOUEDO	pose	1	ABIDJAN	ABIDJAN	Côte d'Ivoire	\N	1	2026-04-29 15:45:19	2026-04-29 15:45:19	0	\N	\N	\N	\N	\N
-11	CAGBAN	CASERNE AGBAN FDS	pose	0	\N	\N	Côte d'Ivoire	\N	1	2026-06-05 11:36:11	2026-06-05 11:36:11	0	\N	\N	\N	\N	CASERNE AGBAN FDS
-12	ABOPOL	ABOBO PREFECTURE POLICE	pose	0	\N	\N	Côte d'Ivoire	\N	1	2026-06-05 11:36:11	2026-06-05 11:36:11	0	\N	\N	\N	\N	ABOBO PREFECTURE POLICE
-13	CBAE	CASERNE BAE FDS	pose	0	\N	\N	Côte d'Ivoire	\N	1	2026-06-05 11:36:11	2026-06-05 11:36:11	0	\N	\N	\N	\N	CASERNE BAE FDS
-14	DGTTC	DGTTC Parc Etat	pose	0	\N	\N	Côte d'Ivoire	\N	1	2026-06-05 11:36:11	2026-06-05 11:36:11	0	\N	\N	\N	\N	DGTTC Parc Etat
-15	GOCAB	GOCAB	pose	0	\N	\N	Côte d'Ivoire	\N	1	2026-06-05 11:36:11	2026-06-05 11:36:11	0	\N	\N	\N	\N	GOCAB
-16	SMMAN	SERVICE MOBILE MAN AOPACI	pose	0	\N	\N	Côte d'Ivoire	\N	1	2026-06-05 11:36:11	2026-06-05 11:36:11	0	\N	\N	\N	\N	SERVICE MOBILE MAN AOPACI
-17	SIIRAST	SIIRAST SOUBRE	pose	0	\N	\N	Côte d'Ivoire	\N	1	2026-06-05 11:36:11	2026-06-05 11:36:11	0	\N	\N	\N	\N	SIIRAST SOUBRE
-18	SOCIDA	SOCIDA	pose	0	\N	\N	Côte d'Ivoire	\N	1	2026-06-05 11:36:11	2026-06-05 11:36:11	0	\N	\N	\N	\N	SOCIDA
-19	SURYS	Surysinc	pose	0	\N	\N	Côte d'Ivoire	\N	1	2026-06-05 11:36:11	2026-06-05 11:36:11	0	\N	\N	\N	\N	Surysinc
-20	UMOTORS	UNITED MOTORS	pose	0	\N	\N	Côte d'Ivoire	\N	1	2026-06-05 11:36:11	2026-06-05 11:36:11	0	\N	\N	\N	\N	UNITED MOTORS
-21	MAN-01	SERVICE MOBILE MAN AOPACI	pose	0		MAN	Côte d'Ivoire	\N	1	2026-06-05 11:57:15	2026-06-05 11:57:15	0	\N	\N	\N	\N	\N
-22	MAG	Magasin central	magasin	0	\N	Abidjan	Côte d'Ivoire	\N	1	2026-08-18 21:54:29.842238	2026-08-18 21:54:29.842238	0	\N	\N	\N	\N	\N
-\.
+INSERT INTO public.sites VALUES
+	(1, 'ABJ-01', 'GUICHET UNIQUE ABIDJAN', 'pose', 1, 'Guichet unique abidjan vridi', 'ABIDJAN', 'Côte d''Ivoire', 7, 1, '2026-04-02 06:06:19', '2026-06-05 11:36:11', 0, NULL, NULL, NULL, NULL, 'GUICHET UNIQUE ABIDJAN'),
+	(2, 'ABJ-02', 'STAR AUTO', 'mixte', 0, '', 'ABIDJAN', 'Côte d''Ivoire', NULL, 1, '2026-04-02 06:06:49', '2026-06-05 11:36:11', 0, NULL, NULL, NULL, NULL, 'STAR AUTO'),
+	(3, 'ABJ-03', 'SITE CFAO', 'pose', 0, '', 'ABIDJAN', 'Côte d''Ivoire', NULL, 1, '2026-04-02 06:07:37', '2026-06-05 11:36:11', 0, NULL, NULL, NULL, NULL, 'SITE CFAO'),
+	(4, 'KGO-01', 'GUICHET UNIQUE KORHOGO', 'pose', 0, '', 'KORHOGOO', 'Côte d''Ivoire', NULL, 1, '2026-04-02 06:08:13', '2026-06-05 11:36:11', 0, NULL, NULL, NULL, NULL, 'GUICHET UNIQUE KORHOGO'),
+	(5, 'BKE-01', 'GUICHET UNIQUE BOUAKE', 'pose', 0, '', 'BOUAKE', 'Côte d''Ivoire', NULL, 1, '2026-04-02 06:08:34', '2026-06-05 11:36:11', 0, NULL, NULL, NULL, NULL, 'GUICHET UNIQUE BOUAKE'),
+	(6, 'ABJ-04', 'SITE DE TEST', 'saisie', 0, '', 'ABIDJAN', 'Côte d''Ivoire', NULL, 1, '2026-04-03 04:18:17', '2026-04-03 04:18:17', 0, NULL, NULL, NULL, NULL, NULL),
+	(7, 'ABJ-05', 'CASERNE AKOUEDO FDS', 'pose', 1, '', 'ABIDJAN', 'Côte d''Ivoire', NULL, 1, '2026-04-03 04:22:59', '2026-06-05 11:37:05', 0, NULL, NULL, NULL, NULL, 'CASERNE AKOUEDO FDS'),
+	(8, 'ENT', 'Administration centrale', 'entrepot', 0, '', 'ABIDJAN', 'Côte d''Ivoire', NULL, 1, '2026-04-03 04:45:47', '2026-06-05 11:36:11', 0, NULL, NULL, NULL, NULL, 'Administration centrale'),
+	(9, 'ADM', 'ADMINISTRATION (Siége)', 'siege', 0, '', 'ABIDJAN Zone4', 'Côte d''Ivoire', NULL, 1, '2026-04-03 04:46:43', '2026-04-03 04:46:43', 0, NULL, NULL, NULL, NULL, NULL),
+	(10, 'ABJ-06', 'FDS AKOUEDO', 'pose', 1, 'ABIDJAN', 'ABIDJAN', 'Côte d''Ivoire', NULL, 1, '2026-04-29 15:45:19', '2026-04-29 15:45:19', 0, NULL, NULL, NULL, NULL, NULL),
+	(11, 'CAGBAN', 'CASERNE AGBAN FDS', 'pose', 0, NULL, NULL, 'Côte d''Ivoire', NULL, 1, '2026-06-05 11:36:11', '2026-06-05 11:36:11', 0, NULL, NULL, NULL, NULL, 'CASERNE AGBAN FDS'),
+	(12, 'ABOPOL', 'ABOBO PREFECTURE POLICE', 'pose', 0, NULL, NULL, 'Côte d''Ivoire', NULL, 1, '2026-06-05 11:36:11', '2026-06-05 11:36:11', 0, NULL, NULL, NULL, NULL, 'ABOBO PREFECTURE POLICE'),
+	(13, 'CBAE', 'CASERNE BAE FDS', 'pose', 0, NULL, NULL, 'Côte d''Ivoire', NULL, 1, '2026-06-05 11:36:11', '2026-06-05 11:36:11', 0, NULL, NULL, NULL, NULL, 'CASERNE BAE FDS'),
+	(14, 'DGTTC', 'DGTTC Parc Etat', 'pose', 0, NULL, NULL, 'Côte d''Ivoire', NULL, 1, '2026-06-05 11:36:11', '2026-06-05 11:36:11', 0, NULL, NULL, NULL, NULL, 'DGTTC Parc Etat'),
+	(15, 'GOCAB', 'GOCAB', 'pose', 0, NULL, NULL, 'Côte d''Ivoire', NULL, 1, '2026-06-05 11:36:11', '2026-06-05 11:36:11', 0, NULL, NULL, NULL, NULL, 'GOCAB'),
+	(16, 'SMMAN', 'SERVICE MOBILE MAN AOPACI', 'pose', 0, NULL, NULL, 'Côte d''Ivoire', NULL, 1, '2026-06-05 11:36:11', '2026-06-05 11:36:11', 0, NULL, NULL, NULL, NULL, 'SERVICE MOBILE MAN AOPACI'),
+	(17, 'SIIRAST', 'SIIRAST SOUBRE', 'pose', 0, NULL, NULL, 'Côte d''Ivoire', NULL, 1, '2026-06-05 11:36:11', '2026-06-05 11:36:11', 0, NULL, NULL, NULL, NULL, 'SIIRAST SOUBRE'),
+	(18, 'SOCIDA', 'SOCIDA', 'pose', 0, NULL, NULL, 'Côte d''Ivoire', NULL, 1, '2026-06-05 11:36:11', '2026-06-05 11:36:11', 0, NULL, NULL, NULL, NULL, 'SOCIDA'),
+	(19, 'SURYS', 'Surysinc', 'pose', 0, NULL, NULL, 'Côte d''Ivoire', NULL, 1, '2026-06-05 11:36:11', '2026-06-05 11:36:11', 0, NULL, NULL, NULL, NULL, 'Surysinc'),
+	(20, 'UMOTORS', 'UNITED MOTORS', 'pose', 0, NULL, NULL, 'Côte d''Ivoire', NULL, 1, '2026-06-05 11:36:11', '2026-06-05 11:36:11', 0, NULL, NULL, NULL, NULL, 'UNITED MOTORS'),
+	(21, 'MAN-01', 'SERVICE MOBILE MAN AOPACI', 'pose', 0, '', 'MAN', 'Côte d''Ivoire', NULL, 1, '2026-06-05 11:57:15', '2026-06-05 11:57:15', 0, NULL, NULL, NULL, NULL, NULL),
+	(22, 'MAG', 'Magasin central', 'magasin', 0, NULL, 'Abidjan', 'Côte d''Ivoire', NULL, 1, '2026-08-18 22:01:36.016815', '2026-08-18 22:01:36.016815', 0, NULL, NULL, NULL, NULL, NULL);
 
 
 --
 -- Data for Name: stock_consommables_site; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.stock_consommables_site (id, consommable_id, site_id, quantite, updated_at) FROM stdin;
-1	2	5	1.00	2026-04-02 14:18:16
-2	2	3	2.00	2026-04-02 14:21:26
-3	5	3	2.00	2026-04-03 04:38:56
-4	6	3	5.00	2026-04-03 04:57:38
-5	5	7	1.00	2026-04-03 05:02:41
-6	3	1	205.00	2026-04-27 14:35:27
-7	1	3	4.00	2026-04-15 22:39:31
-8	4	1	1.00	2026-04-20 12:21:41
-10	1	1	4.00	2026-06-04 16:10:16
-\.
+INSERT INTO public.stock_consommables_site VALUES
+	(1, 2, 5, 1.00, '2026-04-02 14:18:16'),
+	(2, 2, 3, 2.00, '2026-04-02 14:21:26'),
+	(3, 5, 3, 2.00, '2026-04-03 04:38:56'),
+	(4, 6, 3, 5.00, '2026-04-03 04:57:38'),
+	(5, 5, 7, 1.00, '2026-04-03 05:02:41'),
+	(6, 3, 1, 205.00, '2026-04-27 14:35:27'),
+	(7, 1, 3, 4.00, '2026-04-15 22:39:31'),
+	(8, 4, 1, 1.00, '2026-04-20 12:21:41'),
+	(10, 1, 1, 4.00, '2026-06-04 16:10:16');
 
 
 --
 -- Data for Name: stock_departement; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.stock_departement (id, article_id, departement_id, quantite, updated_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: stock_fin_mois; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.stock_fin_mois (id, article_id, site_id, annee, mois, quantite, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: stock_pmma; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.stock_pmma (id, site_id, type_pmma, quantite, type_mouvement, bobine_id, notes, created_by, created_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: stock_pmma_site; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.stock_pmma_site (id, site_id, type_pmma, quantite, seuil_alerte, updated_at) FROM stdin;
-\.
 
 
 --
 -- Data for Name: stock_site; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.stock_site (id, article_id, site_id, quantite, updated_at) FROM stdin;
-1	2	5	1	2026-06-04 16:01:35
-2	2	3	2	2026-06-04 16:01:35
-3	5	3	2	2026-06-04 16:01:35
-4	6	3	5	2026-06-04 16:01:35
-5	5	7	1	2026-06-04 16:01:35
-6	3	1	205	2026-06-04 16:01:35
-7	1	3	4	2026-06-04 16:01:35
-8	4	1	1	2026-06-04 16:01:35
-9	1	1	4	2026-06-04 16:10:16
-10	1	22	40	2026-08-18 21:54:29.842238
-11	2	22	40	2026-08-18 21:54:29.842238
-12	4	22	30	2026-08-18 21:54:29.842238
-13	7	22	25	2026-08-18 21:54:29.842238
-14	5	22	80	2026-08-18 21:54:29.842238
-15	6	22	30	2026-08-18 21:54:29.842238
-16	3	22	500	2026-08-18 21:54:29.842238
-\.
+INSERT INTO public.stock_site VALUES
+	(1, 2, 5, 1, '2026-06-04 16:01:35'),
+	(2, 2, 3, 2, '2026-06-04 16:01:35'),
+	(3, 5, 3, 2, '2026-06-04 16:01:35'),
+	(4, 6, 3, 5, '2026-06-04 16:01:35'),
+	(5, 5, 7, 1, '2026-06-04 16:01:35'),
+	(6, 3, 1, 205, '2026-06-04 16:01:35'),
+	(7, 1, 3, 4, '2026-06-04 16:01:35'),
+	(8, 4, 1, 1, '2026-06-04 16:01:35'),
+	(9, 1, 1, 4, '2026-06-04 16:10:16'),
+	(10, 1, 22, 40, '2026-08-18 22:01:36.016815'),
+	(11, 2, 22, 40, '2026-08-18 22:01:36.016815'),
+	(12, 4, 22, 30, '2026-08-18 22:01:36.016815'),
+	(13, 7, 22, 25, '2026-08-18 22:01:36.016815'),
+	(14, 5, 22, 80, '2026-08-18 22:01:36.016815'),
+	(15, 6, 22, 30, '2026-08-18 22:01:36.016815'),
+	(16, 3, 22, 500, '2026-08-18 22:01:36.016815');
 
 
 --
 -- Data for Name: support_it_roles; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.support_it_roles (id, user_id, sous_role, actif, affecte_par, created_at) FROM stdin;
-1	12	maintenance	0	3	2026-06-05 15:34:12
-2	12	controleur_production	0	3	2026-06-05 15:34:15
-3	12	gestionnaire_bobines	0	3	2026-06-05 15:34:16
-4	6	maintenance	1	\N	2026-08-18 21:52:42.476181
-\.
+INSERT INTO public.support_it_roles VALUES
+	(1, 12, 'maintenance', 0, 3, '2026-06-05 15:34:12'),
+	(2, 12, 'controleur_production', 0, 3, '2026-06-05 15:34:15'),
+	(3, 12, 'gestionnaire_bobines', 0, 3, '2026-06-05 15:34:16'),
+	(4, 6, 'maintenance', 1, NULL, '2026-08-18 22:01:13.445798');
 
 
 --
 -- Data for Name: user_departements; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.user_departements (user_id, departement_id, is_n1, created_at) FROM stdin;
-5	1	0	2026-08-18 21:54:29.842238
-14	3	0	2026-08-18 21:54:29.842238
-15	2	0	2026-08-18 21:54:29.842238
-16	2	0	2026-08-18 21:54:29.842238
-17	2	0	2026-08-18 21:54:29.842238
-\.
+INSERT INTO public.user_departements VALUES
+	(5, 1, 0, '2026-08-18 22:01:36.016815'),
+	(14, 3, 0, '2026-08-18 22:01:36.016815'),
+	(15, 2, 0, '2026-08-18 22:01:36.016815'),
+	(16, 2, 0, '2026-08-18 22:01:36.016815'),
+	(17, 2, 0, '2026-08-18 22:01:36.016815');
 
 
 --
 -- Data for Name: users; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.users (id, nom, prenom, email, password_hash, role_id, site_id, avatar, telephone, signature, actif, last_login, reset_token, reset_token_expiry, created_at, updated_at, support_it_sous_roles) FROM stdin;
-1	Admin	Super	admin@stockapp.local	$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i	1	\N	\N	\N	\N	1	\N	3ab6396e0e7db7593d436c5342a1060ca1963089fabbe18d8d46c79dbd5a9684	2026-04-01 13:35:27	2026-04-01 11:43:26	2026-04-01 12:35:27	\N
-2	KOUASSI	RITA	kri@gmail.com	$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i	2	1	\N	0789745649	\N	0	\N	\N	\N	2026-04-01 13:52:31	2026-04-19 08:05:33	\N
-3	DON	Axelle	donruthaxelle01@gmail.com	$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i	1	\N	\N	\N	\N	1	2026-06-09 11:21:37	\N	\N	2026-04-02 06:00:26	2026-06-09 11:21:37	\N
-5	operation	test	testoperation@gmail.com	$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i	8	9	\N	+22507897462222	\N	1	2026-06-05 12:46:13	\N	\N	2026-04-19 08:04:30	2026-06-05 12:46:13	\N
-7	cordo	test	testcordo@gmail.com	$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i	6	1	\N	+22507897462222	\N	1	2026-06-05 09:34:48	\N	\N	2026-04-19 08:06:45	2026-06-05 09:34:48	\N
-8	stock	test	teststock@gmail.com	$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i	5	\N	\N	+22507897462222	\N	1	2026-06-05 12:47:08	\N	\N	2026-04-19 08:07:28	2026-06-05 12:47:08	\N
-9	gestion	Pose	gestionpose@gmail.com	$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i	9	\N	\N	+22507897462222	\N	1	2026-04-27 17:20:11	\N	\N	2026-04-24 18:11:36	2026-04-27 17:20:11	\N
-10	cordo2	test	testcordo2@gmail.com	$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i	6	3	\N	+2250504333315	\N	1	2026-06-05 15:39:12	\N	\N	2026-06-05 10:16:25	2026-06-05 15:39:12	\N
-11	bobine	stock	stockbobine@gmail.com	$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i	13	9	\N	+2250504333315	\N	1	2026-06-05 13:05:36	\N	\N	2026-06-05 11:44:39	2026-06-05 13:05:36	\N
-12	IT	INFO	supit@gmail.com	$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i	16	9	\N	+2250504333315	\N	1	\N	\N	\N	2026-06-05 15:33:45	2026-06-05 15:33:45	\N
-4	KOUASSI	BERTRAND	bertrand@gmail.com	$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i	5	\N	\N		\N	1	2026-05-29 14:18:38	\N	\N	2026-04-02 11:27:44	2026-05-29 14:18:38	\N
-6	info	test	testinfo@gmail.com	$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i	16	9	\N	+22507897462223	\N	1	2026-06-04 17:09:38	\N	\N	2026-04-19 08:05:15	2026-06-04 17:09:38	\N
-13	MAGASIN	Recette	magasin@recette.local	$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i	5	9	\N	\N	\N	1	\N	\N	\N	2026-08-18 21:54:29.842238	2026-08-18 21:54:29.842238	\N
-14	ACHAT	Recette	achat@recette.local	$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i	17	9	\N	\N	\N	1	\N	\N	\N	2026-08-18 21:54:29.842238	2026-08-18 21:54:29.842238	\N
-15	RAF	Recette	raf@recette.local	$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i	18	9	\N	\N	\N	1	\N	\N	\N	2026-08-18 21:54:29.842238	2026-08-18 21:54:29.842238	\N
-16	DAF	Recette	daf@recette.local	$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i	19	9	\N	\N	\N	1	\N	\N	\N	2026-08-18 21:54:29.842238	2026-08-18 21:54:29.842238	\N
-17	PDG	Recette	pdg@recette.local	$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i	4	9	\N	\N	\N	1	\N	\N	\N	2026-08-18 21:54:29.842238	2026-08-18 21:54:29.842238	\N
-\.
+INSERT INTO public.users VALUES
+	(1, 'Admin', 'Super', 'admin@stockapp.local', '$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i', 1, NULL, NULL, NULL, NULL, 1, NULL, '3ab6396e0e7db7593d436c5342a1060ca1963089fabbe18d8d46c79dbd5a9684', '2026-04-01 13:35:27', '2026-04-01 11:43:26', '2026-04-01 12:35:27', NULL),
+	(2, 'KOUASSI', 'RITA', 'kri@gmail.com', '$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i', 2, 1, NULL, '0789745649', NULL, 0, NULL, NULL, NULL, '2026-04-01 13:52:31', '2026-04-19 08:05:33', NULL),
+	(3, 'DON', 'Axelle', 'donruthaxelle01@gmail.com', '$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i', 1, NULL, NULL, NULL, NULL, 1, '2026-06-09 11:21:37', NULL, NULL, '2026-04-02 06:00:26', '2026-06-09 11:21:37', NULL),
+	(5, 'operation', 'test', 'testoperation@gmail.com', '$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i', 8, 9, NULL, '+22507897462222', NULL, 1, '2026-06-05 12:46:13', NULL, NULL, '2026-04-19 08:04:30', '2026-06-05 12:46:13', NULL),
+	(7, 'cordo', 'test', 'testcordo@gmail.com', '$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i', 6, 1, NULL, '+22507897462222', NULL, 1, '2026-06-05 09:34:48', NULL, NULL, '2026-04-19 08:06:45', '2026-06-05 09:34:48', NULL),
+	(8, 'stock', 'test', 'teststock@gmail.com', '$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i', 5, NULL, NULL, '+22507897462222', NULL, 1, '2026-06-05 12:47:08', NULL, NULL, '2026-04-19 08:07:28', '2026-06-05 12:47:08', NULL),
+	(9, 'gestion', 'Pose', 'gestionpose@gmail.com', '$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i', 9, NULL, NULL, '+22507897462222', NULL, 1, '2026-04-27 17:20:11', NULL, NULL, '2026-04-24 18:11:36', '2026-04-27 17:20:11', NULL),
+	(10, 'cordo2', 'test', 'testcordo2@gmail.com', '$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i', 6, 3, NULL, '+2250504333315', NULL, 1, '2026-06-05 15:39:12', NULL, NULL, '2026-06-05 10:16:25', '2026-06-05 15:39:12', NULL),
+	(11, 'bobine', 'stock', 'stockbobine@gmail.com', '$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i', 13, 9, NULL, '+2250504333315', NULL, 1, '2026-06-05 13:05:36', NULL, NULL, '2026-06-05 11:44:39', '2026-06-05 13:05:36', NULL),
+	(12, 'IT', 'INFO', 'supit@gmail.com', '$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i', 16, 9, NULL, '+2250504333315', NULL, 1, NULL, NULL, NULL, '2026-06-05 15:33:45', '2026-06-05 15:33:45', NULL),
+	(4, 'KOUASSI', 'BERTRAND', 'bertrand@gmail.com', '$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i', 5, NULL, NULL, '', NULL, 1, '2026-05-29 14:18:38', NULL, NULL, '2026-04-02 11:27:44', '2026-05-29 14:18:38', NULL),
+	(6, 'info', 'test', 'testinfo@gmail.com', '$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i', 16, 9, NULL, '+22507897462223', NULL, 1, '2026-06-04 17:09:38', NULL, NULL, '2026-04-19 08:05:15', '2026-06-04 17:09:38', NULL),
+	(13, 'MAGASIN', 'Recette', 'magasin@recette.local', '$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i', 5, 9, NULL, NULL, NULL, 1, NULL, NULL, NULL, '2026-08-18 22:01:36.016815', '2026-08-18 22:01:36.016815', NULL),
+	(14, 'ACHAT', 'Recette', 'achat@recette.local', '$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i', 17, 9, NULL, NULL, NULL, 1, NULL, NULL, NULL, '2026-08-18 22:01:36.016815', '2026-08-18 22:01:36.016815', NULL),
+	(15, 'RAF', 'Recette', 'raf@recette.local', '$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i', 18, 9, NULL, NULL, NULL, 1, NULL, NULL, NULL, '2026-08-18 22:01:36.016815', '2026-08-18 22:01:36.016815', NULL),
+	(16, 'DAF', 'Recette', 'daf@recette.local', '$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i', 19, 9, NULL, NULL, NULL, 1, NULL, NULL, NULL, '2026-08-18 22:01:36.016815', '2026-08-18 22:01:36.016815', NULL),
+	(17, 'PDG', 'Recette', 'pdg@recette.local', '$2y$12$ck8ok5fq4X8j5HT3FuV91.h6.a6sG491seDQsaBvdrBzwRgaIbN7i', 4, 9, NULL, NULL, NULL, 1, NULL, NULL, NULL, '2026-08-18 22:01:36.016815', '2026-08-18 22:01:36.016815', NULL);
 
 
 --
 -- Data for Name: validations_stock_matin; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-COPY public.validations_stock_matin (id, site_id, date_validation, statut, nb_ecarts, details_ecarts, gsb_user_id, gsb_at, commentaire, bobines_snapshot, created_at) FROM stdin;
-\.
 
 
 --
@@ -8999,5 +8854,4 @@ ALTER TABLE ONLY public.validations_stock_matin
 -- PostgreSQL database dump complete
 --
 
-\unrestrict K4FtUqLZP901jgd6SvFhoCvC1ZZMgAi8WIUebZ6b2gnWkcaNmJ4hyafOO3iZrHi
 
