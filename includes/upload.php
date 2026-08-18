@@ -8,6 +8,7 @@ define('UPLOAD_BL_DIR',    UPLOAD_DIR . 'bl/');
 define('UPLOAD_FICHE_DIR', UPLOAD_DIR . 'fiches/');
 define('UPLOAD_FEB_DIR',   UPLOAD_DIR . 'feb/');
 define('UPLOAD_VALIDATION_DIR', UPLOAD_DIR . 'validation/');
+define('UPLOAD_FOURNISSEUR_DIR', UPLOAD_DIR . 'fournisseurs/');
 define('UPLOAD_MAX_SIZE',  10 * 1024 * 1024);  // 10 Mo
 define('UPLOAD_URL',       APP_URL . '/uploads/');
 
@@ -26,7 +27,7 @@ const UPLOAD_ALLOWED_TYPES = [
  * S'assure que les dossiers d'upload existent.
  */
 function upload_ensure_dirs(): void {
-    foreach ([UPLOAD_BL_DIR, UPLOAD_FICHE_DIR, UPLOAD_FEB_DIR, UPLOAD_VALIDATION_DIR] as $dir) {
+    foreach ([UPLOAD_BL_DIR, UPLOAD_FICHE_DIR, UPLOAD_FEB_DIR, UPLOAD_VALIDATION_DIR, UPLOAD_FOURNISSEUR_DIR] as $dir) {
         if (!is_dir($dir)) {
             mkdir($dir, 0775, true);
         }
@@ -46,14 +47,21 @@ function upload_document(string $field_name, string $type, string $prefix, bool 
     upload_ensure_dirs();
 
     $dir = match ($type) {
-        'fiche' => UPLOAD_FICHE_DIR,
-        'feb'   => UPLOAD_FEB_DIR,
-        default => UPLOAD_BL_DIR,
+        'fiche'       => UPLOAD_FICHE_DIR,
+        'feb'         => UPLOAD_FEB_DIR,
+        'fournisseur' => UPLOAD_FOURNISSEUR_DIR,
+        default       => UPLOAD_BL_DIR,
     };
 
     // Vérifier si un fichier est fourni
     if (empty($_FILES[$field_name]) || $_FILES[$field_name]['error'] === UPLOAD_ERR_NO_FILE) {
         if ($required) {
+            // 'fournisseur' : message nu, sans "Le document X" — l'appelant
+            // (param_fournisseurs.php) préfixe déjà avec le libellé précis de
+            // la pièce (RCCM, DFE...), un second "document" ferait doublon.
+            if ($type === 'fournisseur') {
+                return ['success' => false, 'filename' => null, 'message' => 'ce document est obligatoire.'];
+            }
             $label = match ($type) {
                 'fiche' => 'fiche signée',
                 'feb'   => 'pièce jointe',
@@ -111,10 +119,11 @@ function upload_document(string $field_name, string $type, string $prefix, bool 
  */
 function upload_delete(string $filename, string $type): void {
     $dir = match ($type) {
-        'fiche'      => UPLOAD_FICHE_DIR,
-        'feb'        => UPLOAD_FEB_DIR,
-        'validation' => UPLOAD_VALIDATION_DIR,
-        default      => UPLOAD_BL_DIR,
+        'fiche'       => UPLOAD_FICHE_DIR,
+        'feb'         => UPLOAD_FEB_DIR,
+        'validation'  => UPLOAD_VALIDATION_DIR,
+        'fournisseur' => UPLOAD_FOURNISSEUR_DIR,
+        default       => UPLOAD_BL_DIR,
     };
     $path = $dir . basename($filename);
     if (file_exists($path)) {
@@ -127,10 +136,11 @@ function upload_delete(string $filename, string $type): void {
  */
 function upload_url(string $filename, string $type): string {
     $sub = match ($type) {
-        'fiche'      => 'fiches',
-        'feb'        => 'feb',
-        'validation' => 'validation',
-        default      => 'bl',
+        'fiche'       => 'fiches',
+        'feb'         => 'feb',
+        'validation'  => 'validation',
+        'fournisseur' => 'fournisseurs',
+        default       => 'bl',
     };
     return UPLOAD_URL . $sub . '/' . rawurlencode($filename);
 }

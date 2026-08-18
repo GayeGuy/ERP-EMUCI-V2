@@ -8,6 +8,20 @@ require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/notifications.php';
 require_once __DIR__ . '/../../includes/audit.php';
 require_once __DIR__ . '/../../includes/achats.php';
+require_once __DIR__ . '/../../includes/upload.php';
+
+// Pièces du dossier de conformité fournisseur : colonne DB => métadonnées.
+// RCCM, DFE, RIB et PIRL sont obligatoires ; IDU, ARF et attestation CNPS
+// sont facultatifs (CNPS "lorsque applicable").
+const FOURN_DOCS = [
+    'doc_rccm' => ['field' => 'doc_rccm', 'required' => true,  'label' => 'RCCM'],
+    'doc_idu'  => ['field' => 'doc_idu',  'required' => false, 'label' => "IDU / document d'identification de l'entreprise"],
+    'doc_dfe'  => ['field' => 'doc_dfe',  'required' => true,  'label' => 'DFE / identification fiscale'],
+    'doc_arf'  => ['field' => 'doc_arf',  'required' => false, 'label' => 'ARF'],
+    'doc_cnps' => ['field' => 'doc_cnps', 'required' => false, 'label' => 'Attestation CNPS'],
+    'doc_rib'  => ['field' => 'doc_rib',  'required' => true,  'label' => 'RIB / attestation bancaire'],
+    'doc_pirl' => ['field' => 'doc_pirl', 'required' => true,  'label' => "PIRL / pièce d'identité du représentant légal"],
+];
 
 require_auth();
 $user = current_user();
@@ -33,12 +47,35 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'create') {
         $raison = trim($_POST['raison_sociale'] ?? '');
+        $rccm   = trim($_POST['numero_rccm'] ?? '');
+        $dfe    = trim($_POST['numero_dfe'] ?? '');
+        $rib    = trim($_POST['numero_rib'] ?? '');
         if (!$raison) json_response(false, 'La raison sociale est obligatoire.');
+        if (!$rccm)   json_response(false, 'Le numéro RCCM est obligatoire.');
+        if (!$dfe)    json_response(false, 'Le numéro DFE est obligatoire.');
+        if (!$rib)    json_response(false, 'Le numéro RIB est obligatoire.');
+
+        $uploaded = [];
+        foreach (FOURN_DOCS as $col => $meta) {
+            $res = upload_document($meta['field'], 'fournisseur', 'fournisseur_new', $meta['required']);
+            if (!$res['success']) {
+                foreach ($uploaded as $f) upload_delete($f, 'fournisseur');
+                json_response(false, $meta['label'] . ' : ' . $res['message']);
+            }
+            if ($res['filename']) $uploaded[$col] = $res['filename'];
+        }
+
         db_query(
-            "INSERT INTO fournisseurs (raison_sociale, contact_nom, telephone, email, adresse, conditions_paiement, cree_par)
-             VALUES (?,?,?,?,?,?,?)",
+            "INSERT INTO fournisseurs (raison_sociale, contact_nom, telephone, email, adresse, coordonnees, conditions_paiement,
+                                        numero_rccm, numero_dfe, numero_rib,
+                                        doc_rccm, doc_idu, doc_dfe, doc_arf, doc_cnps, doc_rib, doc_pirl, cree_par)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             [$raison, trim($_POST['contact_nom'] ?? ''), trim($_POST['telephone'] ?? ''),
-             trim($_POST['email'] ?? ''), trim($_POST['adresse'] ?? ''), trim($_POST['conditions_paiement'] ?? ''), $user['id']]
+             trim($_POST['email'] ?? ''), trim($_POST['adresse'] ?? ''), trim($_POST['coordonnees'] ?? ''), trim($_POST['conditions_paiement'] ?? ''),
+             $rccm, $dfe, $rib,
+             $uploaded['doc_rccm'] ?? null, $uploaded['doc_idu'] ?? null, $uploaded['doc_dfe'] ?? null,
+             $uploaded['doc_arf'] ?? null, $uploaded['doc_cnps'] ?? null, $uploaded['doc_rib'] ?? null, $uploaded['doc_pirl'] ?? null,
+             $user['id']]
         );
         $id = (int)db_last_id('fournisseurs_id_seq');
         audit_log($user['id'], 'CREATE', 'achats_param', $id, "Création fournisseur : $raison");
@@ -48,13 +85,54 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'update') {
         $id     = (int)($_POST['id'] ?? 0);
         $raison = trim($_POST['raison_sociale'] ?? '');
+        $rccm   = trim($_POST['numero_rccm'] ?? '');
+        $dfe    = trim($_POST['numero_dfe'] ?? '');
+        $rib    = trim($_POST['numero_rib'] ?? '');
         if (!$id || !$raison) json_response(false, 'Données invalides.');
+        if (!$rccm) json_response(false, 'Le numéro RCCM est obligatoire.');
+        if (!$dfe)  json_response(false, 'Le numéro DFE est obligatoire.');
+        if (!$rib)  json_response(false, 'Le numéro RIB est obligatoire.');
+
+        $current = db_fetch_one("SELECT doc_rccm, doc_idu, doc_dfe, doc_arf, doc_cnps, doc_rib, doc_pirl FROM fournisseurs WHERE id=?", [$id]);
+        if (!$current) json_response(false, 'Fournisseur introuvable.');
+
+        $final      = [];
+        $newUploads = [];
+        foreach (FOURN_DOCS as $col => $meta) {
+            $hasExisting = !empty($current[$col]);
+            $res = upload_document($meta['field'], 'fournisseur', 'fournisseur_' . $id, $meta['required'] && !$hasExisting);
+            if (!$res['success']) {
+                foreach ($newUploads as $f) upload_delete($f, 'fournisseur');
+                json_response(false, $meta['label'] . ' : ' . $res['message']);
+            }
+            if ($res['filename']) {
+                $final[$col] = $res['filename'];
+                $newUploads[] = $res['filename'];
+            } else {
+                $final[$col] = $current[$col];
+            }
+        }
+
         db_query(
-            "UPDATE fournisseurs SET raison_sociale=?, contact_nom=?, telephone=?, email=?, adresse=?, conditions_paiement=?, modifie_le=NOW()
+            "UPDATE fournisseurs SET raison_sociale=?, contact_nom=?, telephone=?, email=?, adresse=?, coordonnees=?, conditions_paiement=?,
+                    numero_rccm=?, numero_dfe=?, numero_rib=?,
+                    doc_rccm=?, doc_idu=?, doc_dfe=?, doc_arf=?, doc_cnps=?, doc_rib=?, doc_pirl=?,
+                    modifie_le=NOW()
              WHERE id=?",
             [$raison, trim($_POST['contact_nom'] ?? ''), trim($_POST['telephone'] ?? ''),
-             trim($_POST['email'] ?? ''), trim($_POST['adresse'] ?? ''), trim($_POST['conditions_paiement'] ?? ''), $id]
+             trim($_POST['email'] ?? ''), trim($_POST['adresse'] ?? ''), trim($_POST['coordonnees'] ?? ''), trim($_POST['conditions_paiement'] ?? ''),
+             $rccm, $dfe, $rib,
+             $final['doc_rccm'], $final['doc_idu'], $final['doc_dfe'], $final['doc_arf'], $final['doc_cnps'], $final['doc_rib'], $final['doc_pirl'],
+             $id]
         );
+
+        // Les fichiers remplacés ne sont purgés qu'après l'UPDATE réussi.
+        foreach (FOURN_DOCS as $col => $meta) {
+            if (in_array($final[$col], $newUploads, true) && !empty($current[$col]) && $current[$col] !== $final[$col]) {
+                upload_delete($current[$col], 'fournisseur');
+            }
+        }
+
         audit_log($user['id'], 'UPDATE', 'achats_param', $id, "Modification fournisseur : $raison");
         json_response(true, 'Fournisseur mis à jour.');
     }
@@ -140,7 +218,7 @@ include __DIR__ . '/../../templates/header.php';
   <table class="ach-table">
     <thead><tr>
       <th>Raison sociale</th><th>Contact</th><th>Téléphone</th><th>Email</th>
-      <th>Score prix</th><th>Score délai</th><th>Statut</th>
+      <th>Score prix</th><th>Score délai</th><th>Dossier</th><th>Statut</th>
       <?php if ($can_edit): ?><th>Actions</th><?php endif; ?>
     </tr></thead>
     <tbody>
@@ -150,6 +228,10 @@ include __DIR__ . '/../../templates/header.php';
         // point 23). Le troisième critère annoncé à l'origine (le service)
         // reste hors V1, sa donnée n'existe pas encore.
         $score = ach_score_fournisseur((int)$f['id']);
+        $docsManquants = [];
+        foreach (FOURN_DOCS as $col => $meta) {
+            if ($meta['required'] && empty($f[$col])) $docsManquants[] = $meta['label'];
+        }
       ?>
       <tr id="frow-<?= $f['id'] ?>">
         <td style="font-weight:700;color:var(--navy)"><?= h($f['raison_sociale']) ?></td>
@@ -170,6 +252,13 @@ include __DIR__ . '/../../templates/header.php';
           <?php else: ?>
             <span style="font-weight:700;color:<?= $score['score_delai'] >= 80 ? '#065F46' : ($score['score_delai'] >= 50 ? '#92400E' : '#991B1B') ?>"><?= $score['score_delai'] ?>%</span>
             <div style="font-size:10.5px;color:var(--muted)">délais respectés, <?= $score['nb_livraisons'] ?> livraison(s)</div>
+          <?php endif; ?>
+        </td>
+        <td>
+          <?php if (empty($docsManquants)): ?>
+            <span class="ach-badge on">Complet</span>
+          <?php else: ?>
+            <span class="ach-badge off" style="background:#FEF3C7;color:#92400E" title="Manquant : <?= h(implode(', ', $docsManquants)) ?>">Incomplet</span>
           <?php endif; ?>
         </td>
         <td><span class="ach-badge <?= $f['actif'] ? 'on' : 'off' ?>"><?= $f['actif'] ? 'Actif' : 'Inactif' ?></span></td>
@@ -197,11 +286,12 @@ include __DIR__ . '/../../templates/header.php';
 
 <!-- MODALE création/édition -->
 <div class="ach-modal-bg" id="ach-modal">
-  <div class="ach-modal" role="dialog" aria-labelledby="ach-modal-title">
+  <div class="ach-modal" role="dialog" aria-labelledby="ach-modal-title" style="max-width:640px">
     <h3 id="ach-modal-title"><i class="ph ph-storefront" aria-hidden="true"></i> <span id="ach-modal-ttl-txt">Nouveau fournisseur</span></h3>
     <input type="hidden" id="f-id" value="">
+
     <div class="ach-fg">
-      <label for="f-raison">Raison sociale</label>
+      <label for="f-raison">Raison sociale *</label>
       <input type="text" id="f-raison" required>
     </div>
     <div class="ach-fg">
@@ -217,13 +307,35 @@ include __DIR__ . '/../../templates/header.php';
       <input type="email" id="f-email">
     </div>
     <div class="ach-fg">
-      <label for="f-adresse">Adresse</label>
+      <label for="f-coord">Coordonnées complémentaires</label>
+      <input type="text" id="f-coord" placeholder="fax, site web, autre contact…">
+    </div>
+    <div class="ach-fg">
+      <label for="f-adresse">Adresse complète</label>
       <textarea id="f-adresse"></textarea>
     </div>
     <div class="ach-fg">
       <label for="f-cond">Conditions de paiement</label>
       <input type="text" id="f-cond" placeholder="ex : 30 jours net">
     </div>
+
+    <h4 style="margin:20px 0 10px;font-size:13px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.4px">Identification légale</h4>
+    <div class="ach-fg">
+      <label for="f-rccm">Numéro RCCM *</label>
+      <input type="text" id="f-rccm" required>
+    </div>
+    <div class="ach-fg">
+      <label for="f-dfe">Numéro DFE (identification fiscale) *</label>
+      <input type="text" id="f-dfe" required>
+    </div>
+    <div class="ach-fg">
+      <label for="f-rib">Numéro RIB *</label>
+      <input type="text" id="f-rib" required>
+    </div>
+
+    <h4 style="margin:20px 0 10px;font-size:13px;font-weight:800;color:var(--navy);text-transform:uppercase;letter-spacing:.4px">Pièces jointes du dossier</h4>
+    <div id="ach-docs"></div>
+
     <div class="ach-err" id="ach-err"></div>
     <div class="ach-modal-actions">
       <button type="button" class="btn btn-secondary" onclick="achCloseModal()">Annuler</button>
@@ -233,10 +345,29 @@ include __DIR__ . '/../../templates/header.php';
 </div>
 
 <script>
+const ACH_DOCS = <?= json_encode(array_map(fn($col, $meta) => ['col' => $col, 'field' => $meta['field'], 'label' => $meta['label'], 'required' => $meta['required']], array_keys(FOURN_DOCS), FOURN_DOCS)) ?>;
+const ACH_DOC_URL = <?= json_encode(UPLOAD_URL . 'fournisseurs/') ?>;
+
+function achRenderDocs(current) {
+  current = current || {};
+  const wrap = document.getElementById('ach-docs');
+  wrap.innerHTML = ACH_DOCS.map(d => {
+    const existing = current[d.col];
+    const link = existing
+      ? `<a href="${ACH_DOC_URL}${encodeURIComponent(existing)}" target="_blank" style="font-size:12px;color:var(--blue-mid,#1a56a0);text-decoration:none;margin-left:8px"><i class="ph ph-file-text" aria-hidden="true"></i> document actuel</a>`
+      : '';
+    return `<div class="ach-fg">
+      <label for="doc-${d.col}">${d.label}${d.required ? ' *' : ''}${link}</label>
+      <input type="file" id="doc-${d.col}" name="${d.field}" accept=".pdf,.jpg,.jpeg,.png,.webp">
+    </div>`;
+  }).join('');
+}
+
 function achOpenCreate() {
   document.getElementById('f-id').value = '';
   document.getElementById('ach-modal-ttl-txt').textContent = 'Nouveau fournisseur';
-  ['f-raison','f-contact','f-tel','f-email','f-adresse','f-cond'].forEach(id => document.getElementById(id).value = '');
+  ['f-raison','f-contact','f-tel','f-email','f-coord','f-adresse','f-cond','f-rccm','f-dfe','f-rib'].forEach(id => document.getElementById(id).value = '');
+  achRenderDocs({});
   document.getElementById('ach-err').style.display = 'none';
   document.getElementById('ach-modal').classList.add('open');
   setTimeout(() => document.getElementById('f-raison').focus(), 80);
@@ -248,8 +379,13 @@ function achOpenEdit(f) {
   document.getElementById('f-contact').value = f.contact_nom || '';
   document.getElementById('f-tel').value     = f.telephone || '';
   document.getElementById('f-email').value   = f.email || '';
+  document.getElementById('f-coord').value   = f.coordonnees || '';
   document.getElementById('f-adresse').value = f.adresse || '';
   document.getElementById('f-cond').value    = f.conditions_paiement || '';
+  document.getElementById('f-rccm').value    = f.numero_rccm || '';
+  document.getElementById('f-dfe').value     = f.numero_dfe || '';
+  document.getElementById('f-rib').value     = f.numero_rib || '';
+  achRenderDocs(f);
   document.getElementById('ach-err').style.display = 'none';
   document.getElementById('ach-modal').classList.add('open');
 }
@@ -260,14 +396,31 @@ document.getElementById('ach-modal').addEventListener('click', e => { if (e.targ
 function achPost(data) {
   const fd = new FormData();
   Object.entries(data).forEach(([k, v]) => fd.append(k, v));
+  ACH_DOCS.forEach(d => {
+    const input = document.getElementById('doc-' + d.col);
+    if (input && input.files[0]) fd.append(d.field, input.files[0]);
+  });
   return fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd }).then(r => r.json());
 }
 
 function achSave() {
   const id = document.getElementById('f-id').value;
   const raison = document.getElementById('f-raison').value.trim();
+  const rccm = document.getElementById('f-rccm').value.trim();
+  const dfe = document.getElementById('f-dfe').value.trim();
+  const rib = document.getElementById('f-rib').value.trim();
   const err = document.getElementById('ach-err');
   if (!raison) { err.textContent = 'La raison sociale est obligatoire.'; err.style.display = 'block'; return; }
+  if (!rccm)   { err.textContent = 'Le numéro RCCM est obligatoire.'; err.style.display = 'block'; return; }
+  if (!dfe)    { err.textContent = 'Le numéro DFE est obligatoire.'; err.style.display = 'block'; return; }
+  if (!rib)    { err.textContent = 'Le numéro RIB est obligatoire.'; err.style.display = 'block'; return; }
+  if (!id) {
+    for (const d of ACH_DOCS) {
+      if (d.required && !document.getElementById('doc-' + d.col).files[0]) {
+        err.textContent = `Le document « ${d.label} » est obligatoire.`; err.style.display = 'block'; return;
+      }
+    }
+  }
   achPost({
     action: id ? 'update' : 'create',
     id: id,
@@ -275,8 +428,12 @@ function achSave() {
     contact_nom: document.getElementById('f-contact').value.trim(),
     telephone: document.getElementById('f-tel').value.trim(),
     email: document.getElementById('f-email').value.trim(),
+    coordonnees: document.getElementById('f-coord').value.trim(),
     adresse: document.getElementById('f-adresse').value.trim(),
     conditions_paiement: document.getElementById('f-cond').value.trim(),
+    numero_rccm: rccm,
+    numero_dfe: dfe,
+    numero_rib: rib,
   }).then(res => {
     if (!res.success) { err.textContent = res.message; err.style.display = 'block'; return; }
     toast(res.message, 'success');
