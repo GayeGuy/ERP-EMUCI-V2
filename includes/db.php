@@ -39,6 +39,13 @@ define('APP_VERSION', '2.0.0');
 define('APP_URL',     env('APP_URL', 'http://localhost:8080'));
 define('APP_TIMEZONE', env('APP_TIMEZONE', 'Africa/Abidjan'));
 
+// Recette Achats : réduit l'application au seul module Achats, pour que les
+// retours des testeurs restent centrés dessus. Piloté par l'environnement et
+// non par le code, afin que la branche de recette ne diverge pas de la
+// branche de développement — on active la restriction sur le service Render
+// de recette, nulle part ailleurs.
+define('RECETTE_ACHATS', env('RECETTE_ACHATS', '0') === '1');
+
 date_default_timezone_set(APP_TIMEZONE);
 define('SESSION_LIFETIME', 28800);
 // Filet de sécurité côté serveur pour la déconnexion pour inactivité : le

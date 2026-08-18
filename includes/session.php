@@ -85,6 +85,40 @@ function require_auth(): void {
         exit;
     }
     $_SESSION['last_activity'] = time();
+
+    // Recette Achats : masquer les menus ne suffit pas, une URL tapée à la
+    // main ouvrirait le reste de l'application. La barrière porte sur le
+    // script appelé, donc sur tous les points d'entrée, y compris les
+    // requêtes AJAX des autres modules.
+    if (defined('RECETTE_ACHATS') && RECETTE_ACHATS
+        && !recette_achats_autorise($_SERVER['SCRIPT_NAME'] ?? '')) {
+        http_response_code(403);
+        include __DIR__ . '/../templates/403_recette.php';
+        exit;
+    }
+}
+
+// ── Écrans laissés ouverts en mode recette Achats.
+//    Comparaison par suffixe : l'application peut être servie depuis une
+//    racine quelconque, seul le chemin de fin est stable.
+function recette_achats_autorise(string $script): bool {
+    $script = '/' . ltrim(str_replace(DIRECTORY_SEPARATOR, '/', $script), '/');
+
+    // pages/commandes.php : la bascule d'une FEB vers une commande interne y
+    // aboutit — l'exclure couperait le parcours en deux au milieu.
+    // api/notifications.php : la cloche est présente sur tous les écrans.
+    $ouverts = [
+        '/index.php',
+        '/pages/accueil.php',
+        '/pages/commandes.php',
+        '/pages/mon_profil.php',
+        '/pages/profil.php',
+        '/api/notifications.php',
+    ];
+    foreach ($ouverts as $o) {
+        if (substr($script, -strlen($o)) === $o) return true;
+    }
+    return strpos($script, '/pages/achats/') !== false;
 }
 
 // ── Vérifier si l'utilisateur a un droit sur un module

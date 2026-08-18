@@ -301,6 +301,11 @@ function _groupes_def(): array {
 
 // ── Groupes accessibles selon le rôle (9 → 7 groupes, plus de doublons)
 function get_groupes_pour_role(string $role_slug): array {
+    // Recette Achats : un seul groupe de menus, quel que soit le rôle. Les
+    // filtres par item de get_groupe_nav_items() continuent de s'appliquer,
+    // donc chacun ne voit que les écrans Achats de son périmètre.
+    if (defined('RECETTE_ACHATS') && RECETTE_ACHATS) return ['ACHATS'];
+
     $all = TOUS_LES_GROUPES;
     $map = [
         // Terrain production
