@@ -194,6 +194,7 @@ include __DIR__ . '/../../templates/header.php';
 .ach-err{color:#dc2626;font-size:12px;margin-top:4px;display:none}
 @media (max-width:768px) {
   .ach-search input, .ach-fg input, .ach-fg textarea { min-height:44px; }
+  #docs-modal-list a { display:inline-flex; align-items:center; min-height:44px; padding:0 4px; }
 }
 </style>
 
@@ -264,6 +265,10 @@ include __DIR__ . '/../../templates/header.php';
         <td><span class="ach-badge <?= $f['actif'] ? 'on' : 'off' ?>"><?= $f['actif'] ? 'Actif' : 'Inactif' ?></span></td>
         <?php if ($can_edit): ?>
         <td style="display:flex;gap:8px">
+          <button type="button" class="btn btn-secondary btn-sm" title="Documents" aria-label="Voir les documents de <?= h($f['raison_sociale']) ?>"
+                  onclick='achOuvrirDocs(<?= json_encode($f, JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
+            <i class="ph ph-folder-open" aria-hidden="true"></i>
+          </button>
           <button type="button" class="btn btn-secondary btn-sm" title="Modifier" aria-label="Modifier <?= h($f['raison_sociale']) ?>"
                   onclick='achOpenEdit(<?= json_encode($f, JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
             <i class="ph ph-pencil-simple" aria-hidden="true"></i>
@@ -344,9 +349,39 @@ include __DIR__ . '/../../templates/header.php';
   </div>
 </div>
 
+<!-- MODALE consultation des documents -->
+<div class="ach-modal-bg" id="docs-modal">
+  <div class="ach-modal" role="dialog" aria-labelledby="docs-modal-title">
+    <h3 id="docs-modal-title"><i class="ph ph-folder-open" aria-hidden="true"></i> Documents — <span id="docs-modal-nom"></span></h3>
+    <ul id="docs-modal-list" style="list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px"></ul>
+    <div class="ach-modal-actions">
+      <button type="button" class="btn btn-secondary" onclick="achFermerDocs()">Fermer</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const ACH_DOCS = <?= json_encode(array_map(fn($col, $meta) => ['col' => $col, 'field' => $meta['field'], 'label' => $meta['label'], 'required' => $meta['required']], array_keys(FOURN_DOCS), FOURN_DOCS)) ?>;
 const ACH_DOC_URL = <?= json_encode(UPLOAD_URL . 'fournisseurs/') ?>;
+
+function achOuvrirDocs(f) {
+  document.getElementById('docs-modal-nom').textContent = f.raison_sociale || '';
+  document.getElementById('docs-modal-list').innerHTML = ACH_DOCS.map(d => {
+    const nom = f[d.col];
+    const statut = nom
+      ? `<a href="${ACH_DOC_URL}${encodeURIComponent(nom)}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--blue-mid,#1a56a0);text-decoration:none;font-weight:700"><i class="ph ph-file-text" aria-hidden="true"></i> Voir</a>`
+      : `<span style="font-size:12.5px;color:${d.required ? '#991B1B' : 'var(--muted)'}">${d.required ? 'Manquant' : 'Non fourni'}</span>`;
+    return `<li style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px;background:#f8fafc;border:1px solid var(--border);border-radius:9px">
+      <span style="font-size:13px">${esc(d.label)}${d.required ? ' *' : ''}</span>
+      ${statut}
+    </li>`;
+  }).join('');
+  document.getElementById('docs-modal').classList.add('open');
+}
+function achFermerDocs() { document.getElementById('docs-modal').classList.remove('open'); }
+document.getElementById('docs-modal').addEventListener('click', e => { if (e.target === e.currentTarget) achFermerDocs(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') achFermerDocs(); });
+function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 function achRenderDocs(current) {
   current = current || {};
