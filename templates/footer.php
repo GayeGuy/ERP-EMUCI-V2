@@ -101,16 +101,36 @@ function liveRefresh(opts) {
     return !!active && container.contains(active) && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName);
   });
   let inFlight = false;
+  let timer = null;
+  // Une fois la session perdue, le rafraîchissement ne peut plus rien
+  // rapporter : on l'arrête et on le dit, plutôt que de laisser un écran
+  // figé qui se présente comme vivant.
+  function arreter(raison) {
+    if (timer) { clearInterval(timer); timer = null; }
+    if (raison && typeof toast === 'function') toast(raison, 'danger');
+  }
   function tick() {
     if (document.hidden || isBusy() || inFlight) return;
     inFlight = true;
     fetch(opts.url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-      .then(r => r.ok ? r.text() : Promise.reject())
-      .then(html => { container.innerHTML = html; if (opts.onUpdate) opts.onUpdate(); })
+      .then(r => {
+        // fetch() suit les redirections sans le dire : session expirée,
+        // require_auth() renvoie un 302 vers login.php et la réponse finale
+        // est un 200 — r.ok est donc vrai. Sans ce test, le HTML complet de
+        // la page de connexion (formulaire, styles et scripts) s'injectait
+        // dans le tableau de l'écran.
+        if (r.redirected) { arreter('Session expirée — rechargez la page pour continuer.'); return null; }
+        return r.ok ? r.text() : Promise.reject();
+      })
+      .then(html => {
+        if (html === null) return;
+        container.innerHTML = html;
+        if (opts.onUpdate) opts.onUpdate();
+      })
       .catch(() => {})
       .finally(() => { inFlight = false; });
   }
-  setInterval(tick, interval);
+  timer = setInterval(tick, interval);
 }
 
 // ===== SIDEBAR SCROLL RESTORE =====

@@ -948,13 +948,21 @@ function ach_soumettre_budget(int $departement_id, int $exercice, array $user): 
     );
     if ($nb === 0) throw new AchValidationException('Aucune ligne budgétaire active à soumettre pour ce département et cet exercice.');
 
-    db_query(
+    // Le statut est revérifié dans le DO UPDATE, pas seulement plus haut :
+    // entre la lecture et l'écriture, le PDG a pu valider. Sans ce garde,
+    // une soumission concurrente ramenait un budget validé à « soumis ».
+    // Même motif conditionnel que ach_prendre_en_charge() et ach_viser().
+    $st = db_query(
         "INSERT INTO budget_validations (departement_id, exercice, statut, soumis_par, soumis_le)
          VALUES (?,?,'soumis',?,NOW())
          ON CONFLICT (departement_id, exercice) DO UPDATE SET
-             statut = 'soumis', soumis_par = ?, soumis_le = NOW(), motif_rejet = NULL",
+             statut = 'soumis', soumis_par = ?, soumis_le = NOW(), motif_rejet = NULL
+         WHERE budget_validations.statut IN ('brouillon', 'rejete')",
         [$departement_id, $exercice, (int)$user['id'], (int)$user['id']]
     );
+    if ($st->rowCount() === 0) {
+        throw new AchValidationException("Ce budget vient d'être traité par quelqu'un d'autre — rechargez l'écran.");
+    }
     audit_log((int)$user['id'], 'UPDATE', 'achats_param', $departement_id,
         "Budget soumis pour validation — département #$departement_id, exercice $exercice");
 
@@ -972,10 +980,19 @@ function ach_valider_budget(int $departement_id, int $exercice, array $user): vo
     $v = ach_budget_validation($departement_id, $exercice);
     if ($v['statut'] !== 'soumis') throw new AchValidationException("Ce budget n'est pas en attente de validation.");
 
-    db_query(
-        "UPDATE budget_validations SET statut='valide', valide_par=?, valide_le=NOW() WHERE departement_id=? AND exercice=?",
+    // statut='soumis' repris dans le WHERE : le contrôle ci-dessus a lu un
+    // état qui a pu changer depuis. Une validation et un rejet lancés en
+    // même temps passaient tous les deux, avec deux notifications
+    // contradictoires au proposant et un état final tiré au sort par
+    // l'ordre de commit.
+    $st = db_query(
+        "UPDATE budget_validations SET statut='valide', valide_par=?, valide_le=NOW()
+          WHERE departement_id=? AND exercice=? AND statut='soumis'",
         [(int)$user['id'], $departement_id, $exercice]
     );
+    if ($st->rowCount() === 0) {
+        throw new AchValidationException("Ce budget vient d'être traité par quelqu'un d'autre — rechargez l'écran.");
+    }
     audit_log((int)$user['id'], 'UPDATE', 'achats_param', $departement_id,
         "Budget validé et verrouillé — département #$departement_id, exercice $exercice");
 
@@ -995,10 +1012,15 @@ function ach_rejeter_budget(int $departement_id, int $exercice, string $motif, a
     $v = ach_budget_validation($departement_id, $exercice);
     if ($v['statut'] !== 'soumis') throw new AchValidationException("Ce budget n'est pas en attente de validation.");
 
-    db_query(
-        "UPDATE budget_validations SET statut='rejete', motif_rejet=?, rejete_par=?, rejete_le=NOW() WHERE departement_id=? AND exercice=?",
+    // Même garde conditionnel qu'à la validation — cf. ach_valider_budget().
+    $st = db_query(
+        "UPDATE budget_validations SET statut='rejete', motif_rejet=?, rejete_par=?, rejete_le=NOW()
+          WHERE departement_id=? AND exercice=? AND statut='soumis'",
         [$motif, (int)$user['id'], $departement_id, $exercice]
     );
+    if ($st->rowCount() === 0) {
+        throw new AchValidationException("Ce budget vient d'être traité par quelqu'un d'autre — rechargez l'écran.");
+    }
     audit_log((int)$user['id'], 'UPDATE', 'achats_param', $departement_id,
         "Budget rejeté — département #$departement_id, exercice $exercice : $motif");
 

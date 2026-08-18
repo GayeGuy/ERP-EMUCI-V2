@@ -71,10 +71,17 @@ ON CONFLICT (role_id, module) DO UPDATE SET can_read = 1;
 --     explicitement que ce n'est pas un vrai geste du PDG, juste un
 --     bootstrap de migration (traçable, distinct d'une validation réelle).
 -- ══════════════════════════════════════════════════════════════
+--     Rejeu : ON CONFLICT DO NOTHING ne protège que les budgets ayant
+--     déjà une ligne de validation. Un budget en brouillon n'en a aucune —
+--     rejouer la migration l'aurait donc fait passer « validé » sans geste
+--     du PDG, c'est-à-dire en contournant exactement le contrôle que ce lot
+--     installe. NOT EXISTS rend la bascule vraiment unique : elle n'opère
+--     qu'à l'introduction du cycle, sur une table encore vide.
 INSERT INTO budget_validations (departement_id, exercice, statut, valide_le)
 SELECT DISTINCT lb.departement_id, lb.exercice, 'valide', CURRENT_TIMESTAMP
 FROM lignes_budgetaires lb
 WHERE lb.actif = 1 AND lb.departement_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM budget_validations)
 ON CONFLICT (departement_id, exercice) DO NOTHING;
 
 COMMIT;
