@@ -86,11 +86,19 @@ ON CONFLICT (code) DO NOTHING;
 --     actifs pour le budget aujourd'hui (Bloc 0, point 11). N'écrase
 --     rien si déjà créés via l'écran d'administration.
 -- ══════════════════════════════════════════════════════════════
-INSERT INTO departements (code, label) VALUES
+-- WHERE NOT EXISTS plutôt que ON CONFLICT (code) : la contrainte UNIQUE sur
+-- code est sensible à la casse, et un département déjà présent avec un
+-- code en casse différente (ex. 'ope' au lieu de 'OPERATION') ne ferait
+-- jamais conflit — la garde laisserait passer un doublon plutôt que de
+-- réutiliser l'existant (cf. migration_achats_14_dedup_departements.sql,
+-- qui corrige les doublons déjà créés par l'ancienne version de ce bloc).
+INSERT INTO departements (code, label)
+SELECT v.code, v.label FROM (VALUES
     ('OPERATION',     'Opérations'),
     ('ADMINISTRATION','Administration'),
     ('ACHAT',         'Achats')
-ON CONFLICT (code) DO NOTHING;
+) AS v(code, label)
+WHERE NOT EXISTS (SELECT 1 FROM departements d WHERE UPPER(d.code) = UPPER(v.code));
 
 -- ══════════════════════════════════════════════════════════════
 --  3. lignes_budgetaires.departement_id — le budget se pilote par
