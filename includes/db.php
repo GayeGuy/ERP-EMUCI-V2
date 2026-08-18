@@ -98,11 +98,24 @@ function get_db(): PDO {
             'pgsql:host=%s;port=%s;dbname=%s;sslmode=%s',
             DB_HOST, DB_PORT, DB_NAME, DB_SSLMODE
         );
+        // PgBouncer en mode transaction — le point d'accès « pooled » de Neon,
+        // dont l'hôte porte « -pooler » — ne gère pas les requêtes préparées
+        // côté serveur : la seconde préparation du même nom échoue, et comme
+        // audit_log() avale ses exceptions, la transaction est condamnée sans
+        // un mot. On bascule alors PDO en préparation émulée ; les paramètres
+        // restent échappés par le pilote, et rowCount() comme FOR UPDATE
+        // continuent de répondre (vérifié).
+        //
+        // DB_EMULATE_PREPARES force le comportement si l'hôte ne trahit pas
+        // le pooler.
+        $forcage = env('DB_EMULATE_PREPARES');
+        $emuler  = $forcage !== null ? ($forcage === '1') : (strpos(DB_HOST, 'pooler') !== false);
+
         try {
             $pdo = new PDO($dsn, DB_USER, DB_PASS, [
                 PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                PDO::ATTR_EMULATE_PREPARES   => false,
+                PDO::ATTR_EMULATE_PREPARES   => $emuler,
             ]);
             // Encodage client UTF-8 (équivalent utf8mb4)
             $pdo->exec("SET client_encoding TO 'UTF8'");
