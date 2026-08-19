@@ -205,15 +205,48 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($montant < 0) json_response(false, 'Le montant TTC est obligatoire et doit être positif ou nul.');
 
         if ($action === 'add_offre') {
-            $nb_offres = (int)db_fetch_value("SELECT COUNT(*) FROM feb_offres WHERE feb_id=? AND lot=?", [$post_feb_id, $lot]);
-            if ($nb_offres >= 3) json_response(false, "Trois offres au maximum par lot — supprimez-en une avant d'en ajouter une nouvelle.");
-            db_query(
-                "INSERT INTO feb_offres (feb_id, lot, fournisseur_id, delai_annonce, conditions_paiement, montant_ttc, prix_initial, observation)
-                 VALUES (?,?,?,?,?,?,?,?)",
-                [$post_feb_id, $lot, $four_id, $delai, $cond_pai ?: null, $montant, $prix_init, $obs ?: null]
-            );
-            $offre_id = (int)db_last_id('feb_offres_id_seq');
-            audit_log($uid, 'CREATE', 'achats', $post_feb_id, "Ajout offre lot $lot — fournisseur #$four_id, $montant XOF");
+            // Verrou sur la FEB porteuse : compter puis écrire est un
+            // « vérifier puis agir ». Le serveur PHP intégré sert les
+            // requêtes une à une, ce qui masque aujourd'hui le défaut, mais
+            // rien ne garantit que ce sera toujours le cas (PHP_CLI_SERVER_
+            // WORKERS, un vrai FPM, plusieurs instances). Le verrou rend le
+            // plafond vrai dans tous les cas.
+            db_begin();
+            try {
+                db_query("SELECT id FROM feb WHERE id=? FOR UPDATE", [$post_feb_id]);
+
+                // Double envoi : deux clics sur « Enregistrer » créaient deux
+                // offres identiques, chacune valide prise isolément. Une même
+                // proposition du même fournisseur au même montant sur le même
+                // lot n'a pas de sens dans un comparatif — c'est un doublon,
+                // pas une seconde offre.
+                $doublon = db_fetch_value(
+                    "SELECT id FROM feb_offres WHERE feb_id=? AND lot=? AND fournisseur_id=? AND montant_ttc=?",
+                    [$post_feb_id, $lot, $four_id, $montant]
+                );
+                if ($doublon) {
+                    db_rollback();
+                    json_response(false, "Cette offre existe déjà pour ce fournisseur et ce montant — modifiez-la plutôt que d'en créer une seconde.");
+                }
+
+                $nb_offres = (int)db_fetch_value("SELECT COUNT(*) FROM feb_offres WHERE feb_id=? AND lot=?", [$post_feb_id, $lot]);
+                if ($nb_offres >= 3) {
+                    db_rollback();
+                    json_response(false, "Trois offres au maximum par lot — supprimez-en une avant d'en ajouter une nouvelle.");
+                }
+
+                db_query(
+                    "INSERT INTO feb_offres (feb_id, lot, fournisseur_id, delai_annonce, conditions_paiement, montant_ttc, prix_initial, observation)
+                     VALUES (?,?,?,?,?,?,?,?)",
+                    [$post_feb_id, $lot, $four_id, $delai, $cond_pai ?: null, $montant, $prix_init, $obs ?: null]
+                );
+                $offre_id = (int)db_last_id('feb_offres_id_seq');
+                audit_log($uid, 'CREATE', 'achats', $post_feb_id, "Ajout offre lot $lot — fournisseur #$four_id, $montant XOF");
+                db_commit();
+            } catch (Exception $e) {
+                db_rollback();
+                json_response(false, $e->getMessage());
+            }
             json_response(true, 'Offre ajoutée.', ['id' => $offre_id]);
         } else {
             $existante = db_fetch_one("SELECT * FROM feb_offres WHERE id=? AND feb_id=?", [$offre_id, $post_feb_id]);
@@ -738,7 +771,7 @@ include __DIR__ . '/../../templates/header.php';
     <div class="ach-err" id="offre-err"></div>
     <div class="ach-modal-actions">
       <button type="button" class="btn btn-secondary" onclick="febFermerOffre()">Annuler</button>
-      <button type="button" class="btn btn-primary" onclick="febEnregistrerOffre()">Enregistrer</button>
+      <button type="button" class="btn btn-primary" id="offre-btn-enregistrer" onclick="febEnregistrerOffre()">Enregistrer</button>
     </div>
   </div>
 </div>
@@ -875,7 +908,14 @@ function febFermerOffre() { document.getElementById('offre-modal').classList.rem
 document.getElementById('offre-modal').addEventListener('click', e => { if (e.target === e.currentTarget) febFermerOffre(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') febFermerOffre(); });
 
+// Verrou d'envoi : sans lui, deux clics sur « Enregistrer » partaient en
+// deux requêtes — l'écran ne se recharge qu'après 500 ms, la fenêtre est
+// large. Le serveur refuse désormais le doublon, mais l'utilisateur ne doit
+// pas voir passer un message d'erreur pour un geste aussi banal.
+let offreEnCours = false;
+
 function febEnregistrerOffre() {
+  if (offreEnCours) return;
   const err = document.getElementById('offre-err');
   const fournisseur_id = document.getElementById('of-fournisseur').value;
   const montant_ttc = document.getElementById('of-montant').value;
@@ -883,6 +923,14 @@ function febEnregistrerOffre() {
   if (montant_ttc === '') { err.textContent = 'Le montant TTC est obligatoire.'; err.style.display = 'block'; return; }
 
   const id = document.getElementById('of-id').value;
+  const bouton = document.getElementById('offre-btn-enregistrer');
+  offreEnCours = true;
+  if (bouton) { bouton.disabled = true; bouton.dataset.libelle = bouton.textContent; bouton.textContent = 'Enregistrement…'; }
+  const relacher = () => {
+    offreEnCours = false;
+    if (bouton) { bouton.disabled = false; if (bouton.dataset.libelle) bouton.textContent = bouton.dataset.libelle; }
+  };
+
   febPost({
     action: id ? 'update_offre' : 'add_offre',
     offre_id: id,
@@ -894,10 +942,12 @@ function febEnregistrerOffre() {
     prix_initial: document.getElementById('of-prix-init').value,
     observation: document.getElementById('of-obs').value.trim(),
   }).then(res => {
-    if (!res.success) { err.textContent = res.message; err.style.display = 'block'; return; }
+    if (!res.success) { relacher(); err.textContent = res.message; err.style.display = 'block'; return; }
     toast(res.message, 'success');
+    // Le bouton reste inerte jusqu'au rechargement : le relâcher ici
+    // rouvrirait la fenêtre de double envoi qu'on vient de fermer.
     setTimeout(() => location.reload(), 500);
-  });
+  }).catch(() => { relacher(); err.textContent = 'La requête n'a pas abouti — réessayez.'; err.style.display = 'block'; });
 }
 function febSupprimerOffre(id) {
   if (!confirm('Supprimer cette offre ?')) return;
