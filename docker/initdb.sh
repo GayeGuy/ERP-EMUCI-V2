@@ -70,6 +70,7 @@ migration_achats_12_stock_departement.sql
 migration_achats_13_budget_validation.sql
 migration_achats_14_dedup_departements.sql
 migration_achats_15_fournisseur_conformite.sql
+migration_achats_16_visa_n1.sql
 "
 
 for f in $FICHIERS; do

@@ -1181,6 +1181,21 @@ function ach_lancer_validation(int $feb_id, array $user): array {
     $labels = array_column(db_fetch_all("SELECT code, label FROM di_roles"), 'label', 'code');
     $workflow = array_map(fn($code) => ['role' => $code, 'label' => $labels[$code] ?? $code], $palier['signataires']);
 
+    // Visa du supérieur hiérarchique, en tête du circuit (modèle papier,
+    // feuille FEB DEMANDEUR : cases DEMANDEUR et SUPERIEUR HIERARCHIQUE).
+    // Il précède le palier : rien n'engage l'enveloppe du département avant
+    // que son responsable ait endossé la demande.
+    //
+    // La personne est résolue ici et figée sur la FEB, pour la même raison
+    // que workflow_snapshot : un changement de responsable en cours de
+    // circuit ne doit pas déplacer une signature déjà attendue.
+    $n1_user_id = $feb['departement_id']
+        ? ach_n1_du_departement((int)$feb['departement_id'], (int)$feb['demandeur_id'])
+        : null;
+    if ($n1_user_id) {
+        array_unshift($workflow, ['role' => 'n1', 'label' => $labels['n1'] ?? 'Responsable N+1']);
+    }
+
     $now = date('Y-m-d H:i:s');
     $nom = trim(($user['prenom'] ?? '') . ' ' . ($user['nom'] ?? ''));
     $historique = [['action' => 'lancement_validation', 'par' => $uid, 'nom' => $nom,
@@ -1198,9 +1213,9 @@ function ach_lancer_validation(int $feb_id, array $user): array {
         db_query(
             "UPDATE feb SET workflow_snapshot=?::jsonb, etape_actuelle=0, statut='en_validation',
                     date_lancement_validation=?, signatures='[]'::jsonb, historique=?::jsonb,
-                    etape_rejet=NULL, motif_rejet=NULL
+                    etape_rejet=NULL, motif_rejet=NULL, n1_user_id=?
               WHERE id=?",
-            [json_encode($workflow, JSON_UNESCAPED_UNICODE), $now, json_encode($historique, JSON_UNESCAPED_UNICODE), $feb_id]
+            [json_encode($workflow, JSON_UNESCAPED_UNICODE), $now, json_encode($historique, JSON_UNESCAPED_UNICODE), $n1_user_id, $feb_id]
         );
         // Les avertissements budgétaires (mode "alerte", non bloquant) sont
         // ajoutés au message d'audit : c'est cette trace que le dashboard
@@ -1214,9 +1229,47 @@ function ach_lancer_validation(int $feb_id, array $user): array {
         throw $e;
     }
 
-    ach_notifier_role($workflow[0]['role'], "FEB {$feb['numero']} en attente de votre visa — étape : {$workflow[0]['label']}.", $feb_id);
+    ach_notifier_etape($workflow[0], $n1_user_id, "FEB {$feb['numero']} en attente de votre visa — étape : {$workflow[0]['label']}.", $feb_id);
 
     return ['etapes' => count($workflow), 'palier' => $palier['libelle'], 'avertissements' => $controle['avertissements']];
+}
+
+// ── Supérieur hiérarchique d'un département, hors le demandeur lui-même.
+//    La désignation vit dans user_departements.is_n1 — le même mécanisme que
+//    les demandes internes, pas un second registre à tenir.
+//    Le demandeur est exclu de la recherche : il ne peut pas se viser
+//    (di_can_validate() refuse déjà le demandeur), et l'étape resterait
+//    bloquée sans personne pour la lever. Un département dont le N+1 est
+//    l'auteur de la demande n'a donc pas d'étape n1 — c'est voulu.
+function ach_n1_du_departement(int $departement_id, int $demandeur_id): ?int {
+    $id = db_fetch_value(
+        "SELECT ud.user_id
+           FROM user_departements ud
+           JOIN users u ON u.id = ud.user_id AND u.actif = 1
+          WHERE ud.departement_id = ? AND ud.is_n1 = 1 AND ud.user_id <> ?
+          ORDER BY ud.user_id
+          LIMIT 1",
+        [$departement_id, $demandeur_id]
+    );
+    return $id ? (int)$id : null;
+}
+
+// ── Notifie les porteurs d'une étape de circuit.
+//    L'étape n1 fait exception : aucun rôle ERP ne porte le code 'n1'
+//    (di_user_roles() ne le donne qu'aux administrateurs), donc
+//    ach_notifier_role() ne toucherait qu'eux. On notifie la personne
+//    résolue et figée sur la FEB.
+function ach_notifier_etape(array $etape, ?int $n1_user_id, string $message, int $feb_id): void {
+    if (($etape['role'] ?? '') === 'n1') {
+        if ($n1_user_id) {
+            db_query(
+                "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','Visa FEB',?,?)",
+                [$n1_user_id, $message, '/pages/achats/mes_visas.php']
+            );
+        }
+        return;
+    }
+    ach_notifier_role($etape['role'], $message, $feb_id);
 }
 
 // ── Vise (accepte ou rejette) l'étape courante d'une FEB en validation.
@@ -1240,7 +1293,12 @@ function ach_viser(int $feb_id, array $user, bool $accepte, string $commentaire 
     $wf  = $feb['workflow_snapshot'];
 
     $roles = di_user_roles($uid);
-    if (!di_can_validate($roles, $uid, $wf, $cur, (int)$feb['demandeur_id'], null)) {
+    // n1_user_id figé au lancement : sans lui, di_can_validate() retombe sur
+    // « tout porteur du code n1 », que seuls les administrateurs possèdent —
+    // le supérieur hiérarchique réel ne pourrait pas viser, et un
+    // administrateur le pourrait à sa place.
+    $n1_user_id = $feb['n1_user_id'] ? (int)$feb['n1_user_id'] : null;
+    if (!di_can_validate($roles, $uid, $wf, $cur, (int)$feb['demandeur_id'], $n1_user_id)) {
         throw new AchValidationException('Vous ne pouvez pas viser cette étape.');
     }
 
@@ -1330,7 +1388,7 @@ function ach_viser(int $feb_id, array $user, bool $accepte, string $commentaire 
     );
     if ($stmt->rowCount() === 0) return false;
     audit_log($uid, 'UPDATE', 'achats', $feb_id, "Étape « $etape_label » signée — passage à « {$wf[$next]['label']} »");
-    ach_notifier_role($wf[$next]['role'], "FEB {$feb['numero']} en attente de votre visa — étape : {$wf[$next]['label']}.", $feb_id);
+    ach_notifier_etape($wf[$next], $n1_user_id, "FEB {$feb['numero']} en attente de votre visa — étape : {$wf[$next]['label']}.", $feb_id);
     return true;
 }
 
@@ -1388,7 +1446,15 @@ function ach_a_viser(array $user): array {
         "SELECT COUNT(*) FROM user_departements ud JOIN di_roles dr ON dr.departement_id = ud.departement_id WHERE ud.user_id=?",
         [$uid]
     );
-    if (!$roles && !$has_dept_role) return [];
+    // Un supérieur hiérarchique n'a pas nécessairement de rôle de circuit ni
+    // de rôle lié à un département : le responsable des Opérations est un
+    // simple superviseur_operation. Sans cette troisième porte, il serait
+    // écarté avant même que di_can_validate() soit consulté, et ne verrait
+    // jamais la FEB qu'il doit endosser.
+    $est_n1 = (bool)db_fetch_value(
+        "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND is_n1=1", [$uid]
+    );
+    if (!$roles && !$has_dept_role && !$est_n1) return [];
 
     $febs = db_fetch_all(
         "SELECT * FROM feb WHERE statut='en_validation' AND demandeur_id <> ? ORDER BY date_lancement_validation ASC",
@@ -1397,7 +1463,8 @@ function ach_a_viser(array $user): array {
     $out = [];
     foreach ($febs as $f) {
         $f = ach_feb_decode($f);
-        if (di_can_validate($roles, $uid, $f['workflow_snapshot'], (int)$f['etape_actuelle'], (int)$f['demandeur_id'], null)) {
+        $n1 = $f['n1_user_id'] ? (int)$f['n1_user_id'] : null;
+        if (di_can_validate($roles, $uid, $f['workflow_snapshot'], (int)$f['etape_actuelle'], (int)$f['demandeur_id'], $n1)) {
             $out[] = $f;
         }
     }
