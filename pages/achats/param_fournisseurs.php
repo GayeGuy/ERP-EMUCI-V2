@@ -360,6 +360,17 @@ include __DIR__ . '/../../templates/header.php';
   </div>
 </div>
 
+<!-- MODALE aperçu d'un document -->
+<div class="ach-modal-bg" id="doc-preview-modal" style="z-index:2100">
+  <div class="ach-modal" role="dialog" aria-labelledby="doc-preview-title" style="max-width:820px;width:95%;height:88vh;display:flex;flex-direction:column">
+    <h3 id="doc-preview-title" style="margin-bottom:12px"><i class="ph ph-file-text" aria-hidden="true"></i> <span id="doc-preview-nom"></span></h3>
+    <iframe id="doc-preview-frame" src="" style="flex:1;width:100%;border:1px solid var(--border);border-radius:9px;background:#f8fafc"></iframe>
+    <div class="ach-modal-actions">
+      <button type="button" class="btn btn-secondary" onclick="achFermerPreview()">Fermer</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const ACH_DOCS = <?= json_encode(array_map(fn($col, $meta) => ['col' => $col, 'field' => $meta['field'], 'label' => $meta['label'], 'required' => $meta['required']], array_keys(FOURN_DOCS), FOURN_DOCS)) ?>;
 const ACH_DOC_URL = <?= json_encode(UPLOAD_URL . 'fournisseurs/') ?>;
@@ -369,7 +380,7 @@ function achOuvrirDocs(f) {
   document.getElementById('docs-modal-list').innerHTML = ACH_DOCS.map(d => {
     const nom = f[d.col];
     const statut = nom
-      ? `<a href="${ACH_DOC_URL}${encodeURIComponent(nom)}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--blue-mid,#1a56a0);text-decoration:none;font-weight:700"><i class="ph ph-file-text" aria-hidden="true"></i> Voir</a>`
+      ? `<button type="button" onclick="achApercuDoc('${esc(nom).replace(/'/g,"\\'")}', '${esc(d.label).replace(/'/g,"\\'")}')" style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--blue-mid,#1a56a0);background:none;border:none;padding:0;cursor:pointer;text-decoration:none;font-weight:700"><i class="ph ph-file-text" aria-hidden="true"></i> Voir</button>`
       : `<span style="font-size:12.5px;color:${d.required ? '#991B1B' : 'var(--muted)'}">${d.required ? 'Manquant' : 'Non fourni'}</span>`;
     return `<li style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:9px 12px;background:#f8fafc;border:1px solid var(--border);border-radius:9px">
       <span style="font-size:13px">${esc(d.label)}${d.required ? ' *' : ''}</span>
@@ -380,8 +391,23 @@ function achOuvrirDocs(f) {
 }
 function achFermerDocs() { document.getElementById('docs-modal').classList.remove('open'); }
 document.getElementById('docs-modal').addEventListener('click', e => { if (e.target === e.currentTarget) achFermerDocs(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') achFermerDocs(); });
 function esc(s) { return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function achApercuDoc(nom, label) {
+  document.getElementById('doc-preview-nom').textContent = label || '';
+  document.getElementById('doc-preview-frame').src = ACH_DOC_URL + encodeURIComponent(nom);
+  document.getElementById('doc-preview-modal').classList.add('open');
+}
+function achFermerPreview() {
+  document.getElementById('doc-preview-modal').classList.remove('open');
+  document.getElementById('doc-preview-frame').src = '';
+}
+document.getElementById('doc-preview-modal').addEventListener('click', e => { if (e.target === e.currentTarget) achFermerPreview(); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (document.getElementById('doc-preview-modal').classList.contains('open')) achFermerPreview();
+  else achFermerDocs();
+});
 
 function achRenderDocs(current) {
   current = current || {};
@@ -389,7 +415,7 @@ function achRenderDocs(current) {
   wrap.innerHTML = ACH_DOCS.map(d => {
     const existing = current[d.col];
     const link = existing
-      ? `<a href="${ACH_DOC_URL}${encodeURIComponent(existing)}" target="_blank" style="font-size:12px;color:var(--blue-mid,#1a56a0);text-decoration:none;margin-left:8px"><i class="ph ph-file-text" aria-hidden="true"></i> document actuel</a>`
+      ? `<button type="button" onclick="achApercuDoc('${esc(existing).replace(/'/g,"\\'")}', '${esc(d.label).replace(/'/g,"\\'")}')" style="font-size:12px;color:var(--blue-mid,#1a56a0);background:none;border:none;padding:0;cursor:pointer;text-decoration:none;margin-left:8px"><i class="ph ph-file-text" aria-hidden="true"></i> document actuel</button>`
       : '';
     return `<div class="ach-fg">
       <label for="doc-${d.col}">${d.label}${d.required ? ' *' : ''}${link}</label>
