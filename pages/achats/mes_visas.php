@@ -112,6 +112,52 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // ── Affectations d'équipements (Étape 4) — même palier, même moteur de
+    //    circuit que la FEB, table et détail distincts (pas de lots/offres/
+    //    budget à afficher, juste l'exemplaire et sa destination proposée).
+    if ($action === 'get_detail_affectation') {
+        $affectation_id = (int)($_POST['affectation_id'] ?? 0);
+        $row = db_fetch_one("SELECT * FROM equipement_affectations WHERE id=? AND statut='en_validation'", [$affectation_id]);
+        if (!$row) json_response(false, "Proposition introuvable ou plus en cours de validation.");
+        $affectation = ach_affectation_decode($row);
+        $roles = di_user_roles($uid);
+        if (!di_can_validate($roles, $uid, $affectation['workflow_snapshot'], (int)$affectation['etape_actuelle'], (int)$affectation['proposee_par'], null)) {
+            json_response(false, "Ce n'est pas votre étape à viser.");
+        }
+
+        $equipement = db_fetch_one(
+            "SELECT e.*, n.libelle AS nomenclature_libelle FROM equipements e LEFT JOIN nomenclatures n ON n.id = e.nomenclature_id WHERE e.id=?",
+            [$affectation['equipement_id']]
+        );
+        $proposeur_nom  = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$affectation['proposee_par']]);
+        $site_nom       = $affectation['site_id'] ? db_fetch_value("SELECT nom FROM sites WHERE id=?", [$affectation['site_id']]) : null;
+        $utilisateur_nom= $affectation['utilisateur_id'] ? db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$affectation['utilisateur_id']]) : null;
+
+        json_response(true, '', [
+            'affectation'     => $affectation,
+            'numero_serie'    => $equipement['numero_serie_interne'] ?? '—',
+            'nomenclature'    => $equipement['nomenclature_libelle'] ?? '—',
+            'prix_achat'      => (float)($equipement['prix_achat'] ?? 0),
+            'proposeur_nom'   => $proposeur_nom ?: '—',
+            'site_nom'        => $site_nom ?: '—',
+            'utilisateur_nom' => $utilisateur_nom ?: '—',
+            'etape_label'     => $affectation['workflow_snapshot'][(int)$affectation['etape_actuelle']]['label'] ?? '',
+        ]);
+    }
+
+    if ($action === 'viser_affectation') {
+        $affectation_id = (int)($_POST['affectation_id'] ?? 0);
+        $accepte     = ($_POST['accepte'] ?? '') === '1';
+        $commentaire = trim($_POST['commentaire'] ?? '');
+        try {
+            $ok = ach_viser_affectation($affectation_id, $user, $accepte, $commentaire);
+            if ($ok) json_response(true, $accepte ? 'Visa enregistré.' : 'Affectation rejetée.');
+            json_response(false, 'Cette étape vient déjà d\'être traitée par un autre signataire.');
+        } catch (AchValidationException $e) {
+            json_response(false, $e->getMessage());
+        }
+    }
+
     json_response(false, 'Action inconnue.');
 }
 
@@ -131,9 +177,22 @@ unset($f);
 $total_a_viser  = count($a_viser);
 $anciennete_max = $a_viser ? max(array_column($a_viser, 'anciennete_h')) : 0.0;
 
+// ── Étape 4 : propositions d'affectation en attente du même visa.
+$affectations_a_viser = ach_a_viser_affectations($user);
+foreach ($affectations_a_viser as &$a) {
+    $a['numero_serie'] = db_fetch_value("SELECT numero_serie_interne FROM equipements WHERE id=?", [$a['equipement_id']]);
+    $a['nomenclature'] = db_fetch_value(
+        "SELECT n.libelle FROM equipements e LEFT JOIN nomenclatures n ON n.id=e.nomenclature_id WHERE e.id=?", [$a['equipement_id']]
+    );
+    $a['prix_achat']   = (float) db_fetch_value("SELECT prix_achat FROM equipements WHERE id=?", [$a['equipement_id']]);
+    $a['site_nom']     = $a['site_id'] ? db_fetch_value("SELECT nom FROM sites WHERE id=?", [$a['site_id']]) : null;
+    $a['proposeur_nom']= db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$a['proposee_par']]);
+}
+unset($a);
+
 // ── Rafraîchissement live — fragment HTML seul (KPI + tableau), cf. le
 //    même mécanisme sur file_attente.php (templates/footer.php).
-function ach_mv_render_zone(int $total_a_viser, float $anciennete_max, array $a_viser): void {
+function ach_mv_render_zone(int $total_a_viser, float $anciennete_max, array $a_viser, array $affectations_a_viser): void {
     ?>
     <div class="ach-kpi">
       <div class="ach-kpi-item">
@@ -174,11 +233,38 @@ function ach_mv_render_zone(int $total_a_viser, float $anciennete_max, array $a_
       </div>
       <?php endif; ?>
     </div>
+
+    <div class="ach-section-ttl" style="font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;font-weight:800;color:var(--navy);margin:24px 0 12px">Affectations d'équipements (Étape 4)</div>
+    <div class="ach-table-wrap">
+      <?php if (empty($affectations_a_viser)): ?>
+        <div class="ach-empty">Aucune affectation en attente de votre visa.</div>
+      <?php else: ?>
+      <div style="overflow-x:auto">
+      <table class="ach-table">
+        <thead><tr>
+          <th>N° série</th><th>Nomenclature</th><th>Destination proposée</th><th>Valeur</th><th>Proposée par</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          <?php foreach ($affectations_a_viser as $a): ?>
+          <tr>
+            <td style="font-family:monospace;font-size:12px"><?= h($a['numero_serie'] ?: '—') ?></td>
+            <td><?= h($a['nomenclature'] ?: '—') ?></td>
+            <td><?= h($a['site_nom'] ?: '—') ?></td>
+            <td style="font-weight:700"><?= fmt_number((float)$a['prix_achat']) ?> XOF</td>
+            <td><?= h($a['proposeur_nom'] ?: '—') ?></td>
+            <td><button type="button" class="btn btn-primary btn-sm" onclick="mvOuvrirAffectation(<?= (int)$a['id'] ?>)">Examiner</button></td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+      </div>
+      <?php endif; ?>
+    </div>
     <?php
 }
 
 if (is_ajax() && ($_GET['fragment'] ?? '') === '1') {
-    ach_mv_render_zone($total_a_viser, $anciennete_max, $a_viser);
+    ach_mv_render_zone($total_a_viser, $anciennete_max, $a_viser, $affectations_a_viser);
     exit;
 }
 
@@ -217,7 +303,7 @@ include __DIR__ . '/../../templates/header.php';
 </style>
 
 <div id="mv-live-zone">
-<?php ach_mv_render_zone($total_a_viser, $anciennete_max, $a_viser); ?>
+<?php ach_mv_render_zone($total_a_viser, $anciennete_max, $a_viser, $affectations_a_viser); ?>
 </div>
 
 <!-- MODALE visa -->
@@ -257,6 +343,32 @@ include __DIR__ . '/../../templates/header.php';
       <button type="button" class="btn btn-secondary" onclick="mvFermer()">Fermer</button>
       <button type="button" class="btn btn-danger" onclick="mvViser(false)">Rejeter</button>
       <button type="button" class="btn btn-primary" onclick="mvViser(true)">Accepter</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALE visa affectation -->
+<div class="ach-modal-bg" id="visa-affectation-modal">
+  <div class="ach-modal" role="dialog" aria-labelledby="visa-affectation-title" style="max-width:520px">
+    <h3 id="visa-affectation-title">Visa affectation — <span id="mva-numero-serie"></span></h3>
+    <input type="hidden" id="mva-affectation-id" value="">
+    <div class="visa-grid" style="grid-template-columns:repeat(2,1fr)">
+      <div><div class="visa-lbl">Nomenclature</div><div class="visa-val" id="mva-nomenclature"></div></div>
+      <div><div class="visa-lbl">Valeur</div><div class="visa-val big" id="mva-valeur"></div></div>
+      <div><div class="visa-lbl">Site de destination</div><div class="visa-val" id="mva-site"></div></div>
+      <div><div class="visa-lbl">Utilisateur nommé</div><div class="visa-val" id="mva-utilisateur"></div></div>
+      <div><div class="visa-lbl">Proposée par</div><div class="visa-val" id="mva-proposeur"></div></div>
+      <div><div class="visa-lbl">Étape</div><div class="visa-val" id="mva-etape"></div></div>
+    </div>
+    <div class="ach-fg">
+      <label for="mva-commentaire">Commentaire (obligatoire en cas de rejet)</label>
+      <textarea id="mva-commentaire" placeholder="Motif du rejet, ou remarque optionnelle si vous acceptez"></textarea>
+      <div class="ach-err" id="mva-err"></div>
+    </div>
+    <div class="visa-actions">
+      <button type="button" class="btn btn-secondary" onclick="mvaFermer()">Fermer</button>
+      <button type="button" class="btn btn-danger" onclick="mvaViser(false)">Rejeter</button>
+      <button type="button" class="btn btn-primary" onclick="mvaViser(true)">Accepter</button>
     </div>
   </div>
 </div>
@@ -343,6 +455,44 @@ function mvViser(accepte) {
     if (!res.success) { err.textContent = res.message; err.style.display = 'block'; return; }
     toast(res.message, 'success');
     mvFermer();
+    setTimeout(() => location.reload(), 600);
+  });
+}
+
+function mvOuvrirAffectation(affectationId) {
+  mvPost({ action: 'get_detail_affectation', affectation_id: affectationId }).then(res => {
+    if (!res.success) { toast(res.message, 'danger'); return; }
+    const d = res.data;
+    document.getElementById('mva-affectation-id').value = affectationId;
+    document.getElementById('mva-numero-serie').textContent = d.numero_serie;
+    document.getElementById('mva-nomenclature').textContent = d.nomenclature;
+    document.getElementById('mva-valeur').textContent = Number(d.prix_achat).toLocaleString('fr-FR') + ' XOF';
+    document.getElementById('mva-site').textContent = d.site_nom;
+    document.getElementById('mva-utilisateur').textContent = d.utilisateur_nom;
+    document.getElementById('mva-proposeur').textContent = d.proposeur_nom;
+    document.getElementById('mva-etape').textContent = d.etape_label;
+    document.getElementById('mva-commentaire').value = '';
+    document.getElementById('mva-err').style.display = 'none';
+    document.getElementById('visa-affectation-modal').classList.add('open');
+  });
+}
+function mvaFermer() { document.getElementById('visa-affectation-modal').classList.remove('open'); }
+document.getElementById('visa-affectation-modal').addEventListener('click', e => { if (e.target === e.currentTarget) mvaFermer(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') mvaFermer(); });
+
+function mvaViser(accepte) {
+  const err = document.getElementById('mva-err');
+  const commentaire = document.getElementById('mva-commentaire').value.trim();
+  if (!accepte && !commentaire) {
+    err.textContent = 'Le motif de rejet est obligatoire.'; err.style.display = 'block'; return;
+  }
+  if (accepte && !confirm('Confirmer votre visa favorable ?')) return;
+  if (!accepte && !confirm('Confirmer le rejet de cette affectation ?')) return;
+
+  mvPost({ action: 'viser_affectation', affectation_id: document.getElementById('mva-affectation-id').value, accepte: accepte ? '1' : '0', commentaire }).then(res => {
+    if (!res.success) { err.textContent = res.message; err.style.display = 'block'; return; }
+    toast(res.message, 'success');
+    mvaFermer();
     setTimeout(() => location.reload(), 600);
   });
 }

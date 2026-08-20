@@ -1511,6 +1511,213 @@ function ach_a_viser(array $user): array {
     return $out;
 }
 
+// ── Décode les colonnes JSON d'une proposition d'affectation — même
+//    forme que ach_feb_decode(), table distincte.
+function ach_affectation_decode(array $row): array {
+    foreach (['workflow_snapshot', 'signatures', 'historique'] as $k) {
+        $row[$k] = json_decode($row[$k] ?? 'null', true) ?? [];
+    }
+    return $row;
+}
+
+// ── Étape 4 — Propose l'affectation d'un exemplaire en attente à un site
+//    (et, facultativement, à un utilisateur nommé). Circuit résolu sur les
+//    trois paliers existants (achat_paliers), comme au lancement d'une FEB
+//    (ach_lancer_validation()) — décision retenue plutôt qu'une seconde
+//    grille de délégation : ils sont déjà éprouvés et couvrent nativement
+//    l'immobilisation à plusieurs millions. Montant de référence :
+//    equipements.prix_achat de CET exemplaire, jamais le montant de la FEB
+//    entière (plusieurs exemplaires d'une même ligne DAI peuvent suivre des
+//    circuits différents si leur valorisation diffère).
+function ach_proposer_affectation(int $equipement_id, ?int $site_id, ?int $utilisateur_id, array $user): array {
+    $uid = (int)$user['id'];
+    if (!$site_id) throw new AchValidationException('Le site de destination est obligatoire.');
+
+    $equipement = db_fetch_one("SELECT * FROM equipements WHERE id=?", [$equipement_id]);
+    if (!$equipement) throw new AchValidationException('Exemplaire introuvable.');
+    if ($equipement['statut_stock'] !== 'en_attente_affectation') {
+        throw new AchValidationException("Cet exemplaire n'est pas (ou plus) en attente d'affectation.");
+    }
+
+    $montant = (int) round((float)$equipement['prix_achat']);
+    $palier  = ach_palier_pour_montant($montant);
+    if (!$palier) {
+        throw new AchValidationException("Aucun palier ne couvre le montant de $montant XOF — vérifiez la grille des paliers de validation.");
+    }
+    if (!$palier['signataires']) {
+        throw new AchValidationException("Le palier « {$palier['libelle']} » n'a aucun signataire configuré.");
+    }
+    $labels   = array_column(db_fetch_all("SELECT code, label FROM di_roles"), 'label', 'code');
+    $workflow = array_map(fn($code) => ['role' => $code, 'label' => $labels[$code] ?? $code], $palier['signataires']);
+
+    $now = date('Y-m-d H:i:s');
+    $nom = trim(($user['prenom'] ?? '') . ' ' . ($user['nom'] ?? ''));
+    $historique = [['action' => 'proposition', 'par' => $uid, 'nom' => $nom,
+        'commentaire' => "Palier « {$palier['libelle']} » — $montant XOF", 'date' => $now]];
+
+    $pdo = get_db();
+    $transaction_locale = !$pdo->inTransaction();
+    if ($transaction_locale) db_begin();
+    try {
+        // Conditionnel sur le statut actuel : sans lui, deux propositions
+        // lancées en parallèle sur le même exemplaire produiraient deux
+        // circuits concurrents — même défaut, même remède que le double
+        // envoi d'offre (cf. feb_traitement.php).
+        $stmt = db_query(
+            "UPDATE equipements SET statut_stock='affectation_en_cours' WHERE id=? AND statut_stock='en_attente_affectation'",
+            [$equipement_id]
+        );
+        if ($stmt->rowCount() === 0) {
+            if ($transaction_locale) db_rollback();
+            throw new AchValidationException("Cet exemplaire vient d'être proposé par quelqu'un d'autre — rechargez l'écran.");
+        }
+        db_query(
+            "INSERT INTO equipement_affectations
+             (equipement_id, site_id, utilisateur_id, statut, workflow_snapshot, historique, etape_actuelle, proposee_par, proposee_le)
+             VALUES (?,?,?, 'en_validation', ?, ?, 0, ?, ?)",
+            [$equipement_id, $site_id, $utilisateur_id ?: null,
+             json_encode($workflow, JSON_UNESCAPED_UNICODE), json_encode($historique, JSON_UNESCAPED_UNICODE), $uid, $now]
+        );
+        $affectation_id = (int) db_last_id('equipement_affectations_id_seq');
+        audit_log($uid, 'CREATE', 'equipements', $equipement_id,
+            "Affectation proposée — palier « {$palier['libelle']} », $montant XOF");
+        if ($transaction_locale) db_commit();
+    } catch (Exception $e) {
+        if ($transaction_locale) db_rollback();
+        throw $e;
+    }
+
+    ach_notifier_role($workflow[0]['role'], "Affectation d'équipement en attente de votre visa — étape : {$workflow[0]['label']}.");
+    return ['id' => $affectation_id, 'palier' => $palier['libelle'], 'etapes' => count($workflow)];
+}
+
+// ── Étape 4 — Vise (ou rejette) l'étape courante d'une proposition
+//    d'affectation. Même structure que ach_viser() pour une FEB, sans
+//    l'étape n1 (une affectation n'a pas de supérieur hiérarchique dans
+//    son circuit — seulement les signataires du palier).
+function ach_viser_affectation(int $affectation_id, array $user, bool $accepte, string $commentaire = ''): bool {
+    $uid = (int)$user['id'];
+    if (!$accepte && trim($commentaire) === '') {
+        throw new AchValidationException('Le motif de rejet est obligatoire.');
+    }
+
+    $row = db_fetch_one("SELECT * FROM equipement_affectations WHERE id=?", [$affectation_id]);
+    if (!$row) throw new AchValidationException('Proposition introuvable.');
+    if ($row['statut'] !== 'en_validation') throw new AchValidationException("Cette proposition n'est plus en cours de validation.");
+    $affectation = ach_affectation_decode($row);
+    $cur = (int)$affectation['etape_actuelle'];
+    $wf  = $affectation['workflow_snapshot'];
+
+    $roles = di_user_roles($uid);
+    if (!di_can_validate($roles, $uid, $wf, $cur, (int)$affectation['proposee_par'], null)) {
+        throw new AchValidationException('Vous ne pouvez pas viser cette étape.');
+    }
+
+    $now = date('Y-m-d H:i:s');
+    $nom = trim(($user['prenom'] ?? '') . ' ' . ($user['nom'] ?? ''));
+    $etape_label = $wf[$cur]['label'] ?? $wf[$cur]['role'];
+
+    $signatures   = $affectation['signatures'];
+    $signatures[] = ['etape' => $cur, 'etape_label' => $etape_label, 'user_id' => $uid, 'nom' => $nom,
+        'action' => $accepte ? 'approuve' : 'rejete', 'commentaire' => $commentaire, 'date' => $now];
+    $historique   = $affectation['historique'];
+    $historique[] = ['action' => $accepte ? 'valide' : 'rejete', 'etape' => $etape_label, 'par' => $uid,
+        'nom' => $nom, 'commentaire' => $commentaire, 'date' => $now];
+    $sigJson  = json_encode($signatures, JSON_UNESCAPED_UNICODE);
+    $histJson = json_encode($historique, JSON_UNESCAPED_UNICODE);
+
+    $equipement = db_fetch_one("SELECT * FROM equipements WHERE id=?", [$affectation['equipement_id']]);
+
+    if (!$accepte) {
+        $stmt = db_query(
+            "UPDATE equipement_affectations SET statut='rejetee', etape_rejet=?, motif_rejet=?, signatures=?::jsonb, historique=?::jsonb
+              WHERE id=? AND etape_actuelle=?",
+            [$cur, $commentaire, $sigJson, $histJson, $affectation_id, $cur]
+        );
+        if ($stmt->rowCount() === 0) return false;
+        // Retour dans la file : une proposition rejetée n'immobilise pas
+        // l'exemplaire, il redevient proposable — éventuellement vers une
+        // autre destination.
+        db_query("UPDATE equipements SET statut_stock='en_attente_affectation' WHERE id=?", [$affectation['equipement_id']]);
+        audit_log($uid, 'UPDATE', 'equipements', $affectation['equipement_id'], "Affectation rejetée à l'étape « $etape_label » : $commentaire");
+        if ($affectation['proposee_par']) {
+            db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','Affectation rejetée',?,?)",
+                [(int)$affectation['proposee_par'],
+                 "L'affectation de « " . ($equipement['numero_serie_interne'] ?? '') . " » a été rejetée à l'étape « $etape_label » : $commentaire",
+                 '/pages/achats/equipements_attente.php']);
+        }
+        return true;
+    }
+
+    $next = di_next_step($wf, $cur);
+    if ($next === null) {
+        $statut_final = $affectation['utilisateur_id'] ? 'affecte' : 'en_stock';
+        $stmt = db_query(
+            "UPDATE equipement_affectations SET statut='validee', valide_le=?, signatures=?::jsonb, historique=?::jsonb
+              WHERE id=? AND etape_actuelle=?",
+            [$now, $sigJson, $histJson, $affectation_id, $cur]
+        );
+        if ($stmt->rowCount() === 0) return false;
+        db_query(
+            "UPDATE equipements SET site_id=?, utilisateur_id=?, statut_stock=?, date_mise_en_service=COALESCE(date_mise_en_service, ?) WHERE id=?",
+            [$affectation['site_id'], $affectation['utilisateur_id'], $statut_final, date('Y-m-d'), $affectation['equipement_id']]
+        );
+        audit_log($uid, 'UPDATE', 'equipements', $affectation['equipement_id'], "Affectation validée — étape finale « $etape_label »");
+        if ($affectation['proposee_par']) {
+            db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','Affectation validée',?,?)",
+                [(int)$affectation['proposee_par'],
+                 "L'affectation de « " . ($equipement['numero_serie_interne'] ?? '') . " » est validée.",
+                 '/pages/equipements.php']);
+        }
+        return true;
+    }
+
+    $stmt = db_query(
+        "UPDATE equipement_affectations SET etape_actuelle=?, signatures=?::jsonb, historique=?::jsonb
+          WHERE id=? AND etape_actuelle=?",
+        [$next, $sigJson, $histJson, $affectation_id, $cur]
+    );
+    if ($stmt->rowCount() === 0) return false;
+    audit_log($uid, 'UPDATE', 'equipements', $affectation['equipement_id'], "Affectation — étape « $etape_label » visée, passage à « {$wf[$next]['label']} »");
+    ach_notifier_role($wf[$next]['role'], "Affectation d'équipement en attente de votre visa — étape : {$wf[$next]['label']}.");
+    return true;
+}
+
+// ── Étape 4 — Propositions d'affectation en attente du visa de
+//    l'utilisateur courant. Même filtre à trois portes que ach_a_viser()
+//    (rôle de circuit, rôle lié à un département, ou N+1).
+function ach_a_viser_affectations(array $user): array {
+    $uid   = (int)$user['id'];
+    $roles = di_user_roles($uid);
+    $has_dept_role = (bool)db_fetch_value(
+        "SELECT COUNT(*) FROM user_departements ud JOIN di_roles dr ON dr.departement_id = ud.departement_id WHERE ud.user_id=?",
+        [$uid]
+    );
+    $est_n1 = (bool)db_fetch_value("SELECT COUNT(*) FROM user_departements WHERE user_id=? AND is_n1=1", [$uid]);
+    if (!$roles && !$has_dept_role && !$est_n1) return [];
+
+    $rows = db_fetch_all(
+        "SELECT ea.*, e.numero_serie_interne, e.prix_achat, n.libelle AS nomenclature_libelle,
+                s.nom AS site_nom, CONCAT(u2.prenom,' ',u2.nom) AS utilisateur_nom
+         FROM equipement_affectations ea
+         JOIN equipements e ON e.id = ea.equipement_id
+         LEFT JOIN nomenclatures n ON n.id = e.nomenclature_id
+         LEFT JOIN sites s         ON s.id = ea.site_id
+         LEFT JOIN users u2        ON u2.id = ea.utilisateur_id
+         WHERE ea.statut='en_validation' AND ea.proposee_par <> ?
+         ORDER BY ea.proposee_le ASC",
+        [$uid]
+    );
+    $out = [];
+    foreach ($rows as $r) {
+        $a = ach_affectation_decode($r);
+        if (di_can_validate($roles, $uid, $a['workflow_snapshot'], (int)$a['etape_actuelle'], (int)$a['proposee_par'], null)) {
+            $out[] = $a;
+        }
+    }
+    return $out;
+}
+
 // ── Éclatement en lignes de suivi Sage, à la confirmation d'une FEB
 //    (Bloc 1, J6). Appelée par ach_viser() dans la même transaction que le
 //    passage à confirmee — jamais en dehors.
