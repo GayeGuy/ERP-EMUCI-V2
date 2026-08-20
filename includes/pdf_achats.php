@@ -71,8 +71,23 @@ function ach_html_fiche_validation(int $feb_id): string {
         </div>";
     }
 
+    // Circuit aval seul : le visa du supérieur hiérarchique (role 'n1',
+    // désormais première étape du circuit — cf. ach_lancer_validation())
+    // appartient à la fiche demandeur (bloc DEMANDEUR + SUPÉRIEUR
+    // HIÉRARCHIQUE, ach_html_fiche_imprimable()), pas à cette pièce
+    // archivée qui documente uniquement le circuit financier aval
+    // (paliers RAF/DAF/PDG). Filtré par label, pas seulement exclu du
+    // circuit : sa signature ne doit pas non plus apparaître ci-dessous.
+    $n1_label_validation = null;
+    foreach ($feb['workflow_snapshot'] as $e) {
+        if (($e['role'] ?? '') === 'n1') { $n1_label_validation = $e['label'] ?? null; break; }
+    }
+    $etapes_aval = array_values(array_filter($feb['workflow_snapshot'], fn($e) => ($e['role'] ?? '') !== 'n1'));
+    $circuit = implode(' → ', array_map(fn($e) => h($e['label'] ?? $e['role'] ?? ''), $etapes_aval));
+
     $signatures_html = '';
     foreach ($feb['signatures'] as $s) {
+        if ($n1_label_validation !== null && ($s['etape_label'] ?? '') === $n1_label_validation) continue;
         $action_lbl = ($s['action'] ?? '') === 'approuve' ? 'Approuvé' : 'Rejeté';
         $signatures_html .= "<tr>
             <td style='padding:6px 9px;border:1px solid #d1d5db'>" . h($s['etape_label'] ?? '') . "</td>
@@ -82,8 +97,6 @@ function ach_html_fiche_validation(int $feb_id): string {
             <td style='padding:6px 9px;border:1px solid #d1d5db'>" . h($s['commentaire'] ?? '') . "</td>
         </tr>";
     }
-
-    $circuit = implode(' → ', array_map(fn($e) => h($e['label'] ?? $e['role'] ?? ''), $feb['workflow_snapshot']));
 
     ob_start();
     ?>
@@ -204,6 +217,43 @@ function ach_html_fiche_imprimable(int $feb_id): string {
     $signatures_par_etape = [];
     foreach ($feb['signatures'] as $s) { $signatures_par_etape[$s['etape_label'] ?? ''] = $s; }
 
+    // ── Bloc DEMANDEUR + SUPÉRIEUR HIÉRARCHIQUE (modèle papier, feuille
+    //    « FEB DEMANDEUR ») — propre à cette fiche, jamais sur la fiche de
+    //    validation archivée qui ne documente que le circuit financier aval
+    //    (cf. ach_html_fiche_validation()). Le demandeur n'a pas de visa à
+    //    proprement parler : déposer/soumettre la FEB EST son engagement,
+    //    daté à la soumission (ou à la création tant qu'elle est en
+    //    brouillon). Le N+1 est résolu et figé sur feb.n1_user_id au
+    //    lancement de la validation (ach_lancer_validation()) — case vide
+    //    tant qu'il n'est pas encore visé, ou que la validation n'a même
+    //    pas été lancée.
+    $n1_nom = $feb['n1_user_id'] ? db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [(int)$feb['n1_user_id']]) : null;
+    $n1_label_imprimable = null;
+    foreach (($feb['workflow_snapshot'] ?: []) as $e) {
+        if (($e['role'] ?? '') === 'n1') { $n1_label_imprimable = $e['label'] ?? null; break; }
+    }
+    $n1_signature = $n1_label_imprimable ? ($signatures_par_etape[$n1_label_imprimable] ?? null) : null;
+
+    // Case DEMANDEUR : toujours renseignée dès que la FEB existe — déposer/
+    // soumettre est l'engagement du demandeur, il n'y a pas de visa distinct
+    // à attendre. Date de soumission si elle a eu lieu, sinon de création
+    // (brouillon imprimé avant soumission).
+    $date_demandeur = $feb['date_soumission'] ?: $feb['date_creation'];
+    $bloc_demandeur_n1 = "
+        <td style='width:50%;vertical-align:top;padding:8px;border:1px solid #d1d5db'>
+            <div style='font-size:9px;text-transform:uppercase;color:#888;margin-bottom:26px'>Demandeur</div>
+            <div style='font-size:10px;font-weight:700'>" . h($demandeur['nom'] ?? '—') . "</div>
+            <div style='font-size:9px;color:#666'>" . h($date_demandeur ? date('d/m/Y', strtotime($date_demandeur)) : '') . "</div>
+        </td>
+        <td style='width:50%;vertical-align:top;padding:8px;border:1px solid #d1d5db'>
+            <div style='font-size:9px;text-transform:uppercase;color:#888;margin-bottom:26px'>Supérieur hiérarchique</div>"
+            . (!$n1_nom
+                ? "<div style='font-size:9px;color:#aaa'>Aucun N+1 désigné pour ce service.</div>"
+                : ($n1_signature
+                    ? "<div style='font-size:10px;font-weight:700'>" . h($n1_signature['nom'] ?? $n1_nom) . "</div><div style='font-size:9px;color:#666'>" . h(!empty($n1_signature['date']) ? date('d/m/Y', strtotime($n1_signature['date'])) : '') . "</div>"
+                    : "<div style='font-size:10px;color:#374151'>" . h($n1_nom) . "</div><div style='border-bottom:1px solid #ccc;height:1px;margin-top:10px'></div><div style='font-size:9px;color:#aaa;margin-top:4px'>Signature en attente</div>")) .
+        "</td>";
+
     // ── Blocs repris du modèle papier « FEB FINALE DES ACHATS » (classeur
     //    FEB EMUCI.xlsx). Chacun s'affiche en cases vides tant que la donnée
     //    n'existe pas : c'est un formulaire, pas un rapport — une FEB en
@@ -263,8 +313,11 @@ function ach_html_fiche_imprimable(int $feb_id): string {
         </tr>";
     }
 
+    // Circuit aval seul ici aussi (cf. bloc DEMANDEUR + SUPÉRIEUR
+    // HIÉRARCHIQUE ci-dessus, qui porte déjà la case du N+1) — sans quoi
+    // il apparaîtrait deux fois sur la même fiche.
     $cases_signature = '';
-    $etapes = $feb['workflow_snapshot'] ?: [];
+    $etapes = array_values(array_filter($feb['workflow_snapshot'] ?: [], fn($e) => ($e['role'] ?? '') !== 'n1'));
     if ($etapes) {
         foreach ($etapes as $e) {
             $label = $e['label'] ?? $e['role'] ?? '';
@@ -336,6 +389,9 @@ function ach_html_fiche_imprimable(int $feb_id): string {
         <div><?= h($feb['objet']) ?></div>
       </div>
 
+      <div style="font-size:10px;text-transform:uppercase;color:#888;margin-bottom:6px">Demandeur / Supérieur hiérarchique</div>
+      <table width="100%" style="margin-bottom:12px"><tr><?= $bloc_demandeur_n1 ?></tr></table>
+
       <table class="data">
         <thead><tr><th>Désignation</th><th>Qté</th><th>Code analytique</th><th>Type d'achat</th></tr></thead>
         <tbody><?= $lignes_html ?: '<tr><td colspan="4" style="padding:8px;text-align:center;color:#888">Aucune ligne.</td></tr>' ?></tbody>
@@ -389,7 +445,7 @@ function ach_html_fiche_imprimable(int $feb_id): string {
         </tbody>
       </table>
 
-      <div style="font-size:10px;text-transform:uppercase;color:#888;margin-bottom:6px">Circuit de signature</div>
+      <div style="font-size:10px;text-transform:uppercase;color:#888;margin-bottom:6px">Circuit de validation (Achats)</div>
       <table width="100%"><tr><?= $cases_signature ?></tr></table>
 
       <div style="margin-top:20px;font-size:9px;color:#888">
