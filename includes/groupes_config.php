@@ -245,6 +245,9 @@ function _groupes_def(): array {
                 ['label'=>'Stock par département', 'icon'=>'ph-buildings',
                  'url'=>'pages/achats/stock_departements.php','active_keys'=>['achats_stock_departements'],
                  'perm'=>['achats_suivi','can_read']],
+                ['label'=>"File d'attente équipements", 'icon'=>'ph-desktop-tower',
+                 'url'=>'pages/achats/equipements_attente.php','active_keys'=>['achats_equipements_attente'],
+                 'perm'=>['achats_suivi','can_read']],
                 // RAF/DAF/PDG (lecteur) portent achats_param can_read/can_update
                 // uniquement pour le budget (migration_achats_13) : exclus des
                 // 4 autres écrans, qui restent à l'administration (même 403

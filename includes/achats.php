@@ -265,6 +265,29 @@ function ach_crediter_stock_departement(int $article_id, int $departement_id, in
     );
 }
 
+// ── Rattache (ou retire) une nomenclature à une ligne DAI — au plus tôt à
+//    sa réception (pages/achats/receptions.php), jamais à la création de
+//    la FEB : une ligne DAI n'a le plus souvent pas d'article_id (saisie
+//    libre), et même quand elle en a un, ce n'est pas la même chose qu'une
+//    nomenclature (referentiel equipements, distinct du référentiel achats
+//    articles). Décision du 2026-08-20 : rattachement optionnel, sans lui
+//    la ligne reste réceptionnable, elle ne produit simplement aucun
+//    exemplaire equipements (cf. ach_receptionner()).
+function ach_lier_nomenclature_ligne(int $feb_ligne_id, ?int $nomenclature_id, array $user): void {
+    $ligne = db_fetch_one("SELECT * FROM feb_lignes WHERE id=?", [$feb_ligne_id]);
+    if (!$ligne) throw new AchValidationException('Ligne introuvable.');
+    if ($ligne['type_achat'] !== 'DAI') {
+        throw new AchValidationException("Le rattachement à une nomenclature n'a de sens que pour une ligne DAI (immobilisation).");
+    }
+    if ($nomenclature_id) {
+        $existe = db_fetch_value("SELECT 1 FROM nomenclatures WHERE id=?", [$nomenclature_id]);
+        if (!$existe) throw new AchValidationException('Nomenclature introuvable.');
+    }
+    db_query("UPDATE feb_lignes SET nomenclature_id=? WHERE id=?", [$nomenclature_id ?: null, $feb_ligne_id]);
+    audit_log((int)$user['id'], 'UPDATE', 'achats_suivi', $feb_ligne_id,
+        $nomenclature_id ? "Nomenclature rattachée à la ligne « {$ligne['designation']} »" : "Rattachement nomenclature retiré sur la ligne « {$ligne['designation']} »");
+}
+
 // ── Exception de validation FEB — porte le champ fautif pour que l'écran
 //    place le message à côté du champ concerné, pas dans une bannière
 //    générale (cf. Bloc 4 de la spécification).
@@ -1639,7 +1662,9 @@ function ach_receptionner(int $suivi_id, int $quantite, string $date, ?string $b
     if ($quantite <= 0) throw new AchValidationException('La quantité reçue doit être strictement positive.');
 
     $ligne = db_fetch_one(
-        "SELECT fs.*, fl.article_id, fl.designation, f.numero AS feb_numero, f.acheteur_id, f.demandeur_id, f.departement_id
+        "SELECT fs.*, fl.article_id, fl.designation, fl.type_achat, fl.nomenclature_id,
+                fl.quantite AS ligne_quantite, fl.montant_ttc AS ligne_montant_ttc,
+                f.numero AS feb_numero, f.acheteur_id, f.demandeur_id, f.departement_id
          FROM feb_suivi fs
          JOIN feb_lignes fl ON fl.id = fs.feb_ligne_id
          JOIN feb f         ON f.id  = fs.feb_id
@@ -1704,6 +1729,40 @@ function ach_receptionner(int $suivi_id, int $quantite, string $date, ?string $b
             if ($ligne['departement_id']) {
                 ach_crediter_stock_departement((int)$ligne['article_id'], (int)$ligne['departement_id'], $quantite);
             }
+        }
+
+        // Étape 3b : une ligne DAI rattachée à une nomenclature (au plus
+        // tôt à cette réception, cf. ach_lier_nomenclature_ligne()) produit
+        // un exemplaire equipements PAR UNITÉ reçue, jamais un par ligne —
+        // une quantité de 5 donne 5 fiches affectables séparément
+        // (Étape 4). Sans rattachement, la ligne reste réceptionnable
+        // normalement : c'est le choix retenu, pas un blocage silencieux.
+        if ($ligne['type_achat'] === 'DAI' && $ligne['nomenclature_id']) {
+            $ligne_quantite = (int)$ligne['ligne_quantite'];
+            // Valorisé au montant TOTAL de la ligne divisé par sa quantité
+            // D'ORIGINE (fl.quantite) — jamais par la quantité de cette
+            // réception si elle n'est que partielle.
+            $prix_unitaire = $ligne_quantite > 0 ? (int) round(((int)$ligne['ligne_montant_ttc']) / $ligne_quantite) : 0;
+            $nomenclature  = db_fetch_one("SELECT categorie, duree_amortissement_mois FROM nomenclatures WHERE id=?", [(int)$ligne['nomenclature_id']]);
+            $chrono = (int) db_fetch_value("SELECT COALESCE(MAX(numero_chrono),0) FROM equipements");
+            for ($i = 1; $i <= $quantite; $i++) {
+                $chrono++;
+                // Numéro de série interne provisoire, unique et traçable
+                // jusqu'à la ligne d'origine — à corriger par le magasin une
+                // fois l'exemplaire physiquement étiqueté (pages/equipements.php).
+                $nsi = "DAI-{$ligne['feb_ligne_id']}-" . ($recue + $i);
+                db_query(
+                    "INSERT INTO equipements
+                     (numero_serie_interne, numero_chrono, nomenclature_id, categorie, departement_id, feb_ligne_id,
+                      etat, statut_stock, date_acquisition, prix_achat, duree_amortissement_mois, actif, created_by)
+                     VALUES (?,?,?,?,?,?, 'neuf','en_attente_affectation', ?,?,?, 1, ?)",
+                    [$nsi, $chrono, (int)$ligne['nomenclature_id'], $nomenclature['categorie'] ?? 'informatique',
+                     $ligne['departement_id'] ?: null, (int)$ligne['feb_ligne_id'], $date, $prix_unitaire,
+                     $nomenclature['duree_amortissement_mois'] ?? null, $uid]
+                );
+            }
+            audit_log($uid, 'CREATE', 'equipements', (int)$ligne['feb_ligne_id'],
+                "$quantite exemplaire(s) créé(s) en attente d'affectation — « {$ligne['designation']} » (FEB {$ligne['feb_numero']})");
         }
 
         audit_log($uid, 'CREATE', 'achats_suivi', $suivi_id,

@@ -31,6 +31,17 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$can_receptionner) json_response(false, 'Action réservée.');
     $action = $_POST['action'] ?? '';
 
+    if ($action === 'lier_nomenclature') {
+        $feb_ligne_id    = (int)($_POST['feb_ligne_id'] ?? 0);
+        $nomenclature_id = (int)($_POST['nomenclature_id'] ?? 0) ?: null;
+        try {
+            ach_lier_nomenclature_ligne($feb_ligne_id, $nomenclature_id, $user);
+            json_response(true, $nomenclature_id ? 'Nomenclature rattachée.' : 'Rattachement retiré.');
+        } catch (AchValidationException $e) {
+            json_response(false, $e->getMessage());
+        }
+    }
+
     if ($action === 'receptionner') {
         $suivi_id    = (int)($_POST['suivi_id'] ?? 0);
         $quantite    = (int)($_POST['quantite'] ?? 0);
@@ -74,18 +85,24 @@ if ($site_force) { $where[] = 'fs.site_id = ?'; $params[] = $site_force; }
 
 $lignes = db_fetch_all(
     "SELECT fs.*, f.numero AS feb_numero,
-            fl.designation, fl.unite, fl.fournisseur_id,
+            fl.designation, fl.unite, fl.fournisseur_id, fl.type_achat, fl.nomenclature_id,
             fo.raison_sociale AS fournisseur_nom,
-            s.nom AS site_nom
+            s.nom AS site_nom,
+            n.libelle AS nomenclature_libelle
      FROM feb_suivi fs
      JOIN feb f          ON f.id = fs.feb_id
      JOIN feb_lignes fl  ON fl.id = fs.feb_ligne_id
      LEFT JOIN fournisseurs fo ON fo.id = fl.fournisseur_id
      LEFT JOIN sites s         ON s.id = fs.site_id
+     LEFT JOIN nomenclatures n ON n.id = fl.nomenclature_id
      WHERE " . implode(' AND ', $where) . "
      ORDER BY fs.date_livraison_prevue ASC",
     $params
 );
+// Lignes DAI : rattachement optionnel à une nomenclature avant réception
+// (Étape 3, décision du 2026-08-20) — référentiel chargé une seule fois,
+// utilisé par la modale de réception.
+$nomenclatures = db_fetch_all("SELECT id, code, libelle, categorie FROM nomenclatures ORDER BY categorie, libelle");
 
 // ── Rafraîchissement live — fragment HTML seul (le tableau), cf. le même
 //    mécanisme sur file_attente.php.
@@ -98,16 +115,25 @@ function ach_rc_render_zone(array $lignes, bool $can_receptionner, int $site_for
       <div style="overflow-x:auto">
       <table class="ach-table">
         <thead><tr>
-          <th>FEB</th><th>Article</th><th>Fournisseur</th><th>Commandée</th><th>Déjà reçue</th><th>Reste à recevoir</th>
+          <th>FEB</th><th>Article</th><th>Nomenclature</th><th>Fournisseur</th><th>Commandée</th><th>Déjà reçue</th><th>Reste à recevoir</th>
           <th>Livraison prévue</th><?php if ($can_receptionner): ?><th>Actions</th><?php endif; ?>
         </tr></thead>
         <tbody>
           <?php foreach ($lignes as $l):
             $reste = (int)$l['quantite_commandee'] - (int)$l['quantite_recue'];
+            $est_dai = $l['type_achat'] === 'DAI';
           ?>
           <tr>
             <td style="font-weight:700;color:var(--navy)"><?= h($l['feb_numero'] ?: '—') ?></td>
             <td><?= h($l['designation']) ?></td>
+            <td>
+              <?php if (!$est_dai): ?>—
+              <?php elseif ($l['nomenclature_libelle']): ?>
+                <span class="ach-badge on"><?= h($l['nomenclature_libelle']) ?></span>
+              <?php else: ?>
+                <span class="ach-badge off" style="background:#FEF3C7;color:#92400E">DAI — non rattachée</span>
+              <?php endif; ?>
+            </td>
             <td><?= h($l['fournisseur_nom'] ?: '—') ?></td>
             <td><?= (int)$l['quantite_commandee'] ?> <?= h($l['unite'] ?: '') ?></td>
             <td><?= (int)$l['quantite_recue'] ?></td>
@@ -117,9 +143,9 @@ function ach_rc_render_zone(array $lignes, bool $can_receptionner, int $site_for
             <td>
               <button type="button" class="btn btn-primary btn-sm"
                       onclick='rcOuvrir(<?= json_encode([
-                        "id"=>(int)$l["id"], "feb_numero"=>$l["feb_numero"], "designation"=>$l["designation"],
+                        "id"=>(int)$l["id"], "feb_ligne_id"=>(int)$l["feb_ligne_id"], "feb_numero"=>$l["feb_numero"], "designation"=>$l["designation"],
                         "unite"=>$l["unite"], "reste"=>$reste, "commandee"=>(int)$l["quantite_commandee"],
-                        "recue"=>(int)$l["quantite_recue"],
+                        "recue"=>(int)$l["quantite_recue"], "est_dai"=>$est_dai, "nomenclature_id"=>$l["nomenclature_id"],
                       ], JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
                 Réceptionner
               </button>
@@ -150,6 +176,9 @@ include __DIR__ . '/../../templates/header.php';
 .ach-table td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
 .ach-table tr:last-child td{border-bottom:none}
 .ach-empty{padding:40px 20px;text-align:center;color:var(--muted);font-size:13px}
+.ach-badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap}
+.ach-badge.on{background:#D1FAE5;color:#065F46}
+.ach-badge.off{background:#F1F5F9;color:#475569}
 .ach-modal-bg{display:none;position:fixed;inset:0;background:rgba(6,3,58,.45);z-index:2000;align-items:center;justify-content:center;padding:20px}
 .ach-modal-bg.open{display:flex}
 .ach-modal{background:white;border-radius:16px;padding:26px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
@@ -176,11 +205,24 @@ include __DIR__ . '/../../templates/header.php';
   <div class="ach-modal" role="dialog" aria-labelledby="rc-modal-title">
     <h3 id="rc-modal-title">Réception — <span id="rc-feb"></span></h3>
     <input type="hidden" id="rc-suivi-id" value="">
+    <input type="hidden" id="rc-feb-ligne-id" value="">
     <div class="rc-grid">
       <div style="grid-column:1/-1"><div class="rc-lbl">Article</div><div class="rc-val" id="rc-article"></div></div>
       <div><div class="rc-lbl">Commandée</div><div class="rc-val" id="rc-commandee"></div></div>
       <div><div class="rc-lbl">Déjà reçue</div><div class="rc-val" id="rc-recue"></div></div>
       <div><div class="rc-lbl">Reste à recevoir</div><div class="rc-val big" id="rc-reste"></div></div>
+    </div>
+    <div class="ach-fg" id="rc-nomenclature-wrap" style="display:none">
+      <label for="rc-nomenclature">Nomenclature (immobilisation — facultatif)</label>
+      <select id="rc-nomenclature">
+        <option value="">— Ne pas créer de fiche équipement —</option>
+        <?php foreach ($nomenclatures as $n): ?>
+          <option value="<?= $n['id'] ?>"><?= h($n['libelle']) ?> (<?= h($n['categorie']) ?>)</option>
+        <?php endforeach; ?>
+      </select>
+      <div class="ach-hint" style="font-size:11.5px;color:var(--muted);margin-top:4px">
+        Rattachée, chaque unité reçue crée une fiche équipement individuelle en attente d'affectation. Laissé vide, aucune fiche n'est créée.
+      </div>
     </div>
     <div class="ach-fg">
       <label for="rc-quantite">Quantité reçue cette fois</label>
@@ -219,6 +261,9 @@ function rcOuvrir(l) {
   document.getElementById('rc-date').value = new Date().toISOString().slice(0, 10);
   document.getElementById('rc-bl').value = '';
   document.getElementById('rc-observation').value = '';
+  document.getElementById('rc-feb-ligne-id').value = l.feb_ligne_id || '';
+  document.getElementById('rc-nomenclature-wrap').style.display = l.est_dai ? '' : 'none';
+  document.getElementById('rc-nomenclature').value = l.nomenclature_id || '';
   document.getElementById('rc-err').style.display = 'none';
   document.getElementById('rc-modal').classList.add('open');
   setTimeout(() => document.getElementById('rc-quantite').focus(), 80);
@@ -232,6 +277,25 @@ function rcValider() {
   const quantite = parseInt(document.getElementById('rc-quantite').value, 10);
   if (!quantite || quantite < 1) { err.textContent = 'La quantité reçue doit être strictement positive.'; err.style.display = 'block'; return; }
 
+  // Ligne DAI : le rattachement (ou son retrait) est enregistré avant la
+  // réception elle-même, dans un aller séparé — plus simple qu'une
+  // transaction unique côté serveur, et sans conséquence si l'un réussit
+  // sans l'autre (le rattachement seul ne crée aucun exemplaire).
+  const nomenclatureWrap = document.getElementById('rc-nomenclature-wrap');
+  const lierPuisReceptionner = () => {
+    if (nomenclatureWrap.style.display === 'none') return Promise.resolve(true);
+    const fdLien = new FormData();
+    fdLien.append('action', 'lier_nomenclature');
+    fdLien.append('feb_ligne_id', document.getElementById('rc-feb-ligne-id').value);
+    fdLien.append('nomenclature_id', document.getElementById('rc-nomenclature').value);
+    return fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fdLien })
+      .then(r => r.json())
+      .then(res => {
+        if (!res.success) { err.textContent = res.message; err.style.display = 'block'; return false; }
+        return true;
+      });
+  };
+
   const fd = new FormData();
   fd.append('action', 'receptionner');
   fd.append('suivi_id', document.getElementById('rc-suivi-id').value);
@@ -241,7 +305,9 @@ function rcValider() {
   const blFile = document.getElementById('rc-bl').files[0];
   if (blFile) fd.append('bl', blFile);
 
-  fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
+  lierPuisReceptionner().then(ok => {
+    if (!ok) return;
+    return fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
     .then(r => r.json())
     .then(res => {
       if (!res.success) { err.textContent = res.message; err.style.display = 'block'; return; }
@@ -249,6 +315,7 @@ function rcValider() {
       rcFermer();
       setTimeout(() => location.reload(), 600);
     });
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
