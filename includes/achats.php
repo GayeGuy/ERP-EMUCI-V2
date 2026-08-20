@@ -1234,6 +1234,23 @@ function ach_lancer_validation(int $feb_id, array $user): array {
     return ['etapes' => count($workflow), 'palier' => $palier['libelle'], 'avertissements' => $controle['avertissements']];
 }
 
+// ── Accès à l'écran des visas. La matrice de permissions raisonne par
+//    module, elle ne sait pas exprimer « supérieur hiérarchique d'un
+//    département » : un responsable des Opérations est un simple
+//    superviseur_operation, sans achats.can_update, et se voyait refuser
+//    l'écran alors même qu'une FEB attendait son visa.
+//    Même nature de problème que ach_est_acheteur(), résolu de la même
+//    façon : une règle métier là où la matrice s'arrête.
+//    L'écran ne montre que ce que ach_a_viser() rend — quelqu'un sans visa
+//    en attente y trouve une liste vide, jamais la FEB d'un autre.
+function ach_peut_ouvrir_visas(array $user): bool {
+    if (can('achats', 'can_update')) return true;
+    return (bool) db_fetch_value(
+        "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND is_n1=1",
+        [(int)$user['id']]
+    );
+}
+
 // ── Supérieur hiérarchique d'un département, hors le demandeur lui-même.
 //    La désignation vit dans user_departements.is_n1 — le même mécanisme que
 //    les demandes internes, pas un second registre à tenir.

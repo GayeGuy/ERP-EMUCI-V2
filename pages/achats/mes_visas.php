@@ -13,7 +13,13 @@ require_once __DIR__ . '/../../includes/achats.php';
 
 require_auth();
 $user = current_user();
-require_permission('achats', 'can_update');
+// Pas require_permission() : le supérieur hiérarchique n'a pas
+// achats.can_update — cf. ach_peut_ouvrir_visas().
+if (!ach_peut_ouvrir_visas($user)) {
+    http_response_code(403);
+    include __DIR__ . '/../../templates/403.php';
+    exit;
+}
 $uid = (int)$user['id'];
 $_SESSION['groupe_actif'] = 'ACHATS';
 $page_title  = 'Mes visas';
@@ -30,7 +36,12 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         if (!$row) json_response(false, 'FEB introuvable ou plus en cours de validation.');
         $feb = ach_feb_decode($row);
         $roles = di_user_roles($uid);
-        if (!di_can_validate($roles, $uid, $feb['workflow_snapshot'], (int)$feb['etape_actuelle'], (int)$feb['demandeur_id'], null)) {
+        // n1_user_id figé au lancement, comme dans ach_viser() : passer null
+        // ferait retomber di_can_validate() sur « tout porteur du code n1 »,
+        // que seuls les administrateurs possèdent — le supérieur hiérarchique
+        // verrait la FEB dans sa liste sans pouvoir l'ouvrir.
+        $n1_user_id = $feb['n1_user_id'] ? (int)$feb['n1_user_id'] : null;
+        if (!di_can_validate($roles, $uid, $feb['workflow_snapshot'], (int)$feb['etape_actuelle'], (int)$feb['demandeur_id'], $n1_user_id)) {
             json_response(false, "Ce n'est pas votre étape à viser.");
         }
 
