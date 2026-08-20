@@ -947,7 +947,7 @@ function febEnregistrerOffre() {
     // Le bouton reste inerte jusqu'au rechargement : le relâcher ici
     // rouvrirait la fenêtre de double envoi qu'on vient de fermer.
     setTimeout(() => location.reload(), 500);
-  }).catch(() => { relacher(); err.textContent = 'La requête n'a pas abouti — réessayez.'; err.style.display = 'block'; });
+  }).catch(() => { relacher(); err.textContent = "La requête n'a pas abouti — réessayez."; err.style.display = 'block'; });
 }
 function febSupprimerOffre(id) {
   if (!confirm('Supprimer cette offre ?')) return;
