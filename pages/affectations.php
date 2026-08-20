@@ -196,6 +196,7 @@ include __DIR__ . '/../templates/header.php';
 .mouv-equip{font-family:monospace;font-weight:700;font-size:13px;color:var(--navy)}
 .mouv-detail{font-size:12px;color:var(--muted);margin-top:2px}
 .mouv-date{font-size:12px;color:var(--muted);white-space:nowrap}
+.mouv-scroll{max-height:450px;overflow-y:auto}
 
 .affecte-group{margin-bottom:16px}
 .affecte-site-title{font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:var(--navy);padding:8px 12px;background:var(--lighter);border-radius:8px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
@@ -358,7 +359,7 @@ include __DIR__ . '/../templates/header.php';
       <div class="card-header">
         <h3><i class="ph ph-clipboard-text" aria-hidden="true"></i> Historique des mouvements <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= fmt_number($total) ?>)</span></h3>
       </div>
-      <div style="padding:4px 20px">
+      <div class="<?= count($mouvements) > 5 ? 'mouv-scroll' : '' ?>" style="padding:4px 20px">
         <?php if(empty($mouvements)): ?>
         <div style="text-align:center;padding:40px;color:var(--muted)">Aucun mouvement enregistré.</div>
         <?php else: foreach($mouvements as $m): ?>
