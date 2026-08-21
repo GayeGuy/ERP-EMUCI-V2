@@ -86,6 +86,19 @@ function require_auth(): void {
     }
     $_SESSION['last_activity'] = time();
 
+    // Mot de passe par défaut (création ou réinitialisation admin) : bloque
+    // tout écran tant qu'il n'a pas été changé. Comparaison par suffixe,
+    // comme la barrière recette juste en dessous — même raison (racine de
+    // service potentiellement variable).
+    if (!empty($_SESSION['must_change_password'])) {
+        $script = '/' . ltrim(str_replace(DIRECTORY_SEPARATOR, '/', $_SERVER['SCRIPT_NAME'] ?? ''), '/');
+        if (substr($script, -strlen('/changer-mot-de-passe.php')) !== '/changer-mot-de-passe.php') {
+            if (is_ajax()) json_response(false, 'Vous devez changer votre mot de passe avant de continuer.');
+            header('Location: ' . APP_URL . '/changer-mot-de-passe.php');
+            exit;
+        }
+    }
+
     // Recette Achats : masquer les menus ne suffit pas, une URL tapée à la
     // main ouvrirait le reste de l'application. La barrière porte sur le
     // script appelé, donc sur tous les points d'entrée, y compris les
