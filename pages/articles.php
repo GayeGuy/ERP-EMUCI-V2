@@ -46,13 +46,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $desc  = trim($_POST['description']            ?? '');
         $seuil = (int)($_POST['seuil_alerte']          ?? 10);
         $prix  = (int)($_POST['prix_unitaire']         ?? 0);
+        $famille_id = (int)($_POST['famille_id']       ?? 0) ?: null;
         if (!$code || !$lib) json_response(false, 'Code et libellé obligatoires.');
         if (db_fetch_value("SELECT COUNT(*) FROM articles WHERE code=?", [$code]) > 0)
             json_response(false, "Le code $code existe déjà.");
         db_query(
-            "INSERT INTO articles (code,libelle,type_article,unite,description,seuil_alerte,prix_unitaire)
-             VALUES (?,?,?,?,?,?,?)",
-            [$code, $lib, $type, $unite, $desc, $seuil, $prix]
+            "INSERT INTO articles (code,libelle,type_article,unite,description,seuil_alerte,prix_unitaire,famille_id)
+             VALUES (?,?,?,?,?,?,?,?)",
+            [$code, $lib, $type, $unite, $desc, $seuil, $prix, $famille_id]
         );
         $id = (int)db_last_id();
         audit_log($user['id'], 'CREATE', 'articles', $id, "Création article $code — $lib");
@@ -69,12 +70,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $desc  = trim($_POST['description']    ?? '');
         $seuil = (int)($_POST['seuil_alerte']  ?? 10);
         $prix  = (int)($_POST['prix_unitaire'] ?? 0);
+        $famille_id = (int)($_POST['famille_id'] ?? 0) ?: null;
         if (!$lib) json_response(false, 'Libellé obligatoire.');
         $old = db_fetch_one("SELECT * FROM articles WHERE id=?", [$id]);
         db_query(
-            "UPDATE articles SET libelle=?,type_article=?,unite=?,description=?,seuil_alerte=?,prix_unitaire=? WHERE id=?",
-            [$lib, $type, $unite, $desc, $seuil, $prix, $id]
+            "UPDATE articles SET libelle=?,type_article=?,unite=?,description=?,seuil_alerte=?,prix_unitaire=?,famille_id=? WHERE id=?",
+            [$lib, $type, $unite, $desc, $seuil, $prix, $famille_id, $id]
         );
+        // Reclassement possible à tout moment (Bloc 1, point 9) : sans effet
+        // rétroactif, les lignes de FEB déjà émises portent déjà leur propre
+        // famille_id, copié au moment de la composition (ach_creer_feb).
+        if ((int)($old['famille_id'] ?? 0) !== (int)($famille_id ?? 0)) {
+            $ancienne = $old['famille_id'] ? db_fetch_value("SELECT libelle FROM familles_achat WHERE id=?", [$old['famille_id']]) : '—';
+            $nouvelle = $famille_id ? db_fetch_value("SELECT libelle FROM familles_achat WHERE id=?", [$famille_id]) : '—';
+            audit_log($user['id'], 'UPDATE', 'articles', $id, "Reclassement article {$old['code']} : famille « $ancienne » → « $nouvelle »");
+        }
         audit_log($user['id'], 'UPDATE', 'articles', $id, "Modification article {$old['code']}", $old);
         json_response(true, 'Article mis à jour.');
     }
@@ -338,6 +348,7 @@ $articles_list = db_fetch_all(
 );
 
 $sites_list  = db_fetch_all("SELECT id,nom,type FROM sites WHERE actif=1 ORDER BY nom");
+$familles_achat = db_fetch_all("SELECT id, code, libelle FROM familles_achat WHERE actif=1 ORDER BY libelle");
 
 $kpi_total   = count($articles_list);
 $kpi_alertes = count(array_filter($articles_list, fn($a) => $a['stock_global'] <= $a['seuil_alerte']));
@@ -723,6 +734,15 @@ include __DIR__ . '/../templates/header.php';
           <?php foreach($TYPES_ARTICLE as $k=>$l): ?><option value="<?= $k ?>"><?= $l ?></option><?php endforeach; ?>
         </select>
       </div>
+      <div class="form-group"><label>Famille d'achat</label>
+        <select class="form-control" id="aFamille">
+          <option value="">— Aucune —</option>
+          <?php foreach($familles_achat as $fa): ?>
+            <option value="<?= $fa['id'] ?>"><?= h($fa['libelle']) ?> (<?= h($fa['code']) ?>)</option>
+          <?php endforeach; ?>
+        </select>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:4px">Rattachement au référentiel achat (budget, comptabilité). Reclassable à tout moment, sans effet sur les FEB déjà émises.</div>
+      </div>
       <div class="form-row cols-2">
         <div class="form-group"><label>Seuil d'alerte</label>
           <input type="number" class="form-control" id="aSeuil" value="10" min="0" step="1">
@@ -868,6 +888,7 @@ function resetAF(){
   ['aId','aCode','aLib','aDesc'].forEach(i=>document.getElementById(i).value='');
   document.getElementById('aSeuil').value='10'; document.getElementById('aPrix').value='0';
   document.getElementById('aUnite').value='unite'; document.getElementById('aType').value='autre';
+  document.getElementById('aFamille').value='';
   document.getElementById('mAAlert').innerHTML=''; document.getElementById('mAT').textContent='Nouvel article';
   document.getElementById('aCode').disabled=false;
 }
@@ -878,7 +899,7 @@ function saveArticle(){
     code:document.getElementById('aCode').value,libelle:document.getElementById('aLib').value,
     type_article:document.getElementById('aType').value,unite:document.getElementById('aUnite').value,
     seuil_alerte:document.getElementById('aSeuil').value,prix_unitaire:document.getElementById('aPrix').value||0,
-    description:document.getElementById('aDesc').value,
+    description:document.getElementById('aDesc').value,famille_id:document.getElementById('aFamille').value,
   }).then(d=>{
     btn.disabled=false;
     if(d.success){toast(d.message,'success');closeMA();setTimeout(()=>location.reload(),800);}
@@ -932,6 +953,7 @@ function editArticle(id){
     document.getElementById('aUnite').value=r.unite; document.getElementById('aSeuil').value=r.seuil_alerte;
     document.getElementById('aPrix').value=r.prix_unitaire||0; document.getElementById('aDesc').value=r.description||'';
     document.getElementById('aType').value=r.type_article||'autre';
+    document.getElementById('aFamille').value=r.famille_id||'';
     document.getElementById('mAD').classList.remove('open'); document.getElementById('mA').classList.add('open');
   });
 }

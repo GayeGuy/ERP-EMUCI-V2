@@ -476,7 +476,9 @@ function refreshNotifs() {
     });
   }).catch(() => {});
 }
-setInterval(refreshNotifs, 60000);
+// Page standalone (n'inclut pas templates/footer.php) : copie propre du
+// même intervalle resserré + pause sur onglet caché que footer.php.
+setInterval(() => { if (!document.hidden) refreshNotifs(); }, 20000);
 
 // ── User chip ─────────────────────────────────────────────────
 function toggleUcMenu(e) {

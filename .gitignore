@@ -4,8 +4,14 @@
 # Uploaded files (user content, not code)
 /uploads/fiches/*
 /uploads/bl/*
+/uploads/feb/*
+/uploads/validation/*
+/uploads/fournisseurs/*
 !/uploads/fiches/.gitkeep
 !/uploads/bl/.gitkeep
+!/uploads/feb/.gitkeep
+!/uploads/validation/.gitkeep
+!/uploads/fournisseurs/.gitkeep
 
 # includes/db.php ne contient PLUS de secrets (config via variables
 # d'environnement) : il DOIT être versionné pour le déploiement Render.
@@ -35,6 +41,11 @@ Thumbs.db
 
 # Config locale Claude Code (ne pas versionner)
 .claude/settings.local.json
+
+# Chaîne de connexion de la base de recette (Neon) — jamais versionnée.
+# Créer le fichier à la main, une seule ligne :
+#     RECETTE_DSN=postgresql://user:motdepasse@hote/base?sslmode=require
+.env.recette
 
 # Fichiers de travail temporaires
 .mien_*.tmp

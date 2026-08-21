@@ -26,12 +26,48 @@ function env(string $key, ?string $default = null): ?string {
 }
 
 // --- Configuration base de données -------------------------------------
-define('DB_HOST',    env('DB_HOST',    'localhost'));
-define('DB_PORT',    env('DB_PORT',    '5432'));
-define('DB_NAME',    env('DB_NAME',    'stockapp'));
-define('DB_USER',    env('DB_USER',    'postgres'));
-define('DB_PASS',    env('DB_PASS',    'postgres'));
-define('DB_SSLMODE', env('DB_SSLMODE', 'prefer'));   // Neon => require
+//
+// Neon, Render et la plupart des hébergeurs livrent la connexion sous forme
+// d'une seule chaîne (postgresql://user:motdepasse@hote/base?sslmode=require).
+// La découper à la main en cinq variables est fastidieux et se prête aux
+// fautes de recopie — sur un mot de passe, l'erreur ne se voit pas. DATABASE_URL
+// est donc acceptée telle quelle et décomposée ici.
+//
+// Les variables séparées restent prioritaires : une base déjà configurée avec
+// DB_HOST/DB_USER/... ne change pas de comportement.
+function env_url_bdd(): array {
+    $url = env('DATABASE_URL');
+    if (!$url) return [];
+    $p = parse_url($url);
+    if (!$p || empty($p['host'])) return [];
+
+    $parts = [
+        'DB_HOST' => $p['host'],
+        'DB_PORT' => isset($p['port']) ? (string)$p['port'] : null,
+        'DB_NAME' => isset($p['path']) ? ltrim($p['path'], '/') : null,
+        'DB_USER' => isset($p['user']) ? rawurldecode($p['user']) : null,
+        'DB_PASS' => isset($p['pass']) ? rawurldecode($p['pass']) : null,
+    ];
+    // sslmode voyage dans la query string chez Neon.
+    if (!empty($p['query'])) {
+        parse_str($p['query'], $q);
+        if (!empty($q['sslmode'])) $parts['DB_SSLMODE'] = $q['sslmode'];
+    }
+    return array_filter($parts, fn($v) => $v !== null && $v !== '');
+}
+
+$_bdd_url = env_url_bdd();
+function env_bdd(string $cle, string $defaut): string {
+    global $_bdd_url;
+    return env($cle) ?? ($_bdd_url[$cle] ?? $defaut);
+}
+
+define('DB_HOST',    env_bdd('DB_HOST',    'localhost'));
+define('DB_PORT',    env_bdd('DB_PORT',    '5432'));
+define('DB_NAME',    env_bdd('DB_NAME',    'stockapp'));
+define('DB_USER',    env_bdd('DB_USER',    'postgres'));
+define('DB_PASS',    env_bdd('DB_PASS',    'postgres'));
+define('DB_SSLMODE', env_bdd('DB_SSLMODE', 'prefer'));   // Neon => require
 
 // --- Configuration application -----------------------------------------
 define('APP_NAME',    'ERP EMUCI');
@@ -39,8 +75,21 @@ define('APP_VERSION', '2.0.0');
 define('APP_URL',     env('APP_URL', 'http://localhost:8080'));
 define('APP_TIMEZONE', env('APP_TIMEZONE', 'Africa/Abidjan'));
 
+// Recette Achats : réduit l'application au seul module Achats, pour que les
+// retours des testeurs restent centrés dessus. Piloté par l'environnement et
+// non par le code, afin que la branche de recette ne diverge pas de la
+// branche de développement — on active la restriction sur le service Render
+// de recette, nulle part ailleurs.
+define('RECETTE_ACHATS', env('RECETTE_ACHATS', '0') === '1');
+
 date_default_timezone_set(APP_TIMEZONE);
 define('SESSION_LIFETIME', 28800);
+// Filet de sécurité côté serveur pour la déconnexion pour inactivité : le
+// minuteur JS (templates/footer.php) ne suffit pas seul, un onglet mis en
+// arrière-plan peut être déchargé par le navigateur (JS perdu, la page se
+// recharge simplement au retour sans passer par la déconnexion) — ce garde-
+// fou tranche sur la dernière requête reçue, indépendamment du JS.
+define('INACTIVITY_TIMEOUT', 900);   // 15 min — cf. le même délai côté JS dans templates/footer.php
 
 function get_db(): PDO {
     static $pdo = null;
@@ -49,11 +98,24 @@ function get_db(): PDO {
             'pgsql:host=%s;port=%s;dbname=%s;sslmode=%s',
             DB_HOST, DB_PORT, DB_NAME, DB_SSLMODE
         );
+        // PgBouncer en mode transaction — le point d'accès « pooled » de Neon,
+        // dont l'hôte porte « -pooler » — ne gère pas les requêtes préparées
+        // côté serveur : la seconde préparation du même nom échoue, et comme
+        // audit_log() avale ses exceptions, la transaction est condamnée sans
+        // un mot. On bascule alors PDO en préparation émulée ; les paramètres
+        // restent échappés par le pilote, et rowCount() comme FOR UPDATE
+        // continuent de répondre (vérifié).
+        //
+        // DB_EMULATE_PREPARES force le comportement si l'hôte ne trahit pas
+        // le pooler.
+        $forcage = env('DB_EMULATE_PREPARES');
+        $emuler  = $forcage !== null ? ($forcage === '1') : (strpos(DB_HOST, 'pooler') !== false);
+
         try {
             $pdo = new PDO($dsn, DB_USER, DB_PASS, [
                 PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-                PDO::ATTR_EMULATE_PREPARES   => false,
+                PDO::ATTR_EMULATE_PREPARES   => $emuler,
             ]);
             // Encodage client UTF-8 (équivalent utf8mb4)
             $pdo->exec("SET client_encoding TO 'UTF8'");

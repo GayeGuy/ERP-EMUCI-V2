@@ -56,6 +56,23 @@ migration_lot_sessions_inventaire.sql
 migration_lot4_periode_inventaire.sql
 migration_lot5_corrections_inventaire.sql
 migration_lot6_autorisation_modif_inventaire.sql
+migration_achats_01_schema.sql
+migration_achats_02_referentiels.sql
+migration_achats_03_permissions.sql
+migration_achats_04_bigint.sql
+migration_achats_05_arbitrage.sql
+migration_achats_06_derogation.sql
+migration_achats_07_visas.sql
+migration_achats_08_syscohada.sql
+migration_achats_10_reception.sql
+migration_achats_11_pdf_dashboard.sql
+migration_achats_12_stock_departement.sql
+migration_achats_13_budget_validation.sql
+migration_achats_14_dedup_departements.sql
+migration_achats_15_fournisseur_conformite.sql
+migration_achats_16_visa_n1.sql
+migration_achats_17_equipements_dai.sql
+migration_achats_18_affectation_validee.sql
 "
 
 for f in $FICHIERS; do

@@ -3,6 +3,12 @@
 //  includes/session.php — Authentification & Droits v3
 //  Gère : profils normaux + Support IT sous-rôles + délégations
 // ============================================================
+// audit_log() pour tracer la déconnexion pour inactivité (voir require_auth()).
+// audit.php ne déclare qu'une fonction et n'inclut rien : aucun cycle, et
+// db_query() y est déjà disponible puisque db.php précède toujours ce fichier
+// (SESSION_LIFETIME, utilisé juste en dessous, en vient).
+require_once __DIR__ . '/audit.php';
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start([
         'cookie_lifetime' => SESSION_LIFETIME,
@@ -61,6 +67,58 @@ function require_auth(): void {
         header('Location: ' . APP_URL . '/login.php');
         exit;
     }
+    // Déconnexion pour inactivité (garde-fou serveur, cf. INACTIVITY_TIMEOUT
+    // dans db.php) : les requêtes de fond (notifications, liveRefresh) ne
+    // sont jamais envoyées tant que l'onglet est masqué, donc last_activity
+    // ne progresse pas pendant ce temps — seul un vrai retour sur l'appli
+    // (onglet redevenu visible, rechargement) peut la faire avancer.
+    if (!empty($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) > INACTIVITY_TIMEOUT) {
+        // Même trace que le chemin JS, qui passe par auth_logout(true) : sans
+        // elle, le cas le plus fréquent — l'onglet laissé de côté — n'apparaît
+        // nulle part, et l'audit ne montre que les déconnexions volontaires.
+        // On la pose avant de vider $_SESSION, sinon l'utilisateur est perdu.
+        audit_log($_SESSION['user_id'] ?? null, 'LOGOUT', 'auth',
+            $_SESSION['user_id'] ?? null, 'Déconnexion pour inactivité');
+        $_SESSION = [];
+        session_destroy();
+        header('Location: ' . APP_URL . '/login.php?timeout=1');
+        exit;
+    }
+    $_SESSION['last_activity'] = time();
+
+    // Recette Achats : masquer les menus ne suffit pas, une URL tapée à la
+    // main ouvrirait le reste de l'application. La barrière porte sur le
+    // script appelé, donc sur tous les points d'entrée, y compris les
+    // requêtes AJAX des autres modules.
+    if (defined('RECETTE_ACHATS') && RECETTE_ACHATS
+        && !recette_achats_autorise($_SERVER['SCRIPT_NAME'] ?? '')) {
+        http_response_code(403);
+        include __DIR__ . '/../templates/403_recette.php';
+        exit;
+    }
+}
+
+// ── Écrans laissés ouverts en mode recette Achats.
+//    Comparaison par suffixe : l'application peut être servie depuis une
+//    racine quelconque, seul le chemin de fin est stable.
+function recette_achats_autorise(string $script): bool {
+    $script = '/' . ltrim(str_replace(DIRECTORY_SEPARATOR, '/', $script), '/');
+
+    // pages/commandes.php : la bascule d'une FEB vers une commande interne y
+    // aboutit — l'exclure couperait le parcours en deux au milieu.
+    // api/notifications.php : la cloche est présente sur tous les écrans.
+    $ouverts = [
+        '/index.php',
+        '/pages/accueil.php',
+        '/pages/commandes.php',
+        '/pages/mon_profil.php',
+        '/pages/profil.php',
+        '/api/notifications.php',
+    ];
+    foreach ($ouverts as $o) {
+        if (substr($script, -strlen($o)) === $o) return true;
+    }
+    return strpos($script, '/pages/achats/') !== false;
 }
 
 // ── Vérifier si l'utilisateur a un droit sur un module

@@ -13,6 +13,8 @@ require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/audit.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
+// ach_debiter_stock_magasin() : contrepartie du décrément global à l'expédition.
+require_once __DIR__ . '/../includes/achats.php';
 
 require_auth();
 
@@ -52,10 +54,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         // ce garde-fou un chef de site pouvait empiler les commandes non validées
         // et le superviseur recevait plusieurs demandes concurrentes pour le même
         // besoin. Les admins gardent la main en cas d'urgence.
+        // AND feb_id IS NULL : la règle vise la saisie manuelle, pas le flux
+        // automatique de bascule FEB → commande (ach_basculer_vers_commande) —
+        // sans cette exemption, une commande issue d'une FEB reste en attente
+        // et bloque tout tiers qui veut ensuite créer sa propre commande
+        // manuelle sur le même site.
         if (!in_array($user['role_slug'] ?? '', ['admin','superadmin'], true)) {
             $en_cours = db_fetch_one(
                 "SELECT numero_commande FROM commandes
-                  WHERE site_id=? AND statut='en_attente' ORDER BY id DESC LIMIT 1",
+                  WHERE site_id=? AND statut='en_attente' AND feb_id IS NULL ORDER BY id DESC LIMIT 1",
                 [$site_id]
             );
             if ($en_cours) {
@@ -218,6 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             );
             $dist_id = (int)db_last_id();
 
+            $manques = [];   // stock magasin insuffisant, dit et non absorbé
             foreach ($lignes_liv as $l) {
                 $q_liv = (int)($l['quantite_livree'] ?? $l['quantite']);
                 db_query(
@@ -236,6 +244,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     if (!empty($l['article_id'])) {
                         db_query("UPDATE articles SET stock_global = GREATEST(0, stock_global - ?) WHERE id=?",
                             [$q_liv, (int)$l['article_id']]);
+                        // …et sa contrepartie au magasin : le décrément global
+                        // seul laissait stock_site inchangé côté source, donc
+                        // ach_stock_magasin() proposait encore des unités déjà
+                        // parties.
+                        $deb = ach_debiter_stock_magasin((int)$l['article_id'], $q_liv);
+                        if ($deb['manquant'] > 0) {
+                            $manques[] = ($l['libelle'] ?? "article #{$l['article_id']}")
+                                       . " : {$deb['manquant']} non couvert(s) par le stock magasin";
+                        }
                     }
                 }
             }
@@ -256,9 +273,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                      "Votre commande est en route. Confirmez la réception à l'arrivée.",
                      '/pages/commandes.php']);
             }
-            audit_log($user['id'],'UPDATE','commandes',$cmd_id,"Livraison émise — bon $num_dist");
+            $ecart_magasin = $manques ? ' — stock magasin insuffisant : ' . implode(' ; ', $manques) : '';
+            audit_log($user['id'],'UPDATE','commandes',$cmd_id,"Livraison émise — bon $num_dist$ecart_magasin");
             db_commit();
-            json_response(true,'Livraison émise. Coordinateur notifié.');
+            json_response(true, 'Livraison émise. Coordinateur notifié.'
+                . ($manques ? ' Attention — ' . implode(' ; ', $manques) . '.' : ''));
         } catch(Exception $e){ db_rollback(); json_response(false,$e->getMessage()); }
     }
 
@@ -366,11 +385,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $det = db_fetch_one(
             "SELECT c.*, s.nom AS site_nom,
                     CONCAT(u.prenom,' ',u.nom) AS agent,
-                    CASE WHEN uv.id IS NOT NULL THEN CONCAT(uv.prenom,' ',uv.nom) ELSE '' END AS validateur_nom
+                    CASE WHEN uv.id IS NOT NULL THEN CONCAT(uv.prenom,' ',uv.nom) ELSE '' END AS validateur_nom,
+                    f.numero AS feb_numero
              FROM commandes c
              LEFT JOIN sites s  ON s.id  = c.site_id
              LEFT JOIN users u  ON u.id  = c.created_by
              LEFT JOIN users uv ON uv.id = c.valide_par
+             LEFT JOIN feb f    ON f.id  = c.feb_id
              WHERE c.id=?", [$cmd_id]
         );
         if (!$det) json_response(false,'Commande introuvable.');
@@ -1351,6 +1372,10 @@ include __DIR__ . '/../templates/header.php';
             <div style="font-size:12px;text-transform:uppercase;color:var(--muted);font-weight:700;letter-spacing:.5px;margin-bottom:3px">Validé par</div>
             <div id="detail-validateur" style="font-size:13px;font-weight:700;color:var(--navy)"></div>
           </div>
+          <div id="detail-feb-box" style="background:#fff7ed;border-radius:10px;padding:10px 13px;border:1px solid #fed7aa;display:none">
+            <div style="font-size:12px;text-transform:uppercase;color:#B45309;font-weight:700;letter-spacing:.5px;margin-bottom:3px">Issue de la FEB</div>
+            <a id="detail-feb-link" href="#" style="font-size:13px;font-weight:700;color:#B45309;text-decoration:underline"></a>
+          </div>
           <div id="detail-notes-box" style="background:#f0f7ff;border-radius:10px;padding:10px 13px;border:1px solid #bfdbfe;grid-column:span 2;display:none">
             <div style="font-size:12px;text-transform:uppercase;color:#1D4ED8;font-weight:700;letter-spacing:.5px;margin-bottom:3px">Notes / Observations</div>
             <div id="detail-notes" style="font-size:12.5px;color:var(--navy)"></div>
@@ -1465,6 +1490,14 @@ async function voirDetail(id, numero) {
       + (cmd.valide_at ? ' — ' + cmd.valide_at.substring(0,10).split('-').reverse().join('/') : '');
     vBox.style.display = '';
   } else { vBox.style.display = 'none'; }
+
+  const fBox = document.getElementById('detail-feb-box');
+  if (cmd.feb_id && cmd.feb_numero) {
+    const fLink = document.getElementById('detail-feb-link');
+    fLink.textContent = cmd.feb_numero;
+    fLink.href = '/pages/achats/feb_traitement.php?id=' + cmd.feb_id;
+    fBox.style.display = '';
+  } else { fBox.style.display = 'none'; }
 
   const nBox = document.getElementById('detail-notes-box');
   if (cmd.notes && cmd.notes.trim()) {

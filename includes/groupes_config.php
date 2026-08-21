@@ -6,7 +6,7 @@
 
 define('TOUS_LES_GROUPES', [
     'DASHBOARD','OPERATIONS','BOBINES','STOCK',
-    'INFORMATIQUE','RAPPORTS','DEMANDES','ADMINISTRATION'
+    'INFORMATIQUE','RAPPORTS','DEMANDES','ACHATS','ADMINISTRATION'
 ]);
 
 function _groupes_def(): array {
@@ -199,6 +199,81 @@ function _groupes_def(): array {
             ],
         ],
 
+        // ── ACHATS — transversal (cf. get_groupes_pour_role) : « Mes FEB » et
+        //    « Nouvelle FEB » sont ouverts à tout titulaire du droit de
+        //    lecture/création sur `achats` (tout le monde sauf le lecteur/PDG,
+        //    cf. migration_achats_03_permissions.sql et ach_peut_creer()) ;
+        //    les 5 écrans de paramétrage restent filtrés par `achats_param`,
+        //    donc invisibles pour la plupart des rôles malgré le groupe visible.
+        'ACHATS' => [
+            'icon'        => 'ph-shopping-cart',
+            'titre'       => 'Achats',
+            'description' => 'Expression de besoin, fournisseurs et paramétrage budgétaire',
+            'couleur'     => '#B45309',
+            'gradient'    => 'linear-gradient(135deg, #B45309 0%, #F59E0B 100%)',
+            'first_page'  => 'pages/achats/mes_feb.php',
+            'nav' => [
+                ['label'=>'Dashboard Achats',      'icon'=>'ph-gauge',
+                 'url'=>'pages/achats/dashboard.php','active_keys'=>['achats_dashboard'],
+                 'perm'=>['achats_dashboard','can_read']],
+                // L'ex-Dashboard Direction est fusionné dans la Vue exécutive
+                // (pages/pdg_overview.php) : un seul dashboard pour le PDG.
+                ['label'=>'Mes FEB',               'icon'=>'ph-list-checks',
+                 'url'=>'pages/achats/mes_feb.php','active_keys'=>['achats_mes_feb'],
+                 'perm'=>['achats','can_read']],
+                ['label'=>'Nouvelle FEB',          'icon'=>'ph-plus-circle',
+                 'url'=>'pages/achats/feb_fiche.php','active_keys'=>['achats_feb_fiche'],
+                 'perm'=>['achats','can_read'],
+                 'roles_exclude'=>['lecteur']],
+                ['label'=>'File d\'attente Achats', 'icon'=>'ph-queue',
+                 'url'=>'pages/achats/file_attente.php','active_keys'=>['achats_file_attente'],
+                 'perm'=>['achats','can_update'],
+                 // can_update sur `achats` est aussi porté par les valideurs
+                 // (visa, mes_visas.php) — cf. ach_est_acheteur() dans
+                 // includes/achats.php : ils n'ouvrent plus la page (403),
+                 // exclus ici en plus pour ne pas leur laisser un lien mort.
+                 'roles_exclude'=>['raf','daf','directeur_general','lecteur']],
+                ['label'=>'Mes visas',             'icon'=>'ph-signature',
+                 'url'=>'pages/achats/mes_visas.php','active_keys'=>['achats_mes_visas'],
+                 'perm'=>['achats','can_update']],
+                ['label'=>'Suivi Achats (DA/BC)',  'icon'=>'ph-truck',
+                 'url'=>'pages/achats/suivi_achats.php','active_keys'=>['achats_suivi'],
+                 'perm'=>['achats_suivi','can_read']],
+                ['label'=>'Réceptions',            'icon'=>'ph-package',
+                 'url'=>'pages/achats/receptions.php','active_keys'=>['achats_receptions'],
+                 'perm'=>['achats_suivi','can_create']],
+                ['label'=>'Stock par département', 'icon'=>'ph-buildings',
+                 'url'=>'pages/achats/stock_departements.php','active_keys'=>['achats_stock_departements'],
+                 'perm'=>['achats_suivi','can_read']],
+                ['label'=>"File d'attente équipements", 'icon'=>'ph-desktop-tower',
+                 'url'=>'pages/achats/equipements_attente.php','active_keys'=>['achats_equipements_attente'],
+                 'perm'=>['achats_suivi','can_read']],
+                // RAF/DAF/PDG (lecteur) portent achats_param can_read/can_update
+                // uniquement pour le budget (migration_achats_13) : exclus des
+                // 4 autres écrans, qui restent à l'administration (même 403
+                // côté page, cf. param_fournisseurs.php et consorts).
+                ['label'=>'Fournisseurs',          'icon'=>'ph-storefront',
+                 'url'=>'pages/achats/param_fournisseurs.php','active_keys'=>['achats_param_fournisseurs'],
+                 'perm'=>['achats_param','can_read'],
+                 'roles_exclude'=>['raf','daf','lecteur']],
+                ['label'=>'Familles & types',      'icon'=>'ph-tag',
+                 'url'=>'pages/achats/param_familles.php','active_keys'=>['achats_param_familles'],
+                 'perm'=>['achats_param','can_read'],
+                 'roles_exclude'=>['raf','daf','lecteur']],
+                ['label'=>'Paliers de validation',  'icon'=>'ph-stairs',
+                 'url'=>'pages/achats/param_paliers.php','active_keys'=>['achats_param_paliers'],
+                 'perm'=>['achats_param','can_read'],
+                 'roles_exclude'=>['raf','daf','lecteur']],
+                ['label'=>'Lignes budgétaires',     'icon'=>'ph-calculator',
+                 'url'=>'pages/achats/param_budget.php','active_keys'=>['achats_param_budget'],
+                 'perm'=>['achats_param','can_read']],
+                ['label'=>'Paramètres généraux',    'icon'=>'ph-gear',
+                 'url'=>'pages/achats/param_general.php','active_keys'=>['achats_param_general'],
+                 'perm'=>['achats_param','can_read'],
+                 'roles_exclude'=>['raf','daf','lecteur']],
+            ],
+        ],
+
         // ── 8. ADMINISTRATION
         'ADMINISTRATION' => [
             'icon'        => 'ph-shield-check',
@@ -229,6 +304,11 @@ function _groupes_def(): array {
 
 // ── Groupes accessibles selon le rôle (9 → 7 groupes, plus de doublons)
 function get_groupes_pour_role(string $role_slug): array {
+    // Recette Achats : un seul groupe de menus, quel que soit le rôle. Les
+    // filtres par item de get_groupe_nav_items() continuent de s'appliquer,
+    // donc chacun ne voit que les écrans Achats de son périmètre.
+    if (defined('RECETTE_ACHATS') && RECETTE_ACHATS) return ['ACHATS'];
+
     $all = TOUS_LES_GROUPES;
     $map = [
         // Terrain production
@@ -242,7 +322,7 @@ function get_groupes_pour_role(string $role_slug): array {
         'superviseur_it'             => ['DASHBOARD','INFORMATIQUE','STOCK'],
         'support_it'                 => ['DASHBOARD','INFORMATIQUE'],
         // Achat & approvisionnement (accès commandes via OPERATIONS)
-        'superviseur_achat'          => ['DASHBOARD','OPERATIONS','STOCK'],
+        'superviseur_achat'          => ['DASHBOARD','OPERATIONS','STOCK','ACHATS'],
         // Production (ex-PRODUCTION → OPERATIONS)
         'controleur_production'      => ['DASHBOARD','OPERATIONS','BOBINES'],
         // Opérations
@@ -262,8 +342,13 @@ function get_groupes_pour_role(string $role_slug): array {
         'superadmin'                 => $all,
     ];
     $groupes = $map[$role_slug] ?? ['DASHBOARD'];
-    // « Demandes internes » est transversal : visible par tous les rôles.
+    // « Demandes internes » et « Achats » sont transversaux : visibles par
+    // tous les rôles. Pour Achats, seuls « Mes FEB »/« Nouvelle FEB »
+    // s'affichent réellement pour la plupart (filtrage par item dans
+    // get_groupe_nav_items — les écrans de paramétrage restent réservés à
+    // achats_param).
     if (!in_array('DEMANDES', $groupes, true)) $groupes[] = 'DEMANDES';
+    if (!in_array('ACHATS', $groupes, true)) $groupes[] = 'ACHATS';
     return $groupes;
 }
 

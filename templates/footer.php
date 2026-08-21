@@ -73,8 +73,87 @@ function refreshNotifs() {
     });
   }).catch(()=>{});
 }
-// Rafraîchir toutes les 60 secondes
-setInterval(refreshNotifs, 60000);
+// Rafraîchir toutes les 20 secondes — pause quand l'onglet n'est pas
+// visible, même principe que liveRefresh() ci-dessous : pas la peine
+// d'interroger le serveur pour un écran que personne ne regarde.
+setInterval(() => { if (!document.hidden) refreshNotifs(); }, 20000);
+
+// ===== RAFRAICHISSEMENT LIVE (polling léger) =====
+// Remplace périodiquement le contenu d'un conteneur par un fragment HTML
+// renvoyé par le serveur (même page, ?fragment=1) — pas de connexion
+// persistante (l'hébergement actuel ne le permet pas), juste un appel
+// espacé. S'interrompt quand l'onglet n'est pas visible ou qu'une modale
+// est ouverte : on ne doit jamais remplacer l'écran sous les yeux de
+// quelqu'un qui a une fenêtre ouverte ou un champ en cours de saisie.
+// Usage : liveRefresh({ url, container: '#id', interval: 10000 }).
+function liveRefresh(opts) {
+  const container = typeof opts.container === 'string' ? document.querySelector(opts.container) : opts.container;
+  if (!container) return;
+  const interval = opts.interval || 10000;
+  // Par défaut : pause si une modale est ouverte, OU si le focus est
+  // actuellement sur un champ de saisie à l'intérieur du conteneur (ex.
+  // suivi_achats.php a des <input> de N° DA/BC directement dans le
+  // tableau, sans modale — remplacer le HTML sous un champ en cours de
+  // frappe effacerait ce que la personne est en train de taper).
+  const isBusy = opts.isBusy || (() => {
+    if (document.querySelector('.ach-modal-bg.open, .modal-overlay.show')) return true;
+    const active = document.activeElement;
+    return !!active && container.contains(active) && ['INPUT', 'TEXTAREA', 'SELECT'].includes(active.tagName);
+  });
+  let inFlight = false;
+  let timer = null;
+  // Une fois la session perdue, le rafraîchissement ne peut plus rien
+  // rapporter : on l'arrête et on le dit, plutôt que de laisser un écran
+  // figé qui se présente comme vivant.
+  function arreter(raison) {
+    if (timer) { clearInterval(timer); timer = null; }
+    if (raison && typeof toast === 'function') toast(raison, 'danger');
+  }
+  function tick() {
+    if (document.hidden || isBusy() || inFlight) return;
+    inFlight = true;
+    fetch(opts.url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+      .then(r => {
+        // fetch() suit les redirections sans le dire : session expirée,
+        // require_auth() renvoie un 302 vers login.php et la réponse finale
+        // est un 200 — r.ok est donc vrai. Sans ce test, le HTML complet de
+        // la page de connexion (formulaire, styles et scripts) s'injectait
+        // dans le tableau de l'écran.
+        if (r.redirected) { arreter('Session expirée — rechargez la page pour continuer.'); return null; }
+        return r.ok ? r.text() : Promise.reject();
+      })
+      .then(html => {
+        if (html === null) return;
+        container.innerHTML = html;
+        if (opts.onUpdate) opts.onUpdate();
+      })
+      .catch(() => {})
+      .finally(() => { inFlight = false; });
+  }
+  timer = setInterval(tick, interval);
+}
+
+// ===== DÉCONNEXION AUTOMATIQUE APRÈS INACTIVITÉ =====
+// Basé sur de vrais événements utilisateur (souris, clavier, tactile) —
+// jamais sur les requêtes de fond (refreshNotifs, liveRefresh) : sinon un
+// onglet resté ouvert et visible mais que personne ne touche ne se
+// déconnecterait jamais, à cause du polling qui tournerait quand même.
+(function() {
+  // 15 minutes — doit rester aligné sur INACTIVITY_TIMEOUT (includes/db.php) :
+  // deux délais différents donneraient une déconnexion qui dépend de l'onglet.
+  const DELAI_MS = 15 * 60 * 1000;
+  let timer = null;
+  function reinitialiser() {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      window.location.href = '<?= APP_URL ?>/logout.php?timeout=1';
+    }, DELAI_MS);
+  }
+  ['mousemove', 'mousedown', 'keydown', 'scroll', 'touchstart'].forEach(evt => {
+    document.addEventListener(evt, reinitialiser, { passive: true });
+  });
+  reinitialiser();
+})();
 
 // ===== SIDEBAR SCROLL RESTORE =====
 (function() {
