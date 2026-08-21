@@ -90,7 +90,11 @@ function require_auth(): void {
     // tout écran tant qu'il n'a pas été changé. Comparaison par suffixe,
     // comme la barrière recette juste en dessous — même raison (racine de
     // service potentiellement variable).
-    if (!empty($_SESSION['must_change_password'])) {
+    // Désactivé en mode recette : les comptes de test y sont partagés entre
+    // testeurs avec un mot de passe connu de tous — l'imposer casserait ce
+    // fonctionnement, et la recette ne porte pas sur ce mécanisme.
+    if (!empty($_SESSION['must_change_password'])
+        && !(defined('RECETTE_ACHATS') && RECETTE_ACHATS)) {
         $script = '/' . ltrim(str_replace(DIRECTORY_SEPARATOR, '/', $_SERVER['SCRIPT_NAME'] ?? ''), '/');
         if (substr($script, -strlen('/changer-mot-de-passe.php')) !== '/changer-mot-de-passe.php') {
             if (is_ajax()) json_response(false, 'Vous devez changer votre mot de passe avant de continuer.');
@@ -120,6 +124,11 @@ function recette_achats_autorise(string $script): bool {
     // pages/commandes.php : la bascule d'une FEB vers une commande interne y
     // aboutit — l'exclure couperait le parcours en deux au milieu.
     // api/notifications.php : la cloche est présente sur tous les écrans.
+    // changer-mot-de-passe.php : le blocage must_change_password (juste au-
+    // dessus dans require_auth()) y redirige avant même d'atteindre cette
+    // barrière — sans elle dans la liste, tout compte de recette fraîchement
+    // créé se retrouve sur un 403 sans jamais pouvoir changer son mot de
+    // passe.
     $ouverts = [
         '/index.php',
         '/pages/accueil.php',
@@ -127,6 +136,7 @@ function recette_achats_autorise(string $script): bool {
         '/pages/mon_profil.php',
         '/pages/profil.php',
         '/api/notifications.php',
+        '/changer-mot-de-passe.php',
     ];
     foreach ($ouverts as $o) {
         if (substr($script, -strlen($o)) === $o) return true;
