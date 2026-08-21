@@ -41,6 +41,7 @@ function auth_login(string $email, string $password): array {
     $_SESSION['role_slug']  = '';   // sera chargé via current_user()
     $_SESSION['_last_activity'] = time();
     $_SESSION['_last_regen']    = time();
+    $_SESSION['must_change_password'] = !empty($user['must_change_password']);
 
     // Mettre à jour last_login
     db_query("UPDATE users SET last_login = NOW() WHERE id = ?", [$user['id']]);
@@ -104,7 +105,18 @@ function auth_change_password(int $user_id, string $old_password, string $new_pa
     }
 
     $hash = password_hash($new_password, PASSWORD_BCRYPT, ['cost' => 12]);
-    db_query("UPDATE users SET password_hash = ? WHERE id = ?", [$hash, $user_id]);
+    // Un mot de passe posé par un admin (création ou réinitialisation) reste
+    // un mot de passe "par défaut" tant que le titulaire ne l'a pas changé
+    // lui-même — on le force donc à l'écran suivant. À l'inverse, un
+    // changement volontaire (ancien mot de passe fourni) lève le drapeau.
+    db_query(
+        "UPDATE users SET password_hash = ?, must_change_password = ? WHERE id = ?",
+        [$hash, $admin_reset ? 1 : 0, $user_id]
+    );
+
+    if (!empty($_SESSION['user_id']) && (int)$_SESSION['user_id'] === $user_id) {
+        $_SESSION['must_change_password'] = $admin_reset;
+    }
 
     $actor = current_user();
     audit_log($actor['id'] ?? $user_id, 'UPDATE', 'users', $user_id,
@@ -159,7 +171,7 @@ function auth_reset_password(string $token, string $new_password): array {
 
     $hash = password_hash($new_password, PASSWORD_BCRYPT, ['cost' => 12]);
     db_query(
-        "UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expiry = NULL WHERE id = ?",
+        "UPDATE users SET password_hash = ?, must_change_password = 0, reset_token = NULL, reset_token_expiry = NULL WHERE id = ?",
         [$hash, $user['id']]
     );
 
@@ -207,8 +219,8 @@ function auth_create_user(array $data): array {
     $hash = password_hash($data['password'], PASSWORD_BCRYPT, ['cost' => 12]);
 
     db_query(
-        "INSERT INTO users (nom, prenom, email, password_hash, role_id, site_id, telephone)
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO users (nom, prenom, email, password_hash, role_id, site_id, telephone, must_change_password)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 1)",
         [
             $data['nom'],
             $data['prenom'],
