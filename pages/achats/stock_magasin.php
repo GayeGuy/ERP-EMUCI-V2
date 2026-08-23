@@ -40,6 +40,28 @@ $total_unites = array_sum(array_column($lignes, 'quantite'));
 
 $sites_magasin = db_fetch_all("SELECT id, nom FROM sites WHERE type='magasin' AND actif=1 ORDER BY nom");
 
+// Lignes en saisie libre (aucun article du référentiel ne correspond à la
+// désignation, ex. « Emballage ») : stock_site est inutilisable pour elles
+// (article_id NOT NULL en base), donc invisible dans le tableau ci-dessus
+// même si la quantité est bien reçue et pas encore expédiée. Sourcé
+// directement sur feb_suivi, qui porte cette quantité que l'article existe
+// ou non — trouvé en review (FEB-2026-0013, 60 unités « Emballage »
+// invisibles). DAI exclu : circuit équipements séparé, cf. encart plus bas.
+$where_libre  = ["fl.article_id IS NULL", "fl.type_achat IS DISTINCT FROM 'DAI'", "(fs.quantite_recue - fs.quantite_expediee) > 0"];
+$params_libre = [];
+if ($f_q !== '') { $where_libre[] = 'fl.designation ILIKE ?'; $params_libre[] = '%' . $f_q . '%'; }
+$lignes_libres = db_fetch_all(
+    "SELECT f.numero AS feb_numero, fl.designation, fl.unite, s.nom AS site_nom,
+            (fs.quantite_recue - fs.quantite_expediee) AS quantite_magasin
+     FROM feb_suivi fs
+     JOIN feb_lignes fl ON fl.id = fs.feb_ligne_id
+     JOIN feb f         ON f.id  = fs.feb_id
+     LEFT JOIN sites s  ON s.id = fs.site_id
+     WHERE " . implode(' AND ', $where_libre) . "
+     ORDER BY f.numero",
+    $params_libre
+);
+
 include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
@@ -62,6 +84,8 @@ include __DIR__ . '/../../templates/header.php';
   <i class="ph ph-info" aria-hidden="true"></i>
   Ce qui est arrivé au magasin (réception) et n'a pas encore été expédié vers un département — cf. « Réceptions », étape 2.
   Une fois expédiée, la quantité disparaît d'ici et n'est comptée « au département » qu'après confirmation de réception (étape 3).
+  Les immobilisations (lignes DAI — équipements, matériel informatique…) ne sont jamais listées ici : elles suivent leur propre
+  circuit, voir <a href="equipements_attente.php" style="color:#B45309;font-weight:700;text-decoration:underline">File d'attente équipements</a>.
 </div>
 
 <div class="ach-toolbar">
@@ -83,10 +107,11 @@ include __DIR__ . '/../../templates/header.php';
     <?php endif; ?>
     <button type="submit" class="btn btn-secondary">Filtrer</button>
   </form>
-  <div class="ach-summary"><?= count($lignes) ?> ligne(s) — <?= fmt_number((float)$total_unites) ?> unité(s) au total</div>
+  <div class="ach-summary"><?= count($lignes) + count($lignes_libres) ?> ligne(s) — <?= fmt_number((float)$total_unites) ?> unité(s) référencées</div>
 </div>
 
-<div class="ach-table-wrap">
+<div class="ach-section-ttl" style="font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;font-weight:800;color:var(--navy);margin:0 0 12px">Articles du référentiel</div>
+<div class="ach-table-wrap" style="margin-bottom:24px">
   <?php if (empty($lignes)): ?>
     <?php if (empty($sites_magasin)): ?>
       <div class="ach-empty">Aucun site de type « Magasin » n'est configuré (Administration → Sites).</div>
@@ -107,6 +132,31 @@ include __DIR__ . '/../../templates/header.php';
         <td style="font-family:monospace;color:var(--muted)"><?= h($l['article_code']) ?></td>
         <td style="font-weight:700"><?= (int)$l['quantite'] ?> <?= h($l['unite'] ?: '') ?></td>
         <td style="color:var(--muted)"><?= fmt_date($l['updated_at']) ?></td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table>
+  </div>
+  <?php endif; ?>
+</div>
+
+<div class="ach-section-ttl" style="font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;font-weight:800;color:var(--navy);margin:0 0 12px">Saisie libre (hors référentiel)</div>
+<div class="ach-table-wrap">
+  <?php if (empty($lignes_libres)): ?>
+    <div class="ach-empty">Rien en saisie libre au magasin pour ces filtres.</div>
+  <?php else: ?>
+  <div style="overflow-x:auto">
+  <table class="ach-table">
+    <thead><tr>
+      <th>FEB</th><th>Désignation</th><th>Site</th><th>Quantité</th>
+    </tr></thead>
+    <tbody>
+      <?php foreach ($lignes_libres as $l): ?>
+      <tr>
+        <td style="font-weight:700;color:var(--navy)"><?= h($l['feb_numero'] ?: '—') ?></td>
+        <td><?= h($l['designation']) ?></td>
+        <td><?= h($l['site_nom'] ?: '—') ?></td>
+        <td style="font-weight:700"><?= (int)$l['quantite_magasin'] ?> <?= h($l['unite'] ?: '') ?></td>
       </tr>
       <?php endforeach; ?>
     </tbody>
