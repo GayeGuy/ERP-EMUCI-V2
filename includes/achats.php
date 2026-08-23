@@ -2218,7 +2218,7 @@ function ach_expedier_departement(int $suivi_id, int $quantite, string $date, st
     if ($quantite <= 0) throw new AchValidationException('La quantité expédiée doit être strictement positive.');
 
     $ligne = db_fetch_one(
-        "SELECT fs.*, fl.article_id, fl.designation, f.numero AS feb_numero
+        "SELECT fs.*, fl.article_id, fl.designation, fl.type_achat, f.numero AS feb_numero
          FROM feb_suivi fs
          JOIN feb_lignes fl ON fl.id = fs.feb_ligne_id
          JOIN feb f         ON f.id  = fs.feb_id
@@ -2226,7 +2226,15 @@ function ach_expedier_departement(int $suivi_id, int $quantite, string $date, st
         [$suivi_id]
     );
     if (!$ligne) throw new AchValidationException('Ligne de suivi introuvable.');
-    if (!$ligne['article_id']) throw new AchValidationException("Ligne sans article — rien à expédier (saisie libre ou immobilisation).");
+    // DAI exclu : une immobilisation suit son propre circuit (file d'attente
+    // équipements -> proposition d'affectation -> validation -> confirmation),
+    // pas celui-ci. En dehors de ce cas, une ligne sans article_id (saisie
+    // libre — ex. « Demande d'Achat Fournitures » qui ne correspond à aucun
+    // article du référentiel) reste expédiable : elle n'a simplement aucun
+    // stock à créditer/débiter, cf. plus bas.
+    if ($ligne['type_achat'] === 'DAI') {
+        throw new AchValidationException("Ligne DAI — le transfert vers le département se fait par la file d'attente équipements, pas ici.");
+    }
 
     $recue     = (int)$ligne['quantite_recue'];
     $expediee  = (int)$ligne['quantite_expediee'];
@@ -2245,10 +2253,12 @@ function ach_expedier_departement(int $suivi_id, int $quantite, string $date, st
             [$suivi_id, $quantite, $date, $observation ?: null, $uid]
         );
         db_query("UPDATE feb_suivi SET quantite_expediee = quantite_expediee + ? WHERE id=?", [$quantite, $suivi_id]);
-        db_query(
-            "UPDATE stock_site SET quantite = quantite - ? WHERE article_id=? AND site_id=?",
-            [$quantite, $ligne['article_id'], $ligne['site_id']]
-        );
+        if ($ligne['article_id']) {
+            db_query(
+                "UPDATE stock_site SET quantite = quantite - ? WHERE article_id=? AND site_id=?",
+                [$quantite, $ligne['article_id'], $ligne['site_id']]
+            );
+        }
         if ($transaction_locale) db_commit();
     } catch (Exception $e) {
         if ($transaction_locale) db_rollback();
@@ -2280,7 +2290,7 @@ function ach_receptionner_departement(int $suivi_id, int $quantite, string $date
     if ($quantite <= 0) throw new AchValidationException('La quantité reçue doit être strictement positive.');
 
     $ligne = db_fetch_one(
-        "SELECT fs.*, fl.article_id, fl.designation, f.numero AS feb_numero, f.demandeur_id, f.departement_id
+        "SELECT fs.*, fl.article_id, fl.designation, fl.type_achat, f.numero AS feb_numero, f.demandeur_id, f.departement_id
          FROM feb_suivi fs
          JOIN feb_lignes fl ON fl.id = fs.feb_ligne_id
          JOIN feb f         ON f.id  = fs.feb_id
@@ -2288,7 +2298,12 @@ function ach_receptionner_departement(int $suivi_id, int $quantite, string $date
         [$suivi_id]
     );
     if (!$ligne) throw new AchValidationException('Ligne de suivi introuvable.');
-    if (!$ligne['article_id']) throw new AchValidationException("Ligne sans article — rien à réceptionner ici (saisie libre ou immobilisation).");
+    // DAI exclu, même raison que ach_expedier_departement() — sans article_id
+    // (saisie libre), la ligne reste réceptionnable, elle n'a simplement
+    // aucun stock département à créditer, cf. plus bas.
+    if ($ligne['type_achat'] === 'DAI') {
+        throw new AchValidationException("Ligne DAI — la confirmation de réception se fait par la file d'attente équipements, pas ici.");
+    }
     if (!$ligne['departement_id']) throw new AchValidationException('Cette ligne ne porte aucun département.');
 
     $est_n1 = (bool) db_fetch_value(
@@ -2317,7 +2332,9 @@ function ach_receptionner_departement(int $suivi_id, int $quantite, string $date
             [$suivi_id, $quantite, $date, $observation ?: null, $uid]
         );
         db_query("UPDATE feb_suivi SET quantite_receptionnee_departement = quantite_receptionnee_departement + ? WHERE id=?", [$quantite, $suivi_id]);
-        ach_crediter_stock_departement((int)$ligne['article_id'], (int)$ligne['departement_id'], $quantite);
+        if ($ligne['article_id']) {
+            ach_crediter_stock_departement((int)$ligne['article_id'], (int)$ligne['departement_id'], $quantite);
+        }
         if ($transaction_locale) db_commit();
     } catch (Exception $e) {
         if ($transaction_locale) db_rollback();

@@ -164,8 +164,11 @@ $lignes_magasin = $can_magasin ? db_fetch_all(
 ) : [];
 
 // Étape 2 — Expédition vers le département : ce qui est arrivé au magasin
-// et pas encore totalement expédié. Consommables seulement (fl.article_id
-// NOT NULL) — les lignes DAI suivent leur propre circuit (équipements).
+// et pas encore totalement expédié. Tout sauf DAI (fl.type_achat <> 'DAI')
+// — les lignes DAI suivent leur propre circuit (équipements). Une ligne
+// sans article_id (saisie libre non rattachée au référentiel) reste
+// éligible : rien à créditer en stock, mais le suivi de quantité/expédition
+// n'a pas de raison de s'arrêter pour autant (cf. ach_expedier_departement()).
 $lignes_expedition = $can_magasin ? db_fetch_all(
     "SELECT fs.*, f.numero AS feb_numero, f.departement_id,
             fl.designation, fl.unite, fl.article_id,
@@ -175,14 +178,14 @@ $lignes_expedition = $can_magasin ? db_fetch_all(
      JOIN feb_lignes fl  ON fl.id = fs.feb_ligne_id
      LEFT JOIN sites s        ON s.id = fs.site_id
      LEFT JOIN departements d ON d.id = f.departement_id
-     WHERE fl.article_id IS NOT NULL AND fs.quantite_recue > fs.quantite_expediee
+     WHERE fl.type_achat IS DISTINCT FROM 'DAI' AND fs.quantite_recue > fs.quantite_expediee
      ORDER BY fs.id ASC",
     []
 ) : [];
 
 // Étape 3 — Réception département : ce qui a été expédié et pas encore
 // confirmé reçu par le département.
-$where3  = ["fl.article_id IS NOT NULL", "fs.quantite_expediee > fs.quantite_receptionnee_departement"];
+$where3  = ["fl.type_achat IS DISTINCT FROM 'DAI'", "fs.quantite_expediee > fs.quantite_receptionnee_departement"];
 $params3 = [];
 if ($departements_n1_force) {
     $placeholders = implode(',', array_fill(0, count($departements_n1_force), '?'));
