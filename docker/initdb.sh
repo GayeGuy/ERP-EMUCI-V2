@@ -74,6 +74,7 @@ migration_achats_16_visa_n1.sql
 migration_achats_17_equipements_dai.sql
 migration_achats_18_affectation_validee.sql
 migration_mdp_premiere_connexion.sql
+migration_achats_19_circuit_magasin_departement.sql
 "
 
 for f in $FICHIERS; do

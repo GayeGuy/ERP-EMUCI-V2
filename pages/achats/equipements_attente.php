@@ -14,7 +14,17 @@ require_once __DIR__ . '/../../includes/achats.php';
 
 require_auth();
 $user = current_user();
-require_permission('achats_suivi', 'can_read');
+$uid  = (int)$user['id'];
+$is_admin = in_array($user['role_slug'] ?? '', ['admin', 'superadmin'], true);
+// Pas require_permission() strict : le N+1 d'un département doit pouvoir
+// confirmer la réception de ses équipements sans porter achats_suivi.can_read
+// — même porte que pages/achats/receptions.php (étape 3 du circuit magasin
+// -> département, décision du 2026-08-23).
+if (!can('achats_suivi', 'can_read') && !ach_est_n1_quelque_part($uid)) {
+    http_response_code(403);
+    include __DIR__ . '/../../templates/403.php';
+    exit;
+}
 // Même population que la réception (pages/achats/receptions.php) : ceux
 // qui réceptionnent un exemplaire sont ceux qui en proposent l'affectation.
 $can_proposer = can('achats_suivi', 'can_create');
@@ -25,10 +35,10 @@ $active_page = 'achats_equipements_attente';
 // ── AJAX ────────────────────────────────────────────────────
 if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
-    if (!$can_proposer) json_response(false, 'Action réservée.');
     $action = $_POST['action'] ?? '';
 
     if ($action === 'proposer') {
+        if (!$can_proposer) json_response(false, 'Action réservée.');
         $equipement_id  = (int)($_POST['equipement_id'] ?? 0);
         $site_id        = (int)($_POST['site_id'] ?? 0) ?: null;
         $utilisateur_id = (int)($_POST['utilisateur_id'] ?? 0) ?: null;
@@ -40,16 +50,33 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Étape 3 du circuit magasin -> département : le N+1 confirme que
+    // l'exemplaire est physiquement arrivé.
+    if ($action === 'confirmer_reception') {
+        $equipement_id = (int)($_POST['equipement_id'] ?? 0);
+        try {
+            $ok = ach_confirmer_reception_equipement($equipement_id, $user);
+            if ($ok) json_response(true, 'Réception confirmée.');
+            json_response(false, "Cet exemplaire n'est plus en attente de confirmation.");
+        } catch (AchValidationException $e) {
+            json_response(false, $e->getMessage());
+        }
+    }
+
     json_response(false, 'Action inconnue.');
 }
 
 // ── PAGE PHP ─────────────────────────────────────────────────
 $f_departement = (int)($_GET['departement'] ?? 0);
+// Les deux premières sections (proposer/suivre une affectation) restent
+// du ressort du service Achats — un N+1 pur n'y voit rien, il n'a affaire
+// qu'à la 3e (confirmer la réception dans son département).
+$voit_toutes_sections = can('achats_suivi', 'can_read');
 
 $where  = ["e.statut_stock = 'en_attente_affectation'"];
 $params = [];
 if ($f_departement) { $where[] = 'e.departement_id = ?'; $params[] = $f_departement; }
-$equipements = db_fetch_all(
+$equipements = $voit_toutes_sections ? db_fetch_all(
     "SELECT e.id, e.numero_serie_interne, e.prix_achat, e.date_acquisition,
             n.libelle AS nomenclature_libelle, n.categorie,
             d.label AS departement_label,
@@ -62,7 +89,7 @@ $equipements = db_fetch_all(
      WHERE " . implode(' AND ', $where) . "
      ORDER BY e.date_acquisition DESC, e.id DESC",
     $params
-);
+) : [];
 $total_valorise = array_sum(array_column($equipements, 'prix_achat'));
 
 // Propositions déjà lancées, en cours de visa — visibilité sur où en est
@@ -70,7 +97,7 @@ $total_valorise = array_sum(array_column($equipements, 'prix_achat'));
 $where2  = ["e.statut_stock = 'affectation_en_cours'"];
 $params2 = [];
 if ($f_departement) { $where2[] = 'e.departement_id = ?'; $params2[] = $f_departement; }
-$en_cours = db_fetch_all(
+$en_cours = $voit_toutes_sections ? db_fetch_all(
     "SELECT e.id, e.numero_serie_interne, e.prix_achat,
             n.libelle AS nomenclature_libelle,
             d.label AS departement_label,
@@ -85,7 +112,18 @@ $en_cours = db_fetch_all(
      WHERE " . implode(' AND ', $where2) . "
      ORDER BY ea.proposee_le DESC",
     $params2
-);
+) : [];
+
+// Étape 3 du circuit magasin -> département : exemplaires validés,
+// expédiés, en attente de confirmation physique par le N+1.
+$en_transit = ach_equipements_en_transit($user);
+foreach ($en_transit as &$et) {
+    $et['departement_label'] = $et['departement_id'] ? db_fetch_value("SELECT label FROM departements WHERE id=?", [$et['departement_id']]) : null;
+    $et['nomenclature_libelle'] = $et['nomenclature_id'] ? db_fetch_value("SELECT libelle FROM nomenclatures WHERE id=?", [$et['nomenclature_id']]) : null;
+    $et['site_nom'] = $et['site_id'] ? db_fetch_value("SELECT nom FROM sites WHERE id=?", [$et['site_id']]) : null;
+    $et['utilisateur_nom'] = $et['utilisateur_id'] ? db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$et['utilisateur_id']]) : null;
+}
+unset($et);
 
 $departements_actifs = db_fetch_all("SELECT id, label FROM departements WHERE actif=1 ORDER BY label");
 $sites_actifs = db_fetch_all("SELECT id, nom FROM sites WHERE actif=1 ORDER BY nom");
@@ -120,6 +158,7 @@ include __DIR__ . '/../../templates/header.php';
 @media (max-width:768px) { .ach-toolbar select, .ach-fg select, .btn { min-height:44px; } }
 </style>
 
+<?php if ($voit_toutes_sections): ?>
 <div class="ach-toolbar">
   <form method="GET" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     <label for="ach-departement" style="font-size:13px;font-weight:600;color:#374151">Département</label>
@@ -204,6 +243,39 @@ include __DIR__ . '/../../templates/header.php';
   </div>
   <?php endif; ?>
 </div>
+<?php endif; ?>
+
+<div class="ach-section-ttl">Étape 3 — En transit, à confirmer par mon département</div>
+<div class="ach-table-wrap">
+  <?php if (empty($en_transit)): ?>
+    <div class="ach-empty">Rien en attente de confirmation pour votre département.</div>
+  <?php else: ?>
+  <div style="overflow-x:auto">
+  <table class="ach-table">
+    <thead><tr>
+      <th>N° série (provisoire)</th><th>Nomenclature</th><th>Département</th><th>Destination</th><th>Valeur</th><th>Actions</th>
+    </tr></thead>
+    <tbody>
+      <?php foreach ($en_transit as $e): ?>
+      <tr>
+        <td style="font-family:monospace;font-size:12px"><?= h($e['numero_serie_interne']) ?></td>
+        <td><?= h($e['nomenclature_libelle'] ?: '—') ?></td>
+        <td><?= h($e['departement_label'] ?: '—') ?></td>
+        <td><?= h($e['site_nom'] ?: '—') ?><?= $e['utilisateur_nom'] ? ' — ' . h($e['utilisateur_nom']) : '' ?></td>
+        <td><?= fmt_number((float)$e['prix_achat']) ?> XOF</td>
+        <td>
+          <button type="button" class="btn btn-primary btn-sm"
+                  onclick='etConfirmer(<?= (int)$e["id"] ?>, <?= json_encode($e["numero_serie_interne"], JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
+            Confirmer la réception
+          </button>
+        </td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+  </table>
+  </div>
+  <?php endif; ?>
+</div>
 
 <!-- MODALE proposer une affectation -->
 <div class="ach-modal-bg" id="ea-modal">
@@ -240,6 +312,19 @@ include __DIR__ . '/../../templates/header.php';
 </div>
 
 <script>
+function etConfirmer(equipementId, nsi) {
+  if (!confirm(`Confirmer que « ${nsi} » est bien arrivé dans le département ?`)) return;
+  const fd = new FormData();
+  fd.append('action', 'confirmer_reception');
+  fd.append('equipement_id', equipementId);
+  fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
+    .then(r => r.json())
+    .then(res => {
+      toast(res.message, res.success ? 'success' : 'danger');
+      if (res.success) setTimeout(() => location.reload(), 500);
+    });
+}
+
 function eaOuvrir(e) {
   document.getElementById('ea-equipement-id').value = e.id;
   document.getElementById('ea-recap').textContent = e.nsi + ' — ' + (e.nomenclature || '—') + ' — ' + Number(e.valeur).toLocaleString('fr-FR') + ' XOF';
