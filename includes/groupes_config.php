@@ -235,7 +235,7 @@ function _groupes_def(): array {
                  'roles_exclude'=>['raf','daf','directeur_general','lecteur']],
                 ['label'=>'Mes visas',             'icon'=>'ph-signature',
                  'url'=>'pages/achats/mes_visas.php','active_keys'=>['achats_mes_visas'],
-                 'perm'=>['achats','can_update']],
+                 'perm'=>['achats','can_update'], 'ou_n1'=>true],
                 ['label'=>'Suivi Achats (DA/BC)',  'icon'=>'ph-truck',
                  'url'=>'pages/achats/suivi_achats.php','active_keys'=>['achats_suivi'],
                  'perm'=>['achats_suivi','can_read']],
@@ -379,10 +379,21 @@ function get_groupe_nav_items(string $slug): array {
     $role = $user['role_slug'] ?? '';
     $items = [];
     foreach ($def['nav'] as $item) {
-        // Filtre permission DB
+        // Filtre permission DB — sauf pour un item marqué 'ou_n1' : un
+        // supérieur hiérarchique (user_departements.is_n1) ouvre la page
+        // même sans le droit du module (cf. ach_peut_ouvrir_visas(),
+        // includes/achats.php — même règle, dupliquée ici pour ne pas
+        // dépendre du chargement de ce fichier sur les pages non-Achats).
         if (!empty($item['perm'])) {
             [$module, $droit] = $item['perm'];
-            if (!can($module, $droit)) continue;
+            $autorise = can($module, $droit);
+            if (!$autorise && !empty($item['ou_n1']) && $user) {
+                $autorise = (bool) db_fetch_value(
+                    "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND is_n1=1",
+                    [(int)$user['id']]
+                );
+            }
+            if (!$autorise) continue;
         }
         // Filtre rôles exclus (blacklist)
         if (!empty($item['roles_exclude']) && in_array($role, $item['roles_exclude'])) continue;
