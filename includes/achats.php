@@ -818,11 +818,33 @@ function ach_retenir_offre_lot(int $offre_id, array $user): array {
         // RG-09 : une ligne dérogée garde son fournisseur choisi à la main.
         // On compte les deux populations — l'appelant doit pouvoir dire la
         // vérité à l'écran, y compris « reporté sur 0 ligne ».
-        $stmt = db_query(
-            "UPDATE feb_lignes SET fournisseur_id=? WHERE feb_id=? AND lot=? AND fournisseur_derogation=0",
-            [$offre['fournisseur_id'], $feb_id, $lot]
+        //
+        // Le montant de l'offre porte sur tout le lot, jamais ligne par
+        // ligne (feb_offres n'a qu'un seul montant_ttc) : il est réparti au
+        // prorata des quantités sur les lignes non dérogées, le reliquat
+        // d'arrondi posé sur la dernière — ach_verifier_comparatif() exige
+        // une somme des lignes strictement égale au montant de l'offre, donc
+        // un simple report proportionnel arrondi laisserait échouer ce
+        // contrôle par un XOF ici ou là sans cette dernière ligne de rattrapage.
+        $lignes_a_reporter = db_fetch_all(
+            "SELECT id, quantite FROM feb_lignes WHERE feb_id=? AND lot=? AND fournisseur_derogation=0 ORDER BY numero_ligne",
+            [$feb_id, $lot]
         );
-        $reportees = $stmt->rowCount();
+        $reportees = count($lignes_a_reporter);
+        if ($lignes_a_reporter) {
+            $total_qte = array_sum(array_column($lignes_a_reporter, 'quantite')) ?: 1;
+            $montant_offre = (int)$offre['montant_ttc'];
+            $reparti = 0;
+            foreach ($lignes_a_reporter as $i => $l) {
+                $dernier = ($i === count($lignes_a_reporter) - 1);
+                $part = $dernier ? ($montant_offre - $reparti) : (int) round($montant_offre * ((int)$l['quantite'] / $total_qte));
+                $reparti += $part;
+                db_query(
+                    "UPDATE feb_lignes SET fournisseur_id=?, montant_ttc=? WHERE id=?",
+                    [$offre['fournisseur_id'], $part, $l['id']]
+                );
+            }
+        }
         $derogees  = (int) db_fetch_value(
             "SELECT COUNT(*) FROM feb_lignes WHERE feb_id=? AND lot=? AND fournisseur_derogation=1",
             [$feb_id, $lot]

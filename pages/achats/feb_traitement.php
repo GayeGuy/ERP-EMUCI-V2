@@ -251,12 +251,16 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $existante = db_fetch_one("SELECT * FROM feb_offres WHERE id=? AND feb_id=?", [$offre_id, $post_feb_id]);
             if (!$existante) json_response(false, 'Offre introuvable.');
+            // Une offre retenue a déjà reporté son fournisseur et son montant
+            // sur les lignes du lot (ach_retenir_offre_lot()) : la modifier
+            // sans passer par là désynchroniserait silencieusement les
+            // lignes de l'offre qu'elles sont censées refléter. Même garde
+            // que la suppression, juste en dessous.
+            if ($existante['retenue']) json_response(false, "Annulez d'abord la sélection de cette offre avant de la modifier.");
             db_query(
                 "UPDATE feb_offres SET lot=?, fournisseur_id=?, delai_annonce=?, conditions_paiement=?, montant_ttc=?, prix_initial=?, observation=? WHERE id=?",
                 [$lot, $four_id, $delai, $cond_pai ?: null, $montant, $prix_init, $obs ?: null, $offre_id]
             );
-            // Le montant a pu changer sur une offre déjà retenue.
-            if ($existante['retenue']) ach_recalculer_montant_total($post_feb_id);
             audit_log($uid, 'UPDATE', 'achats', $post_feb_id, "Modification offre #$offre_id (lot $lot)");
             json_response(true, 'Offre mise à jour.');
         }
@@ -266,10 +270,27 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $offre_id = (int)($_POST['offre_id'] ?? 0);
         $offre = db_fetch_one("SELECT * FROM feb_offres WHERE id=? AND feb_id=?", [$offre_id, $post_feb_id]);
         if (!$offre) json_response(false, 'Offre introuvable.');
-        if ($offre['retenue']) json_response(false, "Retirez d'abord la sélection de cette offre (retenez-en une autre) avant de la supprimer.");
+        if ($offre['retenue']) json_response(false, "Annulez d'abord la sélection de cette offre avant de la supprimer.");
         db_query("DELETE FROM feb_offres WHERE id=?", [$offre_id]);
         audit_log($uid, 'DELETE', 'achats', $post_feb_id, "Suppression offre #$offre_id (lot {$offre['lot']})");
         json_response(true, 'Offre supprimée.');
+    }
+
+    // ── Annuler la retenue — remet le lot sans offre retenue (bloquant pour
+    //    ach_verifier_comparatif(), comme un lot jamais comparé) pour
+    //    permettre de modifier ou supprimer l'offre, ou d'en retenir une
+    //    autre. Ne touche pas feb_lignes : le fournisseur/montant reportés
+    //    seront écrasés à la prochaine offre retenue, ou laissés en l'état
+    //    si aucune ne l'est encore — ach_verifier_comparatif() bloque de
+    //    toute façon la suite tant qu'aucune offre n'est retenue sur ce lot.
+    if ($action === 'annuler_retenue') {
+        $offre_id = (int)($_POST['offre_id'] ?? 0);
+        $offre = db_fetch_one("SELECT * FROM feb_offres WHERE id=? AND feb_id=?", [$offre_id, $post_feb_id]);
+        if (!$offre) json_response(false, 'Offre introuvable.');
+        if (!$offre['retenue']) json_response(false, "Cette offre n'est pas retenue.");
+        db_query("UPDATE feb_offres SET retenue=0 WHERE id=?", [$offre_id]);
+        audit_log($uid, 'UPDATE', 'achats', $post_feb_id, "Annulation de la retenue — offre #$offre_id (lot {$offre['lot']})");
+        json_response(true, 'Sélection annulée — vous pouvez modifier, supprimer ou retenir une autre offre.');
     }
 
     if ($action === 'retenir_offre') {
@@ -664,26 +685,27 @@ include __DIR__ . '/../../templates/header.php';
         <td style="font-weight:700"><?= fmt_number((float)$o['montant_ttc']) ?> XOF</td>
         <td><?= $o['prix_initial'] !== null ? fmt_number((float)$o['prix_initial']) . ' XOF' : '—' ?></td>
         <td><?= h($o['observation'] ?: '—') ?></td>
-        <td style="display:flex;gap:6px;flex-wrap:wrap">
+        <td style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
           <?php if ($o['retenue']): ?>
             <span class="ach-badge badge-stock">Retenue</span>
+            <?php if ($editable): ?>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="febAnnulerRetenue(<?= (int)$o['id'] ?>)">Annuler la sélection</button>
+            <?php endif; ?>
           <?php elseif ($editable): ?>
             <button type="button" class="btn btn-primary btn-sm" onclick="febRetenirOffre(<?= (int)$o['id'] ?>)">Retenir</button>
-          <?php endif; ?>
-          <?php if ($editable): ?>
-          <button type="button" class="btn btn-secondary btn-sm" aria-label="Modifier l'offre de <?= h($o['fournisseur_nom'] ?: '') ?>"
-                  onclick='febOuvrirOffre(<?= json_encode([
-                    "id"=>(int)$o["id"], "lot"=>$lot["lot"], "fournisseur_id"=>$o["fournisseur_id"],
-                    "delai_annonce"=>$o["delai_annonce"], "conditions_paiement"=>$o["conditions_paiement"],
-                    "montant_ttc"=>(int)$o["montant_ttc"], "prix_initial"=>$o["prix_initial"], "observation"=>$o["observation"],
-                  ], JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
-            <i class="ph ph-pencil-simple" aria-hidden="true"></i>
-          </button>
-          <button type="button" class="btn btn-secondary btn-sm" <?= $o['retenue'] ? 'disabled title="Retenez une autre offre avant de supprimer celle-ci."' : '' ?>
-                  aria-label="Supprimer l'offre de <?= h($o['fournisseur_nom'] ?: '') ?>"
-                  onclick="febSupprimerOffre(<?= (int)$o['id'] ?>)">
-            <i class="ph ph-trash" aria-hidden="true"></i>
-          </button>
+            <button type="button" class="btn btn-secondary btn-sm" aria-label="Modifier l'offre de <?= h($o['fournisseur_nom'] ?: '') ?>"
+                    onclick='febOuvrirOffre(<?= json_encode([
+                      "id"=>(int)$o["id"], "lot"=>$lot["lot"], "fournisseur_id"=>$o["fournisseur_id"],
+                      "delai_annonce"=>$o["delai_annonce"], "conditions_paiement"=>$o["conditions_paiement"],
+                      "montant_ttc"=>(int)$o["montant_ttc"], "prix_initial"=>$o["prix_initial"], "observation"=>$o["observation"],
+                    ], JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
+              <i class="ph ph-pencil-simple" aria-hidden="true"></i>
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm"
+                    aria-label="Supprimer l'offre de <?= h($o['fournisseur_nom'] ?: '') ?>"
+                    onclick="febSupprimerOffre(<?= (int)$o['id'] ?>)">
+              <i class="ph ph-trash" aria-hidden="true"></i>
+            </button>
           <?php endif; ?>
         </td>
       </tr>
@@ -959,6 +981,13 @@ function febSupprimerOffre(id) {
 function febRetenirOffre(id) {
   if (!confirm('Retenir cette offre pour le lot ? Son fournisseur sera reporté sur les lignes non dérogées.')) return;
   febPost({ action: 'retenir_offre', offre_id: id }).then(res => {
+    toast(res.message, res.success ? 'success' : 'danger');
+    if (res.success) setTimeout(() => location.reload(), 500);
+  });
+}
+function febAnnulerRetenue(id) {
+  if (!confirm('Annuler la sélection de cette offre ? Le lot repassera sans offre retenue.')) return;
+  febPost({ action: 'annuler_retenue', offre_id: id }).then(res => {
     toast(res.message, res.success ? 'success' : 'danger');
     if (res.success) setTimeout(() => location.reload(), 500);
   });
