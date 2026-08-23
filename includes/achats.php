@@ -1915,10 +1915,25 @@ function ach_statut_suivi_calcule(array $ligne): string {
 //    seulement — une correction ultérieure par un administrateur change le
 //    numéro sans réécrire la date d'origine. Toute saisie ou modification
 //    est tracée à l'audit.
-function ach_saisir_da(int $suivi_id, string $numero_da, array $user): void {
+function ach_saisir_da(int $suivi_id, string $numero_da, array $user, ?string $date_da = null): void {
     $uid       = (int)$user['id'];
     $numero_da = trim($numero_da);
     if ($numero_da === '') throw new AchValidationException('Le numéro de DA est obligatoire.');
+
+    // La DA existe souvent avant sa saisie ici (papier, Sage) — sans date
+    // réglable, date_da valait toujours « aujourd'hui », faussant tout calcul
+    // du délai DA → BC pour une saisie faite après coup. CURRENT_DATE reste
+    // le défaut si le champ est laissé vide.
+    if ($date_da !== null) {
+        $date_da = trim($date_da);
+        $d = DateTime::createFromFormat('Y-m-d', $date_da);
+        if (!$date_da || !$d || $d->format('Y-m-d') !== $date_da) {
+            throw new AchValidationException('Date de DA invalide.');
+        }
+        if ($date_da > date('Y-m-d')) {
+            throw new AchValidationException('La date de DA ne peut pas être dans le futur.');
+        }
+    }
 
     $ligne = db_fetch_one("SELECT * FROM feb_suivi WHERE id=?", [$suivi_id]);
     if (!$ligne) throw new AchValidationException('Ligne de suivi introuvable.');
@@ -1930,7 +1945,9 @@ function ach_saisir_da(int $suivi_id, string $numero_da, array $user): void {
     }
 
     if ($premiere_saisie) {
-        db_query("UPDATE feb_suivi SET numero_da=?, date_da=CURRENT_DATE WHERE id=?", [$numero_da, $suivi_id]);
+        db_query("UPDATE feb_suivi SET numero_da=?, date_da=? WHERE id=?", [$numero_da, $date_da ?: date('Y-m-d'), $suivi_id]);
+    } elseif ($date_da) {
+        db_query("UPDATE feb_suivi SET numero_da=?, date_da=? WHERE id=?", [$numero_da, $date_da, $suivi_id]);
     } else {
         db_query("UPDATE feb_suivi SET numero_da=? WHERE id=?", [$numero_da, $suivi_id]);
     }
@@ -1969,13 +1986,13 @@ function ach_saisir_bc(int $suivi_id, string $numero_bc, array $user, ?string $d
 //    déjà pourvue n'est jamais écrasée (filtrée avant même d'être tentée,
 //    donc jamais bloquée par le verrou administrateur de ach_saisir_da() sur
 //    ce chemin). Retourne le nombre de lignes effectivement mises à jour.
-function ach_saisir_da_lot(int $feb_id, string $lot, string $numero_da, array $user): int {
+function ach_saisir_da_lot(int $feb_id, string $lot, string $numero_da, array $user, ?string $date_da = null): int {
     $lignes = db_fetch_all(
         "SELECT fs.id FROM feb_suivi fs JOIN feb_lignes fl ON fl.id = fs.feb_ligne_id
           WHERE fs.feb_id=? AND fl.lot=? AND (fs.numero_da IS NULL OR fs.numero_da = '')",
         [$feb_id, $lot]
     );
-    foreach ($lignes as $l) ach_saisir_da((int)$l['id'], $numero_da, $user);
+    foreach ($lignes as $l) ach_saisir_da((int)$l['id'], $numero_da, $user, $date_da);
     return count($lignes);
 }
 function ach_saisir_bc_lot(int $feb_id, string $lot, string $numero_bc, array $user, ?string $date_livraison_prevue = null): int {
@@ -2271,6 +2288,15 @@ function ach_dashboard_kpis(array $user, ?array $depts, string $du, string $au):
          WHERE fs.date_livraison_reelle IS NOT NULL AND f.date_confirmation IS NOT NULL AND f.date_soumission BETWEEN ? AND ?$clause",
         array_merge([$du, $au], $pd)
     );
+    // date_da/date_bc sont des DATE, pas des TIMESTAMP comme les trois delais
+    // ci-dessus : leur soustraction donne déjà un entier (nombre de jours),
+    // pas un intervalle — EXTRACT(EPOCH FROM ...) y échoue (42883).
+    $delai_da_bc = ach_delais_jours(
+        "SELECT (fs.date_bc - fs.date_da) AS d
+         FROM feb_suivi fs JOIN feb f ON f.id=fs.feb_id
+         WHERE fs.date_bc IS NOT NULL AND fs.date_da IS NOT NULL AND f.date_soumission BETWEEN ? AND ?$clause",
+        array_merge([$du, $au], $pd)
+    );
 
     // Taux de livraison à temps et complète — formulation retenue à la
     // place du sigle OTIF (point 15) : receptionnee, sans clôture de
@@ -2290,6 +2316,7 @@ function ach_dashboard_kpis(array $user, ?array $depts, string $du, string $au):
         'delai_prise_charge' => $delai_prise_charge,
         'delai_validation'   => $delai_validation,
         'delai_livraison'    => $delai_livraison,
+        'delai_da_bc'        => $delai_da_bc,
         'taux_livraison_temps' => $taux_livraison_temps,
     ];
 }

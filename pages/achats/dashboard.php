@@ -155,6 +155,11 @@ include __DIR__ . '/../../templates/header.php';
     <div class="kpi-lbl">Livraison (confirmation → réception réelle)</div>
     <div class="kpi-sub"><?= $kpis['delai_livraison']['n'] ?> ligne(s) mesurée(s)</div>
   </div>
+  <div class="kpi-tile">
+    <div class="kpi-val"><?= $kpis['delai_da_bc']['moyenne'] ?? '—' ?> / <?= $kpis['delai_da_bc']['mediane'] ?? '—' ?></div>
+    <div class="kpi-lbl">DA → BC (Sage)</div>
+    <div class="kpi-sub"><?= $kpis['delai_da_bc']['n'] ?> ligne(s) mesurée(s)</div>
+  </div>
 </div>
 
 <div class="section-ttl">Alertes</div>
