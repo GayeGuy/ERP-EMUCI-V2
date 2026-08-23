@@ -21,6 +21,7 @@ require_once __DIR__ . '/demandes.php';
 function ach_statuts_feb(): array {
     return [
         'brouillon'         => ['label' => 'Brouillon',              'bg' => '#F1F5F9', 'color' => '#475569'],
+        'en_attente_n1'     => ['label' => 'En attente du N+1',       'bg' => '#FFF7ED', 'color' => '#B45309'],
         'soumise'           => ['label' => 'Soumise',                 'bg' => '#DBEAFE', 'color' => '#1D4ED8'],
         'prise_en_charge'   => ['label' => 'Prise en charge',         'bg' => '#E0E7FF', 'color' => '#3730A3'],
         'en_validation'     => ['label' => 'En validation',           'bg' => '#FEF3C7', 'color' => '#92400E'],
@@ -460,25 +461,44 @@ function ach_creer_feb(array $user, ?int $feb_id, array $entete, array $lignes, 
         if ($soumettre) {
             $numero = ach_numero_feb($exercice);
             $montant_total = (int) db_fetch_value("SELECT COALESCE(SUM(montant_ttc),0) FROM feb_lignes WHERE feb_id=?", [$feb_id]);
+
+            // Visa du supérieur hiérarchique AVANT prise en charge par les
+            // achats (pas au lancement de la validation, cf. ach_lancer_validation()
+            // qui ne le resollicite plus) : sans son aval, les achats ne
+            // doivent même pas voir la demande. La personne est résolue et
+            // figée sur feb.n1_user_id ici, pour la même raison que le reste
+            // du figeage RG-11 — un changement de responsable en cours de
+            // circuit ne doit pas déplacer une signature déjà attendue.
+            $n1_user_id = $departement_id ? ach_n1_du_departement((int)$departement_id, $uid) : null;
+            $statut_apres = $n1_user_id ? 'en_attente_n1' : 'soumise';
+
             db_query(
-                "UPDATE feb SET numero=?, statut='soumise', date_soumission=?, montant_total=? WHERE id=?",
-                [$numero, $now, $montant_total, $feb_id]
+                "UPDATE feb SET numero=?, statut=?, date_soumission=?, montant_total=?, n1_user_id=? WHERE id=?",
+                [$numero, $statut_apres, $now, $montant_total, $n1_user_id, $feb_id]
             );
-            $statut = 'soumise';
+            $statut = $statut_apres;
             audit_log($uid, 'UPDATE', 'achats', $feb_id, "Soumission FEB $numero");
 
-            // Notification au service Achats — type 'info', seul type
-            // applicatif autorisé par la contrainte d'énumération sur
-            // notifications.type (avec fin_cycle, stock_bas, alerte_conso).
-            $achats = db_fetch_all(
-                "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id
-                 WHERE r.slug='superviseur_achat' AND u.actif=1"
-            );
-            foreach ($achats as $a) {
+            if ($n1_user_id) {
                 db_query(
-                    "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?, 'info', 'Nouvelle FEB', ?, ?)",
-                    [(int)$a['id'], "FEB $numero soumise par $nom — $objet", '/pages/achats/mes_feb.php']
+                    "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?, 'info', 'FEB à endosser', ?, ?)",
+                    [$n1_user_id, "FEB $numero soumise par $nom — $objet — en attente de votre aval.", '/pages/achats/mes_visas.php']
                 );
+            } else {
+                // Pas de N+1 désigné pour ce département : rien à endosser,
+                // la FEB va directement à la file d'attente Achats — type
+                // 'info', seul type applicatif autorisé par la contrainte
+                // d'énumération sur notifications.type.
+                $achats = db_fetch_all(
+                    "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id
+                     WHERE r.slug='superviseur_achat' AND u.actif=1"
+                );
+                foreach ($achats as $a) {
+                    db_query(
+                        "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?, 'info', 'Nouvelle FEB', ?, ?)",
+                        [(int)$a['id'], "FEB $numero soumise par $nom — $objet", '/pages/achats/mes_feb.php']
+                    );
+                }
             }
         } else {
             $numero = db_fetch_value("SELECT numero FROM feb WHERE id=?", [$feb_id]);
@@ -798,11 +818,33 @@ function ach_retenir_offre_lot(int $offre_id, array $user): array {
         // RG-09 : une ligne dérogée garde son fournisseur choisi à la main.
         // On compte les deux populations — l'appelant doit pouvoir dire la
         // vérité à l'écran, y compris « reporté sur 0 ligne ».
-        $stmt = db_query(
-            "UPDATE feb_lignes SET fournisseur_id=? WHERE feb_id=? AND lot=? AND fournisseur_derogation=0",
-            [$offre['fournisseur_id'], $feb_id, $lot]
+        //
+        // Le montant de l'offre porte sur tout le lot, jamais ligne par
+        // ligne (feb_offres n'a qu'un seul montant_ttc) : il est réparti au
+        // prorata des quantités sur les lignes non dérogées, le reliquat
+        // d'arrondi posé sur la dernière — ach_verifier_comparatif() exige
+        // une somme des lignes strictement égale au montant de l'offre, donc
+        // un simple report proportionnel arrondi laisserait échouer ce
+        // contrôle par un XOF ici ou là sans cette dernière ligne de rattrapage.
+        $lignes_a_reporter = db_fetch_all(
+            "SELECT id, quantite FROM feb_lignes WHERE feb_id=? AND lot=? AND fournisseur_derogation=0 ORDER BY numero_ligne",
+            [$feb_id, $lot]
         );
-        $reportees = $stmt->rowCount();
+        $reportees = count($lignes_a_reporter);
+        if ($lignes_a_reporter) {
+            $total_qte = array_sum(array_column($lignes_a_reporter, 'quantite')) ?: 1;
+            $montant_offre = (int)$offre['montant_ttc'];
+            $reparti = 0;
+            foreach ($lignes_a_reporter as $i => $l) {
+                $dernier = ($i === count($lignes_a_reporter) - 1);
+                $part = $dernier ? ($montant_offre - $reparti) : (int) round($montant_offre * ((int)$l['quantite'] / $total_qte));
+                $reparti += $part;
+                db_query(
+                    "UPDATE feb_lignes SET fournisseur_id=?, montant_ttc=? WHERE id=?",
+                    [$offre['fournisseur_id'], $part, $l['id']]
+                );
+            }
+        }
         $derogees  = (int) db_fetch_value(
             "SELECT COUNT(*) FROM feb_lignes WHERE feb_id=? AND lot=? AND fournisseur_derogation=1",
             [$feb_id, $lot]
@@ -1204,25 +1246,22 @@ function ach_lancer_validation(int $feb_id, array $user): array {
     $labels = array_column(db_fetch_all("SELECT code, label FROM di_roles"), 'label', 'code');
     $workflow = array_map(fn($code) => ['role' => $code, 'label' => $labels[$code] ?? $code], $palier['signataires']);
 
-    // Visa du supérieur hiérarchique, en tête du circuit (modèle papier,
-    // feuille FEB DEMANDEUR : cases DEMANDEUR et SUPERIEUR HIERARCHIQUE).
-    // Il précède le palier : rien n'engage l'enveloppe du département avant
-    // que son responsable ait endossé la demande.
-    //
-    // La personne est résolue ici et figée sur la FEB, pour la même raison
-    // que workflow_snapshot : un changement de responsable en cours de
-    // circuit ne doit pas déplacer une signature déjà attendue.
-    $n1_user_id = $feb['departement_id']
-        ? ach_n1_du_departement((int)$feb['departement_id'], (int)$feb['demandeur_id'])
-        : null;
-    if ($n1_user_id) {
-        array_unshift($workflow, ['role' => 'n1', 'label' => $labels['n1'] ?? 'Responsable N+1']);
-    }
+    // Le visa du supérieur hiérarchique n'est plus resollicité ici : il a
+    // déjà endossé la demande avant même que les achats ne la prennent en
+    // charge (ach_endosser_n1(), à la soumission — cf. ach_creer_feb()).
+    // feb.n1_user_id garde la trace de qui, sans reparaître dans ce
+    // circuit-ci, qui ne porte plus que les paliers RAF/DAF/PDG.
+    $n1_user_id = $feb['n1_user_id'] ? (int)$feb['n1_user_id'] : null;
 
     $now = date('Y-m-d H:i:s');
     $nom = trim(($user['prenom'] ?? '') . ' ' . ($user['nom'] ?? ''));
-    $historique = [['action' => 'lancement_validation', 'par' => $uid, 'nom' => $nom,
-        'commentaire' => "Palier « {$palier['libelle']} » — $montant XOF", 'date' => $now]];
+    // Complété, pas remplacé : l'endossement N+1 (ach_endosser_n1(), à la
+    // soumission) y a déjà déposé une entrée que la fiche imprimable
+    // (includes/pdf_achats.php) relit pour dater sa case « Supérieur
+    // hiérarchique ».
+    $historique   = json_decode($feb['historique'] ?? 'null', true) ?: [];
+    $historique[] = ['action' => 'lancement_validation', 'par' => $uid, 'nom' => $nom,
+        'commentaire' => "Palier « {$palier['libelle']} » — $montant XOF", 'date' => $now];
 
     // Bloc 3, point 19 : premier des deux points de contrôle budgétaire.
     // Le verrou posé par ach_controle_budget() (SELECT ... FOR UPDATE) doit
@@ -1268,10 +1307,29 @@ function ach_lancer_validation(int $feb_id, array $user): array {
 //    en attente y trouve une liste vide, jamais la FEB d'un autre.
 function ach_peut_ouvrir_visas(array $user): bool {
     if (can('achats', 'can_update')) return true;
+    return ach_est_n1_quelque_part((int)$user['id']);
+}
+
+// ── Est-on N+1 d'au moins un département ? Extrait de ach_peut_ouvrir_visas()
+//    pour être réutilisé ailleurs qu'aux visas — la réception (pages/achats/
+//    receptions.php) doit s'ouvrir au N+1 pour son département sans qu'il
+//    porte achats_suivi.can_read/can_create.
+function ach_est_n1_quelque_part(int $user_id): bool {
     return (bool) db_fetch_value(
         "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND is_n1=1",
-        [(int)$user['id']]
+        [$user_id]
     );
+}
+
+// ── Départements dont l'utilisateur est le N+1 — sert à scoper la
+//    réception (une ligne par département, pas un id de site) au périmètre
+//    réel du responsable, comme site_id le fait déjà pour un coordinateur
+//    de site.
+function ach_departements_n1(int $user_id): array {
+    return array_map('intval', array_column(
+        db_fetch_all("SELECT departement_id FROM user_departements WHERE user_id=? AND is_n1=1", [$user_id]),
+        'departement_id'
+    ));
 }
 
 // ── Supérieur hiérarchique d'un département, hors le demandeur lui-même.
@@ -1292,6 +1350,76 @@ function ach_n1_du_departement(int $departement_id, int $demandeur_id): ?int {
         [$departement_id, $demandeur_id]
     );
     return $id ? (int)$id : null;
+}
+
+// ── Endossement N+1 avant prise en charge par les achats — porte distincte
+//    du circuit de paliers (RAF/DAF/PDG) qui se joue plus tard, au lancement
+//    de la validation (ach_lancer_validation() ne réinsère plus le N+1 dans
+//    ce circuit-là : son aval ici suffit). Pas de workflow_snapshot ici,
+//    volontairement : une seule personne, une seule décision, pas de circuit
+//    à faire progresser — feb.n1_user_id suffit à savoir qui doit se
+//    prononcer.
+function ach_endosser_n1(int $feb_id, array $user, bool $accepte, string $commentaire = ''): bool {
+    $uid = (int)$user['id'];
+    if (!$accepte && trim($commentaire) === '') {
+        throw new AchValidationException('Le motif de refus est obligatoire.');
+    }
+
+    $feb = db_fetch_one("SELECT * FROM feb WHERE id=?", [$feb_id]);
+    if (!$feb) throw new AchValidationException('FEB introuvable.');
+    if ($feb['statut'] !== 'en_attente_n1') throw new AchValidationException("Cette FEB n'attend pas votre aval.");
+    if ((int)$feb['n1_user_id'] !== $uid) throw new AchValidationException("Vous n'êtes pas le supérieur hiérarchique désigné pour cette demande.");
+
+    $now = date('Y-m-d H:i:s');
+    $nom = trim(($user['prenom'] ?? '') . ' ' . ($user['nom'] ?? ''));
+    $historique   = json_decode($feb['historique'] ?? 'null', true) ?: [];
+    $historique[] = ['action' => $accepte ? 'endosse_n1' : 'rejete_n1', 'par' => $uid, 'nom' => $nom,
+        'commentaire' => $commentaire, 'date' => $now];
+    $histJson = json_encode($historique, JSON_UNESCAPED_UNICODE);
+
+    if (!$accepte) {
+        // Retour au demandeur, pas à un statut intermédiaire : le refus du
+        // N+1 porte sur le besoin lui-même, pas sur un défaut de forme que
+        // les achats auraient à corriger — c'est donc bien un nouveau
+        // brouillon à reprendre, comme un rejet de palier plus tard dans le
+        // cycle renvoie à prise_en_charge.
+        $stmt = db_query(
+            "UPDATE feb SET statut='brouillon', motif_rejet=?, historique=?::jsonb
+              WHERE id=? AND statut='en_attente_n1'",
+            [$commentaire, $histJson, $feb_id]
+        );
+        if ($stmt->rowCount() === 0) return false;
+        audit_log($uid, 'UPDATE', 'achats', $feb_id, "Refus du supérieur hiérarchique : $commentaire");
+        ach_notifier_demandeur_feb($feb_id, "Votre FEB {$feb['numero']} n'a pas été endossée par votre supérieur hiérarchique : $commentaire");
+        return true;
+    }
+
+    $stmt = db_query(
+        "UPDATE feb SET statut='soumise', historique=?::jsonb WHERE id=? AND statut='en_attente_n1'",
+        [$histJson, $feb_id]
+    );
+    if ($stmt->rowCount() === 0) return false;
+    audit_log($uid, 'UPDATE', 'achats', $feb_id, 'Endossée par le supérieur hiérarchique — transmise aux Achats');
+    ach_notifier_demandeur_feb($feb_id, "Votre FEB {$feb['numero']} a été endossée par votre supérieur hiérarchique et transmise aux Achats.");
+
+    $achats = db_fetch_all(
+        "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='superviseur_achat' AND u.actif=1"
+    );
+    foreach ($achats as $a) {
+        db_query(
+            "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?, 'info', 'Nouvelle FEB', ?, ?)",
+            [(int)$a['id'], "FEB {$feb['numero']} endossée par le N+1 — {$feb['objet']}", '/pages/achats/mes_feb.php']
+        );
+    }
+    return true;
+}
+
+// ── FEB en attente de l'aval du N+1 connecté.
+function ach_a_endosser(array $user): array {
+    return db_fetch_all(
+        "SELECT * FROM feb WHERE statut='en_attente_n1' AND n1_user_id=? ORDER BY date_soumission ASC",
+        [(int)$user['id']]
+    );
 }
 
 // ── Notifie les porteurs d'une étape de circuit.
@@ -1651,7 +1779,14 @@ function ach_viser_affectation(int $affectation_id, array $user, bool $accepte, 
 
     $next = di_next_step($wf, $cur);
     if ($next === null) {
-        $statut_final = $affectation['utilisateur_id'] ? 'affecte' : 'en_stock';
+        // Validée ne veut pas dire arrivée : l'exemplaire est expédié vers
+        // sa destination (site_id/utilisateur_id posés dès maintenant, la
+        // décision est prise), mais reste 'en_transit' tant que le N+1 du
+        // département destinataire n'a pas confirmé la réception physique
+        // (ach_confirmer_reception_equipement()) — décision du 2026-08-23,
+        // même principe que le circuit magasin -> département des
+        // consommables. date_mise_en_service n'est donc posée qu'à cette
+        // confirmation, pas ici.
         $stmt = db_query(
             "UPDATE equipement_affectations SET statut='validee', valide_le=?, signatures=?::jsonb, historique=?::jsonb
               WHERE id=? AND etape_actuelle=?",
@@ -1659,15 +1794,25 @@ function ach_viser_affectation(int $affectation_id, array $user, bool $accepte, 
         );
         if ($stmt->rowCount() === 0) return false;
         db_query(
-            "UPDATE equipements SET site_id=?, utilisateur_id=?, statut_stock=?, date_mise_en_service=COALESCE(date_mise_en_service, ?) WHERE id=?",
-            [$affectation['site_id'], $affectation['utilisateur_id'], $statut_final, date('Y-m-d'), $affectation['equipement_id']]
+            "UPDATE equipements SET site_id=?, utilisateur_id=?, statut_stock='en_transit' WHERE id=?",
+            [$affectation['site_id'], $affectation['utilisateur_id'], $affectation['equipement_id']]
         );
-        audit_log($uid, 'UPDATE', 'equipements', $affectation['equipement_id'], "Affectation validée — étape finale « $etape_label »");
+        audit_log($uid, 'UPDATE', 'equipements', $affectation['equipement_id'], "Affectation validée — étape finale « $etape_label » — expédié, en attente de confirmation de réception");
         if ($affectation['proposee_par']) {
             db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','Affectation validée',?,?)",
                 [(int)$affectation['proposee_par'],
-                 "L'affectation de « " . ($equipement['numero_serie_interne'] ?? '') . " » est validée.",
+                 "L'affectation de « " . ($equipement['numero_serie_interne'] ?? '') . " » est validée et expédiée — en attente de confirmation du département.",
                  '/pages/equipements.php']);
+        }
+        if ($equipement['departement_id']) {
+            foreach (db_fetch_all(
+                "SELECT user_id FROM user_departements WHERE departement_id=? AND is_n1=1", [(int)$equipement['departement_id']]
+            ) as $n1) {
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','Équipement à réceptionner',?,?)",
+                    [(int)$n1['user_id'],
+                     "« " . ($equipement['numero_serie_interne'] ?? '') . " » expédié vers votre département — à confirmer.",
+                     '/pages/achats/equipements_attente.php']);
+            }
         }
         return true;
     }
@@ -1681,6 +1826,60 @@ function ach_viser_affectation(int $affectation_id, array $user, bool $accepte, 
     audit_log($uid, 'UPDATE', 'equipements', $affectation['equipement_id'], "Affectation — étape « $etape_label » visée, passage à « {$wf[$next]['label']} »");
     ach_notifier_role($wf[$next]['role'], "Affectation d'équipement en attente de votre visa — étape : {$wf[$next]['label']}.");
     return true;
+}
+
+// ── Confirmation de réception physique par le N+1 du département — dernier
+//    maillon du circuit magasin -> département côté équipements, symétrique
+//    de ach_receptionner_departement() côté consommables. Sans elle,
+//    l'exemplaire reste 'en_transit' indéfiniment : ni disponible pour une
+//    nouvelle affectation (il en a déjà une), ni compté comme réellement en
+//    service (date_mise_en_service).
+function ach_confirmer_reception_equipement(int $equipement_id, array $user): bool {
+    $uid = (int)$user['id'];
+    $equipement = db_fetch_one("SELECT * FROM equipements WHERE id=?", [$equipement_id]);
+    if (!$equipement) throw new AchValidationException('Équipement introuvable.');
+    if ($equipement['statut_stock'] !== 'en_transit') {
+        throw new AchValidationException("Cet exemplaire n'est pas en attente de confirmation de réception.");
+    }
+    if (!$equipement['departement_id']) {
+        throw new AchValidationException('Cet exemplaire ne porte aucun département.');
+    }
+
+    $est_n1 = (bool) db_fetch_value(
+        "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND departement_id=? AND is_n1=1",
+        [$uid, (int)$equipement['departement_id']]
+    );
+    $is_admin = in_array($user['role_slug'] ?? '', ['admin', 'superadmin'], true);
+    if (!$est_n1 && !$is_admin) {
+        throw new AchValidationException("Seul le supérieur hiérarchique du département peut confirmer cette réception.");
+    }
+
+    $statut_final = $equipement['utilisateur_id'] ? 'affecte' : 'en_stock';
+    $stmt = db_query(
+        "UPDATE equipements SET statut_stock=?, date_mise_en_service=COALESCE(date_mise_en_service, ?)
+          WHERE id=? AND statut_stock='en_transit'",
+        [$statut_final, date('Y-m-d'), $equipement_id]
+    );
+    if ($stmt->rowCount() === 0) return false;
+    audit_log($uid, 'UPDATE', 'equipements', $equipement_id, 'Réception confirmée par le supérieur hiérarchique du département');
+    return true;
+}
+
+// ── Équipements 'en_transit' que le N+1 connecté peut confirmer — même
+//    triple porte que les autres files N+1 (rôle admin, ou is_n1 sur le
+//    département de l'exemplaire).
+function ach_equipements_en_transit(array $user): array {
+    $uid = (int)$user['id'];
+    $is_admin = in_array($user['role_slug'] ?? '', ['admin', 'superadmin'], true);
+    if ($is_admin) {
+        return db_fetch_all("SELECT * FROM equipements WHERE statut_stock='en_transit' ORDER BY id DESC");
+    }
+    return db_fetch_all(
+        "SELECT e.* FROM equipements e
+         JOIN user_departements ud ON ud.departement_id = e.departement_id AND ud.user_id=? AND ud.is_n1=1
+         WHERE e.statut_stock='en_transit' ORDER BY e.id DESC",
+        [$uid]
+    );
 }
 
 // ── Étape 4 — Propositions d'affectation en attente du visa de
@@ -1787,10 +1986,25 @@ function ach_statut_suivi_calcule(array $ligne): string {
 //    seulement — une correction ultérieure par un administrateur change le
 //    numéro sans réécrire la date d'origine. Toute saisie ou modification
 //    est tracée à l'audit.
-function ach_saisir_da(int $suivi_id, string $numero_da, array $user): void {
+function ach_saisir_da(int $suivi_id, string $numero_da, array $user, ?string $date_da = null): void {
     $uid       = (int)$user['id'];
     $numero_da = trim($numero_da);
     if ($numero_da === '') throw new AchValidationException('Le numéro de DA est obligatoire.');
+
+    // La DA existe souvent avant sa saisie ici (papier, Sage) — sans date
+    // réglable, date_da valait toujours « aujourd'hui », faussant tout calcul
+    // du délai DA → BC pour une saisie faite après coup. CURRENT_DATE reste
+    // le défaut si le champ est laissé vide.
+    if ($date_da !== null) {
+        $date_da = trim($date_da);
+        $d = DateTime::createFromFormat('Y-m-d', $date_da);
+        if (!$date_da || !$d || $d->format('Y-m-d') !== $date_da) {
+            throw new AchValidationException('Date de DA invalide.');
+        }
+        if ($date_da > date('Y-m-d')) {
+            throw new AchValidationException('La date de DA ne peut pas être dans le futur.');
+        }
+    }
 
     $ligne = db_fetch_one("SELECT * FROM feb_suivi WHERE id=?", [$suivi_id]);
     if (!$ligne) throw new AchValidationException('Ligne de suivi introuvable.');
@@ -1802,7 +2016,9 @@ function ach_saisir_da(int $suivi_id, string $numero_da, array $user): void {
     }
 
     if ($premiere_saisie) {
-        db_query("UPDATE feb_suivi SET numero_da=?, date_da=CURRENT_DATE WHERE id=?", [$numero_da, $suivi_id]);
+        db_query("UPDATE feb_suivi SET numero_da=?, date_da=? WHERE id=?", [$numero_da, $date_da ?: date('Y-m-d'), $suivi_id]);
+    } elseif ($date_da) {
+        db_query("UPDATE feb_suivi SET numero_da=?, date_da=? WHERE id=?", [$numero_da, $date_da, $suivi_id]);
     } else {
         db_query("UPDATE feb_suivi SET numero_da=? WHERE id=?", [$numero_da, $suivi_id]);
     }
@@ -1841,13 +2057,13 @@ function ach_saisir_bc(int $suivi_id, string $numero_bc, array $user, ?string $d
 //    déjà pourvue n'est jamais écrasée (filtrée avant même d'être tentée,
 //    donc jamais bloquée par le verrou administrateur de ach_saisir_da() sur
 //    ce chemin). Retourne le nombre de lignes effectivement mises à jour.
-function ach_saisir_da_lot(int $feb_id, string $lot, string $numero_da, array $user): int {
+function ach_saisir_da_lot(int $feb_id, string $lot, string $numero_da, array $user, ?string $date_da = null): int {
     $lignes = db_fetch_all(
         "SELECT fs.id FROM feb_suivi fs JOIN feb_lignes fl ON fl.id = fs.feb_ligne_id
           WHERE fs.feb_id=? AND fl.lot=? AND (fs.numero_da IS NULL OR fs.numero_da = '')",
         [$feb_id, $lot]
     );
-    foreach ($lignes as $l) ach_saisir_da((int)$l['id'], $numero_da, $user);
+    foreach ($lignes as $l) ach_saisir_da((int)$l['id'], $numero_da, $user, $date_da);
     return count($lignes);
 }
 function ach_saisir_bc_lot(int $feb_id, string $lot, string $numero_bc, array $user, ?string $date_livraison_prevue = null): int {
@@ -1915,8 +2131,13 @@ function ach_receptionner(int $suivi_id, int $quantite, string $date, ?string $b
         }
 
         // Bloc 0 : la réception alimente le stock global ET le stock du site
-        // de la FEB — pas seulement le global — sur le même motif que
-        // pages/commandes.php (réception de commande interne). Rien à faire
+        // de la FEB (le magasin) — pas encore le stock du département.
+        // Décision du 2026-08-23 : le crédit département n'a plus lieu ici,
+        // mais à la confirmation de réception du département lui-même
+        // (ach_receptionner_departement()), après une étape d'expédition
+        // explicite (ach_expedier_departement()) — sans ça, le stock était
+        // compté « au département » alors qu'il vient tout juste d'arriver
+        // au magasin, avant même d'en être physiquement sorti. Rien à faire
         // pour une ligne en saisie libre (article_id NULL) : pas d'article à
         // créditer.
         if ($ligne['article_id']) {
@@ -1926,16 +2147,6 @@ function ach_receptionner(int $suivi_id, int $quantite, string $date, ?string $b
                  ON CONFLICT (article_id, site_id) DO UPDATE SET quantite = stock_site.quantite + ?",
                 [$ligne['article_id'], $ligne['site_id'], $quantite, $quantite]
             );
-            // Traçabilité par département : une FEB porte toujours un site ET
-            // un département (RG-06), mais plusieurs départements partagent
-            // souvent le même site (le siège). stock_site seul ne dit donc
-            // pas quel département détient l'équipement reçu — stock_departement
-            // le complète, sans remplacer ni influencer l'arbitrage (qui reste
-            // sur ach_stock_magasin() : ce stock-ci est déjà affecté, pas
-            // redisponible pour une autre demande).
-            if ($ligne['departement_id']) {
-                ach_crediter_stock_departement((int)$ligne['article_id'], (int)$ligne['departement_id'], $quantite);
-            }
         }
 
         // Étape 3b : une ligne DAI rattachée à une nomenclature (au plus
@@ -1989,16 +2200,143 @@ function ach_receptionner(int $suivi_id, int $quantite, string $date, ?string $b
              '/pages/achats/suivi_achats.php']
         );
     }
-    if ($ecart <= 0 && $ligne['demandeur_id']) {
+    // Pas de notification « besoin couvert » ici : le solde côté magasin ne
+    // dit pas encore que le département a la marchandise en main — cf.
+    // ach_receptionner_departement(), qui porte cette notification depuis
+    // le 2026-08-23.
+
+    return ['cumul' => $cumul, 'ecart' => max(0, $ecart), 'solde' => $ecart <= 0];
+}
+
+// ── Expédition du magasin vers le département (étape 2/3) — débite le
+//    stock du site où la réception magasin a été créditée (jamais plus que
+//    ce qui a été reçu au magasin et pas déjà expédié), ne crédite rien :
+//    le département n'a pas encore confirmé. Même profil que la réception
+//    magasin (achats_suivi.can_create) — décision du 2026-08-23.
+function ach_expedier_departement(int $suivi_id, int $quantite, string $date, string $observation, array $user): array {
+    $uid = (int)$user['id'];
+    if ($quantite <= 0) throw new AchValidationException('La quantité expédiée doit être strictement positive.');
+
+    $ligne = db_fetch_one(
+        "SELECT fs.*, fl.article_id, fl.designation, f.numero AS feb_numero
+         FROM feb_suivi fs
+         JOIN feb_lignes fl ON fl.id = fs.feb_ligne_id
+         JOIN feb f         ON f.id  = fs.feb_id
+         WHERE fs.id = ?",
+        [$suivi_id]
+    );
+    if (!$ligne) throw new AchValidationException('Ligne de suivi introuvable.');
+    if (!$ligne['article_id']) throw new AchValidationException("Ligne sans article — rien à expédier (saisie libre ou immobilisation).");
+
+    $recue     = (int)$ligne['quantite_recue'];
+    $expediee  = (int)$ligne['quantite_expediee'];
+    $reste     = $recue - $expediee;
+    if ($quantite > $reste) {
+        throw new AchValidationException("Quantité expédiée supérieure au reste disponible au magasin (reste $reste, saisi $quantite).");
+    }
+
+    $pdo = get_db();
+    $transaction_locale = !$pdo->inTransaction();
+    if ($transaction_locale) db_begin();
+    try {
+        db_query(
+            "INSERT INTO feb_expeditions (feb_suivi_id, quantite, date_expedition, observation, expedie_par)
+             VALUES (?,?,?,?,?)",
+            [$suivi_id, $quantite, $date, $observation ?: null, $uid]
+        );
+        db_query("UPDATE feb_suivi SET quantite_expediee = quantite_expediee + ? WHERE id=?", [$quantite, $suivi_id]);
+        db_query(
+            "UPDATE stock_site SET quantite = quantite - ? WHERE article_id=? AND site_id=?",
+            [$quantite, $ligne['article_id'], $ligne['site_id']]
+        );
+        if ($transaction_locale) db_commit();
+    } catch (Exception $e) {
+        if ($transaction_locale) db_rollback();
+        throw $e;
+    }
+
+    audit_log($uid, 'UPDATE', 'achats_suivi', $suivi_id, "Expédition vers le département de $quantite sur « {$ligne['designation']} » (FEB {$ligne['feb_numero']})");
+
+    if ($ligne['departement_id']) {
+        foreach (db_fetch_all(
+            "SELECT user_id FROM user_departements WHERE departement_id=? AND is_n1=1", [(int)$ligne['departement_id']]
+        ) as $n1) {
+            db_query(
+                "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','Expédition en cours',?,?)",
+                [(int)$n1['user_id'], "$quantite unité(s) de « {$ligne['designation']} » (FEB {$ligne['feb_numero']}) expédiée(s) vers votre département — à réceptionner.", '/pages/achats/receptions.php']
+            );
+        }
+    }
+
+    return ['cumul_expediee' => (int)$ligne['quantite_expediee'] + $quantite];
+}
+
+// ── Réception par le département (étape 3/3) — seul geste qui crédite enfin
+//    stock_departement. Réservée au N+1 du département de la FEB (même
+//    porte que la réception magasin lui accorde déjà, cf.
+//    ach_est_n1_quelque_part()) — revérifiée ici, pas seulement à l'écran.
+function ach_receptionner_departement(int $suivi_id, int $quantite, string $date, string $observation, array $user): array {
+    $uid = (int)$user['id'];
+    if ($quantite <= 0) throw new AchValidationException('La quantité reçue doit être strictement positive.');
+
+    $ligne = db_fetch_one(
+        "SELECT fs.*, fl.article_id, fl.designation, f.numero AS feb_numero, f.demandeur_id, f.departement_id
+         FROM feb_suivi fs
+         JOIN feb_lignes fl ON fl.id = fs.feb_ligne_id
+         JOIN feb f         ON f.id  = fs.feb_id
+         WHERE fs.id = ?",
+        [$suivi_id]
+    );
+    if (!$ligne) throw new AchValidationException('Ligne de suivi introuvable.');
+    if (!$ligne['article_id']) throw new AchValidationException("Ligne sans article — rien à réceptionner ici (saisie libre ou immobilisation).");
+    if (!$ligne['departement_id']) throw new AchValidationException('Cette ligne ne porte aucun département.');
+
+    $est_n1 = (bool) db_fetch_value(
+        "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND departement_id=? AND is_n1=1",
+        [$uid, (int)$ligne['departement_id']]
+    );
+    $is_admin = in_array($user['role_slug'] ?? '', ['admin', 'superadmin'], true);
+    if (!$est_n1 && !$is_admin) {
+        throw new AchValidationException("Seul le supérieur hiérarchique du département peut confirmer cette réception.");
+    }
+
+    $expediee = (int)$ligne['quantite_expediee'];
+    $recue_dept = (int)$ligne['quantite_receptionnee_departement'];
+    $reste = $expediee - $recue_dept;
+    if ($quantite > $reste) {
+        throw new AchValidationException("Quantité supérieure à ce qui a été expédié et pas encore confirmé (reste $reste, saisi $quantite).");
+    }
+
+    $pdo = get_db();
+    $transaction_locale = !$pdo->inTransaction();
+    if ($transaction_locale) db_begin();
+    try {
+        db_query(
+            "INSERT INTO feb_receptions_departement (feb_suivi_id, quantite, date_reception, observation, recu_par)
+             VALUES (?,?,?,?,?)",
+            [$suivi_id, $quantite, $date, $observation ?: null, $uid]
+        );
+        db_query("UPDATE feb_suivi SET quantite_receptionnee_departement = quantite_receptionnee_departement + ? WHERE id=?", [$quantite, $suivi_id]);
+        ach_crediter_stock_departement((int)$ligne['article_id'], (int)$ligne['departement_id'], $quantite);
+        if ($transaction_locale) db_commit();
+    } catch (Exception $e) {
+        if ($transaction_locale) db_rollback();
+        throw $e;
+    }
+
+    $cumul = $recue_dept + $quantite;
+    audit_log($uid, 'UPDATE', 'achats_suivi', $suivi_id, "Réception département de $quantite sur « {$ligne['designation']} » (FEB {$ligne['feb_numero']}) — cumul $cumul");
+
+    if ($cumul >= $expediee && $ligne['demandeur_id']) {
         db_query(
             "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','Besoin couvert',?,?)",
             [(int)$ligne['demandeur_id'],
-             "Votre besoin « {$ligne['designation']} » (FEB {$ligne['feb_numero']}) est intégralement réceptionné.",
+             "Votre besoin « {$ligne['designation']} » (FEB {$ligne['feb_numero']}) est arrivé dans votre département.",
              '/pages/achats/mes_feb.php']
         );
     }
 
-    return ['cumul' => $cumul, 'ecart' => max(0, $ecart), 'solde' => $ecart <= 0];
+    return ['cumul' => $cumul, 'reste' => max(0, $expediee - $cumul)];
 }
 
 // ── Clôture explicite d'un reliquat (J8, Bloc 3) — pour les cas où le solde
@@ -2143,6 +2481,15 @@ function ach_dashboard_kpis(array $user, ?array $depts, string $du, string $au):
          WHERE fs.date_livraison_reelle IS NOT NULL AND f.date_confirmation IS NOT NULL AND f.date_soumission BETWEEN ? AND ?$clause",
         array_merge([$du, $au], $pd)
     );
+    // date_da/date_bc sont des DATE, pas des TIMESTAMP comme les trois delais
+    // ci-dessus : leur soustraction donne déjà un entier (nombre de jours),
+    // pas un intervalle — EXTRACT(EPOCH FROM ...) y échoue (42883).
+    $delai_da_bc = ach_delais_jours(
+        "SELECT (fs.date_bc - fs.date_da) AS d
+         FROM feb_suivi fs JOIN feb f ON f.id=fs.feb_id
+         WHERE fs.date_bc IS NOT NULL AND fs.date_da IS NOT NULL AND f.date_soumission BETWEEN ? AND ?$clause",
+        array_merge([$du, $au], $pd)
+    );
 
     // Taux de livraison à temps et complète — formulation retenue à la
     // place du sigle OTIF (point 15) : receptionnee, sans clôture de
@@ -2162,6 +2509,7 @@ function ach_dashboard_kpis(array $user, ?array $depts, string $du, string $au):
         'delai_prise_charge' => $delai_prise_charge,
         'delai_validation'   => $delai_validation,
         'delai_livraison'    => $delai_livraison,
+        'delai_da_bc'        => $delai_da_bc,
         'taux_livraison_temps' => $taux_livraison_temps,
     ];
 }

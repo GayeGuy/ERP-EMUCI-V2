@@ -14,8 +14,11 @@ $user = current_user();
 require_permission('achats', 'can_read');
 $peut_creer = ach_peut_creer($user);
 // Un admin ou le service Achats voit toutes les FEB ; un demandeur ne voit
-// que les siennes — filtre serveur, jamais côté affichage.
+// que les siennes, plus celles qu'il a endossées comme N+1 (créées par
+// quelqu'un d'autre de son département) — filtre serveur, jamais côté
+// affichage.
 $voit_tout = in_array($user['role_slug'] ?? '', ['admin', 'superadmin', 'superviseur_achat'], true);
+$est_n1    = ach_est_n1_quelque_part((int)$user['id']);
 $_SESSION['groupe_actif'] = 'ACHATS';
 $page_title  = 'Mes FEB';
 $active_page = 'achats_mes_feb';
@@ -29,7 +32,11 @@ $perPage = 20;
 
 $where  = [];
 $params = [];
-if (!$voit_tout) {
+if (!$voit_tout && $est_n1) {
+    $where[]  = '(f.demandeur_id = ? OR f.n1_user_id = ?)';
+    $params[] = (int)$user['id'];
+    $params[] = (int)$user['id'];
+} elseif (!$voit_tout) {
     $where[]  = 'f.demandeur_id = ?';
     $params[] = (int)$user['id'];
 }
@@ -51,7 +58,7 @@ $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
 $total = (int)db_fetch_value("SELECT COUNT(*) FROM feb f $whereSql", $params);
 $febs  = db_fetch_all(
     "SELECT f.id, f.numero, f.objet, f.statut, f.urgence, f.montant_total, f.date_creation, f.date_soumission, f.fiche_validation_path,
-            CONCAT(u.prenom,' ',u.nom) AS demandeur_nom
+            f.demandeur_id, CONCAT(u.prenom,' ',u.nom) AS demandeur_nom
      FROM feb f
      LEFT JOIN users u ON u.id = f.demandeur_id
      $whereSql
@@ -125,7 +132,8 @@ include __DIR__ . '/../../templates/header.php';
   <table class="ach-table">
     <thead><tr>
       <th>Numéro</th><th>Objet</th>
-      <?php if ($voit_tout): ?><th>Demandeur</th><?php endif; ?>
+      <?php if ($voit_tout || $est_n1): ?><th>Demandeur</th><?php endif; ?>
+      <?php if ($est_n1 && !$voit_tout): ?><th>Mon rôle</th><?php endif; ?>
       <th>Urgence</th><th>Date</th><th>Montant</th><th>Statut</th><th>Actions</th>
     </tr></thead>
     <tbody>
@@ -137,7 +145,10 @@ include __DIR__ . '/../../templates/header.php';
       <tr <?php if ($resumable): ?>class="ach-row-clic" onclick="location.href='feb_fiche.php?id=<?= $f['id'] ?>'"<?php endif; ?>>
         <td style="font-weight:700;color:var(--navy)"><?= h($f['numero'] ?: '— (brouillon)') ?></td>
         <td><?= h($f['objet']) ?></td>
-        <?php if ($voit_tout): ?><td><?= h($f['demandeur_nom'] ?: '—') ?></td><?php endif; ?>
+        <?php if ($voit_tout || $est_n1): ?><td><?= h($f['demandeur_nom'] ?: '—') ?></td><?php endif; ?>
+        <?php if ($est_n1 && !$voit_tout):
+          $mon_role = (int)$f['demandeur_id'] === (int)$user['id'] ? 'Demandeur' : 'N+1';
+        ?><td><span class="ach-badge" style="background:#F1F5F9;color:#475569"><?= h($mon_role) ?></span></td><?php endif; ?>
         <td class="ach-urg" style="color:<?= (int)$f['urgence'] >= 2 ? '#991B1B' : ((int)$f['urgence'] === 1 ? '#92400E' : 'var(--muted)') ?>"><?= h($u) ?></td>
         <td><?= fmt_date($f['date_creation'], 'd/m/Y') ?></td>
         <td><?= fmt_number((float)$f['montant_total']) ?> XOF</td>

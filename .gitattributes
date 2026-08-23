@@ -1,1 +1,6 @@
 *.sh text eol=lf
+
+# Documents bureautiques : binaires, jamais normalises
+*.docx binary
+*.pdf   binary
+*.xlsx  binary

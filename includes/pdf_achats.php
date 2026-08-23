@@ -223,16 +223,16 @@ function ach_html_fiche_imprimable(int $feb_id): string {
     //    (cf. ach_html_fiche_validation()). Le demandeur n'a pas de visa à
     //    proprement parler : déposer/soumettre la FEB EST son engagement,
     //    daté à la soumission (ou à la création tant qu'elle est en
-    //    brouillon). Le N+1 est résolu et figé sur feb.n1_user_id au
-    //    lancement de la validation (ach_lancer_validation()) — case vide
-    //    tant qu'il n'est pas encore visé, ou que la validation n'a même
-    //    pas été lancée.
+    //    brouillon). Le N+1 est résolu et figé sur feb.n1_user_id à la
+    //    soumission (ach_endosser_n1(), avant même la prise en charge par
+    //    les achats) — son endossement est tracé dans feb.historique
+    //    ('endosse_n1'), plus dans feb.signatures : il ne fait plus partie
+    //    du circuit RAF/DAF/PDG qui se joue plus tard, au lancement.
     $n1_nom = $feb['n1_user_id'] ? db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [(int)$feb['n1_user_id']]) : null;
-    $n1_label_imprimable = null;
-    foreach (($feb['workflow_snapshot'] ?: []) as $e) {
-        if (($e['role'] ?? '') === 'n1') { $n1_label_imprimable = $e['label'] ?? null; break; }
+    $n1_signature = null;
+    foreach (($feb['historique'] ?: []) as $h) {
+        if (($h['action'] ?? '') === 'endosse_n1') { $n1_signature = $h; break; }
     }
-    $n1_signature = $n1_label_imprimable ? ($signatures_par_etape[$n1_label_imprimable] ?? null) : null;
 
     // Case DEMANDEUR : toujours renseignée dès que la FEB existe — déposer/
     // soumettre est l'engagement du demandeur, il n'y a pas de visa distinct
