@@ -77,12 +77,10 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!in_array($dept_ligne, $departements_n1_force, true)) json_response(false, "Cette ligne n'appartient pas à votre département.");
         }
 
-        $bl_filename = null;
-        if (!empty($_FILES['bl']['name'])) {
-            $up = upload_document('bl', 'bl', 'bl_suivi_' . $suivi_id, false);
-            if (!$up['success']) json_response(false, $up['message']);
-            $bl_filename = $up['filename'];
-        }
+        if (empty($_FILES['bl']['name'])) json_response(false, 'Le bon de livraison est obligatoire.');
+        $up = upload_document('bl', 'bl', 'bl_suivi_' . $suivi_id, false);
+        if (!$up['success']) json_response(false, $up['message']);
+        $bl_filename = $up['filename'];
 
         try {
             $res = ach_receptionner($suivi_id, $quantite, $date, $bl_filename, $observation, $user);
@@ -260,8 +258,8 @@ include __DIR__ . '/../../templates/header.php';
       <input type="date" id="rc-date">
     </div>
     <div class="ach-fg">
-      <label for="rc-bl">Bon de livraison (PDF, JPG, PNG ou WEBP — facultatif)</label>
-      <input type="file" id="rc-bl" accept=".pdf,.jpg,.jpeg,.png,.webp">
+      <label for="rc-bl">Bon de livraison (PDF, JPG, PNG ou WEBP) *</label>
+      <input type="file" id="rc-bl" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
     </div>
     <div class="ach-fg">
       <label for="rc-observation">Observation</label>
@@ -303,6 +301,7 @@ function rcValider() {
   const err = document.getElementById('rc-err');
   const quantite = parseInt(document.getElementById('rc-quantite').value, 10);
   if (!quantite || quantite < 1) { err.textContent = 'La quantité reçue doit être strictement positive.'; err.style.display = 'block'; return; }
+  if (!document.getElementById('rc-bl').files[0]) { err.textContent = 'Le bon de livraison est obligatoire.'; err.style.display = 'block'; return; }
 
   // Ligne DAI : le rattachement (ou son retrait) est enregistré avant la
   // réception elle-même, dans un aller séparé — plus simple qu'une
