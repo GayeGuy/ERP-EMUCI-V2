@@ -13,8 +13,16 @@ require_once __DIR__ . '/../../includes/upload.php';
 
 require_auth();
 $user = current_user();
-require_permission('achats_suivi', 'can_read');
-$can_receptionner = can('achats_suivi', 'can_create');
+// Pas require_permission() : un supérieur hiérarchique doit pouvoir
+// réceptionner pour son département sans porter achats_suivi.can_read —
+// même porte que ach_peut_ouvrir_visas() pour les visas.
+$uid = (int)$user['id'];
+if (!can('achats_suivi', 'can_read') && !ach_est_n1_quelque_part($uid)) {
+    http_response_code(403);
+    include __DIR__ . '/../../templates/403.php';
+    exit;
+}
+$can_receptionner = can('achats_suivi', 'can_create') || ach_est_n1_quelque_part($uid);
 $_SESSION['groupe_actif'] = 'ACHATS';
 $page_title  = 'Réceptions';
 $active_page = 'achats_receptions';
@@ -24,6 +32,12 @@ $active_page = 'achats_receptions';
 // et l'administration voient toutes les réceptions à traiter.
 $role_slug  = $user['role_slug'] ?? '';
 $site_force = ($role_slug === 'coordinateur_site' && $user['site_id']) ? (int)$user['site_id'] : 0;
+
+// Un supérieur hiérarchique sans achats_suivi.can_read ne voit que les
+// réceptions de son (ses) département(s) — même principe que site_force
+// pour le coordinateur de site, appliqué à feb.departement_id plutôt qu'à
+// un site : la FEB porte le département, pas la ligne de suivi Sage.
+$departements_n1_force = !can('achats_suivi', 'can_read') ? ach_departements_n1($uid) : [];
 
 // ── AJAX ────────────────────────────────────────────────────
 if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -54,6 +68,14 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $site_ligne = (int) db_fetch_value("SELECT site_id FROM feb_suivi WHERE id=?", [$suivi_id]);
             if ($site_ligne !== $site_force) json_response(false, "Cette ligne n'appartient pas à votre site.");
         }
+        // Idem pour un supérieur hiérarchique sans achats_suivi.can_read :
+        // seulement les lignes des FEB de son (ses) département(s).
+        if ($departements_n1_force) {
+            $dept_ligne = (int) db_fetch_value(
+                "SELECT f.departement_id FROM feb_suivi fs JOIN feb f ON f.id=fs.feb_id WHERE fs.id=?", [$suivi_id]
+            );
+            if (!in_array($dept_ligne, $departements_n1_force, true)) json_response(false, "Cette ligne n'appartient pas à votre département.");
+        }
 
         $bl_filename = null;
         if (!empty($_FILES['bl']['name'])) {
@@ -82,6 +104,11 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
 $where  = ["fs.numero_bc IS NOT NULL", "fs.numero_bc <> ''", "fs.quantite_recue < fs.quantite_commandee", "fs.cloture_reliquat = 0"];
 $params = [];
 if ($site_force) { $where[] = 'fs.site_id = ?'; $params[] = $site_force; }
+if ($departements_n1_force) {
+    $placeholders = implode(',', array_fill(0, count($departements_n1_force), '?'));
+    $where[] = "f.departement_id IN ($placeholders)";
+    array_push($params, ...$departements_n1_force);
+}
 
 $lignes = db_fetch_all(
     "SELECT fs.*, f.numero AS feb_numero,
