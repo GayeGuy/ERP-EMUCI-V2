@@ -21,6 +21,7 @@ require_once __DIR__ . '/demandes.php';
 function ach_statuts_feb(): array {
     return [
         'brouillon'         => ['label' => 'Brouillon',              'bg' => '#F1F5F9', 'color' => '#475569'],
+        'en_attente_n1'     => ['label' => 'En attente du N+1',       'bg' => '#FFF7ED', 'color' => '#B45309'],
         'soumise'           => ['label' => 'Soumise',                 'bg' => '#DBEAFE', 'color' => '#1D4ED8'],
         'prise_en_charge'   => ['label' => 'Prise en charge',         'bg' => '#E0E7FF', 'color' => '#3730A3'],
         'en_validation'     => ['label' => 'En validation',           'bg' => '#FEF3C7', 'color' => '#92400E'],
@@ -460,25 +461,44 @@ function ach_creer_feb(array $user, ?int $feb_id, array $entete, array $lignes, 
         if ($soumettre) {
             $numero = ach_numero_feb($exercice);
             $montant_total = (int) db_fetch_value("SELECT COALESCE(SUM(montant_ttc),0) FROM feb_lignes WHERE feb_id=?", [$feb_id]);
+
+            // Visa du supérieur hiérarchique AVANT prise en charge par les
+            // achats (pas au lancement de la validation, cf. ach_lancer_validation()
+            // qui ne le resollicite plus) : sans son aval, les achats ne
+            // doivent même pas voir la demande. La personne est résolue et
+            // figée sur feb.n1_user_id ici, pour la même raison que le reste
+            // du figeage RG-11 — un changement de responsable en cours de
+            // circuit ne doit pas déplacer une signature déjà attendue.
+            $n1_user_id = $departement_id ? ach_n1_du_departement((int)$departement_id, $uid) : null;
+            $statut_apres = $n1_user_id ? 'en_attente_n1' : 'soumise';
+
             db_query(
-                "UPDATE feb SET numero=?, statut='soumise', date_soumission=?, montant_total=? WHERE id=?",
-                [$numero, $now, $montant_total, $feb_id]
+                "UPDATE feb SET numero=?, statut=?, date_soumission=?, montant_total=?, n1_user_id=? WHERE id=?",
+                [$numero, $statut_apres, $now, $montant_total, $n1_user_id, $feb_id]
             );
-            $statut = 'soumise';
+            $statut = $statut_apres;
             audit_log($uid, 'UPDATE', 'achats', $feb_id, "Soumission FEB $numero");
 
-            // Notification au service Achats — type 'info', seul type
-            // applicatif autorisé par la contrainte d'énumération sur
-            // notifications.type (avec fin_cycle, stock_bas, alerte_conso).
-            $achats = db_fetch_all(
-                "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id
-                 WHERE r.slug='superviseur_achat' AND u.actif=1"
-            );
-            foreach ($achats as $a) {
+            if ($n1_user_id) {
                 db_query(
-                    "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?, 'info', 'Nouvelle FEB', ?, ?)",
-                    [(int)$a['id'], "FEB $numero soumise par $nom — $objet", '/pages/achats/mes_feb.php']
+                    "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?, 'info', 'FEB à endosser', ?, ?)",
+                    [$n1_user_id, "FEB $numero soumise par $nom — $objet — en attente de votre aval.", '/pages/achats/mes_visas.php']
                 );
+            } else {
+                // Pas de N+1 désigné pour ce département : rien à endosser,
+                // la FEB va directement à la file d'attente Achats — type
+                // 'info', seul type applicatif autorisé par la contrainte
+                // d'énumération sur notifications.type.
+                $achats = db_fetch_all(
+                    "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id
+                     WHERE r.slug='superviseur_achat' AND u.actif=1"
+                );
+                foreach ($achats as $a) {
+                    db_query(
+                        "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?, 'info', 'Nouvelle FEB', ?, ?)",
+                        [(int)$a['id'], "FEB $numero soumise par $nom — $objet", '/pages/achats/mes_feb.php']
+                    );
+                }
             }
         } else {
             $numero = db_fetch_value("SELECT numero FROM feb WHERE id=?", [$feb_id]);
@@ -1204,25 +1224,22 @@ function ach_lancer_validation(int $feb_id, array $user): array {
     $labels = array_column(db_fetch_all("SELECT code, label FROM di_roles"), 'label', 'code');
     $workflow = array_map(fn($code) => ['role' => $code, 'label' => $labels[$code] ?? $code], $palier['signataires']);
 
-    // Visa du supérieur hiérarchique, en tête du circuit (modèle papier,
-    // feuille FEB DEMANDEUR : cases DEMANDEUR et SUPERIEUR HIERARCHIQUE).
-    // Il précède le palier : rien n'engage l'enveloppe du département avant
-    // que son responsable ait endossé la demande.
-    //
-    // La personne est résolue ici et figée sur la FEB, pour la même raison
-    // que workflow_snapshot : un changement de responsable en cours de
-    // circuit ne doit pas déplacer une signature déjà attendue.
-    $n1_user_id = $feb['departement_id']
-        ? ach_n1_du_departement((int)$feb['departement_id'], (int)$feb['demandeur_id'])
-        : null;
-    if ($n1_user_id) {
-        array_unshift($workflow, ['role' => 'n1', 'label' => $labels['n1'] ?? 'Responsable N+1']);
-    }
+    // Le visa du supérieur hiérarchique n'est plus resollicité ici : il a
+    // déjà endossé la demande avant même que les achats ne la prennent en
+    // charge (ach_endosser_n1(), à la soumission — cf. ach_creer_feb()).
+    // feb.n1_user_id garde la trace de qui, sans reparaître dans ce
+    // circuit-ci, qui ne porte plus que les paliers RAF/DAF/PDG.
+    $n1_user_id = $feb['n1_user_id'] ? (int)$feb['n1_user_id'] : null;
 
     $now = date('Y-m-d H:i:s');
     $nom = trim(($user['prenom'] ?? '') . ' ' . ($user['nom'] ?? ''));
-    $historique = [['action' => 'lancement_validation', 'par' => $uid, 'nom' => $nom,
-        'commentaire' => "Palier « {$palier['libelle']} » — $montant XOF", 'date' => $now]];
+    // Complété, pas remplacé : l'endossement N+1 (ach_endosser_n1(), à la
+    // soumission) y a déjà déposé une entrée que la fiche imprimable
+    // (includes/pdf_achats.php) relit pour dater sa case « Supérieur
+    // hiérarchique ».
+    $historique   = json_decode($feb['historique'] ?? 'null', true) ?: [];
+    $historique[] = ['action' => 'lancement_validation', 'par' => $uid, 'nom' => $nom,
+        'commentaire' => "Palier « {$palier['libelle']} » — $montant XOF", 'date' => $now];
 
     // Bloc 3, point 19 : premier des deux points de contrôle budgétaire.
     // Le verrou posé par ach_controle_budget() (SELECT ... FOR UPDATE) doit
@@ -1268,10 +1285,29 @@ function ach_lancer_validation(int $feb_id, array $user): array {
 //    en attente y trouve une liste vide, jamais la FEB d'un autre.
 function ach_peut_ouvrir_visas(array $user): bool {
     if (can('achats', 'can_update')) return true;
+    return ach_est_n1_quelque_part((int)$user['id']);
+}
+
+// ── Est-on N+1 d'au moins un département ? Extrait de ach_peut_ouvrir_visas()
+//    pour être réutilisé ailleurs qu'aux visas — la réception (pages/achats/
+//    receptions.php) doit s'ouvrir au N+1 pour son département sans qu'il
+//    porte achats_suivi.can_read/can_create.
+function ach_est_n1_quelque_part(int $user_id): bool {
     return (bool) db_fetch_value(
         "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND is_n1=1",
-        [(int)$user['id']]
+        [$user_id]
     );
+}
+
+// ── Départements dont l'utilisateur est le N+1 — sert à scoper la
+//    réception (une ligne par département, pas un id de site) au périmètre
+//    réel du responsable, comme site_id le fait déjà pour un coordinateur
+//    de site.
+function ach_departements_n1(int $user_id): array {
+    return array_map('intval', array_column(
+        db_fetch_all("SELECT departement_id FROM user_departements WHERE user_id=? AND is_n1=1", [$user_id]),
+        'departement_id'
+    ));
 }
 
 // ── Supérieur hiérarchique d'un département, hors le demandeur lui-même.
@@ -1292,6 +1328,76 @@ function ach_n1_du_departement(int $departement_id, int $demandeur_id): ?int {
         [$departement_id, $demandeur_id]
     );
     return $id ? (int)$id : null;
+}
+
+// ── Endossement N+1 avant prise en charge par les achats — porte distincte
+//    du circuit de paliers (RAF/DAF/PDG) qui se joue plus tard, au lancement
+//    de la validation (ach_lancer_validation() ne réinsère plus le N+1 dans
+//    ce circuit-là : son aval ici suffit). Pas de workflow_snapshot ici,
+//    volontairement : une seule personne, une seule décision, pas de circuit
+//    à faire progresser — feb.n1_user_id suffit à savoir qui doit se
+//    prononcer.
+function ach_endosser_n1(int $feb_id, array $user, bool $accepte, string $commentaire = ''): bool {
+    $uid = (int)$user['id'];
+    if (!$accepte && trim($commentaire) === '') {
+        throw new AchValidationException('Le motif de refus est obligatoire.');
+    }
+
+    $feb = db_fetch_one("SELECT * FROM feb WHERE id=?", [$feb_id]);
+    if (!$feb) throw new AchValidationException('FEB introuvable.');
+    if ($feb['statut'] !== 'en_attente_n1') throw new AchValidationException("Cette FEB n'attend pas votre aval.");
+    if ((int)$feb['n1_user_id'] !== $uid) throw new AchValidationException("Vous n'êtes pas le supérieur hiérarchique désigné pour cette demande.");
+
+    $now = date('Y-m-d H:i:s');
+    $nom = trim(($user['prenom'] ?? '') . ' ' . ($user['nom'] ?? ''));
+    $historique   = json_decode($feb['historique'] ?? 'null', true) ?: [];
+    $historique[] = ['action' => $accepte ? 'endosse_n1' : 'rejete_n1', 'par' => $uid, 'nom' => $nom,
+        'commentaire' => $commentaire, 'date' => $now];
+    $histJson = json_encode($historique, JSON_UNESCAPED_UNICODE);
+
+    if (!$accepte) {
+        // Retour au demandeur, pas à un statut intermédiaire : le refus du
+        // N+1 porte sur le besoin lui-même, pas sur un défaut de forme que
+        // les achats auraient à corriger — c'est donc bien un nouveau
+        // brouillon à reprendre, comme un rejet de palier plus tard dans le
+        // cycle renvoie à prise_en_charge.
+        $stmt = db_query(
+            "UPDATE feb SET statut='brouillon', motif_rejet=?, historique=?::jsonb
+              WHERE id=? AND statut='en_attente_n1'",
+            [$commentaire, $histJson, $feb_id]
+        );
+        if ($stmt->rowCount() === 0) return false;
+        audit_log($uid, 'UPDATE', 'achats', $feb_id, "Refus du supérieur hiérarchique : $commentaire");
+        ach_notifier_demandeur_feb($feb_id, "Votre FEB {$feb['numero']} n'a pas été endossée par votre supérieur hiérarchique : $commentaire");
+        return true;
+    }
+
+    $stmt = db_query(
+        "UPDATE feb SET statut='soumise', historique=?::jsonb WHERE id=? AND statut='en_attente_n1'",
+        [$histJson, $feb_id]
+    );
+    if ($stmt->rowCount() === 0) return false;
+    audit_log($uid, 'UPDATE', 'achats', $feb_id, 'Endossée par le supérieur hiérarchique — transmise aux Achats');
+    ach_notifier_demandeur_feb($feb_id, "Votre FEB {$feb['numero']} a été endossée par votre supérieur hiérarchique et transmise aux Achats.");
+
+    $achats = db_fetch_all(
+        "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='superviseur_achat' AND u.actif=1"
+    );
+    foreach ($achats as $a) {
+        db_query(
+            "INSERT INTO notifications (user_id, type, titre, message, lien) VALUES (?, 'info', 'Nouvelle FEB', ?, ?)",
+            [(int)$a['id'], "FEB {$feb['numero']} endossée par le N+1 — {$feb['objet']}", '/pages/achats/mes_feb.php']
+        );
+    }
+    return true;
+}
+
+// ── FEB en attente de l'aval du N+1 connecté.
+function ach_a_endosser(array $user): array {
+    return db_fetch_all(
+        "SELECT * FROM feb WHERE statut='en_attente_n1' AND n1_user_id=? ORDER BY date_soumission ASC",
+        [(int)$user['id']]
+    );
 }
 
 // ── Notifie les porteurs d'une étape de circuit.

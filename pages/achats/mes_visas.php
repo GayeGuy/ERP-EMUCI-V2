@@ -145,6 +145,39 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         ]);
     }
 
+    // ── Endossement N+1 avant prise en charge par les achats — porte
+    //    distincte du circuit RAF/DAF/PDG (pas de workflow_snapshot ici,
+    //    cf. ach_endosser_n1() dans includes/achats.php).
+    if ($action === 'get_detail_endosser') {
+        $row = db_fetch_one("SELECT * FROM feb WHERE id=? AND statut='en_attente_n1'", [$feb_id]);
+        if (!$row) json_response(false, "FEB introuvable ou n'attend plus votre aval.");
+        if ((int)$row['n1_user_id'] !== $uid) json_response(false, "Vous n'êtes pas le supérieur hiérarchique désigné pour cette demande.");
+
+        $demandeur_nom = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$row['demandeur_id']]);
+        $site_nom      = $row['site_id'] ? db_fetch_value("SELECT nom FROM sites WHERE id=?", [$row['site_id']]) : null;
+        $lignes        = db_fetch_all("SELECT designation, quantite, unite, montant_ttc FROM feb_lignes WHERE feb_id=? ORDER BY numero_ligne", [$feb_id]);
+
+        json_response(true, '', [
+            'feb'           => ['id' => $row['id'], 'numero' => $row['numero'], 'objet' => $row['objet'],
+                                 'montant_total' => (float)$row['montant_total'], 'urgence' => (int)$row['urgence']],
+            'demandeur_nom' => $demandeur_nom ?: '—',
+            'site_nom'      => $site_nom ?: '—',
+            'lignes'        => $lignes,
+        ]);
+    }
+
+    if ($action === 'endosser') {
+        $accepte     = ($_POST['accepte'] ?? '') === '1';
+        $commentaire = trim($_POST['commentaire'] ?? '');
+        try {
+            $ok = ach_endosser_n1($feb_id, $user, $accepte, $commentaire);
+            if ($ok) json_response(true, $accepte ? 'FEB endossée et transmise aux Achats.' : 'FEB renvoyée au demandeur.');
+            json_response(false, 'Cette FEB vient déjà d\'être traitée.');
+        } catch (AchValidationException $e) {
+            json_response(false, $e->getMessage());
+        }
+    }
+
     if ($action === 'viser_affectation') {
         $affectation_id = (int)($_POST['affectation_id'] ?? 0);
         $accepte     = ($_POST['accepte'] ?? '') === '1';
@@ -177,6 +210,13 @@ unset($f);
 $total_a_viser  = count($a_viser);
 $anciennete_max = $a_viser ? max(array_column($a_viser, 'anciennete_h')) : 0.0;
 
+// ── Endossement N+1 avant prise en charge par les achats.
+$a_endosser = ach_a_endosser($user);
+foreach ($a_endosser as &$e) {
+    $e['demandeur_nom'] = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$e['demandeur_id']]);
+}
+unset($e);
+
 // ── Étape 4 : propositions d'affectation en attente du même visa.
 $affectations_a_viser = ach_a_viser_affectations($user);
 foreach ($affectations_a_viser as &$a) {
@@ -192,9 +232,13 @@ unset($a);
 
 // ── Rafraîchissement live — fragment HTML seul (KPI + tableau), cf. le
 //    même mécanisme sur file_attente.php (templates/footer.php).
-function ach_mv_render_zone(int $total_a_viser, float $anciennete_max, array $a_viser, array $affectations_a_viser): void {
+function ach_mv_render_zone(int $total_a_viser, float $anciennete_max, array $a_viser, array $a_endosser, array $affectations_a_viser): void {
     ?>
     <div class="ach-kpi">
+      <div class="ach-kpi-item">
+        <div class="ach-kpi-val"><?= count($a_endosser) ?></div>
+        <div class="ach-kpi-lbl">FEB à endosser (avant prise en charge Achats)</div>
+      </div>
       <div class="ach-kpi-item">
         <div class="ach-kpi-val"><?= $total_a_viser ?></div>
         <div class="ach-kpi-lbl">FEB en attente de votre visa</div>
@@ -205,6 +249,33 @@ function ach_mv_render_zone(int $total_a_viser, float $anciennete_max, array $a_
       </div>
     </div>
 
+    <div class="ach-section-ttl" style="font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;font-weight:800;color:var(--navy);margin:0 0 12px">À endosser avant prise en charge Achats</div>
+    <div class="ach-table-wrap" style="margin-bottom:24px">
+      <?php if (empty($a_endosser)): ?>
+        <div class="ach-empty">Aucune FEB en attente de votre aval.</div>
+      <?php else: ?>
+      <div style="overflow-x:auto">
+      <table class="ach-table">
+        <thead><tr>
+          <th>Numéro</th><th>Objet</th><th>Demandeur</th><th>Montant estimé</th><th>Actions</th>
+        </tr></thead>
+        <tbody>
+          <?php foreach ($a_endosser as $e): ?>
+          <tr>
+            <td style="font-weight:700;color:var(--navy)"><?= h($e['numero'] ?: '—') ?></td>
+            <td><?= h($e['objet']) ?></td>
+            <td><?= h($e['demandeur_nom'] ?: '—') ?></td>
+            <td style="font-weight:700"><?= fmt_number((float)$e['montant_total']) ?> XOF</td>
+            <td><button type="button" class="btn btn-primary btn-sm" onclick="mvOuvrirEndosser(<?= (int)$e['id'] ?>)">Examiner</button></td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+      </div>
+      <?php endif; ?>
+    </div>
+
+    <div class="ach-section-ttl" style="font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;font-weight:800;color:var(--navy);margin:0 0 12px">Circuit de validation (RAF/DAF/PDG)</div>
     <div class="ach-table-wrap">
       <?php if (empty($a_viser)): ?>
         <div class="ach-empty">Aucune FEB en attente de votre visa.</div>
@@ -264,7 +335,7 @@ function ach_mv_render_zone(int $total_a_viser, float $anciennete_max, array $a_
 }
 
 if (is_ajax() && ($_GET['fragment'] ?? '') === '1') {
-    ach_mv_render_zone($total_a_viser, $anciennete_max, $a_viser, $affectations_a_viser);
+    ach_mv_render_zone($total_a_viser, $anciennete_max, $a_viser, $a_endosser, $affectations_a_viser);
     exit;
 }
 
@@ -303,7 +374,7 @@ include __DIR__ . '/../../templates/header.php';
 </style>
 
 <div id="mv-live-zone">
-<?php ach_mv_render_zone($total_a_viser, $anciennete_max, $a_viser, $affectations_a_viser); ?>
+<?php ach_mv_render_zone($total_a_viser, $anciennete_max, $a_viser, $a_endosser, $affectations_a_viser); ?>
 </div>
 
 <!-- MODALE visa -->
@@ -343,6 +414,37 @@ include __DIR__ . '/../../templates/header.php';
       <button type="button" class="btn btn-secondary" onclick="mvFermer()">Fermer</button>
       <button type="button" class="btn btn-danger" onclick="mvViser(false)">Rejeter</button>
       <button type="button" class="btn btn-primary" onclick="mvViser(true)">Accepter</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODALE endossement N+1 -->
+<div class="ach-modal-bg" id="endos-modal">
+  <div class="ach-modal" role="dialog" aria-labelledby="endos-modal-title" style="max-width:640px">
+    <h3 id="endos-modal-title">Endossement — <span id="me-numero"></span></h3>
+    <input type="hidden" id="me-feb-id" value="">
+    <div class="visa-grid" style="grid-template-columns:repeat(2,1fr)">
+      <div><div class="visa-lbl">Demandeur</div><div class="visa-val" id="me-demandeur"></div></div>
+      <div><div class="visa-lbl">Site</div><div class="visa-val" id="me-site"></div></div>
+      <div><div class="visa-lbl">Montant estimé</div><div class="visa-val big" id="me-montant"></div></div>
+      <div style="grid-column:1/-1"><div class="visa-lbl">Objet</div><div class="visa-val" id="me-objet"></div></div>
+    </div>
+    <div class="visa-lbl">Lignes</div>
+    <div style="overflow-x:auto;margin-bottom:16px">
+    <table class="ach-table">
+      <thead><tr><th>Désignation</th><th>Qté</th><th>Unité</th><th>Montant estimé</th></tr></thead>
+      <tbody id="me-lignes"></tbody>
+    </table>
+    </div>
+    <div class="ach-fg">
+      <label for="me-commentaire">Commentaire (obligatoire en cas de refus)</label>
+      <textarea id="me-commentaire" placeholder="Motif du refus, ou remarque optionnelle si vous endossez"></textarea>
+      <div class="ach-err" id="me-err"></div>
+    </div>
+    <div class="visa-actions">
+      <button type="button" class="btn btn-secondary" onclick="meFermer()">Fermer</button>
+      <button type="button" class="btn btn-danger" onclick="meViser(false)">Refuser</button>
+      <button type="button" class="btn btn-primary" onclick="meViser(true)">Endosser</button>
     </div>
   </div>
 </div>
@@ -455,6 +557,47 @@ function mvViser(accepte) {
     if (!res.success) { err.textContent = res.message; err.style.display = 'block'; return; }
     toast(res.message, 'success');
     mvFermer();
+    setTimeout(() => location.reload(), 600);
+  });
+}
+
+function mvOuvrirEndosser(febId) {
+  mvPost({ action: 'get_detail_endosser', feb_id: febId }).then(res => {
+    if (!res.success) { toast(res.message, 'danger'); return; }
+    const d = res.data;
+    document.getElementById('me-feb-id').value = febId;
+    document.getElementById('me-numero').textContent = d.feb.numero || '—';
+    document.getElementById('me-demandeur').textContent = d.demandeur_nom;
+    document.getElementById('me-site').textContent = d.site_nom;
+    document.getElementById('me-montant').textContent = Number(d.feb.montant_total).toLocaleString('fr-FR') + ' XOF';
+    document.getElementById('me-objet').textContent = d.feb.objet;
+    document.getElementById('me-commentaire').value = '';
+    document.getElementById('me-err').style.display = 'none';
+    document.getElementById('me-lignes').innerHTML = (d.lignes || []).map(l => `
+      <tr>
+        <td>${esc(l.designation)}</td><td>${l.quantite}</td><td>${esc(l.unite || '—')}</td>
+        <td>${Number(l.montant_ttc).toLocaleString('fr-FR')} XOF</td>
+      </tr>`).join('') || '<tr><td colspan="4" style="text-align:center;color:var(--muted)">Aucune ligne.</td></tr>';
+    document.getElementById('endos-modal').classList.add('open');
+  });
+}
+function meFermer() { document.getElementById('endos-modal').classList.remove('open'); }
+document.getElementById('endos-modal').addEventListener('click', e => { if (e.target === e.currentTarget) meFermer(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') meFermer(); });
+
+function meViser(accepte) {
+  const err = document.getElementById('me-err');
+  const commentaire = document.getElementById('me-commentaire').value.trim();
+  if (!accepte && !commentaire) {
+    err.textContent = 'Le motif de refus est obligatoire.'; err.style.display = 'block'; return;
+  }
+  if (accepte && !confirm('Endosser cette FEB et la transmettre aux Achats ?')) return;
+  if (!accepte && !confirm('Confirmer le refus de cette FEB ?')) return;
+
+  mvPost({ action: 'endosser', feb_id: document.getElementById('me-feb-id').value, accepte: accepte ? '1' : '0', commentaire }).then(res => {
+    if (!res.success) { err.textContent = res.message; err.style.display = 'block'; return; }
+    toast(res.message, 'success');
+    meFermer();
     setTimeout(() => location.reload(), 600);
   });
 }

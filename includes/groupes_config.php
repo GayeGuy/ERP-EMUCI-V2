@@ -241,7 +241,7 @@ function _groupes_def(): array {
                  'perm'=>['achats_suivi','can_read']],
                 ['label'=>'Réceptions',            'icon'=>'ph-package',
                  'url'=>'pages/achats/receptions.php','active_keys'=>['achats_receptions'],
-                 'perm'=>['achats_suivi','can_create']],
+                 'perm'=>['achats_suivi','can_create'], 'ou_n1'=>true],
                 ['label'=>'Stock par département', 'icon'=>'ph-buildings',
                  'url'=>'pages/achats/stock_departements.php','active_keys'=>['achats_stock_departements'],
                  'perm'=>['achats_suivi','can_read']],
