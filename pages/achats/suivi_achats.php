@@ -27,8 +27,9 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'saisir_da') {
         $suivi_id = (int)($_POST['suivi_id'] ?? 0);
         $numero   = trim($_POST['numero'] ?? '');
+        $date_da  = trim($_POST['date_da'] ?? '') ?: null;
         try {
-            ach_saisir_da($suivi_id, $numero, $user);
+            ach_saisir_da($suivi_id, $numero, $user, $date_da);
             json_response(true, 'N° DA enregistré.');
         } catch (AchValidationException $e) { json_response(false, $e->getMessage()); }
     }
@@ -44,12 +45,15 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'saisir_da_lot') {
-        $feb_id = (int)($_POST['feb_id'] ?? 0);
-        $lot    = trim($_POST['lot'] ?? '');
-        $numero = trim($_POST['numero'] ?? '');
+        $feb_id  = (int)($_POST['feb_id'] ?? 0);
+        $lot     = trim($_POST['lot'] ?? '');
+        $numero  = trim($_POST['numero'] ?? '');
+        $date_da = trim($_POST['date_da'] ?? '') ?: null;
         if (!$numero) json_response(false, 'Le numéro de DA est obligatoire.');
-        $n = ach_saisir_da_lot($feb_id, $lot, $numero, $user);
-        json_response(true, $n > 0 ? "N° DA appliqué à $n ligne(s) du lot." : 'Aucune ligne à mettre à jour — le lot est déjà pourvu.');
+        try {
+            $n = ach_saisir_da_lot($feb_id, $lot, $numero, $user, $date_da);
+            json_response(true, $n > 0 ? "N° DA appliqué à $n ligne(s) du lot." : 'Aucune ligne à mettre à jour — le lot est déjà pourvu.');
+        } catch (AchValidationException $e) { json_response(false, $e->getMessage()); }
     }
 
     if ($action === 'saisir_bc_lot') {
@@ -158,17 +162,23 @@ function ach_suivi_render_zone(array $lignes, bool $can_edit, array $user): void
             <td>
               <?php if (!$can_edit || $l['numero_da']): ?>
                 <?= h($l['numero_da'] ?: '—') ?>
+                <?php if ($l['numero_da'] && $l['date_da']): ?>
+                  <div style="font-size:11px;color:var(--muted)">le <?= fmt_date($l['date_da']) ?></div>
+                <?php endif; ?>
                 <?php if ($can_edit && $l['numero_da']): ?>
                   <button type="button" class="btn btn-secondary btn-sm" style="padding:2px 6px;font-size:11px" aria-label="Modifier le N° DA (administrateur)"
-                          onclick="suiviEditerDA(<?= (int)$l['id'] ?>, this)"><i class="ph ph-pencil-simple" aria-hidden="true"></i></button>
+                          onclick="suiviEditerDA(<?= (int)$l['id'] ?>, this, <?= json_encode($l['date_da']) ?>)"><i class="ph ph-pencil-simple" aria-hidden="true"></i></button>
                 <?php endif; ?>
               <?php else: ?>
               <div class="ref-cell">
                 <div class="ref-input-row">
                   <input type="text" id="da-<?= $l['id'] ?>" placeholder="N° DA">
-                  <button type="button" class="btn btn-primary btn-sm" onclick="suiviSaisirDA(<?= (int)$l['id'] ?>)">OK</button>
+                  <input type="date" id="dadate-<?= $l['id'] ?>" class="date-input" value="<?= date('Y-m-d') ?>" title="Date de la DA (aujourd'hui par défaut — ajustez si la DA est antérieure)">
                 </div>
-                <button type="button" class="btn btn-secondary btn-sm" onclick='suiviAppliquerLotDA(<?= (int)$l['feb_id'] ?>, <?= json_encode($l['lot'], JSON_HEX_APOS|JSON_HEX_QUOT) ?>, <?= (int)$l['id'] ?>)'>Appliquer à tout le lot</button>
+                <div class="ref-input-row">
+                  <button type="button" class="btn btn-primary btn-sm" onclick="suiviSaisirDA(<?= (int)$l['id'] ?>)">OK</button>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick='suiviAppliquerLotDA(<?= (int)$l['feb_id'] ?>, <?= json_encode($l['lot'], JSON_HEX_APOS|JSON_HEX_QUOT) ?>, <?= (int)$l['id'] ?>)'>Appliquer à tout le lot</button>
+                </div>
               </div>
               <?php endif; ?>
             </td>
@@ -177,6 +187,11 @@ function ach_suivi_render_zone(array $lignes, bool $can_edit, array $user): void
                 <span style="color:var(--muted);font-size:12px">— (N° DA requis)</span>
               <?php elseif (!$can_edit || $l['numero_bc']): ?>
                 <?= h($l['numero_bc'] ?: '—') ?>
+                <?php if ($l['numero_bc'] && $l['date_da'] && $l['date_bc']):
+                  $delai_da_bc = (strtotime($l['date_bc']) - strtotime($l['date_da'])) / 86400;
+                ?>
+                  <div style="font-size:11px;color:var(--muted)">DA → BC : <?= (int)$delai_da_bc ?> j</div>
+                <?php endif; ?>
               <?php else: ?>
               <div class="ref-cell">
                 <div class="ref-input-row">
@@ -304,17 +319,21 @@ function suiviPost(data) {
 }
 function suiviSaisirDA(suivi_id) {
   const numero = document.getElementById('da-' + suivi_id).value.trim();
+  const dateEl = document.getElementById('dadate-' + suivi_id);
+  const date_da = dateEl ? dateEl.value : '';
   if (!numero) { toast('Le numéro de DA est obligatoire.', 'danger'); return; }
-  suiviPost({ action: 'saisir_da', suivi_id, numero }).then(res => {
+  suiviPost({ action: 'saisir_da', suivi_id, numero, date_da }).then(res => {
     toast(res.message, res.success ? 'success' : 'danger');
     if (res.success) setTimeout(() => location.reload(), 500);
   });
 }
 function suiviAppliquerLotDA(feb_id, lot, suivi_id) {
   const numero = document.getElementById('da-' + suivi_id).value.trim();
+  const dateEl = document.getElementById('dadate-' + suivi_id);
+  const date_da = dateEl ? dateEl.value : '';
   if (!numero) { toast('Renseignez le numéro de DA avant de l\'appliquer au lot.', 'danger'); return; }
   if (!confirm(`Appliquer le N° DA "${numero}" à toutes les lignes sans DA du lot ${lot} ?`)) return;
-  suiviPost({ action: 'saisir_da_lot', feb_id, lot, numero }).then(res => {
+  suiviPost({ action: 'saisir_da_lot', feb_id, lot, numero, date_da }).then(res => {
     toast(res.message, res.success ? 'success' : 'danger');
     if (res.success) setTimeout(() => location.reload(), 500);
   });
@@ -338,11 +357,12 @@ function suiviAppliquerLotBC(feb_id, lot, suivi_id) {
     if (res.success) setTimeout(() => location.reload(), 500);
   });
 }
-function suiviEditerDA(suivi_id, btn) {
+function suiviEditerDA(suivi_id, btn, dateActuelle) {
   const cell = btn.closest('td');
   const actuel = cell.childNodes[0].textContent.trim();
   cell.innerHTML = `<div class="ref-cell"><div class="ref-input-row">
     <input type="text" id="da-${suivi_id}" value="${actuel === '—' ? '' : actuel}">
+    <input type="date" id="dadate-${suivi_id}" class="date-input" value="${dateActuelle || ''}" title="Date de la DA">
     <button type="button" class="btn btn-primary btn-sm" onclick="suiviSaisirDA(${suivi_id})">OK</button>
   </div></div>`;
 }
