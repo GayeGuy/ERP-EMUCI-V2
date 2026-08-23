@@ -1779,7 +1779,14 @@ function ach_viser_affectation(int $affectation_id, array $user, bool $accepte, 
 
     $next = di_next_step($wf, $cur);
     if ($next === null) {
-        $statut_final = $affectation['utilisateur_id'] ? 'affecte' : 'en_stock';
+        // Validée ne veut pas dire arrivée : l'exemplaire est expédié vers
+        // sa destination (site_id/utilisateur_id posés dès maintenant, la
+        // décision est prise), mais reste 'en_transit' tant que le N+1 du
+        // département destinataire n'a pas confirmé la réception physique
+        // (ach_confirmer_reception_equipement()) — décision du 2026-08-23,
+        // même principe que le circuit magasin -> département des
+        // consommables. date_mise_en_service n'est donc posée qu'à cette
+        // confirmation, pas ici.
         $stmt = db_query(
             "UPDATE equipement_affectations SET statut='validee', valide_le=?, signatures=?::jsonb, historique=?::jsonb
               WHERE id=? AND etape_actuelle=?",
@@ -1787,15 +1794,25 @@ function ach_viser_affectation(int $affectation_id, array $user, bool $accepte, 
         );
         if ($stmt->rowCount() === 0) return false;
         db_query(
-            "UPDATE equipements SET site_id=?, utilisateur_id=?, statut_stock=?, date_mise_en_service=COALESCE(date_mise_en_service, ?) WHERE id=?",
-            [$affectation['site_id'], $affectation['utilisateur_id'], $statut_final, date('Y-m-d'), $affectation['equipement_id']]
+            "UPDATE equipements SET site_id=?, utilisateur_id=?, statut_stock='en_transit' WHERE id=?",
+            [$affectation['site_id'], $affectation['utilisateur_id'], $affectation['equipement_id']]
         );
-        audit_log($uid, 'UPDATE', 'equipements', $affectation['equipement_id'], "Affectation validée — étape finale « $etape_label »");
+        audit_log($uid, 'UPDATE', 'equipements', $affectation['equipement_id'], "Affectation validée — étape finale « $etape_label » — expédié, en attente de confirmation de réception");
         if ($affectation['proposee_par']) {
             db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','Affectation validée',?,?)",
                 [(int)$affectation['proposee_par'],
-                 "L'affectation de « " . ($equipement['numero_serie_interne'] ?? '') . " » est validée.",
+                 "L'affectation de « " . ($equipement['numero_serie_interne'] ?? '') . " » est validée et expédiée — en attente de confirmation du département.",
                  '/pages/equipements.php']);
+        }
+        if ($equipement['departement_id']) {
+            foreach (db_fetch_all(
+                "SELECT user_id FROM user_departements WHERE departement_id=? AND is_n1=1", [(int)$equipement['departement_id']]
+            ) as $n1) {
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','Équipement à réceptionner',?,?)",
+                    [(int)$n1['user_id'],
+                     "« " . ($equipement['numero_serie_interne'] ?? '') . " » expédié vers votre département — à confirmer.",
+                     '/pages/achats/equipements_attente.php']);
+            }
         }
         return true;
     }
@@ -1809,6 +1826,60 @@ function ach_viser_affectation(int $affectation_id, array $user, bool $accepte, 
     audit_log($uid, 'UPDATE', 'equipements', $affectation['equipement_id'], "Affectation — étape « $etape_label » visée, passage à « {$wf[$next]['label']} »");
     ach_notifier_role($wf[$next]['role'], "Affectation d'équipement en attente de votre visa — étape : {$wf[$next]['label']}.");
     return true;
+}
+
+// ── Confirmation de réception physique par le N+1 du département — dernier
+//    maillon du circuit magasin -> département côté équipements, symétrique
+//    de ach_receptionner_departement() côté consommables. Sans elle,
+//    l'exemplaire reste 'en_transit' indéfiniment : ni disponible pour une
+//    nouvelle affectation (il en a déjà une), ni compté comme réellement en
+//    service (date_mise_en_service).
+function ach_confirmer_reception_equipement(int $equipement_id, array $user): bool {
+    $uid = (int)$user['id'];
+    $equipement = db_fetch_one("SELECT * FROM equipements WHERE id=?", [$equipement_id]);
+    if (!$equipement) throw new AchValidationException('Équipement introuvable.');
+    if ($equipement['statut_stock'] !== 'en_transit') {
+        throw new AchValidationException("Cet exemplaire n'est pas en attente de confirmation de réception.");
+    }
+    if (!$equipement['departement_id']) {
+        throw new AchValidationException('Cet exemplaire ne porte aucun département.');
+    }
+
+    $est_n1 = (bool) db_fetch_value(
+        "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND departement_id=? AND is_n1=1",
+        [$uid, (int)$equipement['departement_id']]
+    );
+    $is_admin = in_array($user['role_slug'] ?? '', ['admin', 'superadmin'], true);
+    if (!$est_n1 && !$is_admin) {
+        throw new AchValidationException("Seul le supérieur hiérarchique du département peut confirmer cette réception.");
+    }
+
+    $statut_final = $equipement['utilisateur_id'] ? 'affecte' : 'en_stock';
+    $stmt = db_query(
+        "UPDATE equipements SET statut_stock=?, date_mise_en_service=COALESCE(date_mise_en_service, ?)
+          WHERE id=? AND statut_stock='en_transit'",
+        [$statut_final, date('Y-m-d'), $equipement_id]
+    );
+    if ($stmt->rowCount() === 0) return false;
+    audit_log($uid, 'UPDATE', 'equipements', $equipement_id, 'Réception confirmée par le supérieur hiérarchique du département');
+    return true;
+}
+
+// ── Équipements 'en_transit' que le N+1 connecté peut confirmer — même
+//    triple porte que les autres files N+1 (rôle admin, ou is_n1 sur le
+//    département de l'exemplaire).
+function ach_equipements_en_transit(array $user): array {
+    $uid = (int)$user['id'];
+    $is_admin = in_array($user['role_slug'] ?? '', ['admin', 'superadmin'], true);
+    if ($is_admin) {
+        return db_fetch_all("SELECT * FROM equipements WHERE statut_stock='en_transit' ORDER BY id DESC");
+    }
+    return db_fetch_all(
+        "SELECT e.* FROM equipements e
+         JOIN user_departements ud ON ud.departement_id = e.departement_id AND ud.user_id=? AND ud.is_n1=1
+         WHERE e.statut_stock='en_transit' ORDER BY e.id DESC",
+        [$uid]
+    );
 }
 
 // ── Étape 4 — Propositions d'affectation en attente du visa de
@@ -2060,8 +2131,13 @@ function ach_receptionner(int $suivi_id, int $quantite, string $date, ?string $b
         }
 
         // Bloc 0 : la réception alimente le stock global ET le stock du site
-        // de la FEB — pas seulement le global — sur le même motif que
-        // pages/commandes.php (réception de commande interne). Rien à faire
+        // de la FEB (le magasin) — pas encore le stock du département.
+        // Décision du 2026-08-23 : le crédit département n'a plus lieu ici,
+        // mais à la confirmation de réception du département lui-même
+        // (ach_receptionner_departement()), après une étape d'expédition
+        // explicite (ach_expedier_departement()) — sans ça, le stock était
+        // compté « au département » alors qu'il vient tout juste d'arriver
+        // au magasin, avant même d'en être physiquement sorti. Rien à faire
         // pour une ligne en saisie libre (article_id NULL) : pas d'article à
         // créditer.
         if ($ligne['article_id']) {
@@ -2071,16 +2147,6 @@ function ach_receptionner(int $suivi_id, int $quantite, string $date, ?string $b
                  ON CONFLICT (article_id, site_id) DO UPDATE SET quantite = stock_site.quantite + ?",
                 [$ligne['article_id'], $ligne['site_id'], $quantite, $quantite]
             );
-            // Traçabilité par département : une FEB porte toujours un site ET
-            // un département (RG-06), mais plusieurs départements partagent
-            // souvent le même site (le siège). stock_site seul ne dit donc
-            // pas quel département détient l'équipement reçu — stock_departement
-            // le complète, sans remplacer ni influencer l'arbitrage (qui reste
-            // sur ach_stock_magasin() : ce stock-ci est déjà affecté, pas
-            // redisponible pour une autre demande).
-            if ($ligne['departement_id']) {
-                ach_crediter_stock_departement((int)$ligne['article_id'], (int)$ligne['departement_id'], $quantite);
-            }
         }
 
         // Étape 3b : une ligne DAI rattachée à une nomenclature (au plus
@@ -2134,16 +2200,143 @@ function ach_receptionner(int $suivi_id, int $quantite, string $date, ?string $b
              '/pages/achats/suivi_achats.php']
         );
     }
-    if ($ecart <= 0 && $ligne['demandeur_id']) {
+    // Pas de notification « besoin couvert » ici : le solde côté magasin ne
+    // dit pas encore que le département a la marchandise en main — cf.
+    // ach_receptionner_departement(), qui porte cette notification depuis
+    // le 2026-08-23.
+
+    return ['cumul' => $cumul, 'ecart' => max(0, $ecart), 'solde' => $ecart <= 0];
+}
+
+// ── Expédition du magasin vers le département (étape 2/3) — débite le
+//    stock du site où la réception magasin a été créditée (jamais plus que
+//    ce qui a été reçu au magasin et pas déjà expédié), ne crédite rien :
+//    le département n'a pas encore confirmé. Même profil que la réception
+//    magasin (achats_suivi.can_create) — décision du 2026-08-23.
+function ach_expedier_departement(int $suivi_id, int $quantite, string $date, string $observation, array $user): array {
+    $uid = (int)$user['id'];
+    if ($quantite <= 0) throw new AchValidationException('La quantité expédiée doit être strictement positive.');
+
+    $ligne = db_fetch_one(
+        "SELECT fs.*, fl.article_id, fl.designation, f.numero AS feb_numero
+         FROM feb_suivi fs
+         JOIN feb_lignes fl ON fl.id = fs.feb_ligne_id
+         JOIN feb f         ON f.id  = fs.feb_id
+         WHERE fs.id = ?",
+        [$suivi_id]
+    );
+    if (!$ligne) throw new AchValidationException('Ligne de suivi introuvable.');
+    if (!$ligne['article_id']) throw new AchValidationException("Ligne sans article — rien à expédier (saisie libre ou immobilisation).");
+
+    $recue     = (int)$ligne['quantite_recue'];
+    $expediee  = (int)$ligne['quantite_expediee'];
+    $reste     = $recue - $expediee;
+    if ($quantite > $reste) {
+        throw new AchValidationException("Quantité expédiée supérieure au reste disponible au magasin (reste $reste, saisi $quantite).");
+    }
+
+    $pdo = get_db();
+    $transaction_locale = !$pdo->inTransaction();
+    if ($transaction_locale) db_begin();
+    try {
+        db_query(
+            "INSERT INTO feb_expeditions (feb_suivi_id, quantite, date_expedition, observation, expedie_par)
+             VALUES (?,?,?,?,?)",
+            [$suivi_id, $quantite, $date, $observation ?: null, $uid]
+        );
+        db_query("UPDATE feb_suivi SET quantite_expediee = quantite_expediee + ? WHERE id=?", [$quantite, $suivi_id]);
+        db_query(
+            "UPDATE stock_site SET quantite = quantite - ? WHERE article_id=? AND site_id=?",
+            [$quantite, $ligne['article_id'], $ligne['site_id']]
+        );
+        if ($transaction_locale) db_commit();
+    } catch (Exception $e) {
+        if ($transaction_locale) db_rollback();
+        throw $e;
+    }
+
+    audit_log($uid, 'UPDATE', 'achats_suivi', $suivi_id, "Expédition vers le département de $quantite sur « {$ligne['designation']} » (FEB {$ligne['feb_numero']})");
+
+    if ($ligne['departement_id']) {
+        foreach (db_fetch_all(
+            "SELECT user_id FROM user_departements WHERE departement_id=? AND is_n1=1", [(int)$ligne['departement_id']]
+        ) as $n1) {
+            db_query(
+                "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','Expédition en cours',?,?)",
+                [(int)$n1['user_id'], "$quantite unité(s) de « {$ligne['designation']} » (FEB {$ligne['feb_numero']}) expédiée(s) vers votre département — à réceptionner.", '/pages/achats/receptions.php']
+            );
+        }
+    }
+
+    return ['cumul_expediee' => (int)$ligne['quantite_expediee'] + $quantite];
+}
+
+// ── Réception par le département (étape 3/3) — seul geste qui crédite enfin
+//    stock_departement. Réservée au N+1 du département de la FEB (même
+//    porte que la réception magasin lui accorde déjà, cf.
+//    ach_est_n1_quelque_part()) — revérifiée ici, pas seulement à l'écran.
+function ach_receptionner_departement(int $suivi_id, int $quantite, string $date, string $observation, array $user): array {
+    $uid = (int)$user['id'];
+    if ($quantite <= 0) throw new AchValidationException('La quantité reçue doit être strictement positive.');
+
+    $ligne = db_fetch_one(
+        "SELECT fs.*, fl.article_id, fl.designation, f.numero AS feb_numero, f.demandeur_id, f.departement_id
+         FROM feb_suivi fs
+         JOIN feb_lignes fl ON fl.id = fs.feb_ligne_id
+         JOIN feb f         ON f.id  = fs.feb_id
+         WHERE fs.id = ?",
+        [$suivi_id]
+    );
+    if (!$ligne) throw new AchValidationException('Ligne de suivi introuvable.');
+    if (!$ligne['article_id']) throw new AchValidationException("Ligne sans article — rien à réceptionner ici (saisie libre ou immobilisation).");
+    if (!$ligne['departement_id']) throw new AchValidationException('Cette ligne ne porte aucun département.');
+
+    $est_n1 = (bool) db_fetch_value(
+        "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND departement_id=? AND is_n1=1",
+        [$uid, (int)$ligne['departement_id']]
+    );
+    $is_admin = in_array($user['role_slug'] ?? '', ['admin', 'superadmin'], true);
+    if (!$est_n1 && !$is_admin) {
+        throw new AchValidationException("Seul le supérieur hiérarchique du département peut confirmer cette réception.");
+    }
+
+    $expediee = (int)$ligne['quantite_expediee'];
+    $recue_dept = (int)$ligne['quantite_receptionnee_departement'];
+    $reste = $expediee - $recue_dept;
+    if ($quantite > $reste) {
+        throw new AchValidationException("Quantité supérieure à ce qui a été expédié et pas encore confirmé (reste $reste, saisi $quantite).");
+    }
+
+    $pdo = get_db();
+    $transaction_locale = !$pdo->inTransaction();
+    if ($transaction_locale) db_begin();
+    try {
+        db_query(
+            "INSERT INTO feb_receptions_departement (feb_suivi_id, quantite, date_reception, observation, recu_par)
+             VALUES (?,?,?,?,?)",
+            [$suivi_id, $quantite, $date, $observation ?: null, $uid]
+        );
+        db_query("UPDATE feb_suivi SET quantite_receptionnee_departement = quantite_receptionnee_departement + ? WHERE id=?", [$quantite, $suivi_id]);
+        ach_crediter_stock_departement((int)$ligne['article_id'], (int)$ligne['departement_id'], $quantite);
+        if ($transaction_locale) db_commit();
+    } catch (Exception $e) {
+        if ($transaction_locale) db_rollback();
+        throw $e;
+    }
+
+    $cumul = $recue_dept + $quantite;
+    audit_log($uid, 'UPDATE', 'achats_suivi', $suivi_id, "Réception département de $quantite sur « {$ligne['designation']} » (FEB {$ligne['feb_numero']}) — cumul $cumul");
+
+    if ($cumul >= $expediee && $ligne['demandeur_id']) {
         db_query(
             "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,'info','Besoin couvert',?,?)",
             [(int)$ligne['demandeur_id'],
-             "Votre besoin « {$ligne['designation']} » (FEB {$ligne['feb_numero']}) est intégralement réceptionné.",
+             "Votre besoin « {$ligne['designation']} » (FEB {$ligne['feb_numero']}) est arrivé dans votre département.",
              '/pages/achats/mes_feb.php']
         );
     }
 
-    return ['cumul' => $cumul, 'ecart' => max(0, $ecart), 'solde' => $ecart <= 0];
+    return ['cumul' => $cumul, 'reste' => max(0, $expediee - $cumul)];
 }
 
 // ── Clôture explicite d'un reliquat (J8, Bloc 3) — pour les cas où le solde
