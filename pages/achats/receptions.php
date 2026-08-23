@@ -26,9 +26,20 @@ $can_magasin = can('achats_suivi', 'can_create');
 
 $is_admin        = in_array($user['role_slug'] ?? '', ['admin', 'superadmin'], true);
 $departements_n1 = ach_departements_n1($uid);
-// Étape 3 : le N+1 du département, sans qu'il porte achats_suivi.can_read —
-// même porte que ach_peut_ouvrir_visas() pour les visas.
+// Étape 3 : action réservée au N+1 du département destinataire — pas au
+// service Achats, même s'il porte achats_suivi.can_read. Signalé sur la
+// recette (2026-08-23) : achat@recette.local est aussi N+1 du département
+// ACHAT (pour endosser ses propres FEB, cf. Étape 1) et se voyait de ce
+// seul fait autorisé à confirmer la réception de N'IMPORTE QUEL
+// département — $can_dept_reception ne doit donc jamais servir à décider
+// qui voit le bouton, seulement qui est autorisé à ouvrir l'écran.
+// ach_departements_n1() renvoie SES départements ; le bouton n'apparaît
+// plus bas que ligne par ligne, quand departement_id de la ligne y figure.
 $can_dept_reception = $is_admin || !empty($departements_n1);
+// Étape 3, visibilité seule (statut, pas d'action) : le service Achats la
+// voit pour suivre où en est chaque expédition, sans pouvoir la confirmer
+// à la place du département destinataire.
+$peut_voir_etape3 = can('achats_suivi', 'can_read') || $can_dept_reception;
 
 if (!can('achats_suivi', 'can_read') && !$can_dept_reception) {
     http_response_code(403);
@@ -192,7 +203,7 @@ if ($departements_n1_force) {
     $where3[] = "f.departement_id IN ($placeholders)";
     array_push($params3, ...$departements_n1_force);
 }
-$lignes_reception_dept = $can_dept_reception ? db_fetch_all(
+$lignes_reception_dept = $peut_voir_etape3 ? db_fetch_all(
     "SELECT fs.*, f.numero AS feb_numero, f.departement_id,
             fl.designation, fl.unite,
             d.label AS departement_label
@@ -213,7 +224,8 @@ $nomenclatures = db_fetch_all("SELECT id, code, libelle, categorie FROM nomencla
 // ── Rafraîchissement live — fragment HTML seul (les trois tableaux), cf.
 //    le même mécanisme sur file_attente.php.
 function ach_rc_render_zone(array $lignes_magasin, array $lignes_expedition, array $lignes_reception_dept,
-                             bool $can_magasin, bool $can_dept_reception, int $site_force): void {
+                             bool $can_magasin, bool $peut_voir_etape3, int $site_force,
+                             array $departements_n1 = [], bool $is_admin = false): void {
     ?>
     <?php if ($can_magasin): ?>
     <div class="ach-section-ttl">Étape 1 — Réception magasin</div>
@@ -306,11 +318,11 @@ function ach_rc_render_zone(array $lignes_magasin, array $lignes_expedition, arr
     </div>
     <?php endif; ?>
 
-    <?php if ($can_dept_reception): ?>
-    <div class="ach-section-ttl">Étape 3 — Réception par mon département</div>
+    <?php if ($peut_voir_etape3): ?>
+    <div class="ach-section-ttl">Étape 3 — Réception département</div>
     <div class="ach-table-wrap">
       <?php if (empty($lignes_reception_dept)): ?>
-        <div class="ach-empty">Rien en attente de confirmation pour votre département.</div>
+        <div class="ach-empty">Rien en attente de confirmation.</div>
       <?php else: ?>
       <div style="overflow-x:auto">
       <table class="ach-table">
@@ -321,6 +333,12 @@ function ach_rc_render_zone(array $lignes_magasin, array $lignes_expedition, arr
           <?php foreach ($lignes_reception_dept as $l):
             $reste_dept = (int)$l['quantite_expediee'] - (int)$l['quantite_receptionnee_departement'];
             if ($reste_dept <= 0) continue;
+            // Le bouton n'apparaît que pour le vrai N+1 DE CETTE LIGNE (ou
+            // un administrateur) — voir le commentaire au chargement de la
+            // page : avoir achats_suivi.can_read, ou même être N+1 d'un
+            // AUTRE département, ne doit jamais suffire. Un service Achats
+            // qui n'est N+1 nulle part voit ce statut en simple lecture.
+            $peut_confirmer_cette_ligne = $is_admin || in_array((int)$l['departement_id'], $departements_n1, true);
           ?>
           <tr>
             <td style="font-weight:700;color:var(--navy)"><?= h($l['feb_numero'] ?: '—') ?></td>
@@ -330,6 +348,7 @@ function ach_rc_render_zone(array $lignes_magasin, array $lignes_expedition, arr
             <td><?= (int)$l['quantite_receptionnee_departement'] ?></td>
             <td style="font-weight:700"><?= $reste_dept ?></td>
             <td>
+              <?php if ($peut_confirmer_cette_ligne): ?>
               <button type="button" class="btn btn-primary btn-sm"
                       onclick='rdOuvrir(<?= json_encode([
                         "id"=>(int)$l["id"], "feb_numero"=>$l["feb_numero"], "designation"=>$l["designation"],
@@ -337,6 +356,9 @@ function ach_rc_render_zone(array $lignes_magasin, array $lignes_expedition, arr
                       ], JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
                 Confirmer la réception
               </button>
+              <?php else: ?>
+                <span class="ach-badge off">En attente du département</span>
+              <?php endif; ?>
             </td>
           </tr>
           <?php endforeach; ?>
@@ -350,7 +372,7 @@ function ach_rc_render_zone(array $lignes_magasin, array $lignes_expedition, arr
 }
 
 if (is_ajax() && ($_GET['fragment'] ?? '') === '1') {
-    ach_rc_render_zone($lignes_magasin, $lignes_expedition, $lignes_reception_dept, $can_magasin, $can_dept_reception, $site_force);
+    ach_rc_render_zone($lignes_magasin, $lignes_expedition, $lignes_reception_dept, $can_magasin, $peut_voir_etape3, $site_force, $departements_n1, $is_admin);
     exit;
 }
 $fragmentUrl = APP_URL . '/pages/achats/receptions.php?fragment=1';
@@ -386,7 +408,7 @@ include __DIR__ . '/../../templates/header.php';
 </style>
 
 <div id="rc-live-zone">
-<?php ach_rc_render_zone($lignes_magasin, $lignes_expedition, $lignes_reception_dept, $can_magasin, $can_dept_reception, $site_force); ?>
+<?php ach_rc_render_zone($lignes_magasin, $lignes_expedition, $lignes_reception_dept, $can_magasin, $peut_voir_etape3, $site_force, $departements_n1, $is_admin); ?>
 </div>
 
 <!-- MODALE réception magasin -->
