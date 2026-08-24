@@ -79,7 +79,7 @@ if ($f_departement) { $where[] = 'e.departement_id = ?'; $params[] = $f_departem
 $equipements = $voit_toutes_sections ? db_fetch_all(
     "SELECT e.id, e.numero_serie_interne, e.prix_achat, e.date_acquisition,
             n.libelle AS nomenclature_libelle, n.categorie,
-            d.label AS departement_label,
+            e.departement_id, d.label AS departement_label,
             f.numero AS feb_numero, fl.designation AS ligne_designation
      FROM equipements e
      LEFT JOIN nomenclatures n  ON n.id = e.nomenclature_id
@@ -127,7 +127,21 @@ unset($et);
 
 $departements_actifs = db_fetch_all("SELECT id, label FROM departements WHERE actif=1 ORDER BY label");
 $sites_actifs = db_fetch_all("SELECT id, nom FROM sites WHERE actif=1 ORDER BY nom");
-$users_actifs = db_fetch_all("SELECT id, CONCAT(prenom,' ',nom) AS nom FROM users WHERE actif=1 ORDER BY nom");
+
+// Utilisateur nommé à l'affectation (Étape 4) : restreint aux membres du
+// département de l'exemplaire — signalé sur la recette (FEB-2026-0008),
+// la liste montrait n'importe quel utilisateur actif de l'application.
+// Regroupé par département ici, filtré côté client dans eaOuvrir().
+$users_par_departement = [];
+foreach (db_fetch_all(
+    "SELECT ud.departement_id, u.id, CONCAT(u.prenom,' ',u.nom) AS nom
+     FROM user_departements ud
+     JOIN users u ON u.id = ud.user_id
+     WHERE u.actif = 1
+     ORDER BY nom"
+) as $row) {
+    $users_par_departement[(int)$row['departement_id']][] = ['id' => (int)$row['id'], 'nom' => $row['nom']];
+}
 
 include __DIR__ . '/../../templates/header.php';
 ?>
@@ -200,7 +214,7 @@ include __DIR__ . '/../../templates/header.php';
         <?php if ($can_proposer): ?>
         <td>
           <button type="button" class="btn btn-primary btn-sm"
-                  onclick='eaOuvrir(<?= json_encode(["id"=>(int)$e["id"], "nsi"=>$e["numero_serie_interne"], "nomenclature"=>$e["nomenclature_libelle"], "valeur"=>(float)$e["prix_achat"]], JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
+                  onclick='eaOuvrir(<?= json_encode(["id"=>(int)$e["id"], "nsi"=>$e["numero_serie_interne"], "nomenclature"=>$e["nomenclature_libelle"], "valeur"=>(float)$e["prix_achat"], "departement_id"=>(int)($e["departement_id"] ?? 0), "departement"=>$e["departement_label"]], JSON_HEX_APOS|JSON_HEX_QUOT|JSON_UNESCAPED_UNICODE) ?>)'>
             Affecter
           </button>
         </td>
@@ -282,9 +296,14 @@ include __DIR__ . '/../../templates/header.php';
   <div class="ach-modal" role="dialog" aria-labelledby="ea-modal-title">
     <h3 id="ea-modal-title">Proposer une affectation</h3>
     <input type="hidden" id="ea-equipement-id" value="">
+    <input type="hidden" id="ea-departement-id" value="">
     <div class="ach-fg">
       <label>Exemplaire</label>
       <div id="ea-recap" style="font-size:13px;font-weight:700;color:var(--navy)"></div>
+    </div>
+    <div class="ach-fg">
+      <label>Département</label>
+      <div id="ea-departement-label" style="font-size:13px;font-weight:700;color:var(--navy)"></div>
     </div>
     <div class="ach-fg">
       <label for="ea-site">Site de destination</label>
@@ -296,9 +315,9 @@ include __DIR__ . '/../../templates/header.php';
     <div class="ach-fg">
       <label for="ea-utilisateur">Utilisateur nommé (facultatif)</label>
       <select id="ea-utilisateur">
-        <option value="">— Aucun (affectation au site) —</option>
-        <?php foreach ($users_actifs as $u): ?><option value="<?= $u['id'] ?>"><?= h($u['nom']) ?></option><?php endforeach; ?>
+        <option value="">— Aucun (affectation au département/site) —</option>
       </select>
+      <div style="font-size:11.5px;color:var(--muted);margin-top:4px">Limité aux membres du département de l'exemplaire.</div>
     </div>
     <div class="ach-hint" style="font-size:11.5px;color:var(--muted);margin-bottom:10px">
       Le circuit de validation (palier RAF/RAF+DAF/RAF+DAF+PDG) est déterminé automatiquement par la valeur de l'exemplaire.
@@ -312,6 +331,8 @@ include __DIR__ . '/../../templates/header.php';
 </div>
 
 <script>
+const usersParDepartement = <?= json_encode($users_par_departement, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
+
 function etConfirmer(equipementId, nsi) {
   if (!confirm(`Confirmer que « ${nsi} » est bien arrivé dans le département ?`)) return;
   const fd = new FormData();
@@ -327,9 +348,20 @@ function etConfirmer(equipementId, nsi) {
 
 function eaOuvrir(e) {
   document.getElementById('ea-equipement-id').value = e.id;
+  document.getElementById('ea-departement-id').value = e.departement_id || '';
   document.getElementById('ea-recap').textContent = e.nsi + ' — ' + (e.nomenclature || '—') + ' — ' + Number(e.valeur).toLocaleString('fr-FR') + ' XOF';
+  document.getElementById('ea-departement-label').textContent = e.departement || '—';
   document.getElementById('ea-site').value = '';
-  document.getElementById('ea-utilisateur').value = '';
+
+  const sel = document.getElementById('ea-utilisateur');
+  sel.innerHTML = '<option value="">— Aucun (affectation au département/site) —</option>';
+  (usersParDepartement[e.departement_id] || []).forEach(u => {
+    const opt = document.createElement('option');
+    opt.value = u.id;
+    opt.textContent = u.nom;
+    sel.appendChild(opt);
+  });
+
   document.getElementById('ea-err').style.display = 'none';
   document.getElementById('ea-modal').classList.add('open');
 }
