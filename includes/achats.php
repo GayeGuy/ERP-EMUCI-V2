@@ -1667,6 +1667,19 @@ function ach_proposer_affectation(int $equipement_id, ?int $site_id, ?int $utili
         throw new AchValidationException("Cet exemplaire n'est pas (ou plus) en attente d'affectation.");
     }
 
+    // L'utilisateur nommé doit appartenir au département de l'exemplaire —
+    // la liste de la modale (pages/achats/equipements_attente.php) le
+    // filtre déjà côté client, revérifié ici pour ne pas dépendre de lui.
+    if ($utilisateur_id && $equipement['departement_id']) {
+        $appartient = (bool) db_fetch_value(
+            "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND departement_id=?",
+            [$utilisateur_id, $equipement['departement_id']]
+        );
+        if (!$appartient) {
+            throw new AchValidationException("L'utilisateur choisi n'appartient pas au département de cet exemplaire.");
+        }
+    }
+
     $montant = (int) round((float)$equipement['prix_achat']);
     $palier  = ach_palier_pour_montant($montant);
     if (!$palier) {
