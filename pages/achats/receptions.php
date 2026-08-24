@@ -135,8 +135,17 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!in_array($dept_ligne, $departements_n1_force, true)) json_response(false, "Cette ligne n'appartient pas à votre département.");
         }
 
+        // Bon de transfert obligatoire — symétrique du bon de livraison de
+        // la réception magasin (même exigence : une pièce, pas seulement
+        // une déclaration). Stocké dans le même dossier bl/, préfixe
+        // distinct pour ne pas se confondre avec le BL fournisseur.
+        if (empty($_FILES['bt']['name'])) json_response(false, 'Le bon de transfert est obligatoire.');
+        $up = upload_document('bt', 'bl', 'bt_suivi_' . $suivi_id, false);
+        if (!$up['success']) json_response(false, $up['message']);
+        $bon_transfert = $up['filename'];
+
         try {
-            $res = ach_receptionner_departement($suivi_id, $quantite, $date, $observation, $user);
+            $res = ach_receptionner_departement($suivi_id, $quantite, $date, $observation, $user, $bon_transfert);
             $msg = $res['reste'] <= 0
                 ? "Réception département confirmée — ligne soldée (cumul {$res['cumul']})."
                 : "Réception département confirmée — cumul {$res['cumul']}, reste {$res['reste']}.";
@@ -507,6 +516,10 @@ include __DIR__ . '/../../templates/header.php';
       <input type="date" id="rd-date">
     </div>
     <div class="ach-fg">
+      <label for="rd-bt">Bon de transfert (PDF, JPG, PNG ou WEBP) *</label>
+      <input type="file" id="rd-bt" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+    </div>
+    <div class="ach-fg">
       <label for="rd-observation">Observation</label>
       <textarea id="rd-observation" placeholder="Remarque sur cette réception (facultatif)"></textarea>
     </div>
@@ -633,6 +646,7 @@ function rdOuvrir(l) {
   document.getElementById('rd-quantite').value = l.reste;
   document.getElementById('rd-quantite').max = l.reste;
   document.getElementById('rd-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('rd-bt').value = '';
   document.getElementById('rd-observation').value = '';
   document.getElementById('rd-err').style.display = 'none';
   document.getElementById('rd-modal').classList.add('open');
@@ -645,12 +659,15 @@ function rdValider() {
   const err = document.getElementById('rd-err');
   const quantite = parseInt(document.getElementById('rd-quantite').value, 10);
   if (!quantite || quantite < 1) { err.textContent = 'La quantité reçue doit être strictement positive.'; err.style.display = 'block'; return; }
+  if (!document.getElementById('rd-bt').files[0]) { err.textContent = 'Le bon de transfert est obligatoire.'; err.style.display = 'block'; return; }
   const fd = new FormData();
   fd.append('action', 'receptionner_departement');
   fd.append('suivi_id', document.getElementById('rd-suivi-id').value);
   fd.append('quantite', quantite);
   fd.append('date_reception', document.getElementById('rd-date').value);
   fd.append('observation', document.getElementById('rd-observation').value.trim());
+  const btFile = document.getElementById('rd-bt').files[0];
+  if (btFile) fd.append('bt', btFile);
   fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
     .then(r => r.json())
     .then(res => {

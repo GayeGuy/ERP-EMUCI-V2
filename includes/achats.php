@@ -2285,7 +2285,7 @@ function ach_expedier_departement(int $suivi_id, int $quantite, string $date, st
 //    stock_departement. Réservée au N+1 du département de la FEB (même
 //    porte que la réception magasin lui accorde déjà, cf.
 //    ach_est_n1_quelque_part()) — revérifiée ici, pas seulement à l'écran.
-function ach_receptionner_departement(int $suivi_id, int $quantite, string $date, string $observation, array $user): array {
+function ach_receptionner_departement(int $suivi_id, int $quantite, string $date, string $observation, array $user, ?string $bon_transfert = null): array {
     $uid = (int)$user['id'];
     if ($quantite <= 0) throw new AchValidationException('La quantité reçue doit être strictement positive.');
 
@@ -2327,9 +2327,9 @@ function ach_receptionner_departement(int $suivi_id, int $quantite, string $date
     if ($transaction_locale) db_begin();
     try {
         db_query(
-            "INSERT INTO feb_receptions_departement (feb_suivi_id, quantite, date_reception, observation, recu_par)
-             VALUES (?,?,?,?,?)",
-            [$suivi_id, $quantite, $date, $observation ?: null, $uid]
+            "INSERT INTO feb_receptions_departement (feb_suivi_id, quantite, date_reception, observation, recu_par, bon_transfert)
+             VALUES (?,?,?,?,?,?)",
+            [$suivi_id, $quantite, $date, $observation ?: null, $uid, $bon_transfert]
         );
         db_query("UPDATE feb_suivi SET quantite_receptionnee_departement = quantite_receptionnee_departement + ? WHERE id=?", [$quantite, $suivi_id]);
         if ($ligne['article_id']) {
