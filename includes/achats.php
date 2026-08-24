@@ -1659,7 +1659,6 @@ function ach_affectation_decode(array $row): array {
 //    circuits différents si leur valorisation diffère).
 function ach_proposer_affectation(int $equipement_id, ?int $site_id, ?int $utilisateur_id, array $user): array {
     $uid = (int)$user['id'];
-    if (!$site_id) throw new AchValidationException('Le site de destination est obligatoire.');
 
     $equipement = db_fetch_one("SELECT * FROM equipements WHERE id=?", [$equipement_id]);
     if (!$equipement) throw new AchValidationException('Exemplaire introuvable.');
@@ -1667,16 +1666,33 @@ function ach_proposer_affectation(int $equipement_id, ?int $site_id, ?int $utili
         throw new AchValidationException("Cet exemplaire n'est pas (ou plus) en attente d'affectation.");
     }
 
-    // L'utilisateur nommé doit appartenir au département de l'exemplaire —
-    // la liste de la modale (pages/achats/equipements_attente.php) le
-    // filtre déjà côté client, revérifié ici pour ne pas dépendre de lui.
-    if ($utilisateur_id && $equipement['departement_id']) {
-        $appartient = (bool) db_fetch_value(
-            "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND departement_id=?",
-            [$utilisateur_id, $equipement['departement_id']]
-        );
-        if (!$appartient) {
-            throw new AchValidationException("L'utilisateur choisi n'appartient pas au département de cet exemplaire.");
+    // Destination : un site précis, ou — l'exemplaire porte déjà un
+    // département (hérité de sa FEB d'origine) — le département seul,
+    // sans site fixe (décision du 2026-08-24, choix proposé dans la
+    // modale). Un site n'est donc obligatoire que s'il n'y a aucun
+    // département de repli.
+    if (!$site_id && !$equipement['departement_id']) {
+        throw new AchValidationException('Le site de destination est obligatoire pour un exemplaire sans département.');
+    }
+
+    // L'utilisateur nommé doit appartenir à la destination choisie : au
+    // site s'il y en a un, sinon au département de l'exemplaire — la
+    // modale (pages/achats/equipements_attente.php) filtre déjà la liste
+    // en conséquence, revérifié ici pour ne pas dépendre de lui.
+    if ($utilisateur_id) {
+        if ($site_id) {
+            $appartient = (bool) db_fetch_value("SELECT COUNT(*) FROM users WHERE id=? AND site_id=?", [$utilisateur_id, $site_id]);
+            if (!$appartient) {
+                throw new AchValidationException("L'utilisateur choisi n'appartient pas au site de destination.");
+            }
+        } elseif ($equipement['departement_id']) {
+            $appartient = (bool) db_fetch_value(
+                "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND departement_id=?",
+                [$utilisateur_id, $equipement['departement_id']]
+            );
+            if (!$appartient) {
+                throw new AchValidationException("L'utilisateur choisi n'appartient pas au département de cet exemplaire.");
+            }
         }
     }
 
