@@ -40,7 +40,10 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'proposer') {
         if (!$can_proposer) json_response(false, 'Action réservée.');
         $equipement_id  = (int)($_POST['equipement_id'] ?? 0);
-        $site_id        = (int)($_POST['site_id'] ?? 0) ?: null;
+        $type           = $_POST['type'] ?? '';
+        if (!in_array($type, ['departement', 'site'], true)) json_response(false, "Choisissez d'abord le type d'affectation.");
+        $site_id        = $type === 'site' ? ((int)($_POST['site_id'] ?? 0) ?: null) : null;
+        if ($type === 'site' && !$site_id) json_response(false, 'Le site de destination est obligatoire.');
         $utilisateur_id = (int)($_POST['utilisateur_id'] ?? 0) ?: null;
         try {
             $res = ach_proposer_affectation($equipement_id, $site_id, $utilisateur_id, $user);
@@ -141,6 +144,15 @@ foreach (db_fetch_all(
      ORDER BY nom"
 ) as $row) {
     $users_par_departement[(int)$row['departement_id']][] = ['id' => (int)$row['id'], 'nom' => $row['nom']];
+}
+
+// Même chose pour une affectation à un site précis : l'utilisateur nommé
+// doit être quelqu'un de ce site (users.site_id), pas de son département.
+$users_par_site = [];
+foreach (db_fetch_all(
+    "SELECT site_id, id, CONCAT(prenom,' ',nom) AS nom FROM users WHERE actif = 1 AND site_id IS NOT NULL ORDER BY nom"
+) as $row) {
+    $users_par_site[(int)$row['site_id']][] = ['id' => (int)$row['id'], 'nom' => $row['nom']];
 }
 
 include __DIR__ . '/../../templates/header.php';
@@ -246,7 +258,7 @@ include __DIR__ . '/../../templates/header.php';
         <td style="font-family:monospace;font-size:12px"><?= h($e['numero_serie_interne']) ?></td>
         <td><?= h($e['nomenclature_libelle'] ?: '—') ?></td>
         <td><?= h($e['departement_label'] ?: '—') ?></td>
-        <td><?= h($e['site_nom'] ?: '—') ?><?= $e['utilisateur_nom'] ? ' — ' . h($e['utilisateur_nom']) : '' ?></td>
+        <td><?= $e['site_nom'] ? h($e['site_nom']) : ($e['departement_label'] ? h($e['departement_label']) . ' (département)' : '—') ?><?= $e['utilisateur_nom'] ? ' — ' . h($e['utilisateur_nom']) : '' ?></td>
         <td><?= fmt_number((float)$e['prix_achat']) ?> XOF</td>
         <td><span class="ach-badge off"><?= h($etape_label) ?></span></td>
         <td><?= fmt_date($e['proposee_le']) ?></td>
@@ -275,7 +287,7 @@ include __DIR__ . '/../../templates/header.php';
         <td style="font-family:monospace;font-size:12px"><?= h($e['numero_serie_interne']) ?></td>
         <td><?= h($e['nomenclature_libelle'] ?: '—') ?></td>
         <td><?= h($e['departement_label'] ?: '—') ?></td>
-        <td><?= h($e['site_nom'] ?: '—') ?><?= $e['utilisateur_nom'] ? ' — ' . h($e['utilisateur_nom']) : '' ?></td>
+        <td><?= $e['site_nom'] ? h($e['site_nom']) : ($e['departement_label'] ? h($e['departement_label']) . ' (département)' : '—') ?><?= $e['utilisateur_nom'] ? ' — ' . h($e['utilisateur_nom']) : '' ?></td>
         <td><?= fmt_number((float)$e['prix_achat']) ?> XOF</td>
         <td>
           <button type="button" class="btn btn-primary btn-sm"
@@ -294,44 +306,69 @@ include __DIR__ . '/../../templates/header.php';
 <!-- MODALE proposer une affectation -->
 <div class="ach-modal-bg" id="ea-modal">
   <div class="ach-modal" role="dialog" aria-labelledby="ea-modal-title">
-    <h3 id="ea-modal-title">Proposer une affectation</h3>
-    <input type="hidden" id="ea-equipement-id" value="">
-    <input type="hidden" id="ea-departement-id" value="">
-    <div class="ach-fg">
-      <label>Exemplaire</label>
-      <div id="ea-recap" style="font-size:13px;font-weight:700;color:var(--navy)"></div>
+
+    <!-- Étape 1 : à quoi affecter l'exemplaire -->
+    <div id="ea-etape-choix">
+      <h3 id="ea-modal-title">Affecter cet exemplaire</h3>
+      <div class="ach-fg">
+        <label>Exemplaire</label>
+        <div id="ea-recap-choix" style="font-size:13px;font-weight:700;color:var(--navy)"></div>
+      </div>
+      <div class="ach-fg" style="display:flex;gap:10px">
+        <button type="button" class="btn btn-secondary" id="ea-btn-departement" style="flex:1" onclick="eaChoisir('departement')"></button>
+        <button type="button" class="btn btn-secondary" style="flex:1" onclick="eaChoisir('site')">À un site</button>
+      </div>
+      <div class="ach-modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="eaFermer()">Annuler</button>
+      </div>
     </div>
-    <div class="ach-fg">
-      <label>Département</label>
-      <div id="ea-departement-label" style="font-size:13px;font-weight:700;color:var(--navy)"></div>
+
+    <!-- Étape 2 : formulaire de proposition -->
+    <div id="ea-etape-form" style="display:none">
+      <h3>Proposer une affectation</h3>
+      <input type="hidden" id="ea-equipement-id" value="">
+      <input type="hidden" id="ea-departement-id" value="">
+      <input type="hidden" id="ea-type" value="">
+      <div class="ach-fg">
+        <label>Exemplaire</label>
+        <div id="ea-recap" style="font-size:13px;font-weight:700;color:var(--navy)"></div>
+      </div>
+      <div class="ach-fg">
+        <label>Département</label>
+        <div id="ea-departement-label" style="font-size:13px;font-weight:700;color:var(--navy)"></div>
+      </div>
+      <div class="ach-fg" id="ea-site-wrap">
+        <label for="ea-site">Site de destination</label>
+        <select id="ea-site">
+          <option value="">— Sélectionner —</option>
+          <?php foreach ($sites_actifs as $s): ?><option value="<?= $s['id'] ?>"><?= h($s['nom']) ?></option><?php endforeach; ?>
+        </select>
+      </div>
+      <div class="ach-fg">
+        <label for="ea-utilisateur">Utilisateur nommé (facultatif)</label>
+        <select id="ea-utilisateur">
+          <option value="">—</option>
+        </select>
+        <div id="ea-utilisateur-hint" style="font-size:11.5px;color:var(--muted);margin-top:4px"></div>
+      </div>
+      <div class="ach-hint" style="font-size:11.5px;color:var(--muted);margin-bottom:10px">
+        Le circuit de validation (palier RAF/RAF+DAF/RAF+DAF+PDG) est déterminé automatiquement par la valeur de l'exemplaire.
+      </div>
+      <div class="ach-err" id="ea-err"></div>
+      <div class="ach-modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="eaEtapeChoix()">← Changer</button>
+        <button type="button" class="btn btn-secondary" onclick="eaFermer()">Annuler</button>
+        <button type="button" class="btn btn-primary" onclick="eaValider()">Proposer</button>
+      </div>
     </div>
-    <div class="ach-fg">
-      <label for="ea-site">Site de destination</label>
-      <select id="ea-site" required>
-        <option value="">— Sélectionner —</option>
-        <?php foreach ($sites_actifs as $s): ?><option value="<?= $s['id'] ?>"><?= h($s['nom']) ?></option><?php endforeach; ?>
-      </select>
-    </div>
-    <div class="ach-fg">
-      <label for="ea-utilisateur">Utilisateur nommé (facultatif)</label>
-      <select id="ea-utilisateur">
-        <option value="">— Aucun (affectation au département/site) —</option>
-      </select>
-      <div style="font-size:11.5px;color:var(--muted);margin-top:4px">Limité aux membres du département de l'exemplaire.</div>
-    </div>
-    <div class="ach-hint" style="font-size:11.5px;color:var(--muted);margin-bottom:10px">
-      Le circuit de validation (palier RAF/RAF+DAF/RAF+DAF+PDG) est déterminé automatiquement par la valeur de l'exemplaire.
-    </div>
-    <div class="ach-err" id="ea-err"></div>
-    <div class="ach-modal-actions">
-      <button type="button" class="btn btn-secondary" onclick="eaFermer()">Annuler</button>
-      <button type="button" class="btn btn-primary" onclick="eaValider()">Proposer</button>
-    </div>
+
   </div>
 </div>
 
 <script>
 const usersParDepartement = <?= json_encode($users_par_departement, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
+const usersParSite = <?= json_encode($users_par_site, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
+let eaCourant = null;
 
 function etConfirmer(equipementId, nsi) {
   if (!confirm(`Confirmer que « ${nsi} » est bien arrivé dans le département ?`)) return;
@@ -347,36 +384,72 @@ function etConfirmer(equipementId, nsi) {
 }
 
 function eaOuvrir(e) {
+  eaCourant = e;
+  document.getElementById('ea-recap-choix').textContent = e.nsi + ' — ' + (e.nomenclature || '—') + ' — ' + Number(e.valeur).toLocaleString('fr-FR') + ' XOF';
+  const btnDept = document.getElementById('ea-btn-departement');
+  btnDept.textContent = 'Au département' + (e.departement ? ' (' + e.departement + ')' : '');
+  btnDept.disabled = !e.departement_id;
+  btnDept.title = e.departement_id ? '' : "Cet exemplaire ne porte aucun département.";
+
+  eaEtapeChoix();
+  document.getElementById('ea-err').style.display = 'none';
+  document.getElementById('ea-modal').classList.add('open');
+}
+
+function eaEtapeChoix() {
+  document.getElementById('ea-etape-choix').style.display = '';
+  document.getElementById('ea-etape-form').style.display = 'none';
+}
+
+function eaChoisir(type) {
+  const e = eaCourant;
   document.getElementById('ea-equipement-id').value = e.id;
   document.getElementById('ea-departement-id').value = e.departement_id || '';
+  document.getElementById('ea-type').value = type;
   document.getElementById('ea-recap').textContent = e.nsi + ' — ' + (e.nomenclature || '—') + ' — ' + Number(e.valeur).toLocaleString('fr-FR') + ' XOF';
   document.getElementById('ea-departement-label').textContent = e.departement || '—';
   document.getElementById('ea-site').value = '';
 
+  const siteWrap = document.getElementById('ea-site-wrap');
   const sel = document.getElementById('ea-utilisateur');
-  sel.innerHTML = '<option value="">— Aucun (affectation au département/site) —</option>';
-  (usersParDepartement[e.departement_id] || []).forEach(u => {
-    const opt = document.createElement('option');
-    opt.value = u.id;
-    opt.textContent = u.nom;
-    sel.appendChild(opt);
-  });
+  const hint = document.getElementById('ea-utilisateur-hint');
+
+  if (type === 'departement') {
+    siteWrap.style.display = 'none';
+    sel.innerHTML = '<option value="">— Aucun (affectation au département lui-même) —</option>';
+    (usersParDepartement[e.departement_id] || []).forEach(u => sel.add(new Option(u.nom, u.id)));
+    hint.textContent = 'Limité aux membres du département de l\'exemplaire.';
+  } else {
+    siteWrap.style.display = '';
+    sel.innerHTML = '<option value="">— Aucun (affectation au site) —</option>';
+    hint.textContent = 'Choisissez un site pour voir les personnes qui y sont rattachées.';
+  }
 
   document.getElementById('ea-err').style.display = 'none';
-  document.getElementById('ea-modal').classList.add('open');
+  document.getElementById('ea-etape-choix').style.display = 'none';
+  document.getElementById('ea-etape-form').style.display = '';
 }
-function eaFermer() { document.getElementById('ea-modal').classList.remove('open'); }
+
+document.getElementById('ea-site').addEventListener('change', function () {
+  const sel = document.getElementById('ea-utilisateur');
+  sel.innerHTML = '<option value="">— Aucun (affectation au site) —</option>';
+  (usersParSite[this.value] || []).forEach(u => sel.add(new Option(u.nom, u.id)));
+});
+
+function eaFermer() { document.getElementById('ea-modal').classList.remove('open'); eaCourant = null; }
 document.getElementById('ea-modal').addEventListener('click', e => { if (e.target === e.currentTarget) eaFermer(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') eaFermer(); });
 
 function eaValider() {
   const err = document.getElementById('ea-err');
+  const type = document.getElementById('ea-type').value;
   const site_id = document.getElementById('ea-site').value;
-  if (!site_id) { err.textContent = 'Le site de destination est obligatoire.'; err.style.display = 'block'; return; }
+  if (type === 'site' && !site_id) { err.textContent = 'Le site de destination est obligatoire.'; err.style.display = 'block'; return; }
   const fd = new FormData();
   fd.append('action', 'proposer');
+  fd.append('type', type);
   fd.append('equipement_id', document.getElementById('ea-equipement-id').value);
-  fd.append('site_id', site_id);
+  fd.append('site_id', type === 'site' ? site_id : '');
   fd.append('utilisateur_id', document.getElementById('ea-utilisateur').value);
   fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
     .then(r => r.json())
