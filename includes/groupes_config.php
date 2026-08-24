@@ -247,7 +247,7 @@ function _groupes_def(): array {
                  'perm'=>['achats_suivi','can_read']],
                 ['label'=>'Stock par département', 'icon'=>'ph-buildings',
                  'url'=>'pages/achats/stock_departements.php','active_keys'=>['achats_stock_departements'],
-                 'perm'=>['achats_suivi','can_read']],
+                 'perm'=>['achats_suivi','can_read'], 'ou_n1'=>true],
                 ['label'=>"File d'attente équipements", 'icon'=>'ph-desktop-tower',
                  'url'=>'pages/achats/equipements_attente.php','active_keys'=>['achats_equipements_attente'],
                  'perm'=>['achats_suivi','can_read']],
