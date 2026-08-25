@@ -78,6 +78,7 @@ migration_achats_19_circuit_magasin_departement.sql
 migration_achats_20_bon_transfert.sql
 migration_achats_21_equipement_bon_livraison.sql
 migration_achats_22_commande_ligne_feb_ligne.sql
+migration_achats_23_commande_modification.sql
 "
 
 for f in $FICHIERS; do
