@@ -381,7 +381,7 @@ include __DIR__ . '/../../templates/header.php';
     </div>
     <div class="ach-fg">
       <label for="et-bl">Bon de livraison (PDF, JPG, PNG ou WEBP) *</label>
-      <input type="file" id="et-bl" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+      <input type="file" id="et-bl" accept=".pdf,.jpg,.jpeg,.png,.webp">
     </div>
     <div class="ach-err" id="et-err"></div>
     <div class="ach-modal-actions">
@@ -420,7 +420,8 @@ function etValider() {
       toast(res.message, 'success');
       etFermer();
       setTimeout(() => location.reload(), 600);
-    });
+    })
+    .catch(() => { err.textContent = 'Erreur de communication avec le serveur — réessayez.'; err.style.display = 'block'; });
 }
 
 function eaOuvrir(e) {
@@ -498,7 +499,8 @@ function eaValider() {
       toast(res.message, 'success');
       eaFermer();
       setTimeout(() => location.reload(), 600);
-    });
+    })
+    .catch(() => { err.textContent = 'Erreur de communication avec le serveur — réessayez.'; err.style.display = 'block'; });
 }
 </script>
 
