@@ -11,6 +11,7 @@ require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/notifications.php';
 require_once __DIR__ . '/../../includes/audit.php';
 require_once __DIR__ . '/../../includes/achats.php';
+require_once __DIR__ . '/../../includes/upload.php';
 
 require_auth();
 $user = current_user();
@@ -54,11 +55,15 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     // Étape 3 du circuit magasin -> département : le N+1 confirme que
-    // l'exemplaire est physiquement arrivé.
+    // l'exemplaire est physiquement arrivé — bon de livraison obligatoire,
+    // comme pour la réception département des consommables (bon_transfert).
     if ($action === 'confirmer_reception') {
         $equipement_id = (int)($_POST['equipement_id'] ?? 0);
+        if (empty($_FILES['bl']['name'])) json_response(false, 'Le bon de livraison est obligatoire.');
+        $up = upload_document('bl', 'bl', 'bl_equipement_' . $equipement_id, false);
+        if (!$up['success']) json_response(false, $up['message']);
         try {
-            $ok = ach_confirmer_reception_equipement($equipement_id, $user);
+            $ok = ach_confirmer_reception_equipement($equipement_id, $user, $up['filename']);
             if ($ok) json_response(true, 'Réception confirmée.');
             json_response(false, "Cet exemplaire n'est plus en attente de confirmation.");
         } catch (AchValidationException $e) {
@@ -291,7 +296,7 @@ include __DIR__ . '/../../templates/header.php';
         <td><?= fmt_number((float)$e['prix_achat']) ?> XOF</td>
         <td>
           <button type="button" class="btn btn-primary btn-sm"
-                  onclick='etConfirmer(<?= (int)$e["id"] ?>, <?= json_encode($e["numero_serie_interne"], JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
+                  onclick='etOuvrir(<?= (int)$e["id"] ?>, <?= json_encode($e["numero_serie_interne"], JSON_HEX_APOS|JSON_HEX_QUOT) ?>)'>
             Confirmer la réception
           </button>
         </td>
@@ -365,21 +370,56 @@ include __DIR__ . '/../../templates/header.php';
   </div>
 </div>
 
+<!-- MODALE confirmer la réception (bon de livraison) -->
+<div class="ach-modal-bg" id="et-modal">
+  <div class="ach-modal" role="dialog" aria-labelledby="et-modal-title">
+    <h3 id="et-modal-title">Confirmer la réception</h3>
+    <input type="hidden" id="et-equipement-id" value="">
+    <div class="ach-fg">
+      <label>Exemplaire</label>
+      <div id="et-recap" style="font-size:13px;font-weight:700;color:var(--navy)"></div>
+    </div>
+    <div class="ach-fg">
+      <label for="et-bl">Bon de livraison (PDF, JPG, PNG ou WEBP) *</label>
+      <input type="file" id="et-bl" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+    </div>
+    <div class="ach-err" id="et-err"></div>
+    <div class="ach-modal-actions">
+      <button type="button" class="btn btn-secondary" onclick="etFermer()">Annuler</button>
+      <button type="button" class="btn btn-primary" onclick="etValider()">Confirmer</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const usersParDepartement = <?= json_encode($users_par_departement, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
 const usersParSite = <?= json_encode($users_par_site, JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
 let eaCourant = null;
 
-function etConfirmer(equipementId, nsi) {
-  if (!confirm(`Confirmer que « ${nsi} » est bien arrivé dans le département ?`)) return;
+function etOuvrir(equipementId, nsi) {
+  document.getElementById('et-equipement-id').value = equipementId;
+  document.getElementById('et-recap').textContent = nsi;
+  document.getElementById('et-bl').value = '';
+  document.getElementById('et-err').style.display = 'none';
+  document.getElementById('et-modal').classList.add('open');
+}
+function etFermer() { document.getElementById('et-modal').classList.remove('open'); }
+document.getElementById('et-modal').addEventListener('click', e => { if (e.target === e.currentTarget) etFermer(); });
+
+function etValider() {
+  const err = document.getElementById('et-err');
+  if (!document.getElementById('et-bl').files[0]) { err.textContent = 'Le bon de livraison est obligatoire.'; err.style.display = 'block'; return; }
   const fd = new FormData();
   fd.append('action', 'confirmer_reception');
-  fd.append('equipement_id', equipementId);
+  fd.append('equipement_id', document.getElementById('et-equipement-id').value);
+  fd.append('bl', document.getElementById('et-bl').files[0]);
   fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
     .then(r => r.json())
     .then(res => {
-      toast(res.message, res.success ? 'success' : 'danger');
-      if (res.success) setTimeout(() => location.reload(), 500);
+      if (!res.success) { err.textContent = res.message; err.style.display = 'block'; return; }
+      toast(res.message, 'success');
+      etFermer();
+      setTimeout(() => location.reload(), 600);
     });
 }
 
@@ -438,7 +478,7 @@ document.getElementById('ea-site').addEventListener('change', function () {
 
 function eaFermer() { document.getElementById('ea-modal').classList.remove('open'); eaCourant = null; }
 document.getElementById('ea-modal').addEventListener('click', e => { if (e.target === e.currentTarget) eaFermer(); });
-document.addEventListener('keydown', e => { if (e.key === 'Escape') eaFermer(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { eaFermer(); etFermer(); } });
 
 function eaValider() {
   const err = document.getElementById('ea-err');

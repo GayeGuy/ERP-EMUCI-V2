@@ -69,6 +69,37 @@ $departements_list = $departements_n1_force
     ? db_fetch_all("SELECT id, label FROM departements WHERE actif=1 AND id IN (" . implode(',', array_fill(0, count($departements_n1_force), '?')) . ") ORDER BY label", $departements_n1_force)
     : db_fetch_all("SELECT id, label FROM departements WHERE actif=1 ORDER BY label");
 
+// Équipements (lignes DAI) affectés au département — table équipements,
+// pas stock_departement (réservée aux consommables, article_id NOT NULL).
+// N'apparaissent ici qu'une fois la réception confirmée par le N+1
+// (ach_confirmer_reception_equipement()) : signalé en recette, DAI-10-1
+// restait invisible du stock du département qui venait de le réceptionner.
+$where_eq  = ["e.statut_stock IN ('affecte','en_stock')"];
+$params_eq = [];
+if ($departements_n1_force) {
+    $placeholders = implode(',', array_fill(0, count($departements_n1_force), '?'));
+    $where_eq[] = "e.departement_id IN ($placeholders)";
+    array_push($params_eq, ...$departements_n1_force);
+}
+if ($f_departement) { $where_eq[] = 'e.departement_id = ?'; $params_eq[] = $f_departement; }
+if ($f_q !== '')     { $where_eq[] = '(n.libelle ILIKE ? OR e.numero_serie_interne ILIKE ?)'; $params_eq[] = '%' . $f_q . '%'; $params_eq[] = '%' . $f_q . '%'; }
+
+$equipements = db_fetch_all(
+    "SELECT e.numero_serie_interne, e.prix_achat, e.date_mise_en_service,
+            n.libelle AS nomenclature_libelle,
+            d.label AS departement_label,
+            s.nom AS site_nom, CONCAT(u.prenom,' ',u.nom) AS utilisateur_nom
+     FROM equipements e
+     LEFT JOIN nomenclatures n ON n.id = e.nomenclature_id
+     LEFT JOIN departements d  ON d.id = e.departement_id
+     LEFT JOIN sites s         ON s.id = e.site_id
+     LEFT JOIN users u         ON u.id = e.utilisateur_id
+     WHERE " . implode(' AND ', $where_eq) . "
+     ORDER BY d.label, n.libelle",
+    $params_eq
+);
+$total_valorisation_eq = array_sum(array_column($equipements, 'prix_achat'));
+
 include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
@@ -113,7 +144,8 @@ include __DIR__ . '/../../templates/header.php';
   <div class="ach-summary"><?= count($lignes) ?> ligne(s) — <?= fmt_number((float)$total_valorisation) ?> XOF valorisés</div>
 </div>
 
-<div class="ach-table-wrap">
+<div class="ach-section-ttl">Consommables</div>
+<div class="ach-table-wrap" style="margin-bottom:24px">
   <?php if (empty($lignes)): ?>
     <div class="ach-empty">Aucun stock départemental pour ces filtres.</div>
   <?php else: ?>
@@ -138,6 +170,39 @@ include __DIR__ . '/../../templates/header.php';
       <tr class="total-row">
         <td colspan="4" style="font-weight:700;text-align:right">Total valorisation</td>
         <td colspan="2" style="font-weight:700"><?= fmt_number((float)$total_valorisation) ?> XOF</td>
+      </tr>
+    </tfoot>
+  </table>
+  </div>
+  <?php endif; ?>
+</div>
+
+<div class="ach-section-ttl">Équipements affectés (DAI)</div>
+<div class="ach-table-wrap">
+  <?php if (empty($equipements)): ?>
+    <div class="ach-empty">Aucun équipement affecté pour ces filtres.</div>
+  <?php else: ?>
+  <div style="overflow-x:auto">
+  <table class="ach-table">
+    <thead><tr>
+      <th>Département</th><th>Équipement</th><th>N° série</th><th>Localisation</th><th>Valeur</th><th>Mise en service</th>
+    </tr></thead>
+    <tbody>
+      <?php foreach ($equipements as $e): ?>
+      <tr>
+        <td style="font-weight:700;color:var(--navy)"><?= h($e['departement_label'] ?: '—') ?></td>
+        <td><?= h($e['nomenclature_libelle'] ?: '—') ?></td>
+        <td style="font-family:monospace;color:var(--muted)"><?= h($e['numero_serie_interne']) ?></td>
+        <td><?= $e['site_nom'] ? h($e['site_nom']) : ($e['departement_label'] ? h($e['departement_label']) . ' (département)' : '—') ?><?= $e['utilisateur_nom'] ? ' — ' . h($e['utilisateur_nom']) : '' ?></td>
+        <td><?= fmt_number((float)$e['prix_achat']) ?> XOF</td>
+        <td style="color:var(--muted)"><?= fmt_date($e['date_mise_en_service']) ?></td>
+      </tr>
+      <?php endforeach; ?>
+    </tbody>
+    <tfoot>
+      <tr class="total-row">
+        <td colspan="4" style="font-weight:700;text-align:right">Total valorisation</td>
+        <td colspan="2" style="font-weight:700"><?= fmt_number((float)$total_valorisation_eq) ?> XOF</td>
       </tr>
     </tfoot>
   </table>
