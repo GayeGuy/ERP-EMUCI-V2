@@ -454,7 +454,7 @@ include __DIR__ . '/../../templates/header.php';
     </div>
     <div class="ach-fg">
       <label for="rc-bl">Bon de livraison (PDF, JPG, PNG ou WEBP) *</label>
-      <input type="file" id="rc-bl" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+      <input type="file" id="rc-bl" accept=".pdf,.jpg,.jpeg,.png,.webp">
     </div>
     <div class="ach-fg">
       <label for="rc-observation">Observation</label>
@@ -517,7 +517,7 @@ include __DIR__ . '/../../templates/header.php';
     </div>
     <div class="ach-fg">
       <label for="rd-bt">Bon de transfert (PDF, JPG, PNG ou WEBP) *</label>
-      <input type="file" id="rd-bt" accept=".pdf,.jpg,.jpeg,.png,.webp" required>
+      <input type="file" id="rd-bt" accept=".pdf,.jpg,.jpeg,.png,.webp">
     </div>
     <div class="ach-fg">
       <label for="rd-observation">Observation</label>
@@ -598,7 +598,7 @@ function rcValider() {
       rcFermer();
       setTimeout(() => location.reload(), 600);
     });
-  });
+  }).catch(() => { err.textContent = 'Erreur de communication avec le serveur — réessayez.'; err.style.display = 'block'; });
 }
 
 function expOuvrir(l) {
@@ -635,7 +635,8 @@ function expValider() {
       toast(res.message, 'success');
       expFermer();
       setTimeout(() => location.reload(), 600);
-    });
+    })
+    .catch(() => { err.textContent = 'Erreur de communication avec le serveur — réessayez.'; err.style.display = 'block'; });
 }
 
 function rdOuvrir(l) {
@@ -675,7 +676,8 @@ function rdValider() {
       toast(res.message, 'success');
       rdFermer();
       setTimeout(() => location.reload(), 600);
-    });
+    })
+    .catch(() => { err.textContent = 'Erreur de communication avec le serveur — réessayez.'; err.style.display = 'block'; });
 }
 
 document.addEventListener('keydown', e => {
