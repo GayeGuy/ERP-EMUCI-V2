@@ -572,7 +572,7 @@ function rcValider() {
     fdLien.append('feb_ligne_id', document.getElementById('rc-feb-ligne-id').value);
     fdLien.append('nomenclature_id', document.getElementById('rc-nomenclature').value);
     return fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fdLien })
-      .then(r => r.json())
+      .then(achParseJson)
       .then(res => {
         if (!res.success) { err.textContent = res.message; err.style.display = 'block'; return false; }
         return true;
@@ -591,14 +591,14 @@ function rcValider() {
   lierPuisReceptionner().then(ok => {
     if (!ok) return;
     return fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
-    .then(r => r.json())
+    .then(achParseJson)
     .then(res => {
       if (!res.success) { err.textContent = res.message; err.style.display = 'block'; return; }
       toast(res.message, 'success');
       rcFermer();
       setTimeout(() => location.reload(), 600);
     });
-  }).catch(() => { err.textContent = 'Erreur de communication avec le serveur — réessayez.'; err.style.display = 'block'; });
+  }).catch(e => { err.textContent = e.message || 'Erreur de communication avec le serveur — réessayez.'; err.style.display = 'block'; });
 }
 
 function expOuvrir(l) {
@@ -629,14 +629,14 @@ function expValider() {
   fd.append('date_expedition', document.getElementById('exp-date').value);
   fd.append('observation', document.getElementById('exp-observation').value.trim());
   fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
-    .then(r => r.json())
+    .then(achParseJson)
     .then(res => {
       if (!res.success) { err.textContent = res.message; err.style.display = 'block'; return; }
       toast(res.message, 'success');
       expFermer();
       setTimeout(() => location.reload(), 600);
     })
-    .catch(() => { err.textContent = 'Erreur de communication avec le serveur — réessayez.'; err.style.display = 'block'; });
+    .catch(e => { err.textContent = e.message || 'Erreur de communication avec le serveur — réessayez.'; err.style.display = 'block'; });
 }
 
 function rdOuvrir(l) {
@@ -670,14 +670,14 @@ function rdValider() {
   const btFile = document.getElementById('rd-bt').files[0];
   if (btFile) fd.append('bt', btFile);
   fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
-    .then(r => r.json())
+    .then(achParseJson)
     .then(res => {
       if (!res.success) { err.textContent = res.message; err.style.display = 'block'; return; }
       toast(res.message, 'success');
       rdFermer();
       setTimeout(() => location.reload(), 600);
     })
-    .catch(() => { err.textContent = 'Erreur de communication avec le serveur — réessayez.'; err.style.display = 'block'; });
+    .catch(e => { err.textContent = e.message || 'Erreur de communication avec le serveur — réessayez.'; err.style.display = 'block'; });
 }
 
 document.addEventListener('keydown', e => {

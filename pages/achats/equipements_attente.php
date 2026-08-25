@@ -414,14 +414,14 @@ function etValider() {
   fd.append('equipement_id', document.getElementById('et-equipement-id').value);
   fd.append('bl', document.getElementById('et-bl').files[0]);
   fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
-    .then(r => r.json())
+    .then(achParseJson)
     .then(res => {
       if (!res.success) { err.textContent = res.message; err.style.display = 'block'; return; }
       toast(res.message, 'success');
       etFermer();
       setTimeout(() => location.reload(), 600);
     })
-    .catch(() => { err.textContent = 'Erreur de communication avec le serveur — réessayez.'; err.style.display = 'block'; });
+    .catch(e => { err.textContent = e.message || 'Erreur de communication avec le serveur — réessayez.'; err.style.display = 'block'; });
 }
 
 function eaOuvrir(e) {
@@ -493,14 +493,14 @@ function eaValider() {
   fd.append('site_id', type === 'site' ? site_id : '');
   fd.append('utilisateur_id', document.getElementById('ea-utilisateur').value);
   fetch(window.location.href, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' }, body: fd })
-    .then(r => r.json())
+    .then(achParseJson)
     .then(res => {
       if (!res.success) { err.textContent = res.message; err.style.display = 'block'; return; }
       toast(res.message, 'success');
       eaFermer();
       setTimeout(() => location.reload(), 600);
     })
-    .catch(() => { err.textContent = 'Erreur de communication avec le serveur — réessayez.'; err.style.display = 'block'; });
+    .catch(e => { err.textContent = e.message || 'Erreur de communication avec le serveur — réessayez.'; err.style.display = 'block'; });
 }
 </script>
 
