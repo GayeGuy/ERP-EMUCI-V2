@@ -131,6 +131,12 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         $proposeur_nom  = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$affectation['proposee_par']]);
         $site_nom       = $affectation['site_id'] ? db_fetch_value("SELECT nom FROM sites WHERE id=?", [$affectation['site_id']]) : null;
+        // Affectation « au département » (pas de site précis) : même repli
+        // que la liste ci-dessus, sinon la fiche affiche « — » alors que la
+        // destination réelle (le département) est connue.
+        $departement_label = $affectation['site_id'] ? null : db_fetch_value(
+            "SELECT d.label FROM departements d WHERE d.id = ?", [$equipement['departement_id'] ?? 0]
+        );
         $utilisateur_nom= $affectation['utilisateur_id'] ? db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$affectation['utilisateur_id']]) : null;
 
         json_response(true, '', [
@@ -139,7 +145,7 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
             'nomenclature'    => $equipement['nomenclature_libelle'] ?? '—',
             'prix_achat'      => (float)($equipement['prix_achat'] ?? 0),
             'proposeur_nom'   => $proposeur_nom ?: '—',
-            'site_nom'        => $site_nom ?: '—',
+            'site_nom'        => $site_nom ?: ($departement_label ? "$departement_label (département)" : '—'),
             'utilisateur_nom' => $utilisateur_nom ?: '—',
             'etape_label'     => $affectation['workflow_snapshot'][(int)$affectation['etape_actuelle']]['label'] ?? '',
         ]);
@@ -226,6 +232,14 @@ foreach ($affectations_a_viser as &$a) {
     );
     $a['prix_achat']   = (float) db_fetch_value("SELECT prix_achat FROM equipements WHERE id=?", [$a['equipement_id']]);
     $a['site_nom']     = $a['site_id'] ? db_fetch_value("SELECT nom FROM sites WHERE id=?", [$a['site_id']]) : null;
+    // Une affectation « au département » (pas de site précis, cf. la modale
+    // en deux étapes de equipements_attente.php) laissait ce champ à « — »
+    // sans jamais montrer le département — repli identique à celui déjà
+    // posé sur equipements_attente.php et stock_departements.php.
+    $a['departement_label'] = $a['site_id'] ? null : db_fetch_value(
+        "SELECT d.label FROM equipements e LEFT JOIN departements d ON d.id = e.departement_id WHERE e.id=?",
+        [$a['equipement_id']]
+    );
     $a['proposeur_nom']= db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$a['proposee_par']]);
 }
 unset($a);
@@ -320,7 +334,7 @@ function ach_mv_render_zone(int $total_a_viser, float $anciennete_max, array $a_
           <tr>
             <td style="font-family:monospace;font-size:12px"><?= h($a['numero_serie'] ?: '—') ?></td>
             <td><?= h($a['nomenclature'] ?: '—') ?></td>
-            <td><?= h($a['site_nom'] ?: '—') ?></td>
+            <td><?= $a['site_nom'] ? h($a['site_nom']) : ($a['departement_label'] ? h($a['departement_label']) . ' (département)' : '—') ?></td>
             <td style="font-weight:700"><?= fmt_number((float)$a['prix_achat']) ?> XOF</td>
             <td><?= h($a['proposeur_nom'] ?: '—') ?></td>
             <td><button type="button" class="btn btn-primary btn-sm" onclick="mvOuvrirAffectation(<?= (int)$a['id'] ?>)">Examiner</button></td>
