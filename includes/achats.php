@@ -881,10 +881,29 @@ function ach_verifier_comparatif(int $feb_id): array {
             return ['ok' => false, 'message' =>
                 "Lot {$lot['lot']} : aucune offre retenue — comparez au moins une offre fournisseur avant de poursuivre."];
         }
-        $somme = array_sum(array_map(fn($l) => (int)$l['montant_ttc'], $lot['lignes']));
+        // RG-09 : une ligne dérogée suit son propre fournisseur/montant, pas
+        // celui de l'offre retenue du lot — l'exclure de ce total, sinon
+        // toute dérogation fait mécaniquement échouer le comparatif dès que
+        // son montant diffère de sa part dans l'offre (signalé en recette,
+        // lot ADM/OPERATION/FOURN_BUR : 427 000 XOF de lignes contre 2 000
+        // XOF d'offre DMD, la ligne dérogée à 425 000 XOF chez INFOSOLUCES
+        // comptée à tort dans la comparaison).
+        $lignes_suivies  = array_filter($lot['lignes'], fn($l) => !(int)$l['fournisseur_derogation']);
+        $lignes_derogees = array_filter($lot['lignes'], fn($l) => (int)$l['fournisseur_derogation']);
+        $somme = array_sum(array_map(fn($l) => (int)$l['montant_ttc'], $lignes_suivies));
         if ($somme !== (int)$offre['montant_ttc']) {
             return ['ok' => false, 'message' =>
-                "Lot {$lot['lot']} : la somme des lignes ($somme XOF) ne correspond pas au montant de l'offre retenue ({$offre['montant_ttc']} XOF)."];
+                "Lot {$lot['lot']} : la somme des lignes suivant l'offre retenue ($somme XOF) ne correspond pas au montant de cette offre ({$offre['montant_ttc']} XOF)."];
+        }
+        // Une ligne dérogée reste remise à zéro (cf. deroger_fournisseur_ligne)
+        // tant que personne n'a saisi le prix réellement proposé — sans ce
+        // contrôle, elle serait exclue de la somme ci-dessus ET jamais
+        // vérifiée nulle part ailleurs.
+        foreach ($lignes_derogees as $l) {
+            if ((int)$l['montant_ttc'] <= 0) {
+                return ['ok' => false, 'message' =>
+                    "La ligne « {$l['designation']} » (lot {$lot['lot']}) est dérogée mais son montant n'a pas été saisi."];
+            }
         }
         foreach ($lot['lignes'] as $l) {
             if (!$l['type_achat']) {
