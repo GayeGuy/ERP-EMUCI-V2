@@ -1863,7 +1863,7 @@ function ach_viser_affectation(int $affectation_id, array $user, bool $accepte, 
 //    l'exemplaire reste 'en_transit' indéfiniment : ni disponible pour une
 //    nouvelle affectation (il en a déjà une), ni compté comme réellement en
 //    service (date_mise_en_service).
-function ach_confirmer_reception_equipement(int $equipement_id, array $user): bool {
+function ach_confirmer_reception_equipement(int $equipement_id, array $user, ?string $bon_livraison = null): bool {
     $uid = (int)$user['id'];
     $equipement = db_fetch_one("SELECT * FROM equipements WHERE id=?", [$equipement_id]);
     if (!$equipement) throw new AchValidationException('Équipement introuvable.');
@@ -1885,9 +1885,9 @@ function ach_confirmer_reception_equipement(int $equipement_id, array $user): bo
 
     $statut_final = $equipement['utilisateur_id'] ? 'affecte' : 'en_stock';
     $stmt = db_query(
-        "UPDATE equipements SET statut_stock=?, date_mise_en_service=COALESCE(date_mise_en_service, ?)
+        "UPDATE equipements SET statut_stock=?, date_mise_en_service=COALESCE(date_mise_en_service, ?), bon_livraison=?
           WHERE id=? AND statut_stock='en_transit'",
-        [$statut_final, date('Y-m-d'), $equipement_id]
+        [$statut_final, date('Y-m-d'), $bon_livraison, $equipement_id]
     );
     if ($stmt->rowCount() === 0) return false;
     audit_log($uid, 'UPDATE', 'equipements', $equipement_id, 'Réception confirmée par le supérieur hiérarchique du département');
