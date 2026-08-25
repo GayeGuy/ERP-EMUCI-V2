@@ -248,6 +248,16 @@ function _groupes_def(): array {
                 ['label'=>'Stock par département', 'icon'=>'ph-buildings',
                  'url'=>'pages/achats/stock_departements.php','active_keys'=>['achats_stock_departements'],
                  'perm'=>['achats_suivi','can_read'], 'ou_n1'=>true],
+                // Commandes internes issues d'un arbitrage « stock » (cf.
+                // ach_basculer_vers_commande()) — pages/commandes.php porte
+                // sa propre entrée dans STOCK/OPERATIONS, mais ces groupes
+                // sont masqués sur recette-achats (get_groupes_pour_role()
+                // n'y renvoie que ACHATS) : sans cet item, le superviseur
+                // achat n'avait aucun moyen d'y suivre la commande créée par
+                // sa propre bascule.
+                ['label'=>'Commandes', 'icon'=>'ph-shopping-cart',
+                 'url'=>'pages/commandes.php','active_keys'=>['commandes'],
+                 'perm'=>['commandes','can_read'], 'recette_only'=>true],
                 ['label'=>"File d'attente équipements", 'icon'=>'ph-desktop-tower',
                  'url'=>'pages/achats/equipements_attente.php','active_keys'=>['achats_equipements_attente'],
                  'perm'=>['achats_suivi','can_read'], 'ou_n1'=>true],
@@ -402,6 +412,10 @@ function get_groupe_nav_items(string $slug): array {
         if (!empty($item['roles_exclude']) && in_array($role, $item['roles_exclude'])) continue;
         // Filtre rôles autorisés (whitelist) — si défini, seuls ces rôles voient l'item
         if (!empty($item['roles_include']) && !in_array($role, $item['roles_include'])) continue;
+        // Item ajouté uniquement pour compenser un groupe masqué en mode
+        // recette (cf. 'Commandes' dans ACHATS) — inutile et redondant en
+        // production, où ce groupe reste accessible normalement.
+        if (!empty($item['recette_only']) && !(defined('RECETTE_ACHATS') && RECETTE_ACHATS)) continue;
         $items[] = $item;
     }
     return $items;
