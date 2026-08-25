@@ -250,7 +250,7 @@ function _groupes_def(): array {
                  'perm'=>['achats_suivi','can_read'], 'ou_n1'=>true],
                 ['label'=>"File d'attente équipements", 'icon'=>'ph-desktop-tower',
                  'url'=>'pages/achats/equipements_attente.php','active_keys'=>['achats_equipements_attente'],
-                 'perm'=>['achats_suivi','can_read']],
+                 'perm'=>['achats_suivi','can_read'], 'ou_n1'=>true],
                 // RAF/DAF/PDG (lecteur) portent achats_param can_read/can_update
                 // uniquement pour le budget (migration_achats_13) : exclus des
                 // 4 autres écrans, qui restent à l'administration (même 403
