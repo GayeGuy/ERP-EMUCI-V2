@@ -667,10 +667,10 @@ function ach_basculer_vers_commande(int $feb_id, array $user): ?int {
         foreach ($lignes_stock as $l) {
             $article = db_fetch_one("SELECT type_article, unite FROM articles WHERE id=?", [$l['article_id']]);
             db_query(
-                "INSERT INTO commande_lignes (commande_id, type_article, article_id, libelle, quantite, unite, statut_ligne)
-                 VALUES (?,?,?,?,?,?,'en_attente')",
+                "INSERT INTO commande_lignes (commande_id, type_article, article_id, libelle, quantite, unite, statut_ligne, feb_ligne_id)
+                 VALUES (?,?,?,?,?,?,'en_attente',?)",
                 [$cmd_id, $article['type_article'] ?? 'article', $l['article_id'], $l['designation'], $l['quantite'],
-                 $l['unite'] ?: ($article['unite'] ?? 'unité')]
+                 $l['unite'] ?: ($article['unite'] ?? 'unité'), $l['id']]
             );
         }
 

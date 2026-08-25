@@ -225,6 +225,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             );
             $dist_id = (int)db_last_id();
 
+            // Lignes issues d'un arbitrage « stock » (ach_basculer_vers_commande()) :
+            // un écart justifié ici doit remonter vers la FEB d'origine, sinon
+            // elle garde silencieusement l'ancienne quantité demandée alors que
+            // c'est cette ligne-ci qui fait foi sur ce qui a réellement été servi.
+            $feb_ligne_map = array_column(
+                db_fetch_all("SELECT id, feb_ligne_id FROM commande_lignes WHERE commande_id=? AND feb_ligne_id IS NOT NULL", [$cmd_id]),
+                'feb_ligne_id', 'id'
+            );
+
             $manques = [];   // stock magasin insuffisant, dit et non absorbé
             foreach ($lignes_liv as $l) {
                 $q_liv = (int)($l['quantite_livree'] ?? $l['quantite']);
@@ -232,6 +241,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     "UPDATE commande_lignes SET quantite_livree=?,motif_ecart=? WHERE id=? AND commande_id=?",
                     [$q_liv, $l['motif_ecart']??null, (int)$l['ligne_id'], $cmd_id]
                 );
+                $feb_ligne_id = $feb_ligne_map[(int)$l['ligne_id']] ?? null;
+                if ($feb_ligne_id && $q_liv !== (int)($l['quantite'] ?? 0)) {
+                    db_query("UPDATE feb_lignes SET quantite=? WHERE id=?", [$q_liv, $feb_ligne_id]);
+                    audit_log($user['id'], 'UPDATE', 'achats', $feb_ligne_id,
+                        "Quantité ajustée à $q_liv (écart de livraison de la commande {$cmd['numero_commande']})");
+                }
                 // Ligne de distribution
                 if ($q_liv > 0) {
                     db_query(
