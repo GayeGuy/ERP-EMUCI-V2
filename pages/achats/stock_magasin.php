@@ -28,7 +28,7 @@ if ($f_site) { $where[] = 'ss.site_id = ?'; $params[] = $f_site; }
 if ($f_q !== '') { $where[] = '(a.libelle ILIKE ? OR a.code ILIKE ?)'; $params[] = '%' . $f_q . '%'; $params[] = '%' . $f_q . '%'; }
 
 $lignes = db_fetch_all(
-    "SELECT ss.quantite, ss.updated_at, s.nom AS site_nom, a.code AS article_code, a.libelle AS article_libelle, a.unite
+    "SELECT ss.quantite, ss.updated_at, s.nom AS site_nom, a.code AS article_code, a.libelle AS article_libelle, a.unite, a.prix_unitaire
      FROM stock_site ss
      JOIN sites s    ON s.id = ss.site_id
      JOIN articles a ON a.id = ss.article_id
@@ -37,6 +37,12 @@ $lignes = db_fetch_all(
     $params
 );
 $total_unites = array_sum(array_column($lignes, 'quantite'));
+$total_valorisation = 0;
+foreach ($lignes as &$l) {
+    $l['valorisation'] = (int)$l['quantite'] * (int)$l['prix_unitaire'];
+    $total_valorisation += $l['valorisation'];
+}
+unset($l);
 
 $sites_magasin = db_fetch_all("SELECT id, nom FROM sites WHERE type='magasin' AND actif=1 ORDER BY nom");
 
@@ -107,7 +113,7 @@ include __DIR__ . '/../../templates/header.php';
     <?php endif; ?>
     <button type="submit" class="btn btn-secondary">Filtrer</button>
   </form>
-  <div class="ach-summary"><?= count($lignes) + count($lignes_libres) ?> ligne(s) — <?= fmt_number((float)$total_unites) ?> unité(s) référencées</div>
+  <div class="ach-summary"><?= count($lignes) + count($lignes_libres) ?> ligne(s) — <?= fmt_number((float)$total_unites) ?> unité(s) référencées — <?= fmt_number((float)$total_valorisation) ?> XOF valorisés</div>
 </div>
 
 <div class="ach-section-ttl" style="font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;font-weight:800;color:var(--navy);margin:0 0 12px">Articles du référentiel</div>
@@ -122,7 +128,7 @@ include __DIR__ . '/../../templates/header.php';
   <div style="overflow-x:auto">
   <table class="ach-table">
     <thead><tr>
-      <th>Site</th><th>Article</th><th>Code</th><th>Quantité</th><th>Dernier mouvement</th>
+      <th>Site</th><th>Article</th><th>Code</th><th>Quantité</th><th>Valorisation</th><th>Dernier mouvement</th>
     </tr></thead>
     <tbody>
       <?php foreach ($lignes as $l): ?>
@@ -131,10 +137,17 @@ include __DIR__ . '/../../templates/header.php';
         <td><?= h($l['article_libelle']) ?></td>
         <td style="font-family:monospace;color:var(--muted)"><?= h($l['article_code']) ?></td>
         <td style="font-weight:700"><?= (int)$l['quantite'] ?> <?= h($l['unite'] ?: '') ?></td>
+        <td><?= fmt_number((float)$l['valorisation']) ?> XOF</td>
         <td style="color:var(--muted)"><?= fmt_date($l['updated_at']) ?></td>
       </tr>
       <?php endforeach; ?>
     </tbody>
+    <tfoot>
+      <tr class="total-row">
+        <td colspan="4" style="font-weight:700;text-align:right">Total valorisation</td>
+        <td colspan="2" style="font-weight:700"><?= fmt_number((float)$total_valorisation) ?> XOF</td>
+      </tr>
+    </tfoot>
   </table>
   </div>
   <?php endif; ?>
