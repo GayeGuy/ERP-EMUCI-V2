@@ -65,6 +65,15 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
     $action = $_POST['action'] ?? '';
 
+    // Filet de sécurité : une erreur inattendue (SQL, colonne manquante après
+    // une migration oubliée, etc.) plantait ce script en silence — display_
+    // errors est désactivé en production (cf. Dockerfile), la réponse HTTP
+    // revenait donc vide, indiscernable d'un bouton qui ne répond pas.
+    // Repéré en recette (2026-08-25) sur equipements_attente.php, même
+    // filet posé ici par précaution. Les erreurs métier (AchValidationException)
+    // restent gérées au plus près, ce filet n'attrape que ce qu'elles ne couvrent pas.
+    try {
+
     if ($action === 'lier_nomenclature') {
         if (!$can_magasin) json_response(false, 'Action réservée.');
         $feb_ligne_id    = (int)($_POST['feb_ligne_id'] ?? 0);
@@ -156,6 +165,11 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     json_response(false, 'Action inconnue.');
+
+    } catch (\Throwable $e) {
+        error_log("receptions.php AJAX ($action) : " . $e->getMessage());
+        json_response(false, "Erreur interne du serveur — contactez l'administrateur si ça persiste.");
+    }
 }
 
 // ── PAGE PHP ─────────────────────────────────────────────────
