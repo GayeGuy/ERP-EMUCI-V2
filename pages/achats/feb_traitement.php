@@ -340,16 +340,30 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         );
         $realignement = $offre_retenue && (int)$offre_retenue === $fournisseur_id;
 
-        db_query(
-            "UPDATE feb_lignes SET fournisseur_id=?, fournisseur_derogation=? WHERE id=?",
-            [$fournisseur_id, $realignement ? 0 : 1, $ligne_id]
-        );
+        // Une offre porte sur tout le lot (feb_offres n'a qu'un montant_ttc
+        // global) : il n'existe donc aucun moyen de déduire la part exacte
+        // qui revient à CETTE ligne chez le fournisseur dérogé. Remettre le
+        // montant à zéro plutôt que de laisser l'ancien report — sinon il
+        // reste affiché tel quel, prix d'un autre fournisseur pour un autre
+        // lot de lignes, sans que rien ne signale qu'il est à ressaisir.
+        if ($realignement) {
+            db_query(
+                "UPDATE feb_lignes SET fournisseur_id=?, fournisseur_derogation=0 WHERE id=?",
+                [$fournisseur_id, $ligne_id]
+            );
+        } else {
+            db_query(
+                "UPDATE feb_lignes SET fournisseur_id=?, fournisseur_derogation=1, montant_ttc=0 WHERE id=?",
+                [$fournisseur_id, $ligne_id]
+            );
+            ach_recalculer_montant_total($post_feb_id);
+        }
         audit_log($uid, 'UPDATE', 'achats', $post_feb_id, $realignement
             ? "Réalignement ligne #{$l['numero_ligne']} ({$l['designation']}) sur l'offre retenue du lot"
-            : "Dérogation fournisseur ligne #{$l['numero_ligne']} ({$l['designation']})");
+            : "Dérogation fournisseur ligne #{$l['numero_ligne']} ({$l['designation']}) — montant remis à zéro");
         json_response(true, $realignement
             ? "Ligne réalignée sur l'offre retenue du lot — elle suivra de nouveau les changements d'offre."
-            : 'Fournisseur dérogé sur cette ligne — elle ne suivra plus les changements d\'offre du lot.');
+            : 'Fournisseur dérogé sur cette ligne — son montant a été remis à zéro, saisissez le prix réellement proposé par ce fournisseur pour cette ligne.');
     }
 
     if ($action === 'update_ligne_montant') {
