@@ -189,6 +189,20 @@ function toast(msg, type = 'success') {
   setTimeout(() => t.classList.add('show'), neuf ? 10 : 0);
   t._hideTimer = setTimeout(() => t.classList.remove('show'), 3500);
 }
+
+// ── Lit une réponse fetch() en JSON, mais fait apparaître l'erreur réelle
+//    (code HTTP + début du corps) si ce n'en est pas — sans elle, un fatal
+//    PHP ou une coupure réseau fait échouer r.json() en silence : le bouton
+//    « ne répond pas », sans aucun message ni dans l'écran ni ailleurs.
+function achParseJson(r) {
+  return r.text().then(t => {
+    try {
+      return JSON.parse(t);
+    } catch (e) {
+      throw new Error(`Réponse serveur invalide (HTTP ${r.status}) : ${t.slice(0, 300)}`);
+    }
+  });
+}
 </script>
 
 <style>
