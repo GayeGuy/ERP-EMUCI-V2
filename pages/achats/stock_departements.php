@@ -141,7 +141,8 @@ include __DIR__ . '/../../templates/header.php';
     <?php endif; ?>
     <button type="submit" class="btn btn-secondary">Filtrer</button>
   </form>
-  <div class="ach-summary"><?= count($lignes) ?> ligne(s) — <?= fmt_number((float)$total_valorisation) ?> XOF valorisés</div>
+  <div class="ach-summary"><?= count($lignes) + count($equipements) ?> ligne(s) — <?= fmt_number((float)($total_valorisation + $total_valorisation_eq)) ?> XOF valorisés
+    (<?= fmt_number((float)$total_valorisation) ?> XOF consommables, <?= fmt_number((float)$total_valorisation_eq) ?> XOF équipements)</div>
 </div>
 
 <div class="ach-section-ttl">Consommables</div>
