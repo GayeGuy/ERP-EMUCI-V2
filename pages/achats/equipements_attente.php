@@ -38,40 +38,53 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
     $action = $_POST['action'] ?? '';
 
-    if ($action === 'proposer') {
-        if (!$can_proposer) json_response(false, 'Action réservée.');
-        $equipement_id  = (int)($_POST['equipement_id'] ?? 0);
-        $type           = $_POST['type'] ?? '';
-        if (!in_array($type, ['departement', 'site'], true)) json_response(false, "Choisissez d'abord le type d'affectation.");
-        $site_id        = $type === 'site' ? ((int)($_POST['site_id'] ?? 0) ?: null) : null;
-        if ($type === 'site' && !$site_id) json_response(false, 'Le site de destination est obligatoire.');
-        $utilisateur_id = (int)($_POST['utilisateur_id'] ?? 0) ?: null;
-        try {
-            $res = ach_proposer_affectation($equipement_id, $site_id, $utilisateur_id, $user);
-            json_response(true, "Affectation proposée — palier « {$res['palier']} », {$res['etapes']} étape(s).", $res);
-        } catch (AchValidationException $e) {
-            json_response(false, $e->getMessage());
+    // Filet de sécurité : une erreur inattendue (SQL, colonne manquante après
+    // une migration oubliée, etc.) plantait ce script en silence — display_
+    // errors est désactivé en production (cf. Dockerfile), la réponse HTTP
+    // revenait donc vide, indiscernable d'un bouton qui ne répond pas.
+    // Repéré en recette (2026-08-25) : migration_achats_21 pas encore
+    // appliquée sur la base, equipements.bon_livraison inexistante. Les
+    // erreurs métier (AchValidationException) restent gérées au plus près,
+    // ce filet n'attrape que ce qu'elles ne couvrent pas.
+    try {
+        if ($action === 'proposer') {
+            if (!$can_proposer) json_response(false, 'Action réservée.');
+            $equipement_id  = (int)($_POST['equipement_id'] ?? 0);
+            $type           = $_POST['type'] ?? '';
+            if (!in_array($type, ['departement', 'site'], true)) json_response(false, "Choisissez d'abord le type d'affectation.");
+            $site_id        = $type === 'site' ? ((int)($_POST['site_id'] ?? 0) ?: null) : null;
+            if ($type === 'site' && !$site_id) json_response(false, 'Le site de destination est obligatoire.');
+            $utilisateur_id = (int)($_POST['utilisateur_id'] ?? 0) ?: null;
+            try {
+                $res = ach_proposer_affectation($equipement_id, $site_id, $utilisateur_id, $user);
+                json_response(true, "Affectation proposée — palier « {$res['palier']} », {$res['etapes']} étape(s).", $res);
+            } catch (AchValidationException $e) {
+                json_response(false, $e->getMessage());
+            }
         }
-    }
 
-    // Étape 3 du circuit magasin -> département : le N+1 confirme que
-    // l'exemplaire est physiquement arrivé — bon de livraison obligatoire,
-    // comme pour la réception département des consommables (bon_transfert).
-    if ($action === 'confirmer_reception') {
-        $equipement_id = (int)($_POST['equipement_id'] ?? 0);
-        if (empty($_FILES['bl']['name'])) json_response(false, 'Le bon de livraison est obligatoire.');
-        $up = upload_document('bl', 'bl', 'bl_equipement_' . $equipement_id, false);
-        if (!$up['success']) json_response(false, $up['message']);
-        try {
-            $ok = ach_confirmer_reception_equipement($equipement_id, $user, $up['filename']);
-            if ($ok) json_response(true, 'Réception confirmée.');
-            json_response(false, "Cet exemplaire n'est plus en attente de confirmation.");
-        } catch (AchValidationException $e) {
-            json_response(false, $e->getMessage());
+        // Étape 3 du circuit magasin -> département : le N+1 confirme que
+        // l'exemplaire est physiquement arrivé — bon de livraison obligatoire,
+        // comme pour la réception département des consommables (bon_transfert).
+        if ($action === 'confirmer_reception') {
+            $equipement_id = (int)($_POST['equipement_id'] ?? 0);
+            if (empty($_FILES['bl']['name'])) json_response(false, 'Le bon de livraison est obligatoire.');
+            $up = upload_document('bl', 'bl', 'bl_equipement_' . $equipement_id, false);
+            if (!$up['success']) json_response(false, $up['message']);
+            try {
+                $ok = ach_confirmer_reception_equipement($equipement_id, $user, $up['filename']);
+                if ($ok) json_response(true, 'Réception confirmée.');
+                json_response(false, "Cet exemplaire n'est plus en attente de confirmation.");
+            } catch (AchValidationException $e) {
+                json_response(false, $e->getMessage());
+            }
         }
-    }
 
-    json_response(false, 'Action inconnue.');
+        json_response(false, 'Action inconnue.');
+    } catch (\Throwable $e) {
+        error_log("equipements_attente.php AJAX ($action) : " . $e->getMessage());
+        json_response(false, "Erreur interne du serveur — contactez l'administrateur si ça persiste.");
+    }
 }
 
 // ── PAGE PHP ─────────────────────────────────────────────────
