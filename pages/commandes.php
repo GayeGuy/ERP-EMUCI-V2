@@ -120,9 +120,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $cmd = db_fetch_one("SELECT * FROM commandes WHERE id=? AND statut='en_attente'", [$cmd_id]);
         if (!$cmd) json_response(false,'Commande introuvable ou déjà traitée.');
 
-        // Vérifier qu'au moins une ligne est validée
+        // Vérifier qu'au moins une ligne reçoit une vraie décision (validée
+        // ou renvoyée pour correction — un rejet seul reste possible mais ne
+        // suffit pas à faire avancer la commande).
         $nb_valides = count(array_filter($lignes_val, fn($l) => ($l['statut_ligne']??'') === 'valide'));
-        if ($nb_valides === 0) json_response(false,'Validez au moins une ligne.');
+        $nb_modif   = count(array_filter($lignes_val, fn($l) => ($l['statut_ligne']??'') === 'modification_demandee'));
+        if ($nb_valides + $nb_modif === 0) json_response(false,'Validez au moins une ligne, ou demandez une modification.');
 
         db_begin();
         try {
@@ -130,11 +133,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 $sl     = $l['statut_ligne'] ?? 'valide';
                 $motif  = trim($l['motif_rejet'] ?? '');
                 if ($sl === 'rejete' && !$motif) json_response(false,"Motif de rejet obligatoire pour la ligne \"{$l['libelle']}\".");
+                if ($sl === 'modification_demandee' && !$motif) json_response(false,"Précisez ce qui doit être corrigé pour la ligne \"{$l['libelle']}\".");
                 db_query(
-                    "UPDATE commande_lignes SET statut_ligne=?, motif_rejet=? WHERE id=? AND commande_id=?",
-                    [$sl, $motif ?: null, (int)$l['ligne_id'], $cmd_id]
+                    "UPDATE commande_lignes SET statut_ligne=?, motif_rejet=?, motif_modification=? WHERE id=? AND commande_id=?",
+                    [$sl, $sl === 'rejete' ? ($motif ?: null) : null, $sl === 'modification_demandee' ? ($motif ?: null) : null,
+                     (int)$l['ligne_id'], $cmd_id]
                 );
             }
+
+            // Une seule ligne à corriger suffit à bloquer toute la commande
+            // — elle reste un seul et même bon, pas question de le scinder en
+            // « ce qui avance » / « ce qui attend » : plus simple à suivre
+            // pour le coordinateur comme pour le superviseur.
+            if ($nb_modif > 0) {
+                db_query("UPDATE commandes SET statut='modification_demandee' WHERE id=?", [$cmd_id]);
+                $coords = db_fetch_all(
+                    "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id
+                     WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1",
+                    [$cmd['site_id']]
+                );
+                foreach ($coords as $c) {
+                    db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                        [$c['id'],'info',"✏️ Commande {$cmd['numero_commande']} à corriger",
+                         "Le superviseur demande une correction sur $nb_modif ligne(s) — vérifiez et renvoyez la commande.",
+                         '/pages/commandes.php']);
+                }
+                audit_log($user['id'],'UPDATE','commandes',$cmd_id,"Modification demandée par superviseur — $nb_modif ligne(s) à corriger");
+                db_commit();
+                json_response(true, "Modification demandée sur $nb_modif ligne(s) — le coordinateur va être notifié.");
+            }
+
             db_query(
                 "UPDATE commandes SET statut='en_attente_livraison',valide_par=?,valide_at=NOW() WHERE id=?",
                 [$user['id'],$cmd_id]
@@ -164,6 +192,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             audit_log($user['id'],'UPDATE','commandes',$cmd_id,"Commande validée par superviseur — $nb_valides ligne(s)");
             db_commit();
             json_response(true,'Commande validée. Gestionnaire stock notifié.');
+        } catch(Exception $e){ db_rollback(); json_response(false,$e->getMessage()); }
+    }
+
+    // ── 2c. Coordinateur corrige les lignes signalées et renvoie la commande
+    if ($action === 'resoumettre_commande') {
+        $cmd_id     = (int)($_POST['cmd_id'] ?? 0);
+        $lignes_raw = $_POST['lignes'] ?? '[]';
+        $lignes_maj = json_decode($lignes_raw, true);
+
+        $cmd = db_fetch_one("SELECT * FROM commandes WHERE id=? AND statut='modification_demandee'", [$cmd_id]);
+        if (!$cmd) json_response(false,'Commande introuvable ou déjà traitée.');
+        if ($is_coord && $cmd['site_id'] != $site_force) json_response(false,'Accès refusé.');
+        if (!$is_coord && !$is_superviseur && !$is_gestionnaire) json_response(false,'Accès refusé.');
+
+        db_begin();
+        try {
+            $nb_corrigees = 0;
+            foreach ($lignes_maj as $l) {
+                $ligne_id = (int)($l['ligne_id'] ?? 0);
+                $ligne = db_fetch_one(
+                    "SELECT * FROM commande_lignes WHERE id=? AND commande_id=? AND statut_ligne='modification_demandee'",
+                    [$ligne_id, $cmd_id]
+                );
+                if (!$ligne) continue;
+                $nouvelle_qte = (int)($l['quantite'] ?? 0);
+                if ($nouvelle_qte < 1) json_response(false,"Quantité invalide pour \"{$ligne['libelle']}\".");
+                db_query(
+                    "UPDATE commande_lignes SET quantite=?, statut_ligne='en_attente' WHERE id=?",
+                    [$nouvelle_qte, $ligne_id]
+                );
+                $nb_corrigees++;
+            }
+            $reste = (int) db_fetch_value(
+                "SELECT COUNT(*) FROM commande_lignes WHERE commande_id=? AND statut_ligne='modification_demandee'",
+                [$cmd_id]
+            );
+            if ($reste > 0) json_response(false, "$reste ligne(s) restent à corriger avant de pouvoir renvoyer la commande.");
+            if ($nb_corrigees === 0) json_response(false, 'Aucune ligne corrigée.');
+
+            db_query("UPDATE commandes SET statut='en_attente' WHERE id=?", [$cmd_id]);
+            $superviseurs = db_fetch_all(
+                "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id
+                 WHERE r.slug IN ('superviseur_operation','admin','superadmin') AND u.actif=1"
+            );
+            foreach ($superviseurs as $s) {
+                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                    [$s['id'],'info',"🔁 Commande {$cmd['numero_commande']} corrigée",
+                     "Le coordinateur a corrigé $nb_corrigees ligne(s) — à revalider.",
+                     '/pages/commandes.php']);
+            }
+            audit_log($user['id'],'UPDATE','commandes',$cmd_id,"Commande corrigée ($nb_corrigees ligne(s)) et renvoyée pour validation");
+            db_commit();
+            json_response(true,'Commande corrigée et renvoyée pour validation.');
         } catch(Exception $e){ db_rollback(); json_response(false,$e->getMessage()); }
     }
 
@@ -732,6 +813,7 @@ $kpi = [
     'attente_liv'    => count(array_filter($commandes,fn($c)=>$c['statut']==='en_attente_livraison')),
     'en_cours'       => count(array_filter($commandes,fn($c)=>$c['statut']==='en_cours_livraison')),
     'recu'           => count(array_filter($commandes,fn($c)=>$c['statut']==='recu')),
+    'a_corriger'     => count(array_filter($commandes,fn($c)=>$c['statut']==='modification_demandee')),
 ];
 
 // ── Export PDF (Dompdf — pas de URL navigateur, couleurs marque, signatures)
@@ -745,7 +827,7 @@ function _bdc_pdf($cmd, $lignes, $voir_prix, array $ctx = []) {
     // Libellés alignés sur ceux de l'application : le bon de commande imprimé
     // annonçait « Pret livraison » alors que l'écran affiche « À préparer »,
     // ce qui laissait croire que la commande était prête à partir.
-    $sl = ['en_attente'=>'A valider','en_attente_livraison'=>'En preparation',
+    $sl = ['en_attente'=>'A valider','modification_demandee'=>'A corriger','en_attente_livraison'=>'En preparation',
            'en_cours_livraison'=>'En livraison','recu'=>'Recu','livre'=>'Livre',
            'rejete'=>'Rejete','annule'=>'Annule'];
 
@@ -776,8 +858,8 @@ function _bdc_pdf($cmd, $lignes, $voir_prix, array $ctx = []) {
         $lbl_valide = in_array($cmd['statut'], ['recu','livre'], true)   ? 'Livré'
                     : ($cmd['statut'] === 'en_cours_livraison'           ? 'En livraison'
                     : 'Validé');
-        $st_labels = ['valide'=>$lbl_valide,'rejete'=>'Rejeté','modifie'=>'Modifié'];
-        $st_colors = ['valide'=>'#15803d','rejete'=>'#dc2626','modifie'=>'#d97706'];
+        $st_labels = ['valide'=>$lbl_valide,'rejete'=>'Rejeté','modifie'=>'Modifié','modification_demandee'=>'À corriger'];
+        $st_colors = ['valide'=>'#15803d','rejete'=>'#dc2626','modifie'=>'#d97706','modification_demandee'=>'#5b21b6'];
         $st_txt    = $st_labels[$l['statut_ligne'] ?? ''] ?? '';
         $st_col    = $st_colors[$l['statut_ligne'] ?? ''] ?? '#555';
 
@@ -1047,6 +1129,7 @@ include __DIR__ . '/../templates/header.php';
 .step:hover{filter:brightness(.96)}
 .st-en_attente{background:#fef3c7;color:#92400e}
 .st-en_attente_livraison{background:#dbeafe;color:#1d4ed8}
+.st-modification_demandee{background:#ede9fe;color:#5b21b6}
 .st-en_cours_livraison{background:#fff7ed;color:#c2410c}
 .st-recu{background:#d1fae5;color:#065f46}
 .st-rejete{background:#fee2e2;color:#991b1b}
@@ -1065,6 +1148,10 @@ include __DIR__ . '/../templates/header.php';
   <div class="step s-attente" onclick="filtrer('en_attente')">
     <div class="s-num"><?= $kpi['attente'] ?></div>
     <div class="s-lbl">⏳ À valider</div>
+  </div>
+  <div class="step s-attente" onclick="filtrer('modification_demandee')">
+    <div class="s-num"><?= $kpi['a_corriger'] ?></div>
+    <div class="s-lbl">✏️ À corriger</div>
   </div>
   <div class="step s-valide" onclick="filtrer('en_attente_livraison')">
     <div class="s-num"><?= $kpi['attente_liv'] ?></div>
@@ -1094,6 +1181,7 @@ include __DIR__ . '/../templates/header.php';
     <select name="statut" id="selStatut" onchange="this.form.submit()" aria-label="Filtrer par statut" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
       <option value="">Tous statuts</option>
       <option value="en_attente" <?= $f_statut==='en_attente'?'selected':'' ?>>⏳ En attente validation</option>
+      <option value="modification_demandee" <?= $f_statut==='modification_demandee'?'selected':'' ?>>✏️ À corriger</option>
       <option value="en_attente_livraison" <?= $f_statut==='en_attente_livraison'?'selected':'' ?>>📋 À préparer</option>
       <option value="en_cours_livraison" <?= $f_statut==='en_cours_livraison'?'selected':'' ?>>🚚 En livraison</option>
       <option value="recu" <?= $f_statut==='recu'?'selected':'' ?>>✅ Reçu</option>
@@ -1140,7 +1228,7 @@ include __DIR__ . '/../templates/header.php';
           <?php endif; ?>
           <td>
             <span class="st-badge st-<?= $cmd['statut'] ?>">
-              <?= ['en_attente'=>'⏳ À valider','en_attente_livraison'=>'<i class="ph ph-clipboard-text" aria-hidden="true"></i> À préparer','en_cours_livraison'=>'<i class="ph ph-truck" aria-hidden="true"></i> En livraison','recu'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Reçu','rejete'=>'<i class="ph ph-x-circle" aria-hidden="true"></i> Rejeté','annule'=>'Annulé'][$cmd['statut']] ?? $cmd['statut'] ?>
+              <?= ['en_attente'=>'⏳ À valider','modification_demandee'=>'✏️ À corriger','en_attente_livraison'=>'<i class="ph ph-clipboard-text" aria-hidden="true"></i> À préparer','en_cours_livraison'=>'<i class="ph ph-truck" aria-hidden="true"></i> En livraison','recu'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Reçu','rejete'=>'<i class="ph ph-x-circle" aria-hidden="true"></i> Rejeté','annule'=>'Annulé'][$cmd['statut']] ?? $cmd['statut'] ?>
             </span>
           </td>
           <td style="font-size:12px"><?= h($cmd['agent']??'—') ?></td>
@@ -1156,6 +1244,9 @@ include __DIR__ . '/../templates/header.php';
             <?php endif; ?>
             <?php if($cmd['statut']==='en_cours_livraison' && ($is_coord || $is_gestionnaire)): ?>
               <button class="btn btn-success btn-sm" onclick="receptionner(<?= $cmd['id'] ?>)"><i class="ph ph-check-circle" aria-hidden="true"></i> Réceptionner</button>
+            <?php endif; ?>
+            <?php if($cmd['statut']==='modification_demandee' && ($is_coord || $is_superviseur || $is_gestionnaire)): ?>
+              <button class="btn btn-sm" style="background:#ede9fe;color:#5b21b6;border:1.5px solid #ddd6fe" onclick="ouvrirCorrection(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>')"><i class="ph ph-pencil-simple" aria-hidden="true"></i> Corriger</button>
             <?php endif; ?>
             <?php if($cmd['statut']==='en_attente' && ($is_coord || $is_superviseur || $is_gestionnaire)): ?>
               <button class="btn btn-sm" style="background:#FEE2E2;color:#991B1B;border:1.5px solid #FCA5A5" onclick="annuler(<?= $cmd['id'] ?>)"><i class="ph ph-x" aria-hidden="true"></i></button>
@@ -1318,6 +1409,27 @@ include __DIR__ . '/../templates/header.php';
 </div>
 <?php endif; ?>
 
+<!-- ═══ MODAL CORRECTION (coordinateur, sur demande du superviseur) ═══ -->
+<?php if($is_coord || $is_superviseur || $is_gestionnaire): ?>
+<div id="modalCorrection" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.55);z-index:1000;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto">
+  <div style="background:white;border-radius:18px;padding:26px;width:640px;max-width:96vw;box-shadow:0 20px 60px rgba(0,0,0,.25);margin:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800;color:#5b21b6" id="titleCorrection">Corriger la commande</h3>
+      <button onclick="fermer('Correction')" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
+    </div>
+    <div id="alertCorrection"></div>
+    <div style="background:#EFF6FF;color:#1D4ED8;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12.5px">
+      Corrigez la quantité des lignes signalées par le superviseur, puis renvoyez la commande pour une nouvelle validation.
+    </div>
+    <div id="lignesCorrection"></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px">
+      <button class="btn btn-secondary" onclick="fermer('Correction')">Annuler</button>
+      <button class="btn btn-primary" style="background:#5b21b6" onclick="confirmerCorrection()"><i class="ph ph-paper-plane-tilt" aria-hidden="true"></i> Renvoyer pour validation</button>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+
 <!-- ═══ MODAL LIVRAISON GESTIONNAIRE ═══ -->
 <?php if($is_gestionnaire): ?>
 <div id="modalLivraison" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.55);z-index:1000;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto">
@@ -1426,6 +1538,9 @@ include __DIR__ . '/../templates/header.php';
         <button id="detail-btn-rejeter" style="display:none" class="btn btn-danger" onclick="rejeterDepuisDetail()">
           <i class="ph-duotone ph-x-circle"></i> Rejeter
         </button>
+        <button id="detail-btn-corriger" style="display:none;background:#ede9fe;color:#5b21b6;border:1.5px solid #ddd6fe" class="btn" onclick="corrigerDepuisDetail()">
+          <i class="ph-duotone ph-pencil-simple"></i> Corriger et renvoyer
+        </button>
         <button class="btn btn-secondary" onclick="fermer('Detail')">Fermer</button>
       </div>
     </div>
@@ -1443,6 +1558,7 @@ const equipData    = <?= json_encode(array_values($equipements_list)) ?>;
 const voirPrix       = <?= $voir_prix?'true':'false' ?>;
 const siteForce      = <?= $site_force ?>;
 const isSuperviseur  = <?= $is_superviseur?'true':'false' ?>;
+const isCoord        = <?= $is_coord?'true':'false' ?>;
 
 let lignes = [];
 let currentCmdId = null, lignesCmd = [];
@@ -1457,10 +1573,10 @@ function ap(d){
 function fermer(m){document.getElementById('modal'+m).style.display='none';}
 
 // ── Voir détail commande ───────────────────────────────────────
-const _SL = {'en_attente':'⏳ À valider','en_attente_livraison':'📋 À préparer','en_cours_livraison':'🚚 En livraison','recu':'✅ Reçu','livre':'✅ Livré','rejete':'❌ Rejeté','annule':'Annulé'};
-const _SC = {'en_attente':'st-en_attente','en_attente_livraison':'st-en_attente_livraison','en_cours_livraison':'st-en_cours_livraison','recu':'st-recu','rejete':'st-rejete'};
-const _LS = {'valide':'✅ OK','rejete':'❌ Rejeté','modifie':'⚠️ Modifié'};
-const _LC = {'valide':'#15803d','rejete':'#dc2626','modifie':'#d97706'};
+const _SL = {'en_attente':'⏳ À valider','modification_demandee':'✏️ À corriger','en_attente_livraison':'📋 À préparer','en_cours_livraison':'🚚 En livraison','recu':'✅ Reçu','livre':'✅ Livré','rejete':'❌ Rejeté','annule':'Annulé'};
+const _SC = {'en_attente':'st-en_attente','modification_demandee':'st-modification_demandee','en_attente_livraison':'st-en_attente_livraison','en_cours_livraison':'st-en_cours_livraison','recu':'st-recu','rejete':'st-rejete'};
+const _LS = {'valide':'✅ OK','rejete':'❌ Rejeté','modifie':'⚠️ Modifié','modification_demandee':'✏️ À corriger'};
+const _LC = {'valide':'#15803d','rejete':'#dc2626','modifie':'#d97706','modification_demandee':'#5b21b6'};
 
 async function voirDetail(id, numero) {
   const modal = document.getElementById('modalDetail');
@@ -1475,13 +1591,14 @@ async function voirDetail(id, numero) {
   document.getElementById('detail-pdf-link').href = window.location.pathname + '?id=' + id + '&export=1&format=pdf';
   document.getElementById('detail-btn-valider').style.display = 'none';
   document.getElementById('detail-btn-rejeter').style.display = 'none';
+  document.getElementById('detail-btn-corriger').style.display = 'none';
 
   const d = await ap({action:'get_detail', cmd_id: id});
   if (!d.success) { toast(d.message || 'Erreur', 'danger'); fermer('Detail'); return; }
 
   const cmd    = d.data.cmd;
   const lignes = d.data.lignes;
-  const hasLiv = ['en_attente_livraison','en_cours_livraison','recu','livre'].includes(cmd.statut);
+  const hasLiv = ['en_attente_livraison','en_cours_livraison','recu','livre','modification_demandee'].includes(cmd.statut);
 
   // Statut badge
   const sb = document.getElementById('detail-statut-badge');
@@ -1492,6 +1609,9 @@ async function voirDetail(id, numero) {
   if (isSuperviseur && cmd.statut === 'en_attente') {
     document.getElementById('detail-btn-valider').style.display = '';
     document.getElementById('detail-btn-rejeter').style.display = '';
+  }
+  if ((isCoord || isSuperviseur) && cmd.statut === 'modification_demandee') {
+    document.getElementById('detail-btn-corriger').style.display = '';
   }
 
   // Infos
@@ -1542,7 +1662,7 @@ async function voirDetail(id, numero) {
     const qLiv     = l.quantite_livree !== null ? parseInt(l.quantite_livree) : null;
     const hasEcart = qLiv !== null && qLiv !== qte;
     const stLigne  = l.statut_ligne || '';
-    const motif    = l.motif_rejet || l.motif_ecart || '';
+    const motif    = l.motif_rejet || l.motif_modification || l.motif_ecart || '';
     if (voirPrix) total += qte * pu;
 
     let row = `<tr>
@@ -1591,7 +1711,46 @@ function rejeterDepuisDetail() {
   fermer('Detail');
   ouvrirRejet(currentDetailId, currentDetailNumero);
 }
+function corrigerDepuisDetail() {
+  fermer('Detail');
+  ouvrirCorrection(currentDetailId, currentDetailNumero);
+}
 function filtrer(s){document.getElementById('selStatut').value=s;document.getElementById('frmFiltres').submit();}
+
+// ── Correction (coordinateur) des lignes signalées par le superviseur
+let currentCorrectionId = null, lignesCorrection = [];
+async function ouvrirCorrection(cmdId, numCmd) {
+  currentCorrectionId = cmdId;
+  document.getElementById('titleCorrection').textContent = `✏️ Corriger — ${numCmd}`;
+  document.getElementById('alertCorrection').innerHTML = '';
+  const d = await ap({action:'get_lignes', cmd_id: cmdId});
+  const toutes = d.data || [];
+  lignesCorrection = toutes.filter(l => l.statut_ligne === 'modification_demandee');
+  const container = document.getElementById('lignesCorrection');
+  if (!lignesCorrection.length) {
+    container.innerHTML = '<div style="color:var(--muted);font-size:13px">Aucune ligne à corriger.</div>';
+  } else {
+    container.innerHTML = lignesCorrection.map((l, i) => `
+      <div style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:10px;padding:13px;margin-bottom:8px">
+        <div style="font-size:13.5px;font-weight:700;color:var(--navy)">${l.libelle}</div>
+        <div style="font-size:12px;color:#5b21b6;margin:4px 0">✏️ ${l.motif_modification || 'Correction demandée'}</div>
+        <label style="font-size:12px;font-weight:700;color:var(--navy);display:block;margin:8px 0 4px">Nouvelle quantité (actuellement ${l.quantite} ${l.unite||''}) *</label>
+        <input type="number" class="form-control qte-correction" data-idx="${i}" value="${l.quantite}" min="1" step="1"
+          style="padding:7px;border-radius:8px;font-size:13px;max-width:160px">
+      </div>`).join('');
+  }
+  document.getElementById('modalCorrection').style.display = 'flex';
+}
+async function confirmerCorrection() {
+  if (!lignesCorrection.length) { fermer('Correction'); return; }
+  const lignesData = lignesCorrection.map((l, i) => ({
+    ligne_id: l.id,
+    quantite: parseInt(document.querySelector(`.qte-correction[data-idx="${i}"]`)?.value) || 0
+  }));
+  const d = await ap({action:'resoumettre_commande', cmd_id: currentCorrectionId, lignes: JSON.stringify(lignesData)});
+  if (d.success) { toast(d.message,'success'); fermer('Correction'); setTimeout(()=>location.reload(),800); }
+  else document.getElementById('alertCorrection').innerHTML = `<div class="alert alert-danger">${d.message}</div>`;
+}
 
 // ── Nouvelle commande
 function onTypeChange(){
@@ -1719,10 +1878,11 @@ async function ouvrirValidation(cmdId,numCmd){
             style="padding:7px;border-radius:8px;font-size:13px">
             <option value="valide">✅ Valider</option>
             <option value="rejete">❌ Rejeter</option>
+            <option value="modification_demandee">✏️ Demander une modification</option>
           </select>
         </div>
         <div id="motifLigne${i}" style="display:none">
-          <label style="font-size:12px;font-weight:700;color:var(--danger-d);display:block;margin-bottom:4px">Motif rejet *</label>
+          <label id="motifLbl${i}" style="font-size:12px;font-weight:700;color:var(--danger-d);display:block;margin-bottom:4px">Motif rejet *</label>
           <input type="text" class="form-control motif-ligne" data-idx="${i}"
             placeholder="Raison du rejet…" style="padding:7px;border-radius:8px;font-size:12px;border-color:var(--danger)">
         </div>
@@ -1732,7 +1892,18 @@ async function ouvrirValidation(cmdId,numCmd){
 }
 function checkMotifRejet(i){
   const sel=document.querySelector(`.statut-ligne[data-idx="${i}"]`);
-  document.getElementById(`motifLigne${i}`).style.display=sel.value==='rejete'?'block':'none';
+  const box=document.getElementById(`motifLigne${i}`);
+  const lbl=document.getElementById(`motifLbl${i}`);
+  const input=document.querySelector(`.motif-ligne[data-idx="${i}"]`);
+  if(sel.value==='rejete'){
+    box.style.display='block'; lbl.textContent='Motif rejet *'; lbl.style.color='var(--danger-d)';
+    input.placeholder='Raison du rejet…'; input.style.borderColor='var(--danger)';
+  } else if(sel.value==='modification_demandee'){
+    box.style.display='block'; lbl.textContent='Précisez la correction souhaitée *'; lbl.style.color='#5b21b6';
+    input.placeholder='Ex : quantité trop élevée, ramener à 3 unités…'; input.style.borderColor='#ddd6fe';
+  } else {
+    box.style.display='none';
+  }
 }
 async function confirmerValidation(){
   const lignesData=lignesCmd.map((l,i)=>{
