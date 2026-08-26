@@ -286,7 +286,7 @@ include __DIR__ . '/../templates/header.php';
 </div>
 
 <!-- ── KPIs ── -->
-<div class="equip-kpis">
+<div class="equip-kpis" id="equipKpis">
   <a href="<?= h($kpi_url_total) ?>" class="ek<?= $kpi_active_total?' ek-active':'' ?>" title="Voir tous les équipements">          <div class="ek-val"><?= $kpi_total ?></div>                                          <div class="ek-lbl">Total</div></a>
   <a href="<?= h($kpi_url_ok) ?>" class="ek green<?= $kpi_active_ok?' ek-active':'' ?>" title="Filtrer sur les équipements opérationnels">    <div class="ek-val" style="color:var(--success-d)"><?= $kpi_ok ?></div>                <div class="ek-lbl"><i class="ph ph-check-circle" aria-hidden="true"></i> Opérationnels</div></a>
   <a href="<?= h($kpi_url_hs) ?>" class="ek red<?= $kpi_active_hs?' ek-active':'' ?>" title="Filtrer sur les équipements hors service">      <div class="ek-val" style="color:var(--danger-d)"><?= $kpi_hs ?></div>                 <div class="ek-lbl"><i class="ph ph-x-circle" aria-hidden="true"></i> Hors service</div></a>
@@ -295,11 +295,13 @@ include __DIR__ . '/../templates/header.php';
 </div>
 
 <!-- ── LIGNE 2 : Filtres (remplace les blocs résumé) ── -->
-<form method="GET" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:18px">
+<form method="GET" id="equipFiltreForm" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:18px">
   <input type="hidden" name="categorie" value="<?= h($f_categorie) ?>">
+  <input type="hidden" name="statut_stock" value="<?= h($f_statut_stock) ?>">
+  <input type="hidden" name="fin_cycle" value="<?= $f_fin_cycle?'1':'' ?>">
 
   <?php if($role_slug !== 'coordinateur_site'): ?>
-  <select name="site" onchange="this.form.submit()" aria-label="Filtrer par site" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
+  <select name="site" onchange="equipFiltrer(this.form)" aria-label="Filtrer par site" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
     <option value="">Tous les sites</option>
     <?php foreach($sites_list as $s): ?>
     <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
@@ -307,7 +309,7 @@ include __DIR__ . '/../templates/header.php';
   </select>
   <?php endif; ?>
 
-  <select name="etat" onchange="this.form.submit()" aria-label="Filtrer par état" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
+  <select name="etat" onchange="equipFiltrer(this.form)" aria-label="Filtrer par état" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
     <option value="">Tous états</option>
     <option value="ok"        <?= $f_etat==='ok'?'selected':''        ?>>Opérationnel (neuf/bon)</option>
     <option value="neuf"      <?= $f_etat==='neuf'?'selected':''      ?>>Neuf</option>
@@ -317,7 +319,7 @@ include __DIR__ . '/../templates/header.php';
     <option value="hs"        <?= $f_etat==='hs'?'selected':''        ?>>H.S.</option>
   </select>
 
-  <select name="type" onchange="this.form.submit()" aria-label="Filtrer par type d'équipement" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
+  <select name="type" onchange="equipFiltrer(this.form)" aria-label="Filtrer par type d'équipement" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
     <option value="">Tous les types</option>
     <?php foreach($nomenclatures as $n): ?>
     <option value="<?= $n['id'] ?>" <?= $f_type===$n['id']?'selected':'' ?>><?= h($n['libelle']) ?></option>
@@ -327,22 +329,21 @@ include __DIR__ . '/../templates/header.php';
   <div style="position:relative;flex:1;min-width:180px">
     <i class="ph-duotone ph-magnifying-glass" style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px;pointer-events:none"></i>
     <input type="text" name="q" value="<?= h($f_search) ?>" placeholder="Rechercher..." aria-label="Rechercher un équipement"
-           onchange="this.form.submit()"
+           onchange="equipFiltrer(this.form)"
            style="width:100%;padding:9px 12px 9px 34px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none">
   </div>
 
-  <?php if($f_site||$f_etat||$f_type||$f_search||$f_statut_stock||$f_fin_cycle): ?>
-  <a href="?categorie=<?= h($f_categorie) ?>" class="btn btn-secondary btn-sm" title="Réinitialiser les filtres"><i class="ph ph-x" aria-hidden="true"></i> Effacer</a>
-  <?php endif; ?>
+  <a href="?categorie=<?= h($f_categorie) ?>" id="equipEffacerBtn" onclick="return equipEffacer(event)" class="btn btn-secondary btn-sm" title="Réinitialiser les filtres"
+     style="<?= ($f_site||$f_etat||$f_type||$f_search||$f_statut_stock||$f_fin_cycle) ? '' : 'display:none' ?>"><i class="ph ph-x" aria-hidden="true"></i> Effacer</a>
 
   <a href="?categorie=<?= h($f_categorie) ?>&site=<?= $f_site ?>&etat=<?= h($f_etat) ?>&type=<?= $f_type ?>&q=<?= urlencode($f_search) ?>&statut_stock=<?= h($f_statut_stock) ?>&fin_cycle=<?= $f_fin_cycle?'1':'' ?>&export=1"
-     class="btn btn-secondary btn-sm">
+     id="equipExportLink" class="btn btn-secondary btn-sm">
     <i class="ph-duotone ph-file-xls"></i> Excel
   </a>
 </form>
 
 <!-- LISTE ÉQUIPEMENTS -->
-<div class="card">
+<div class="card" id="equipResultCard">
   <div class="card-header">
     <h3>
       <?= $f_categorie==='informatique'
@@ -504,6 +505,56 @@ include __DIR__ . '/../templates/header.php';
 
 <script>
 function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
+
+// ── Filtres sans rechargement de page : remplace les KPI et le tableau par
+// le fragment equivalent de la page fraichement chargee (memes id), evite
+// le flash de rechargement complet (cf. pages/operations/bobines.php).
+let equipEnVol = null;
+function equipCharger(url){
+  if(!window.fetch || !window.DOMParser){ location.href = url; return; }
+  if(equipEnVol) try{ equipEnVol.abort(); }catch(e){}
+  const ctrl = window.AbortController ? new AbortController() : null;
+  equipEnVol = ctrl;
+  fetch(url, {credentials:'same-origin', signal: ctrl?ctrl.signal:undefined, headers:{'X-Requested-With':'fetch'}})
+    .then(r => { if(!r.ok) throw new Error(r.status); return r.text(); })
+    .then(html => {
+      if(equipEnVol !== ctrl) return;
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      ['equipKpis','equipResultCard'].forEach(id => {
+        const neuf = doc.getElementById(id);
+        const ancien = document.getElementById(id);
+        if(!neuf || !ancien) throw new Error('structure');
+        ancien.replaceWith(neuf);
+      });
+      history.pushState({equip:1}, '', url);
+      equipEnVol = null;
+    })
+    .catch(e => {
+      if(e && e.name==='AbortError') return;
+      equipEnVol = null;
+      location.href = url;
+    });
+}
+function equipMajLiens(form){
+  const actif = ['site','etat','type','q','statut_stock','fin_cycle'].some(n => form.elements[n] && form.elements[n].value);
+  const btn = document.getElementById('equipEffacerBtn');
+  if(btn) btn.style.display = actif ? '' : 'none';
+  const exp = document.getElementById('equipExportLink');
+  if(exp){ const p = new URLSearchParams(new FormData(form)); p.set('export','1'); exp.href = location.pathname + '?' + p.toString(); }
+}
+function equipFiltrer(form){
+  equipMajLiens(form);
+  equipCharger(location.pathname + '?' + new URLSearchParams(new FormData(form)).toString());
+}
+function equipEffacer(ev){
+  ev.preventDefault();
+  const form = document.getElementById('equipFiltreForm');
+  ['site','etat','type','q','statut_stock','fin_cycle'].forEach(n => { if(form.elements[n]) form.elements[n].value = ''; });
+  equipMajLiens(form);
+  equipCharger(location.pathname + '?' + new URLSearchParams(new FormData(form)).toString());
+  return false;
+}
+window.addEventListener('popstate', function(ev){ if(ev.state && ev.state.equip) location.reload(); });
 function toast(m,t='success'){let el=document.getElementById('toast-live');if(!el){el=document.createElement('div');el.id='toast-live';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.setAttribute('aria-atomic','true');document.body.appendChild(el);}clearTimeout(el._hideTimer);el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white`;el.textContent=m;el._hideTimer=setTimeout(()=>{el.style.display='none';},3500);}
 
 function ouvrirCreation(){
