@@ -470,7 +470,7 @@ include __DIR__ . '/../templates/header.php';
 </div>
 
 <!-- KPI -->
-<div class="kpi-bar">
+<div class="kpi-bar" id="pmmaKpis">
   <?php
   $total_stock = array_sum(array_column($stock_par_site, 'quantite'));
   ?>
@@ -503,6 +503,7 @@ include __DIR__ . '/../templates/header.php';
 </div>
 
 <!-- STOCK PAR SITE -->
+<div id="pmmaStock">
 <div style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">
   <i class="ph-duotone ph-package" style="vertical-align:middle"></i> Stock actuel par site
 </div>
@@ -539,9 +540,10 @@ include __DIR__ . '/../templates/header.php';
   </div>
   <?php endforeach; ?>
 </div>
+</div>
 
 <!-- TABLEAU CONSOMMATION -->
-<div class="card">
+<div class="card" id="pmmaResultCard">
   <div class="card-header">
     <h3><i class="ph-duotone ph-clipboard-text" style="vertical-align:middle"></i>
       Consommation PMMA — Points journaliers
@@ -684,6 +686,35 @@ function ap(d){
     for(const[k,v] of Object.entries(d)) if(v!==undefined) fd.append(k,v);
     return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
 }
+// ── Filtres sans rechargement de page (meme pattern que equipements.php et
+// pages/operations/bobines.php : fetch + DOMParser remplace les zones).
+let pmmaEnVol = null;
+function pmmaCharger(url){
+  if(!window.fetch || !window.DOMParser){ location.href = url; return; }
+  if(pmmaEnVol) try{ pmmaEnVol.abort(); }catch(e){}
+  const ctrl = window.AbortController ? new AbortController() : null;
+  pmmaEnVol = ctrl;
+  fetch(url, {credentials:'same-origin', signal: ctrl?ctrl.signal:undefined, headers:{'X-Requested-With':'fetch'}})
+    .then(r => { if(!r.ok) throw new Error(r.status); return r.text(); })
+    .then(html => {
+      if(pmmaEnVol !== ctrl) return;
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      ['pmmaKpis','pmmaStock','pmmaResultCard'].forEach(id => {
+        const neuf = doc.getElementById(id);
+        const ancien = document.getElementById(id);
+        if(!neuf || !ancien) throw new Error('structure');
+        ancien.replaceWith(neuf);
+      });
+      history.pushState({pmma:1}, '', url);
+      pmmaEnVol = null;
+    })
+    .catch(e => {
+      if(e && e.name==='AbortError') return;
+      pmmaEnVol = null;
+      location.href = url;
+    });
+}
+window.addEventListener('popstate', function(ev){ if(ev.state && ev.state.pmma) location.reload(); });
 function appliquerFiltres(){
     const p=new URLSearchParams();
     p.set('from',document.getElementById('fFrom').value);
@@ -692,11 +723,11 @@ function appliquerFiltres(){
     const site=document.getElementById('fSite').value;
     if(site!=='0') p.set('site',site);
     <?php endif; ?>
-    location.href='?'+p.toString();
+    pmmaCharger(location.pathname+'?'+p.toString());
 }
 function resetFiltres(){
     const today=new Date(),y=today.getFullYear(),m=String(today.getMonth()+1).padStart(2,'0'),d=String(today.getDate()).padStart(2,'0');
-    location.href='?from='+y+'-'+m+'-01&to='+y+'-'+m+'-'+d;
+    pmmaCharger(location.pathname+'?from='+y+'-'+m+'-01&to='+y+'-'+m+'-'+d);
 }
 <?php if($can_saisie): ?>
 async function enregistrerEntree(){
