@@ -206,7 +206,7 @@ foreach ($a_viser as &$f) {
     $f['anciennete_h']     = ach_anciennete_heures_ouvrees($f['date_lancement_validation']);
     $f['demandeur_nom']    = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$f['demandeur_id']]);
     $f['fournisseur_retenu'] = db_fetch_value(
-        "SELECT STRING_AGG(DISTINCT f2.raison_sociale, ', ') FROM feb_offres o JOIN fournisseurs f2 ON f2.id = o.fournisseur_id WHERE o.feb_id=? AND o.retenue=1",
+        "SELECT GROUP_CONCAT(DISTINCT f2.raison_sociale SEPARATOR ', ') FROM feb_offres o JOIN fournisseurs f2 ON f2.id = o.fournisseur_id WHERE o.feb_id=? AND o.retenue=1",
         [$f['id']]
     );
     $f['nb_pieces'] = (int) db_fetch_value("SELECT COUNT(*) FROM feb_pieces_jointes WHERE feb_id=?", [$f['id']]);

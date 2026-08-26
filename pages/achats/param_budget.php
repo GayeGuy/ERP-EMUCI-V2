@@ -303,9 +303,9 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
             db_query(
                 "INSERT INTO lignes_budgetaires (departement_id, famille_id, exercice, code_comptable, designation, enveloppe, comportement)
                  VALUES (?,?,?,?,?,?,?)
-                 ON CONFLICT (departement_id, famille_id, exercice) DO UPDATE SET
-                    code_comptable=EXCLUDED.code_comptable, designation=EXCLUDED.designation,
-                    enveloppe=EXCLUDED.enveloppe, comportement=EXCLUDED.comportement",
+                 ON DUPLICATE KEY UPDATE
+                    code_comptable=VALUES(code_comptable), designation=VALUES(designation),
+                    enveloppe=VALUES(enveloppe), comportement=VALUES(comportement)",
                 [$l['departement_id'], $l['famille_id'], $imp_exercice,
                  $fam['compte_comptable'] ?: $fam['code'], $dept['label'] . ' — ' . $fam['libelle'],
                  $l['enveloppe'], $l['comportement']]

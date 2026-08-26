@@ -47,7 +47,7 @@ if ($departements_n1_force) {
     array_push($params, ...$departements_n1_force);
 }
 if ($f_departement) { $where[] = 'sd.departement_id = ?'; $params[] = $f_departement; }
-if ($f_q !== '')     { $where[] = '(a.libelle ILIKE ? OR a.code ILIKE ?)'; $params[] = '%' . $f_q . '%'; $params[] = '%' . $f_q . '%'; }
+if ($f_q !== '')     { $where[] = '(a.libelle LIKE ? OR a.code LIKE ?)'; $params[] = '%' . $f_q . '%'; $params[] = '%' . $f_q . '%'; }
 
 $lignes = db_fetch_all(
     "SELECT sd.quantite, sd.updated_at, d.label AS departement_label, a.code AS article_code, a.libelle AS article_libelle, a.unite, a.prix_unitaire
@@ -82,7 +82,7 @@ if ($departements_n1_force) {
     array_push($params_eq, ...$departements_n1_force);
 }
 if ($f_departement) { $where_eq[] = 'e.departement_id = ?'; $params_eq[] = $f_departement; }
-if ($f_q !== '')     { $where_eq[] = '(n.libelle ILIKE ? OR e.numero_serie_interne ILIKE ?)'; $params_eq[] = '%' . $f_q . '%'; $params_eq[] = '%' . $f_q . '%'; }
+if ($f_q !== '')     { $where_eq[] = '(n.libelle LIKE ? OR e.numero_serie_interne LIKE ?)'; $params_eq[] = '%' . $f_q . '%'; $params_eq[] = '%' . $f_q . '%'; }
 
 $equipements = db_fetch_all(
     "SELECT e.numero_serie_interne, e.prix_achat, e.date_mise_en_service,

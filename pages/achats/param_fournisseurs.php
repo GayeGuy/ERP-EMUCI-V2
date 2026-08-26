@@ -156,7 +156,7 @@ $perPage = 20;
 $where   = [];
 $params  = [];
 if ($q !== '') {
-    $where[]  = '(raison_sociale ILIKE ? OR contact_nom ILIKE ?)';
+    $where[]  = '(raison_sociale LIKE ? OR contact_nom LIKE ?)';
     $params[] = "%$q%"; $params[] = "%$q%";
 }
 $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';

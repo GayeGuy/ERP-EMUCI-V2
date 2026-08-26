@@ -92,7 +92,7 @@ $params = [];
 if ($f_site)        { $where[] = 'fs.site_id = ?';       $params[] = $f_site; }
 if ($f_fournisseur) { $where[] = 'fl.fournisseur_id = ?'; $params[] = $f_fournisseur; }
 if ($f_departement) { $where[] = 'f.departement_id = ?';  $params[] = $f_departement; }
-if ($f_q !== '')     { $where[] = 'f.numero ILIKE ?';     $params[] = '%' . $f_q . '%'; }
+if ($f_q !== '')     { $where[] = 'f.numero LIKE ?';     $params[] = '%' . $f_q . '%'; }
 
 $lignes = db_fetch_all(
     "SELECT fs.*, f.numero AS feb_numero, f.departement_id, f.acheteur_id, f.fiche_validation_path,

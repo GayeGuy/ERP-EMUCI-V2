@@ -67,14 +67,14 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $sigJson = json_encode($signataires);
         if ($id) {
             db_query(
-                "UPDATE achat_paliers SET libelle=?, borne_min=?, borne_max=?, signataires=?::jsonb, ordre=? WHERE id=?",
+                "UPDATE achat_paliers SET libelle=?, borne_min=?, borne_max=?, signataires=?, ordre=? WHERE id=?",
                 [$lib, $bmin, $bmax, $sigJson, $ordre, $id]
             );
             audit_log($user['id'], 'UPDATE', 'achats_param', $id, "Modification palier : $lib");
             json_response(true, 'Palier mis à jour.');
         } else {
             db_query(
-                "INSERT INTO achat_paliers (libelle, borne_min, borne_max, signataires, ordre) VALUES (?,?,?,?::jsonb,?)",
+                "INSERT INTO achat_paliers (libelle, borne_min, borne_max, signataires, ordre) VALUES (?,?,?,?,?)",
                 [$lib, $bmin, $bmax, $sigJson, $ordre]
             );
             $newId = (int)db_last_id('achat_paliers_id_seq');
