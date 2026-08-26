@@ -79,6 +79,7 @@ migration_achats_20_bon_transfert.sql
 migration_achats_21_equipement_bon_livraison.sql
 migration_achats_22_commande_ligne_feb_ligne.sql
 migration_achats_23_commande_modification.sql
+migration_fix_fk_consommables_legacy.sql
 "
 
 for f in $FICHIERS; do
