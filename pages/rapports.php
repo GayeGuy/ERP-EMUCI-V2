@@ -33,7 +33,7 @@ $kpi = [
     'equip_neuf'     => (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND etat='neuf'"),
     'fin_cycle_30j'  => (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL '30 DAY')"),
     'fin_cycle_exp'  => (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle < CURRENT_DATE"),
-    'conso_alertes'  => (int)db_fetch_value("SELECT COUNT(*) FROM consommables WHERE stock_global<=seuil_alerte"),
+    'conso_alertes'  => (int)db_fetch_value("SELECT COUNT(*) FROM articles WHERE stock_global<=seuil_alerte"),
 ];
 
 // ── CONSOMMATION PAR PÉRIODE & SITE
@@ -42,7 +42,7 @@ $conso_global = db_fetch_all(
     "SELECT c.code, c.libelle, c.unite,
             COALESCE(SUM(lc.quantite),0) AS total_periode,
             COALESCE(SUM(CASE WHEN EXTRACT(MONTH FROM lc.date_livraison)=EXTRACT(MONTH FROM CURRENT_DATE) AND EXTRACT(YEAR FROM lc.date_livraison)=EXTRACT(YEAR FROM CURRENT_DATE) THEN lc.quantite ELSE 0 END),0) AS total_mois
-     FROM consommables c
+     FROM articles c
      LEFT JOIN livraisons_consommables lc ON lc.consommable_id=c.id
          AND lc.date_livraison BETWEEN ? AND ? $conso_where
      GROUP BY c.id ORDER BY total_periode DESC",
@@ -66,17 +66,6 @@ $conso_par_site = db_fetch_all(
      LEFT JOIN livraisons_consommables lc ON lc.site_id=s.id
          AND lc.date_livraison BETWEEN ? AND ?
      WHERE s.actif=1 GROUP BY s.id ORDER BY total DESC",
-    [$date_debut, $date_fin]
-);
-
-// ── CONSOMMATION PAR CONSOMMABLE PAR SITE (matrice)
-$matrice_consos = db_fetch_all(
-    "SELECT c.libelle AS conso, s.nom AS site, SUM(lc.quantite) AS total
-     FROM livraisons_consommables lc
-     JOIN consommables c ON c.id=lc.consommable_id
-     JOIN sites s ON s.id=lc.site_id
-     WHERE lc.date_livraison BETWEEN ? AND ?
-     GROUP BY c.id, s.id ORDER BY c.libelle, total DESC",
     [$date_debut, $date_fin]
 );
 
@@ -197,7 +186,7 @@ $detail_article_site = db_fetch_all(
             COALESCE(AVG(lc.prix_unitaire),0) AS prix_unit_moy,
             COALESCE(SUM(lc.prix_total),0) AS cout_total
      FROM livraisons_consommables lc
-     JOIN consommables c ON c.id=lc.consommable_id
+     JOIN articles c ON c.id=lc.consommable_id
      JOIN sites s ON s.id=lc.site_id
      WHERE lc.date_livraison BETWEEN ? AND ?
        AND lc.prix_total > 0 $csite_where
@@ -229,7 +218,7 @@ $bilan_mois_cur = db_fetch_all(
             COALESCE(SUM(lc.prix_total),0)    AS cout_total
      FROM livraisons_consommables lc
      JOIN sites s ON s.id=lc.site_id
-     JOIN consommables c ON c.id=lc.consommable_id
+     JOIN articles c ON c.id=lc.consommable_id
      WHERE EXTRACT(YEAR FROM lc.date_livraison)=EXTRACT(YEAR FROM CURRENT_DATE)
        AND EXTRACT(MONTH FROM lc.date_livraison)=EXTRACT(MONTH FROM CURRENT_DATE)
        AND lc.prix_total > 0
