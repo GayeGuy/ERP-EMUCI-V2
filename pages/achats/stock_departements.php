@@ -74,7 +74,7 @@ $departements_list = $departements_n1_force
 // N'apparaissent ici qu'une fois la réception confirmée par le N+1
 // (ach_confirmer_reception_equipement()) : signalé en recette, DAI-10-1
 // restait invisible du stock du département qui venait de le réceptionner.
-$where_eq  = ["e.statut_stock IN ('affecte','en_stock')"];
+$where_eq  = ["e.statut_stock IN ('affecte','en_stock')", "e.departement_id IS NOT NULL"];
 $params_eq = [];
 if ($departements_n1_force) {
     $placeholders = implode(',', array_fill(0, count($departements_n1_force), '?'));
