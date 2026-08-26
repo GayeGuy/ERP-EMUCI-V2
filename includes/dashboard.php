@@ -561,7 +561,7 @@ function dash_v2_kpis(array $portee): array {
         $tot = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 $we $wc", $arg);
         $hs  = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND etat='hs' $we $wc", $arg);
         $mt  = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND etat='maintenance' $we $wc", $arg);
-        $fc  = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle IS NOT NULL AND date_fin_cycle <= (CURRENT_DATE + INTERVAL '30 days') $we $wc", $arg);
+        $fc  = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle IS NOT NULL AND date_fin_cycle <= (CURRENT_DATE + INTERVAL 30 DAY) $we $wc", $arg);
         $k = [
             ['libelle'=>'Parc actif','valeur'=>fmt_number($tot),'icone'=>'ph-desktop','ton'=>'b',
              'note'=>'équipements en service'],
@@ -615,7 +615,7 @@ function dash_periode(array $portee): array {
     $courant = date('Y-m');
 
     $dernier = (string)db_fetch_value(
-        "SELECT TO_CHAR(MAX(pj.date_point),'YYYY-MM') FROM op_points_journaliers pj
+        "SELECT DATE_FORMAT(MAX(pj.date_point),'%Y-%m') FROM op_points_journaliers pj
          WHERE pj.statut = 'valide' $w", $args);
 
     $mois = ($dernier !== '' && $dernier < $courant) ? $dernier : $courant;
@@ -780,11 +780,11 @@ function dash_registre(): array {
         'donnees'   => function (array $p) {
             [$w, $args] = dash_filtre_site($p, 'pj.site_id');
             $lignes = db_fetch_all(
-                "SELECT TO_CHAR(pj.date_point,'YYYY-MM') AS m,
+                "SELECT DATE_FORMAT(pj.date_point,'%Y-%m') AS m,
                         COALESCE(SUM(pj.total_engins),0) AS v
                  FROM op_points_journaliers pj
                  WHERE pj.statut = 'valide'
-                   AND pj.date_point >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '11 months' $w
+                   AND pj.date_point >= DATE_SUB(DATE_FORMAT(CURRENT_DATE,'%Y-%m-01'), INTERVAL 11 MONTH) $w
                  GROUP BY 1 ORDER BY 1", $args);
 
             // Les mois sans relevé doivent apparaître à zéro : une série
@@ -874,7 +874,7 @@ function dash_registre(): array {
                      FROM op_points_journaliers pj
                      JOIN sites s ON s.id = pj.site_id
                      WHERE pj.statut = 'valide'
-                       AND TO_CHAR(pj.date_point,'YYYY-MM') = ? $w
+                       AND DATE_FORMAT(pj.date_point,'%Y-%m') = ? $w
                      GROUP BY s.nom HAVING SUM(pj.total_engins) > 0
                      ORDER BY 2 DESC LIMIT 12",
                     array_merge([$per['mois']], $args)),
@@ -1023,7 +1023,7 @@ function dash_registre(): array {
                 "SELECT v.date_validation, v.statut, v.nb_ecarts, s.nom AS site_nom
                  FROM validations_stock_matin v
                  JOIN sites s ON s.id = v.site_id
-                 WHERE v.date_validation >= (CURRENT_DATE - INTERVAL '7 DAY') $w
+                 WHERE v.date_validation >= (CURRENT_DATE - INTERVAL 7 DAY) $w
                  ORDER BY v.date_validation DESC, s.nom
                  LIMIT 10", $args);
         },
@@ -1306,12 +1306,12 @@ function dash_registre(): array {
             return db_fetch_all(
                 "SELECT e.numero_serie_interne, e.date_fin_cycle, n.libelle AS type_equip,
                         s.nom AS site_nom,
-                        ((e.date_fin_cycle)::date - CURRENT_DATE) AS jours
+                        DATEDIFF(e.date_fin_cycle, CURRENT_DATE) AS jours
                  FROM equipements e
                  JOIN nomenclatures n ON n.id = e.nomenclature_id
                  LEFT JOIN sites s ON s.id = e.site_id
                  WHERE e.actif=1 AND e.date_fin_cycle IS NOT NULL
-                   AND e.date_fin_cycle <= (CURRENT_DATE + INTERVAL '60 DAY') $ws $wc
+                   AND e.date_fin_cycle <= (CURRENT_DATE + INTERVAL 60 DAY) $ws $wc
                  ORDER BY e.date_fin_cycle ASC
                  LIMIT 8", array_merge($as, $ac));
         },
@@ -1444,8 +1444,8 @@ function dash_registre(): array {
                 "SELECT s.nom AS site_nom, COUNT(im.id) AS nb
                  FROM sites s
                  LEFT JOIN interventions_maintenance im ON im.site_id = s.id
-                      AND EXTRACT(YEAR  FROM im.date_intervention) = EXTRACT(YEAR  FROM CURRENT_DATE)
-                      AND EXTRACT(MONTH FROM im.date_intervention) = EXTRACT(MONTH FROM CURRENT_DATE)
+                      AND YEAR(im.date_intervention)  = YEAR(CURRENT_DATE)
+                      AND MONTH(im.date_intervention) = MONTH(CURRENT_DATE)
                  WHERE s.actif=1 $w
                  GROUP BY s.id, s.nom
                  HAVING COUNT(im.id) > 0
@@ -1478,7 +1478,7 @@ function dash_registre(): array {
                 "SELECT s.nom AS site_nom, COALESCE(SUM(lc.prix_total),0) AS montant
                  FROM livraisons_consommables lc
                  JOIN sites s ON s.id = lc.site_id
-                 WHERE lc.date_livraison >= (CURRENT_DATE - INTERVAL '12 MONTH') $w
+                 WHERE lc.date_livraison >= (CURRENT_DATE - INTERVAL 12 MONTH) $w
                  GROUP BY s.id, s.nom
                  HAVING COALESCE(SUM(lc.prix_total),0) > 0
                  ORDER BY montant DESC
@@ -1551,7 +1551,7 @@ function dash_registre(): array {
                 [$we, $ae] = dash_filtre_site($p, 'site_id');
                 [$wc, $ac] = dash_filtre_categorie($p, 'categorie');
                 $d['equip']     = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 $we $wc", array_merge($ae, $ac));
-                $d['equip_fin'] = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle IS NOT NULL AND date_fin_cycle <= (CURRENT_DATE + INTERVAL '30 days') $we $wc", array_merge($ae, $ac));
+                $d['equip_fin'] = (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle IS NOT NULL AND date_fin_cycle <= (CURRENT_DATE + INTERVAL 30 DAY) $we $wc", array_merge($ae, $ac));
             }
             return $d;
         },
@@ -1753,7 +1753,7 @@ function dash_registre(): array {
                         AVG(p.moyenne_prod)    AS moy_vh
                  FROM op_points_journaliers p
                  JOIN sites s ON s.id = p.site_id
-                 WHERE TO_CHAR(p.date_point,'YYYY-MM') = ? $w
+                 WHERE DATE_FORMAT(p.date_point,'%Y-%m') = ? $w
                  GROUP BY p.site_id, s.nom
                  ORDER BY total_plaques DESC
                  LIMIT 12",
@@ -1822,7 +1822,7 @@ function dash_registre(): array {
                  JOIN sites s ON s.id = pj.site_id
                  LEFT JOIN users u ON u.id = pj.created_by
                  WHERE pj.statut = 'rejete'
-                   AND pj.date_point >= (CURRENT_DATE - INTERVAL '7 DAY') $w
+                   AND pj.date_point >= (CURRENT_DATE - INTERVAL 7 DAY) $w
                  ORDER BY pj.date_point DESC
                  LIMIT 6",
                 $args
@@ -1960,8 +1960,8 @@ function dash_registre(): array {
             [$ws, $as] = dash_filtre_site($p, 'site_id');
             $debut = date('Y-m-01');
             $r = db_fetch_one(
-                "SELECT COUNT(*) FILTER (WHERE statut='valide') AS ok,
-                        COUNT(*) FILTER (WHERE statut IN ('valide','en_attente_validation')) AS tot
+                "SELECT SUM(CASE WHEN statut='valide' THEN 1 ELSE 0 END) AS ok,
+                        SUM(CASE WHEN statut IN ('valide','en_attente_validation') THEN 1 ELSE 0 END) AS tot
                  FROM op_points_journaliers WHERE date_point >= ? $ws", array_merge([$debut], $as));
             return ['ok'=>(int)($r['ok'] ?? 0), 'tot'=>(int)($r['tot'] ?? 0)];
         },
