@@ -237,7 +237,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
       font-size: 14px;
       color: var(--text);
       background: var(--light);
-      transition: all .2s;
+      transition: background-color .2s, border-color .2s, color .2s, box-shadow .2s, transform .2s, opacity .2s;
       outline: none;
     }
     .input-wrap input:focus {
@@ -271,7 +271,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
       font-size: 15px; font-weight: 700;
       letter-spacing: .3px;
       cursor: pointer;
-      transition: all .2s;
+      transition: background-color .2s, border-color .2s, color .2s, box-shadow .2s, transform .2s, opacity .2s;
       position: relative; overflow: hidden;
     }
     .btn-login:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(41,128,212,.4); }
@@ -300,14 +300,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
       animation: fadeIn .3s ease;
     }
     .alert.show { display: flex; align-items: center; gap: 10px; }
-    .alert-danger  { background: #fdf0ef; color: var(--danger);  border-left: 3px solid var(--danger); }
-    .alert-success { background: #eafaf1; color: var(--success); border-left: 3px solid var(--success); }
+    .alert-danger  { background: #fdf0ef; color: var(--danger-d);  border-left: 3px solid var(--danger); }
+    .alert-success { background: #eafaf1; color: var(--success-d); border-left: 3px solid var(--success); }
     .alert-warning { background: #fef9e7; color: #e67e22;        border-left: 3px solid #e67e22; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
 
     /* ===== RESPONSIVE ===== */
     @media (max-width: 760px) {
-      .card-wrap { grid-template-columns: 1fr; max-width: 420px; width: 95%; }
+      .card-wrap { grid-template-columns: minmax(0,1fr); max-width: 420px; width: 95%; }
       .left-panel { display: none; }
       .right-panel { padding: 40px 28px; }
     }
@@ -325,7 +325,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
   <!-- LEFT -->
   <div class="left-panel">
     <div class="brand">
-      <div class="brand-icon">📦</div>
+      <div class="brand-icon"><i class="ph ph-package" aria-hidden="true"></i></div>
       <h1>Stock<br>Manager</h1>
       <p>Gestion complète de votre inventaire d'équipements et consommables</p>
     </div>
@@ -352,7 +352,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     <div class="form-group">
       <label for="email">Adresse email</label>
       <div class="input-wrap">
-        <span class="icon">✉</span>
+        <span class="icon"><i class="ph ph-envelope-simple" aria-hidden="true"></i></span>
         <input type="email" id="email" name="email" placeholder="vous@domaine.ci" autocomplete="email" required>
       </div>
     </div>
@@ -360,9 +360,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     <div class="form-group">
       <label for="password">Mot de passe</label>
       <div class="input-wrap">
-        <span class="icon">🔒</span>
+        <span class="icon"><i class="ph ph-lock" aria-hidden="true"></i></span>
         <input type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password" required>
-        <button class="toggle-pw" type="button" onclick="togglePw()" title="Afficher/masquer">👁</button>
+        <button class="toggle-pw" type="button" onclick="togglePw()" title="Afficher/masquer"><i class="ph ph-eye" aria-hidden="true"></i></button>
       </div>
     </div>
 
@@ -391,7 +391,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     const el = document.getElementById(id);
     el.textContent = '';
     el.className = 'alert ' + (id.includes('error') ? 'alert-danger' : 'alert-success') + ' show';
-    el.innerHTML = (id.includes('error') ? '❌ ' : '✅ ') + msg;
+    el.innerHTML = (id.includes('error') ? '<i class="ph ph-x-circle" aria-hidden="true"></i> ' : '<i class="ph ph-check-circle" aria-hidden="true"></i> ') + msg;
   }
 
   function hideAlerts() {

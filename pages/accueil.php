@@ -128,7 +128,7 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
       position: absolute; top: -5px; right: -5px;
       min-width: 18px; height: 18px; padding: 0 4px;
       background: #EF4444; color: white;
-      font-size: 10px; font-weight: 700;
+      font-size: 12px; font-weight: 700;
       border-radius: 9px; display: flex; align-items: center; justify-content: center;
       font-family: 'Plus Jakarta Sans', sans-serif;
     }
@@ -153,7 +153,7 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
     .notif-item:hover { background: #F8FAFC; }
     .notif-item:last-child { border-bottom: none; }
     .notif-item .n-titre { font-size: 13px; font-weight: 600; color: var(--navy); }
-    .notif-item .n-date  { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .notif-item .n-date  { font-size: 12px; color: var(--muted); margin-top: 3px; }
     .notif-empty { padding: 28px; text-align: center; color: var(--muted); font-size: 13px; }
 
     /* ── User chip (dropdown) ── */
@@ -171,7 +171,7 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
     .uc-btn:hover { border-color: var(--primary); background: #E0E7FF; }
     .uc-avatar {
       width: 30px; height: 30px; border-radius: 8px;
-      background: linear-gradient(135deg, var(--primary), #A5D8FF);
+      background: var(--primary-d);
       display: flex; align-items: center; justify-content: center;
       color: white; font-size: 12px; font-weight: 800;
       font-family: 'Plus Jakarta Sans', sans-serif;
@@ -202,7 +202,7 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
       transition: background .15s;
     }
     .uc-item:hover { background: var(--primary-l); }
-    .uc-item i { font-size: 18px; color: var(--primary); }
+    .uc-item i { font-size: 18px; color: var(--primary-d); }
     .uc-item.logout { color: #B91C1C; }
     .uc-item.logout i { color: #B91C1C; }
     .uc-item.logout:hover { background: #FEE2E2; }
@@ -247,7 +247,7 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
       border-radius: 18px; border: 1.5px solid var(--border);
       box-shadow: 0 2px 10px rgba(6,3,58,.05);
       text-decoration: none; color: inherit;
-      transition: all .2s cubic-bezier(.4,0,.2,1);
+      transition: background-color .2s cubic-bezier(.4,0,.2,1), border-color .2s cubic-bezier(.4,0,.2,1), color .2s cubic-bezier(.4,0,.2,1), box-shadow .2s cubic-bezier(.4,0,.2,1), transform .2s cubic-bezier(.4,0,.2,1), opacity .2s cubic-bezier(.4,0,.2,1);
       position: relative; overflow: hidden; text-align: center;
     }
     .groupe-bloc::after {
@@ -283,7 +283,7 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
       margin-bottom: 4px; transition: color .2s; line-height: 1.2;
     }
     .groupe-text p {
-      font-size: 11px; color: var(--muted);
+      font-size: 12px; color: var(--muted);
       line-height: 1.4; transition: color .2s;
     }
 
@@ -330,7 +330,7 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
         <rect x="12.5" y="12.5" width="8.5" height="8.5" rx="2" fill="white" opacity=".95"/>
       </svg>
     </div>
-    <span class="navbar-brand-name">DigiStock</span>
+    <span class="navbar-brand-name">ERP EMUCI</span>
     <span class="navbar-brand-sep"></span>
     <span class="navbar-accueil">Accueil</span>
   </a>
@@ -353,7 +353,7 @@ $initiales = strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',
       </div>
       <div class="notif-list" id="notif-list">
         <?php if (empty($notifs)): ?>
-          <div class="notif-empty">✅ Aucune notification</div>
+          <div class="notif-empty"><i class="ph ph-check-circle" aria-hidden="true"></i> Aucune notification</div>
         <?php else: ?>
           <?php foreach ($notifs as $n): ?>
             <div class="notif-item" onclick="readNotif(<?= $n['id'] ?>, '<?= h($n['lien']??'') ?>')">
@@ -464,7 +464,7 @@ function refreshNotifs() {
     }
     const list = document.getElementById('notif-list');
     if (!list) return;
-    if (count === 0) { list.innerHTML = '<div class="notif-empty">✅ Aucune notification</div>'; return; }
+    if (count === 0) { list.innerHTML = '<div class="notif-empty"><i class="ph ph-check-circle" aria-hidden="true"></i> Aucune notification</div>'; return; }
     const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     list.innerHTML = d.data.data.map(n => `
       <div class="notif-item" data-id="${n.id}" data-lien="${esc(n.lien||'')}">
@@ -476,7 +476,9 @@ function refreshNotifs() {
     });
   }).catch(() => {});
 }
-setInterval(refreshNotifs, 60000);
+// Page standalone (n'inclut pas templates/footer.php) : copie propre du
+// même intervalle resserré + pause sur onglet caché que footer.php.
+setInterval(() => { if (!document.hidden) refreshNotifs(); }, 20000);
 
 // ── User chip ─────────────────────────────────────────────────
 function toggleUcMenu(e) {

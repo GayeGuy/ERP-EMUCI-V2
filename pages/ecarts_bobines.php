@@ -54,13 +54,12 @@ $ecarts = db_fetch_all(
 );
 
 // ── KPIs
-// MySQL n'a pas COUNT(*) FILTER (WHERE ...) : agrégation conditionnelle via SUM(CASE WHEN...).
 $kpis = db_fetch_one(
     "SELECT
-        SUM(CASE WHEN eb.statut='ouvert' THEN 1 ELSE 0 END) AS nb_ouvert,
-        SUM(CASE WHEN eb.statut='resolu' THEN 1 ELSE 0 END) AS nb_resolu,
-        SUM(CASE WHEN eb.statut='ignore' THEN 1 ELSE 0 END) AS nb_ignore,
-        COUNT(*)                                             AS nb_total
+        COUNT(*) FILTER (WHERE eb.statut='ouvert')  AS nb_ouvert,
+        COUNT(*) FILTER (WHERE eb.statut='resolu')  AS nb_resolu,
+        COUNT(*) FILTER (WHERE eb.statut='ignore')  AS nb_ignore,
+        COUNT(*)                                     AS nb_total
      FROM ecarts_bobines eb
      JOIN op_bobines ob ON ob.id = eb.bobine_id
      $sql_where",
@@ -80,7 +79,7 @@ include __DIR__ . '/../templates/header.php';
 <style>
 .ecarts-page { padding: 24px; max-width: 1400px; margin: 0 auto; }
 .ecarts-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
-.ecarts-header h1 { font-size: 22px; font-weight: 800; color: var(--navy); margin: 0; }
+.ecarts-header h2 { font-size: 22px; font-weight: 800; color: var(--navy); margin: 0; }
 
 /* KPI cards */
 .ecarts-kpis { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 24px; }
@@ -91,7 +90,7 @@ include __DIR__ . '/../templates/header.php';
 
 /* Filters */
 .filtre-bar { background: white; border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
-.filtre-bar label { font-size: 11px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .5px; }
+.filtre-bar label { font-size: 12px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 4px; text-transform: uppercase; letter-spacing: .5px; }
 .filtre-bar select, .filtre-bar input { border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; font-size: 13px; background: #f8fafc; }
 .filtre-bar button { padding: 8px 18px; background: var(--navy); color: white; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; }
 
@@ -101,14 +100,14 @@ include __DIR__ . '/../templates/header.php';
 .table-header h2 { font-size: 14px; font-weight: 700; color: var(--navy); margin: 0; }
 .table-scroll { overflow-x: auto; }
 .ecarts-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.ecarts-table thead th { background: var(--navy); color: white; padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.ecarts-table thead th { background: var(--navy); color: white; padding: 10px 12px; text-align: left; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .ecarts-table tbody tr:nth-child(even) td { background: #f8fafc; }
 .ecarts-table tbody tr:hover td { background: #EFF6FF; }
 .ecarts-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 .ecarts-table td:empty::after { content: '—'; color: var(--muted); }
 
 /* Badges statut */
-.badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; white-space: nowrap; }
+.badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .badge-ouvert  { background: #FEE2E2; color: #991B1B; }
 .badge-resolu  { background: #D1FAE5; color: #065F46; }
 .badge-ignore  { background: #FEF3C7; color: #92400E; }
@@ -132,8 +131,8 @@ include __DIR__ . '/../templates/header.php';
   <div class="ecarts-header">
     <i class="ph ph-warning-diamond" style="font-size:28px;color:#D97706"></i>
     <div>
-      <h1>Écarts bobines</h1>
-      <p style="margin:0;font-size:13px;color:var(--muted)">Historique des écarts DigiStock / EMUCI détectés lors des validations</p>
+      <h2>Écarts bobines</h2>
+      <p style="margin:0;font-size:13px;color:var(--muted)">Historique des écarts ERP EMUCI / EMUCI détectés lors des validations</p>
     </div>
   </div>
 
@@ -234,7 +233,7 @@ include __DIR__ . '/../templates/header.php';
             <th>N° Bobine</th>
             <th>Type</th>
             <th style="text-align:center">Stock EMUCI</th>
-            <th style="text-align:center">Stock DigiStock</th>
+            <th style="text-align:center">Stock ERP EMUCI</th>
             <th style="text-align:center">Écart</th>
             <th>Source</th>
             <th>Statut</th>

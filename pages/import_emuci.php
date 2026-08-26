@@ -32,11 +32,11 @@ function trouver_site_id(string $nom_emuci, array $sites): ?int {
         if (!empty($s['nom_emuci']) && strtolower(trim($s['nom_emuci'])) === $nom)
             return (int)$s['id'];
     }
-    // 2. Correspondance exacte sur nom DigiStock
+    // 2. Correspondance exacte sur nom ERP EMUCI
     foreach ($sites as $s) {
         if (strtolower(trim($s['nom'])) === $nom) return (int)$s['id'];
     }
-    // 3. Correspondance partielle sur nom DigiStock (fallback)
+    // 3. Correspondance partielle sur nom ERP EMUCI (fallback)
     foreach ($sites as $s) {
         if (str_contains(strtolower($s['nom']), $nom) || str_contains($nom, strtolower($s['nom'])))
             return (int)$s['id'];
@@ -50,8 +50,8 @@ function logger_site_inconnu(string $nom_emuci, string $type_import): void {
     db_query(
         "INSERT INTO emuci_sites_inconnus (nom_emuci, type_import, nb_occurrences, derniere_apparition)
          VALUES (?, ?, 1, NOW())
-         ON DUPLICATE KEY UPDATE
-           nb_occurrences = nb_occurrences + 1,
+         ON CONFLICT (nom_emuci,type_import) DO UPDATE SET
+           nb_occurrences = emuci_sites_inconnus.nb_occurrences + 1,
            derniere_apparition = NOW()",
         [$nom_emuci, $type_import]
     );
@@ -134,7 +134,7 @@ function _auto_valider_stock(string $date_import, int $user_id): array {
         );
         if (!$has_pj) continue;
 
-        // Comparer films_restants (DigiStock, mis à jour par le PJ)
+        // Comparer films_restants (ERP EMUCI, mis à jour par le PJ)
         // vs stock_systeme (EMUCI, mis à jour par l'import OptoTrace)
         $bobines = db_fetch_all(
             "SELECT b.id, b.numero, b.stock_systeme, b.films_restants
@@ -165,11 +165,8 @@ function _auto_valider_stock(string $date_import, int $user_id): array {
             db_query(
                 "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,gsb_user_id,gsb_at)
                  VALUES (?,?,'valide_auto',0,?,NOW())
-                 ON DUPLICATE KEY UPDATE
-                   statut = IF(gsb_user_id IS NULL, 'valide_auto', statut),
-                   nb_ecarts = IF(gsb_user_id IS NULL, 0, nb_ecarts),
-                   gsb_at = IF(gsb_user_id IS NULL, NOW(), gsb_at),
-                   gsb_user_id = IF(gsb_user_id IS NULL, VALUES(gsb_user_id), gsb_user_id)",
+                 ON CONFLICT (site_id,date_validation) DO UPDATE SET statut='valide_auto',nb_ecarts=0,gsb_user_id=EXCLUDED.gsb_user_id,gsb_at=NOW()
+                 WHERE validations_stock_matin.gsb_user_id IS NULL",
                 [$site_id, $date_import, $user_id]
             );
             $coords = db_fetch_all(
@@ -192,7 +189,7 @@ function _auto_valider_stock(string $date_import, int $user_id): array {
             foreach ($gsb_users as $gsb) {
                 db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
                     [$gsb['id'],'info','⚠️ Écart stock détecté',
-                     "Import du $date_import — Site $site_nom : $nb_ecarts écart(s) DigiStock/EMUCI. Validation requise.",
+                     "Import du $date_import — Site $site_nom : $nb_ecarts écart(s) ERP EMUCI / EMUCI. Validation requise.",
                      '/pages/validation_stock_matin.php']);
             }
             $resultats[] = ['site_id'=>$site_id,'statut'=>'ecart_detecte','nb_ecarts'=>$nb_ecarts];
@@ -542,7 +539,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         [$nb_ok, $nb_err, $session_id]);
                     $nb_crees = (int)db_fetch_value(
                         "SELECT COUNT(*) FROM op_bobines
-                         WHERE created_at >= (NOW() - INTERVAL 5 MINUTE)"
+                         WHERE created_at >= (NOW() - INTERVAL '5 MINUTE')"
                     );
                     audit_log($user['id'], 'CREATE', 'import_emuci', 0,
                         "Import OptoTrace $date_import — $nb_ok lignes, $nb_stock_maj bobines MAJ/créées");
@@ -634,7 +631,7 @@ $detail_bobines_optotrace = db_fetch_all(
     [$f_date]
 );
 
-// Comparaison OptoPlate vs DigiStock PJ par site
+// Comparaison OptoPlate vs ERP EMUCI PJ par site
 $comparaison = db_fetch_all(
     "SELECT
         s.nom AS site_nom,
@@ -680,19 +677,19 @@ include __DIR__ . '/../templates/header.php';
 .tab-nav{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:24px}
 .tab-btn{padding:12px 28px;font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:600;
   border:none;background:none;cursor:pointer;color:var(--muted);border-bottom:3px solid transparent;
-  margin-bottom:-2px;transition:all .15s}
-.tab-btn.active{color:var(--primary);border-bottom-color:var(--primary)}
+  margin-bottom:-2px;transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;}
+.tab-btn.active{color:var(--primary-d);border-bottom-color:var(--primary)}
 .tab-btn:hover{color:var(--navy)}
 .tab-pane{display:none}.tab-pane.active{display:block}
 
 .upload-zone{border:2px dashed var(--border);border-radius:16px;padding:40px;text-align:center;
-  background:var(--tertiary);transition:all .2s;cursor:pointer}
+  background:var(--tertiary);transition: background-color .2s, border-color .2s, color .2s, box-shadow .2s, transform .2s, opacity .2s;cursor:pointer}
 .upload-zone:hover,.upload-zone.drag{border-color:var(--primary);background:var(--primary-l)}
 .upload-zone input[type=file]{display:none}
 .upload-icon{font-size:48px;margin-bottom:12px}
 .upload-label{font-size:15px;font-weight:600;color:var(--navy);margin-bottom:4px}
 .upload-sub{font-size:12px;color:var(--muted)}
-.upload-selected{margin-top:12px;font-size:13px;font-weight:600;color:var(--primary)}
+.upload-selected{margin-top:12px;font-size:13px;font-weight:600;color:var(--primary-d)}
 
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px}
 .stat-card{background:white;border:1px solid var(--border);border-radius:12px;padding:14px 18px;border-left:4px solid var(--primary)}
@@ -700,13 +697,13 @@ include __DIR__ . '/../templates/header.php';
 .stat-card.orange{border-left-color:#f39c12}
 .stat-card.red{border-left-color:var(--danger)}
 .stat-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:26px;font-weight:900;color:var(--navy);line-height:1}
-.stat-lbl{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
+.stat-lbl{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
 
 .ecart-pos{color:#e74c3c;font-weight:700}
 .ecart-neg{color:#f39c12;font-weight:700}
-.ecart-zero{color:var(--success);font-weight:700}
+.ecart-zero{color:var(--success-d);font-weight:700}
 
-.statut-badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700}
+.statut-badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:12px;font-weight:700}
 .s-in_use{background:#d1fae5;color:#065f46}
 .s-reserved{background:#dbeafe;color:#1d4ed8}
 .s-declared_broken{background:#fee2e2;color:#991b1b}
@@ -773,7 +770,7 @@ include __DIR__ . '/../templates/header.php';
 <?php if($msg_optoplate): ?>
 <div class="import-result-banner <?= $msg_optoplate['type'] ?>">
   <div class="irb-title">
-    <?= $msg_optoplate['type']==='success' ? '✅ Import OptoPlate terminé' : '❌ Erreur import OptoPlate' ?>
+    <?= $msg_optoplate['type']==='success' ? '<i class="ph ph-check-circle" aria-hidden="true"></i> Import OptoPlate terminé' : '<i class="ph ph-x-circle" aria-hidden="true"></i> Erreur import OptoPlate' ?>
   </div>
   <div style="font-size:13.5px"><?= h($msg_optoplate['text']) ?></div>
   <?php if(!empty($result_optoplate)): ?>
@@ -791,7 +788,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="irb-stat"><div class="irb-stat-val" style="font-size:15px"><?= fmt_date($result_optoplate['date'],'d/m/Y') ?></div><div class="irb-stat-lbl">Date import</div></div>
   </div>
   <?php if(!empty($result_optoplate['sites_inconnus'])): ?>
-  <div style="margin-top:10px;font-size:12.5px;color:#92400E">⚠️ Sites non reconnus : <strong><?= implode(', ', array_map('h',$result_optoplate['sites_inconnus'])) ?></strong></div>
+  <div style="margin-top:10px;font-size:12.5px;color:#92400E"><i class="ph ph-warning" aria-hidden="true"></i> Sites non reconnus : <strong><?= implode(', ', array_map('h',$result_optoplate['sites_inconnus'])) ?></strong></div>
   <?php endif; ?>
   <?php endif; ?>
 </div>
@@ -800,7 +797,7 @@ include __DIR__ . '/../templates/header.php';
 <?php if($msg_optotrace): ?>
 <div class="import-result-banner <?= $msg_optotrace['type'] ?>">
   <div class="irb-title">
-    <?= $msg_optotrace['type']==='success' ? '✅ Import OptoTrace terminé' : '❌ Erreur import OptoTrace' ?>
+    <?= $msg_optotrace['type']==='success' ? '<i class="ph ph-check-circle" aria-hidden="true"></i> Import OptoTrace terminé' : '<i class="ph ph-x-circle" aria-hidden="true"></i> Erreur import OptoTrace' ?>
   </div>
   <div style="font-size:13.5px"><?= h($msg_optotrace['text']) ?></div>
   <?php if(!empty($result_optotrace)): ?>
@@ -821,7 +818,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="irb-stat"><div class="irb-stat-val" style="font-size:15px"><?= fmt_date($result_optotrace['date'],'d/m/Y') ?></div><div class="irb-stat-lbl">Date import</div></div>
   </div>
   <?php if(!empty($result_optotrace['sites_inconnus'])): ?>
-  <div style="margin-top:10px;font-size:12.5px;color:#92400E">⚠️ Sites non reconnus : <strong><?= implode(', ', array_map('h',$result_optotrace['sites_inconnus'])) ?></strong></div>
+  <div style="margin-top:10px;font-size:12.5px;color:#92400E"><i class="ph ph-warning" aria-hidden="true"></i> Sites non reconnus : <strong><?= implode(', ', array_map('h',$result_optotrace['sites_inconnus'])) ?></strong></div>
   <?php endif; ?>
   <?php endif; ?>
 </div>
@@ -832,27 +829,27 @@ include __DIR__ . '/../templates/header.php';
 <!-- TABS -->
 <div class="tab-nav">
   <button class="tab-btn <?= $onglet==='optoplate'?'active':'' ?>" onclick="showTab('optoplate')">
-    📋 OptoPlate — Plaques posées
+    <i class="ph ph-clipboard-text" aria-hidden="true"></i> OptoPlate — Plaques posées
   </button>
   <button class="tab-btn <?= $onglet==='optotrace'?'active':'' ?>" onclick="showTab('optotrace')">
-    🎞️ OptoTrace — Registre véhicules
+    <i class="ph ph-film-strip" aria-hidden="true"></i> BI-Stock bobine
   </button>
   <button class="tab-btn <?= $onglet==='comparaison'?'active':'' ?>" onclick="showTab('comparaison')">
-    ⚖️ Comparaison EMUCI vs DigiStock
+    <i class="ph ph-scales" aria-hidden="true"></i> Comparaison EMUCI vs ERP EMUCI
   </button>
   <button class="tab-btn <?= $onglet==='historique'?'active':'' ?>" onclick="showTab('historique')">
-    📅 Historique imports
+    <i class="ph ph-calendar" aria-hidden="true"></i> Historique imports
   </button>
 </div>
 
 <!-- FILTRE DATE + SITE -->
 <form method="GET" style="display:flex;gap:10px;align-items:center;margin-bottom:20px;flex-wrap:wrap">
   <input type="hidden" name="tab" id="tabInput" value="<?= h($onglet) ?>">
-  <label style="font-size:13px;font-weight:600;color:var(--navy)">Date :</label>
-  <input type="date" name="date" value="<?= h($f_date) ?>" onchange="this.form.submit()"
+  <label for="inp-date-emuci" style="font-size:13px;font-weight:600;color:var(--navy)">Date :</label>
+  <input type="date" id="inp-date-emuci" name="date" value="<?= h($f_date) ?>" onchange="this.form.submit()"
          style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none">
   <label style="font-size:13px;font-weight:600;color:var(--navy)">Site :</label>
-  <select name="site" class="fsel" onchange="this.form.submit()">
+  <select name="site" class="fsel" aria-label="Filtrer par site" onchange="this.form.submit()">
     <option value="0">Tous les sites</option>
     <?php foreach($sites_list as $s): ?>
     <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
@@ -866,7 +863,7 @@ include __DIR__ . '/../templates/header.php';
   <!-- Import -->
   <div class="card" style="margin-bottom:20px">
     <div class="card-header">
-      <h3>📤 Importer fichier OptoPlate (CSV)</h3>
+      <h3><i class="ph ph-upload-simple" aria-hidden="true"></i> Importer fichier OptoPlate (CSV)</h3>
       <span style="font-size:12px;color:var(--muted)">Format : export CSV depuis OptoPlate · séparateur ;</span>
     </div>
     <div class="card-body">
@@ -874,15 +871,15 @@ include __DIR__ . '/../templates/header.php';
       <div class="alert alert-<?= $msg_optoplate['type'] ?>" style="margin-bottom:16px"><?= h($msg_optoplate['text']) ?></div>
       <?php endif; ?>
       <?php if(!empty($result_optoplate['sites_inconnus'])): ?>
-      <div class="alert alert-warning">⚠️ Sites non reconnus dans DigiStock : <strong><?= implode(', ', array_map('h',$result_optoplate['sites_inconnus'])) ?></strong></div>
+      <div class="alert alert-warning"><i class="ph ph-warning" aria-hidden="true"></i> Sites non reconnus dans ERP EMUCI : <strong><?= implode(', ', array_map('h',$result_optoplate['sites_inconnus'])) ?></strong></div>
       <?php endif; ?>
 
       <form method="POST" enctype="multipart/form-data">
         <input type="hidden" name="action" value="import_optoplate">
         <div style="display:grid;grid-template-columns:auto 1fr;gap:16px;align-items:start">
           <div>
-            <label style="font-size:13px;font-weight:600;color:var(--navy);display:block;margin-bottom:6px">Date du fichier</label>
-            <input type="date" name="date_import" value="<?= date('Y-m-d') ?>"
+            <label for="inp-date-fichier" style="font-size:13px;font-weight:600;color:var(--navy);display:block;margin-bottom:6px">Date du fichier</label>
+            <input type="date" id="inp-date-fichier" name="date_import" value="<?= date('Y-m-d') ?>"
                    style="padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;outline:none">
           </div>
           <div>
@@ -891,7 +888,7 @@ include __DIR__ . '/../templates/header.php';
                  ondragover="this.classList.add('drag');event.preventDefault()"
                  ondragleave="this.classList.remove('drag')"
                  ondrop="this.classList.remove('drag');handleDrop(event,'fileOpto','selectedOpto')">
-              <div class="upload-icon">📋</div>
+              <div class="upload-icon"><i class="ph ph-clipboard-text" aria-hidden="true"></i></div>
               <div class="upload-label">Glissez le fichier CSV ici ou cliquez</div>
               <div class="upload-sub">export_plates_from_YYYY-MM-DD_until_YYYY-MM-DD.csv</div>
               <div class="upload-selected" id="selectedOpto"></div>
@@ -901,7 +898,7 @@ include __DIR__ . '/../templates/header.php';
           </div>
         </div>
         <div style="margin-top:16px;display:flex;justify-content:flex-end">
-          <button type="submit" class="btn btn-primary">📤 Importer OptoPlate</button>
+          <button type="submit" class="btn btn-primary"><i class="ph ph-upload-simple" aria-hidden="true"></i> Importer OptoPlate</button>
         </div>
       </form>
     </div>
@@ -920,15 +917,15 @@ include __DIR__ . '/../templates/header.php';
   ?>
   <div style="margin-bottom:16px">
     <div style="font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;font-weight:700;color:var(--navy);margin-bottom:12px">
-      📊 État des plaques au <?= fmt_date($f_date,'d/m/Y') ?>
+      <i class="ph ph-chart-bar" aria-hidden="true"></i> État des plaques au <?= fmt_date($f_date,'d/m/Y') ?>
     </div>
     <div class="stat-grid">
-      <div class="stat-card green"><div class="stat-val"><?= fmt_number($totaux['in_use']??0) ?></div><div class="stat-lbl">✅ In Use (posées)</div></div>
-      <div class="stat-card"><div class="stat-val"><?= fmt_number($totaux['reserved']??0) ?></div><div class="stat-lbl">📌 Reserved</div></div>
-      <div class="stat-card red"><div class="stat-val"><?= fmt_number($totaux['declared_broken']??0) ?></div><div class="stat-lbl">❌ Declared Broken</div></div>
-      <div class="stat-card orange"><div class="stat-val"><?= fmt_number($totaux['ad-print']??0) ?></div><div class="stat-lbl">🖨️ Ad-Print</div></div>
-      <div class="stat-card orange"><div class="stat-val"><?= fmt_number($totaux['inused_need_reprint']??0) ?></div><div class="stat-lbl">⚠️ Need Reprint</div></div>
-      <div class="stat-card"><div class="stat-val"><?= fmt_number($totaux['lost']??0) ?></div><div class="stat-lbl">🔍 Lost</div></div>
+      <div class="stat-card green"><div class="stat-val"><?= fmt_number($totaux['in_use']??0) ?></div><div class="stat-lbl"><i class="ph ph-check-circle" aria-hidden="true"></i> In Use (posées)</div></div>
+      <div class="stat-card"><div class="stat-val"><?= fmt_number($totaux['reserved']??0) ?></div><div class="stat-lbl"><i class="ph ph-push-pin" aria-hidden="true"></i> Reserved</div></div>
+      <div class="stat-card red"><div class="stat-val"><?= fmt_number($totaux['declared_broken']??0) ?></div><div class="stat-lbl"><i class="ph ph-x-circle" aria-hidden="true"></i> Declared Broken</div></div>
+      <div class="stat-card orange"><div class="stat-val"><?= fmt_number($totaux['ad-print']??0) ?></div><div class="stat-lbl"><i class="ph ph-printer" aria-hidden="true"></i> Ad-Print</div></div>
+      <div class="stat-card orange"><div class="stat-val"><?= fmt_number($totaux['inused_need_reprint']??0) ?></div><div class="stat-lbl"><i class="ph ph-warning" aria-hidden="true"></i> Need Reprint</div></div>
+      <div class="stat-card"><div class="stat-val"><?= fmt_number($totaux['lost']??0) ?></div><div class="stat-lbl"><i class="ph ph-magnifying-glass" aria-hidden="true"></i> Lost</div></div>
     </div>
   </div>
 
@@ -936,7 +933,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="card-header">
       <h3>Détail par site et statut</h3>
       <a href="?tab=optoplate&date=<?= $f_date ?>&site=<?= $f_site ?>&export=optoplate"
-         class="btn btn-secondary btn-sm">📥 Export Excel</a>
+         class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Export Excel</a>
     </div>
     <div class="table-wrap">
       <table>
@@ -974,7 +971,7 @@ include __DIR__ . '/../templates/header.php';
   <!-- Import -->
   <div class="card" style="margin-bottom:20px">
     <div class="card-header">
-      <h3>📤 Importer fichier OptoTrace (XLSX)</h3>
+      <h3><i class="ph ph-upload-simple" aria-hidden="true"></i> Importer fichier OptoTrace (XLSX)</h3>
       <span style="font-size:12px;color:var(--muted)">Format : export Excel depuis OptoTrace</span>
     </div>
     <div class="card-body">
@@ -982,7 +979,7 @@ include __DIR__ . '/../templates/header.php';
       <div class="alert alert-<?= $msg_optotrace['type'] ?>"><?= h($msg_optotrace['text']) ?></div>
       <?php endif; ?>
       <?php if(!empty($result_optotrace['sites_inconnus'])): ?>
-      <div class="alert alert-warning">⚠️ Sites non reconnus : <strong><?= implode(', ', array_map('h',$result_optotrace['sites_inconnus'])) ?></strong></div>
+      <div class="alert alert-warning"><i class="ph ph-warning" aria-hidden="true"></i> Sites non reconnus : <strong><?= implode(', ', array_map('h',$result_optotrace['sites_inconnus'])) ?></strong></div>
       <?php endif; ?>
 
       <form method="POST" enctype="multipart/form-data">
@@ -999,7 +996,7 @@ include __DIR__ . '/../templates/header.php';
                  ondragover="this.classList.add('drag');event.preventDefault()"
                  ondragleave="this.classList.remove('drag')"
                  ondrop="this.classList.remove('drag');handleDrop(event,'fileTrace','selectedTrace')">
-              <div class="upload-icon">🎞️</div>
+              <div class="upload-icon"><i class="ph ph-film-strip" aria-hidden="true"></i></div>
               <div class="upload-label">Glissez le fichier XLSX ici ou cliquez</div>
               <div class="upload-sub">production-plaques-YYYY-MM-DD.xlsx</div>
               <div class="upload-selected" id="selectedTrace"></div>
@@ -1009,7 +1006,7 @@ include __DIR__ . '/../templates/header.php';
           </div>
         </div>
         <div style="margin-top:16px;display:flex;justify-content:flex-end">
-          <button type="submit" class="btn btn-primary">📤 Importer OptoTrace</button>
+          <button type="submit" class="btn btn-primary"><i class="ph ph-upload-simple" aria-hidden="true"></i> Importer OptoTrace</button>
         </div>
       </form>
     </div>
@@ -1048,9 +1045,9 @@ include __DIR__ . '/../templates/header.php';
         <tr>
           <td style="font-weight:600"><?= h($st['site_nom_emuci'] ?: '— non mappé —') ?></td>
           <td style="text-align:center;font-weight:700"><?= $st['nb_bobines'] ?></td>
-          <td style="text-align:center;color:var(--success);font-weight:700"><?= fmt_number($st['total_films_restants']) ?></td>
+          <td style="text-align:center;color:var(--success-d);font-weight:700"><?= fmt_number($st['total_films_restants']) ?></td>
           <td style="text-align:center;color:var(--muted)"><?= $st['nb_retirees'] ?></td>
-          <td style="text-align:center;color:var(--danger)"><?= $st['nb_epuisees'] ?></td>
+          <td style="text-align:center;color:var(--danger-d)"><?= $st['nb_epuisees'] ?></td>
         </tr>
         <?php endforeach; ?>
         </tbody>
@@ -1058,11 +1055,11 @@ include __DIR__ . '/../templates/header.php';
     </div>
   </div>
 
-  <!-- Détail bobines avec comparaison DigiStock -->
+  <!-- Détail bobines avec comparaison ERP EMUCI -->
   <?php if(!empty($detail_bobines_optotrace)): ?>
   <div class="card">
     <div class="card-header">
-      <h3>🔍 Détail bobines — OptoTrace vs DigiStock</h3>
+      <h3><i class="ph ph-magnifying-glass" aria-hidden="true"></i> Détail bobines — OptoTrace vs ERP EMUCI</h3>
       <span style="font-size:12px;color:var(--muted)">keyname = N° bobine</span>
     </div>
     <div class="table-wrap">
@@ -1072,7 +1069,7 @@ include __DIR__ . '/../templates/header.php';
           <th>Format</th>
           <th>Site</th>
           <th style="text-align:center">Films OptoTrace</th>
-          <th style="text-align:center">Films DigiStock</th>
+          <th style="text-align:center">Films ERP EMUCI</th>
           <th style="text-align:center">Écart</th>
           <th style="text-align:center">État</th>
         </tr></thead>
@@ -1085,12 +1082,12 @@ include __DIR__ . '/../templates/header.php';
           <td style="font-family:monospace;font-weight:700;color:var(--navy)"><?= h($b['keyname']) ?></td>
           <td style="font-size:12px"><?= h($b['format']) ?></td>
           <td style="font-size:12px"><?= h($b['site_nom_emuci']) ?></td>
-          <td style="text-align:center;font-weight:700;color:var(--success)"><?= fmt_number($b['qty_optotrace']) ?></td>
+          <td style="text-align:center;font-weight:700;color:var(--success-d)"><?= fmt_number($b['qty_optotrace']) ?></td>
           <td style="text-align:center;font-weight:700"><?= $b['bobine_id'] ? fmt_number($b['qty_digistock']) : '<span style="color:var(--muted)">—</span>' ?></td>
           <td style="text-align:center" class="<?= $ecart_cls ?>">
-            <?= $b['bobine_id'] ? ($ecart > 0 ? '+' : '') . $ecart : '<span style="color:var(--warning)">Inconnue</span>' ?>
+            <?= $b['bobine_id'] ? ($ecart > 0 ? '+' : '') . $ecart : '<span style="color:var(--warning-d)">Inconnue</span>' ?>
           </td>
-          <td style="text-align:center;font-size:11px">
+          <td style="text-align:center;font-size:12px">
             <?php
             if ($b['state'] == 7) echo '<span class="statut-badge" style="background:#f1f5f9;color:#475569">Retirée</span>';
             elseif ($b['qty_optotrace'] == 0) echo '<span class="statut-badge" style="background:#fee2e2;color:#991b1b">Épuisée</span>';
@@ -1117,9 +1114,9 @@ include __DIR__ . '/../templates/header.php';
 <div id="tab-comparaison" class="tab-pane <?= $onglet==='comparaison'?'active':'' ?>">
   <div class="card">
     <div class="card-header">
-      <h3>⚖️ Comparaison EMUCI (OptoPlate) vs DigiStock (PJ coordinateurs) — <?= fmt_date($f_date,'d/m/Y') ?></h3>
+      <h3><i class="ph ph-scales" aria-hidden="true"></i> Comparaison EMUCI (OptoPlate) vs ERP EMUCI (PJ coordinateurs) — <?= fmt_date($f_date,'d/m/Y') ?></h3>
       <a href="?tab=comparaison&date=<?= $f_date ?>&site=<?= $f_site ?>&export=comparaison"
-         class="btn btn-secondary btn-sm">📥 Export Excel</a>
+         class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Export Excel</a>
     </div>
     <div class="table-wrap">
       <table>
@@ -1128,7 +1125,7 @@ include __DIR__ . '/../templates/header.php';
           <th style="text-align:center">In Use EMUCI</th>
           <th style="text-align:center">Reserved EMUCI</th>
           <th style="text-align:center">Broken EMUCI</th>
-          <th style="text-align:center">PJ DigiStock</th>
+          <th style="text-align:center">PJ ERP EMUCI</th>
           <th style="text-align:center">Écart</th>
           <th style="text-align:center">Statut</th>
         </tr></thead>
@@ -1138,13 +1135,13 @@ include __DIR__ . '/../templates/header.php';
         <?php else: foreach($comparaison as $c):
           $ecart = (int)$c['ecart'];
           $ecart_cls = $ecart===0?'ecart-zero':($ecart>0?'ecart-pos':'ecart-neg');
-          $statut_icon = $ecart===0?'✅ OK':($ecart>0?'⚠️ EMUCI > DigiStock':'⚠️ DigiStock > EMUCI');
+          $statut_icon = $ecart===0?'<i class="ph ph-check-circle" aria-hidden="true"></i> OK':($ecart>0?'<i class="ph ph-warning" aria-hidden="true"></i> EMUCI > ERP EMUCI':'<i class="ph ph-warning" aria-hidden="true"></i> ERP EMUCI > EMUCI');
         ?>
         <tr>
           <td style="font-weight:600;color:var(--navy)"><?= h($c['site_nom']) ?></td>
-          <td style="text-align:center;font-weight:700;color:var(--success)"><?= fmt_number($c['plaques_in_use_emuci']) ?></td>
+          <td style="text-align:center;font-weight:700;color:var(--success-d)"><?= fmt_number($c['plaques_in_use_emuci']) ?></td>
           <td style="text-align:center;color:var(--blue)"><?= fmt_number($c['plaques_reserved_emuci']) ?></td>
-          <td style="text-align:center;color:var(--danger)"><?= fmt_number($c['plaques_broken_emuci']) ?></td>
+          <td style="text-align:center;color:var(--danger-d)"><?= fmt_number($c['plaques_broken_emuci']) ?></td>
           <td style="text-align:center;font-weight:700"><?= fmt_number($c['plaques_digi']) ?></td>
           <td style="text-align:center" class="<?= $ecart_cls ?>"><?= $ecart>0?'+':'' ?><?= $ecart ?></td>
           <td style="text-align:center;font-size:12px;font-weight:600"><?= $statut_icon ?></td>
@@ -1155,7 +1152,7 @@ include __DIR__ . '/../templates/header.php';
     </div>
     <div style="padding:14px 20px;background:var(--tertiary);font-size:12px;color:var(--muted)">
       <strong>Légende :</strong>
-      Écart = (Plaques In Use EMUCI) − (Plaques PJ DigiStock).
+      Écart = (Plaques In Use EMUCI) − (Plaques PJ ERP EMUCI).
       Un écart positif signifie qu'EMUCI a plus de plaques posées que le déclaratif coordinateur.
     </div>
   </div>
@@ -1164,7 +1161,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- ═══ ONGLET HISTORIQUE ═══ -->
 <div id="tab-historique" class="tab-pane <?= $onglet==='historique'?'active':'' ?>">
   <div class="card">
-    <div class="card-header"><h3>📅 Historique des imports</h3></div>
+    <div class="card-header"><h3><i class="ph ph-calendar" aria-hidden="true"></i> Historique des imports</h3></div>
     <div class="table-wrap">
       <table>
         <thead><tr>
@@ -1183,11 +1180,11 @@ include __DIR__ . '/../templates/header.php';
         <?php else: foreach($historique as $h): ?>
         <tr>
           <td style="font-weight:700"><?= fmt_date($h['date_import'],'d/m/Y') ?></td>
-          <td><span style="padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700;background:var(--primary-l);color:var(--primary)"><?= h($h['type_import']) ?></span></td>
+          <td><span style="padding:2px 9px;border-radius:12px;font-size:12px;font-weight:700;background:var(--primary-l);color:var(--primary-d)"><?= h($h['type_import']) ?></span></td>
           <td style="text-align:center"><?= $h['nb_lignes_optoplate']>0?fmt_number($h['nb_lignes_optoplate']):'—' ?></td>
           <td style="text-align:center"><?= $h['nb_lignes_optotrace']>0?fmt_number($h['nb_lignes_optotrace']):'—' ?></td>
-          <td style="text-align:center;color:<?= $h['nb_erreurs']>0?'var(--danger)':'var(--muted)' ?>"><?= $h['nb_erreurs'] ?></td>
-          <td><span style="padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700;background:<?= $h['statut']==='termine'?'#d1fae5':'#fee2e2' ?>;color:<?= $h['statut']==='termine'?'#065f46':'#991b1b' ?>"><?= $h['statut']==='termine'?'✅ Terminé':'❌ Erreur' ?></span></td>
+          <td style="text-align:center;color:<?= $h['nb_erreurs']>0?'var(--danger-d)':'var(--muted)' ?>"><?= $h['nb_erreurs'] ?></td>
+          <td><span style="padding:2px 9px;border-radius:12px;font-size:12px;font-weight:700;background:<?= $h['statut']==='termine'?'#d1fae5':'#fee2e2' ?>;color:<?= $h['statut']==='termine'?'#065f46':'#991b1b' ?>"><?= $h['statut']==='termine'?'<i class="ph ph-check-circle" aria-hidden="true"></i> Terminé':'<i class="ph ph-x-circle" aria-hidden="true"></i> Erreur' ?></span></td>
           <td style="font-size:12px;color:var(--muted)"><?= h($h['importeur']??'—') ?></td>
           <td style="font-size:12px;color:var(--muted)"><?= fmt_datetime($h['created_at']) ?></td>
         </tr>

@@ -169,8 +169,8 @@ include __DIR__ . '/../templates/header.php';
 .ik{background:white;border-radius:14px;border:1px solid var(--border);padding:16px 20px;border-left:4px solid var(--blue)}
 .ik.orange{border-left-color:#f39c12} .ik.red{border-left-color:var(--danger)} .ik.green{border-left-color:var(--success)}
 .ik-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:26px;font-weight:900;color:var(--navy)}
-.ik-lbl{font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
-.type-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.ik-lbl{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:4px}
+.type-badge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
 .type-preventive{background:#e8f4f9;color:var(--blue)} .type-curative{background:#fee2e2;color:#991b1b}
 .statut-planifiee{background:#dbeafe;color:#1d4ed8} .statut-en_cours{background:#fef3c7;color:#92400e}
 .statut-terminee{background:#d1fae5;color:#065f46} .statut-demandee{background:#fee2e2;color:#991b1b}
@@ -178,26 +178,26 @@ include __DIR__ . '/../templates/header.php';
 .prio-urgente{background:#fee2e2;color:#991b1b;font-weight:700} .prio-haute{background:#fef3c7;color:#92400e}
 .prio-normale{background:#f1f5f9;color:#475569}
 .tab-nav{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px}
-.tab-btn{padding:11px 22px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .15s}
+.tab-btn{padding:11px 22px;font-size:13px;font-weight:600;border:none;background:none;cursor:pointer;color:var(--muted);border-bottom:3px solid transparent;margin-bottom:-2px;transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;}
 .tab-btn.active{color:var(--primary,var(--blue));border-bottom-color:var(--primary,var(--blue))}
 </style>
 
 <!-- KPIs -->
 <div class="int-kpis">
-  <div class="ik"><div class="ik-val"><?= $nb_preventive ?></div><div class="ik-lbl">🗓️ Préventives</div></div>
-  <div class="ik red"><div class="ik-val" style="color:var(--danger)"><?= $nb_curative ?></div><div class="ik-lbl">🔧 Curatives</div></div>
-  <div class="ik orange"><div class="ik-val" style="color:#f39c12"><?= $nb_demandees ?></div><div class="ik-lbl">📬 Demandes en attente</div></div>
-  <div class="ik green"><div class="ik-val" style="color:#f39c12"><?= $nb_en_cours ?></div><div class="ik-lbl">⚙️ En cours</div></div>
+  <div class="ik"><div class="ik-val"><?= $nb_preventive ?></div><div class="ik-lbl"><i class="ph ph-calendar" aria-hidden="true"></i> Préventives</div></div>
+  <div class="ik red"><div class="ik-val" style="color:var(--danger-d)"><?= $nb_curative ?></div><div class="ik-lbl"><i class="ph ph-wrench" aria-hidden="true"></i> Curatives</div></div>
+  <div class="ik orange"><div class="ik-val" style="color:#f39c12"><?= $nb_demandees ?></div><div class="ik-lbl"><i class="ph ph-tray" aria-hidden="true"></i> Demandes en attente</div></div>
+  <div class="ik green"><div class="ik-val" style="color:#f39c12"><?= $nb_en_cours ?></div><div class="ik-lbl"><i class="ph ph-gear" aria-hidden="true"></i> En cours</div></div>
 </div>
 
 <!-- TABS -->
 <div class="tab-nav">
-  <button class="tab-btn <?= $onglet==='toutes'?'active':'' ?>" onclick="showTab('toutes',this)">🔧 Toutes</button>
-  <button class="tab-btn <?= $onglet==='preventive'?'active':'' ?>" onclick="showTab('preventive',this)">🗓️ Préventives</button>
-  <button class="tab-btn <?= $onglet==='curative'?'active':'' ?>" onclick="showTab('curative',this)">🚨 Curatives</button>
+  <button class="tab-btn <?= $onglet==='toutes'?'active':'' ?>" onclick="showTab('toutes',this)"><i class="ph ph-wrench" aria-hidden="true"></i> Toutes</button>
+  <button class="tab-btn <?= $onglet==='preventive'?'active':'' ?>" onclick="showTab('preventive',this)"><i class="ph ph-calendar" aria-hidden="true"></i> Préventives</button>
+  <button class="tab-btn <?= $onglet==='curative'?'active':'' ?>" onclick="showTab('curative',this)"><i class="ph ph-warning-octagon" aria-hidden="true"></i> Curatives</button>
   <?php if($nb_demandees>0): ?>
   <button class="tab-btn <?= $onglet==='demandes'?'active':'' ?>" onclick="showTab('demandes',this)">
-    📬 Demandes <span style="background:var(--danger);color:white;border-radius:10px;padding:1px 7px;font-size:10px;margin-left:4px"><?= $nb_demandees ?></span>
+    <i class="ph ph-tray" aria-hidden="true"></i> Demandes <span style="background:var(--danger);color:white;border-radius:10px;padding:1px 7px;font-size:12px;margin-left:4px"><?= $nb_demandees ?></span>
   </button>
   <?php endif; ?>
 </div>
@@ -207,7 +207,7 @@ include __DIR__ . '/../templates/header.php';
   <form method="GET" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
     <input type="hidden" name="tab" value="<?= h($onglet) ?>">
     <?php if(!$site_force): ?>
-    <select name="site" class="fsel" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
+    <select name="site" class="fsel" aria-label="Filtrer par site" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
       <option value="">Tous les sites</option>
       <?php foreach($sites_list as $s): ?>
       <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
@@ -217,11 +217,11 @@ include __DIR__ . '/../templates/header.php';
   </form>
   <div style="display:flex;gap:8px">
     <?php if($is_coord): ?>
-    <button class="btn btn-primary" onclick="ouvrirDemande()">🔧 Signaler une panne</button>
+    <button class="btn btn-primary" onclick="ouvrirDemande()"><i class="ph ph-wrench" aria-hidden="true"></i> Signaler une panne</button>
     <?php endif; ?>
     <?php if($can_create && !$is_coord): ?>
-    <button class="btn btn-primary" onclick="ouvrirCreation('preventive')">📅 + Préventive</button>
-    <button class="btn" style="background:#fee2e2;color:#991b1b;border:1.5px solid #fca5a5" onclick="ouvrirCreation('curative')">🚨 + Curative</button>
+    <button class="btn btn-primary" onclick="ouvrirCreation('preventive')"><i class="ph ph-calendar" aria-hidden="true"></i> + Préventive</button>
+    <button class="btn" style="background:#fee2e2;color:#991b1b;border:1.5px solid #fca5a5" onclick="ouvrirCreation('curative')"><i class="ph ph-warning-octagon" aria-hidden="true"></i> + Curative</button>
     <?php endif; ?>
   </div>
 </div>
@@ -239,7 +239,7 @@ foreach($types_onglets as $tab_key => $type_filtre):
   <div class="card">
     <div class="card-header">
       <h3>
-        <?= $tab_key==='preventive'?'🗓️ Interventions Préventives':($tab_key==='curative'?'🚨 Interventions Curatives':($tab_key==='demandes'?'📬 Demandes Coordinateurs':'🔧 Toutes les Interventions')) ?>
+        <?= $tab_key==='preventive'?'<i class="ph ph-calendar" aria-hidden="true"></i> Interventions Préventives':($tab_key==='curative'?'<i class="ph ph-warning-octagon" aria-hidden="true"></i> Interventions Curatives':($tab_key==='demandes'?'<i class="ph ph-tray" aria-hidden="true"></i> Demandes Coordinateurs':'<i class="ph ph-wrench" aria-hidden="true"></i> Toutes les Interventions')) ?>
         <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= count($items) ?>)</span>
       </h3>
     </div>
@@ -258,17 +258,17 @@ foreach($types_onglets as $tab_key => $type_filtre):
           <tr style="<?= $int['statut']==='demandee'?'background:#fffbf0':'' ?>">
             <td style="font-weight:600;white-space:nowrap"><?= fmt_date($int['date_intervention']??$int['created_at'],'d/m/Y') ?></td>
             <?php $is_prev = in_array($int['type_action']??'',['maintenance_preventive']); ?>
-            <td><span class="type-badge type-<?= $is_prev?'preventive':'curative' ?>"><?= $is_prev ? '🗓️ Préventive' : '🚨 Curative' ?></span></td>
+            <td><span class="type-badge type-<?= $is_prev?'preventive':'curative' ?>"><?= $is_prev ? '<i class="ph ph-calendar" aria-hidden="true"></i> Préventive' : '<i class="ph ph-warning-octagon" aria-hidden="true"></i> Curative' ?></span></td>
             <td style="font-size:13px">
               <?= h($int['equip_nom']??'—') ?>
-              <?php if($int['numero_serie_interne']): ?><div style="font-size:11px;color:var(--muted)"><?= h($int['numero_serie_interne']) ?></div><?php endif; ?>
+              <?php if($int['numero_serie_interne']): ?><div style="font-size:12px;color:var(--muted)"><?= h($int['numero_serie_interne']) ?></div><?php endif; ?>
             </td>
             <td><?= h($int['site_nom']??'—') ?></td>
             <td style="font-size:12px;max-width:200px"><?= h($int['description']) ?></td>
             <td style="text-align:center"><span class="type-badge prio-<?= 'normale' ?>"><?= ucfirst('normale') ?></span></td>
             <td><span class="type-badge statut-<?= $int['statut'] ?>"><?= [
-              'planifiee'=>'📅 Planifiée','en_cours'=>'⚙️ En cours','terminee'=>'✅ Terminée',
-              'demandee'=>'📬 Demandée','annulee'=>'❌ Annulée'
+              'planifiee'=>'<i class="ph ph-calendar" aria-hidden="true"></i> Planifiée','en_cours'=>'<i class="ph ph-gear" aria-hidden="true"></i> En cours','terminee'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Terminée',
+              'demandee'=>'<i class="ph ph-tray" aria-hidden="true"></i> Demandée','annulee'=>'<i class="ph ph-x-circle" aria-hidden="true"></i> Annulée'
             ][$int['statut']] ?? $int['statut'] ?></span></td>
             <td style="font-size:12px;color:var(--muted)"><?= h($int['createur']??'—') ?></td>
             <?php if(!$is_coord): ?>
@@ -277,7 +277,7 @@ foreach($types_onglets as $tab_key => $type_filtre):
               <button class="btn btn-primary btn-sm" onclick="changerStatut(<?= $int['id'] ?>,'en_cours')">▶️ Démarrer</button>
               <?php endif; ?>
               <?php if($int['statut']==='en_cours'): ?>
-              <button class="btn btn-success btn-sm" onclick="terminer(<?= $int['id'] ?>)">✅ Terminer</button>
+              <button class="btn btn-success btn-sm" onclick="terminer(<?= $int['id'] ?>)"><i class="ph ph-check-circle" aria-hidden="true"></i> Terminer</button>
               <?php endif; ?>
             </td>
             <?php endif; ?>
@@ -295,8 +295,8 @@ foreach($types_onglets as $tab_key => $type_filtre):
 <div id="modalDemande" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:20px;padding:28px;width:500px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)">🔧 Signaler une panne</h3>
-      <button onclick="fermer('Demande')" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)"><i class="ph ph-wrench" aria-hidden="true"></i> Signaler une panne</h3>
+      <button onclick="fermer('Demande')" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div id="alertDemande"></div>
     <div class="form-group" style="margin-bottom:14px">
@@ -314,7 +314,7 @@ foreach($types_onglets as $tab_key => $type_filtre):
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px">
       <button class="btn btn-secondary" onclick="fermer('Demande')">Annuler</button>
-      <button class="btn btn-primary" onclick="envoyerDemande()">📤 Envoyer la demande</button>
+      <button class="btn btn-primary" onclick="envoyerDemande()"><i class="ph ph-upload-simple" aria-hidden="true"></i> Envoyer la demande</button>
     </div>
   </div>
 </div>
@@ -326,7 +326,7 @@ foreach($types_onglets as $tab_key => $type_filtre):
   <div style="background:white;border-radius:20px;padding:28px;width:520px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
       <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)" id="titleCreation">Nouvelle intervention</h3>
-      <button onclick="fermer('Creation')" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+      <button onclick="fermer('Creation')" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <input type="hidden" id="cType" value="preventive">
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
@@ -367,7 +367,7 @@ foreach($types_onglets as $tab_key => $type_filtre):
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px">
       <button class="btn btn-secondary" onclick="fermer('Creation')">Annuler</button>
-      <button class="btn btn-primary" onclick="creer()">✅ Créer</button>
+      <button class="btn btn-primary" onclick="creer()"><i class="ph ph-check-circle" aria-hidden="true"></i> Créer</button>
     </div>
   </div>
 </div>
@@ -376,7 +376,7 @@ foreach($types_onglets as $tab_key => $type_filtre):
 <!-- MODAL TERMINER -->
 <div id="modalTerminer" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:20px;padding:28px;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin-bottom:20px">✅ Clôturer l'intervention</h3>
+    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin-bottom:20px"><i class="ph ph-check-circle" aria-hidden="true"></i> Clôturer l'intervention</h3>
     <input type="hidden" id="tId">
     <div class="form-group" style="margin-bottom:20px">
       <label>Notes de résolution</label>
@@ -384,14 +384,14 @@ foreach($types_onglets as $tab_key => $type_filtre):
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px">
       <button class="btn btn-secondary" onclick="fermer('Terminer')">Annuler</button>
-      <button class="btn btn-success" onclick="confirmerTerminer()">✅ Clôturer</button>
+      <button class="btn btn-success" onclick="confirmerTerminer()"><i class="ph ph-check-circle" aria-hidden="true"></i> Clôturer</button>
     </div>
   </div>
 </div>
 
 <script>
 function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
-function toast(m,t='success'){const el=document.createElement('div');el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white`;el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),3500);}
+function toast(m,t='success'){let el=document.getElementById('toast-live');if(!el){el=document.createElement('div');el.id='toast-live';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.setAttribute('aria-atomic','true');document.body.appendChild(el);}clearTimeout(el._hideTimer);el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white`;el.textContent=m;el._hideTimer=setTimeout(()=>{el.style.display='none';},3500);}
 function showTab(name,btn){document.querySelectorAll('[id^="tab-"]').forEach(t=>t.style.display='none');document.getElementById('tab-'+name).style.display='block';document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));btn.classList.add('active');}
 function fermer(mod){document.getElementById('modal'+mod).style.display='none';}
 

@@ -431,7 +431,7 @@ include __DIR__ . '/../templates/header.php';
 .rg-filters-title{font-size:13px;font-weight:800;color:var(--navy);margin-bottom:14px;display:flex;align-items:center;gap:8px}
 .rg-filters-row{display:flex;gap:16px;align-items:flex-end;flex-wrap:wrap}
 .rg-field{display:flex;flex-direction:column;gap:5px}
-.rg-field label{font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.rg-field label{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
 .rg-field input,.rg-field select{padding:8px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;color:var(--navy);outline:none;transition:border-color .15s;background:white}
 .rg-field input:focus,.rg-field select:focus{border-color:#1B75BC}
 .rg-cards{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:20px}
@@ -453,7 +453,7 @@ include __DIR__ . '/../templates/header.php';
 .rg-info-body{padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:24px}
 .rg-info-col h4{font-size:13px;font-weight:700;color:var(--navy);margin:0 0 10px}
 .rg-info-col ul{margin:0;padding:0 0 0 18px;color:var(--muted);font-size:13px;line-height:1.8}
-@media(max-width:800px){.rg-cards{grid-template-columns:1fr}.rg-info-body{grid-template-columns:1fr}}
+@media(max-width:800px){.rg-cards{grid-template-columns:minmax(0,1fr)}.rg-info-body{grid-template-columns:minmax(0,1fr)}}
 </style>
 
 <!-- BANNIÈRE -->
@@ -505,7 +505,7 @@ include __DIR__ . '/../templates/header.php';
   <!-- Rapport journalier -->
   <div class="rg-card">
     <div class="rg-card-hdr">
-      <div class="rg-card-icon" style="background:#e3f2fd">📅</div>
+      <div class="rg-card-icon" style="background:#e3f2fd"><i class="ph ph-calendar" aria-hidden="true"></i></div>
       <div>
         <div class="rg-card-title">Rapport journalier</div>
         <div class="rg-card-sub">Consommations et état du stock pour la période sélectionnée.</div>
@@ -527,7 +527,7 @@ include __DIR__ . '/../templates/header.php';
   <!-- Rapport mensuel -->
   <div class="rg-card">
     <div class="rg-card-hdr">
-      <div class="rg-card-icon" style="background:#e8f5e9">📆</div>
+      <div class="rg-card-icon" style="background:#e8f5e9"><i class="ph ph-calendar-blank" aria-hidden="true"></i></div>
       <div>
         <div class="rg-card-title">Rapport mensuel</div>
         <div class="rg-card-sub">Synthèse mensuelle des consommations avec totaux et tendances.</div>
@@ -551,7 +551,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- HISTORIQUE VALIDATIONS -->
 <div class="rg-card-full">
   <div class="rg-card-hdr">
-    <div class="rg-card-icon" style="background:#d1fae5">✅</div>
+    <div class="rg-card-icon" style="background:#d1fae5"><i class="ph ph-check-circle" aria-hidden="true"></i></div>
     <div>
       <div class="rg-card-title">Historique des validations</div>
       <div class="rg-card-sub">Export de toutes les validations de stock (date, bobine, écarts, validateur, commentaires).</div>

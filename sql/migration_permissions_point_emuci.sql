@@ -1,6 +1,6 @@
 -- ============================================================
 --  Permission de lecture « point_emuci » pour les rôles qui utilisent
---  déjà la page des points journaliers (variante MySQL)
+--  déjà la page des points journaliers
 -- ============================================================
 --
 --  Constat du 2026-07-30. Le tableau de bord par profil fait dépendre
@@ -43,8 +43,9 @@ WHERE r.slug IN ('coordinateur_site', 'gestionnaire_operation')
 -- Une ligne déjà présente mais à can_read = 0 doit passer à 1 : le but est
 -- que ces rôles puissent lire, quel que soit l'état antérieur.
 UPDATE permissions p
-JOIN roles r ON p.role_id = r.id
-SET p.can_read = 1
-WHERE p.module = 'point_emuci'
+SET can_read = 1
+FROM roles r
+WHERE p.role_id = r.id
+  AND p.module = 'point_emuci'
   AND r.slug IN ('coordinateur_site', 'gestionnaire_operation')
   AND p.can_read <> 1;

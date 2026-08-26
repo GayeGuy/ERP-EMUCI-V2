@@ -12,8 +12,20 @@ RUN apt-get update && apt-get install -y \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Activer les variables d'environnement en PHP
+#
+# display_errors=Off : l'image de base php:8.2-cli n'embarque aucun
+# php.ini (confirmé : "Loaded Configuration File => (none)"), et son
+# défaut compilé est display_errors=STDOUT — chaque erreur, avertissement
+# ou trace de pile PHP s'affichait donc en clair dans la réponse HTTP,
+# avec chemins serveur complets, sur n'importe quelle page. Les erreurs
+# restent journalisées (log_errors=On, visibles via `docker logs`/Render
+# Logs) — rien n'est perdu pour le débogage, juste plus montré au visiteur.
 RUN echo "variables_order = EGPCS" >> /usr/local/etc/php/php.ini \
-    && echo "auto_prepend_file =" >> /usr/local/etc/php/php.ini
+    && echo "auto_prepend_file =" >> /usr/local/etc/php/php.ini \
+    && echo "display_errors = Off" >> /usr/local/etc/php/php.ini \
+    && echo "display_startup_errors = Off" >> /usr/local/etc/php/php.ini \
+    && echo "log_errors = On" >> /usr/local/etc/php/php.ini \
+    && echo "error_reporting = E_ALL" >> /usr/local/etc/php/php.ini
 
 # Installer Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer

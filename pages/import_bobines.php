@@ -236,7 +236,7 @@ include __DIR__ . '/../templates/header.php';
 .site-arrow{color:var(--muted);font-size:16px;flex-shrink:0}
 .alert-success{background:#eafaf1;border:1px solid #a9dfbf;border-radius:10px;padding:16px 20px;font-size:13px;color:#1e8449}
 .alert-danger{background:#fdf0ef;border:1px solid #f5c6cb;border-radius:10px;padding:12px 16px;font-size:13px;color:#c0392b;margin-bottom:16px}
-.format-chip{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#e3f2fd;color:#1565c0;margin:2px}
+.format-chip{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600;background:#e3f2fd;color:#1565c0;margin:2px}
 </style>
 
 <div style="max-width:860px">
@@ -248,10 +248,10 @@ include __DIR__ . '/../templates/header.php';
 <?php if($result && $result['success']): ?>
 <!-- RÉSULTAT IMPORT -->
 <div class="alert-success" style="margin-bottom:20px">
-  <div style="font-size:16px;font-weight:700;margin-bottom:8px">✅ Import réussi !</div>
+  <div style="font-size:16px;font-weight:700;margin-bottom:8px"><i class="ph ph-check-circle" aria-hidden="true"></i> Import réussi !</div>
   <div style="display:flex;gap:24px;flex-wrap:wrap">
     <span>🆕 <strong><?= $result['created'] ?></strong> bobines créées</span>
-    <span>🔄 <strong><?= $result['updated'] ?></strong> bobines mises à jour</span>
+    <span><i class="ph ph-arrow-clockwise" aria-hidden="true"></i> <strong><?= $result['updated'] ?></strong> bobines mises à jour</span>
     <span>⏭ <strong><?= $result['ignored'] ?></strong> ignorées</span>
   </div>
   <div style="margin-top:12px">
@@ -263,14 +263,14 @@ include __DIR__ . '/../templates/header.php';
 
 <?php if(!empty($errors)): ?>
 <div class="alert-danger">
-  <?php foreach($errors as $e): ?><div>⚠️ <?= h($e) ?></div><?php endforeach; ?>
+  <?php foreach($errors as $e): ?><div><i class="ph ph-warning" aria-hidden="true"></i> <?= h($e) ?></div><?php endforeach; ?>
 </div>
 <?php endif; ?>
 
 <?php if(!$preview): ?>
 <!-- ÉTAPE 1 : Upload fichier -->
 <div class="import-card">
-  <h3>📤 Importer le stock bobines depuis Excel</h3>
+  <h3><i class="ph ph-upload-simple" aria-hidden="true"></i> Importer le stock bobines depuis Excel</h3>
   <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
     Le fichier doit contenir les colonnes : <code>keyname</code>, <code>format</code>, <code>quantity</code>, <code>site</code>, <code>state</code>
   </p>
@@ -291,18 +291,18 @@ include __DIR__ . '/../templates/header.php';
       <input type="file" name="fichier_excel" accept=".xlsx,.xls"
              style="width:100%;padding:10px;border:2px dashed var(--border);border-radius:8px;font-size:13px;cursor:pointer;background:var(--lighter)">
     </div>
-    <button type="submit" class="btn btn-primary">📊 Analyser le fichier</button>
+    <button type="submit" class="btn btn-primary"><i class="ph ph-chart-bar" aria-hidden="true"></i> Analyser le fichier</button>
   </form>
 </div>
 
 <?php else: ?>
 <!-- ÉTAPE 2 : Aperçu + Mapping sites -->
 <div class="import-card">
-  <h3>📊 Aperçu — <?= $preview['total'] ?> bobines détectées</h3>
+  <h3><i class="ph ph-chart-bar" aria-hidden="true"></i> Aperçu — <?= $preview['total'] ?> bobines détectées</h3>
 
   <div class="stat-grid">
     <div class="stat-box"><div class="stat-val"><?= $preview['total'] ?></div><div class="stat-lbl">Total bobines</div></div>
-    <div class="stat-box"><div class="stat-val" style="color:var(--success)"><?= $preview['avec_films'] ?></div><div class="stat-lbl">Avec films restants</div></div>
+    <div class="stat-box"><div class="stat-val" style="color:var(--success-d)"><?= $preview['avec_films'] ?></div><div class="stat-lbl">Avec films restants</div></div>
     <div class="stat-box"><div class="stat-val" style="color:var(--muted)"><?= $preview['retirees'] ?></div><div class="stat-lbl">Retirées (state=7)</div></div>
     <div class="stat-box"><div class="stat-val" style="color:var(--blue-mid,#1a56a0)"><?= count($preview['formats']) ?></div><div class="stat-lbl">Types de format</div></div>
   </div>
@@ -321,7 +321,7 @@ include __DIR__ . '/../templates/header.php';
 
   <!-- Mapping des sites -->
   <div class="import-card">
-    <h3>🏢 Correspondance des sites</h3>
+    <h3><i class="ph ph-buildings" aria-hidden="true"></i> Correspondance des sites</h3>
     <p style="font-size:13px;color:var(--muted);margin-bottom:16px">
       Associez chaque site du fichier Excel à un site de l'application. Laissez "Ignorer" si le site n'existe pas.
     </p>
@@ -335,7 +335,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="site-row">
       <div class="site-nom">
         <?= h($sf) ?>
-        <div style="font-size:11px;color:var(--muted);font-weight:400"><?= $nb_bobs ?> bob · <?= number_format($nb_films) ?> films</div>
+        <div style="font-size:12px;color:var(--muted);font-weight:400"><?= $nb_bobs ?> bob · <?= number_format($nb_films) ?> films</div>
       </div>
       <div class="site-arrow">→</div>
       <div style="flex:1">
@@ -347,7 +347,7 @@ include __DIR__ . '/../templates/header.php';
         </select>
       </div>
       <?php if($auto_id): ?>
-      <span style="font-size:11px;color:var(--success);font-weight:600;white-space:nowrap">✅ Auto-mappé</span>
+      <span style="font-size:12px;color:var(--success-d);font-weight:600;white-space:nowrap"><i class="ph ph-check-circle" aria-hidden="true"></i> Auto-mappé</span>
       <?php endif; ?>
     </div>
     <?php endforeach; ?>
@@ -355,7 +355,7 @@ include __DIR__ . '/../templates/header.php';
 
   <!-- Options import -->
   <div class="import-card">
-    <h3>⚙️ Options d'import</h3>
+    <h3><i class="ph ph-gear" aria-hidden="true"></i> Options d'import</h3>
     <div style="display:flex;flex-direction:column;gap:12px">
       <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13px">
         <input type="checkbox" name="skip_retirees" value="1" checked style="width:16px;height:16px">
@@ -376,11 +376,11 @@ include __DIR__ . '/../templates/header.php';
 
   <div style="display:flex;gap:12px;align-items:center">
     <button type="submit" class="btn btn-primary" style="font-size:14px;padding:12px 28px">
-      🚀 Lancer l'import
+      <i class="ph ph-rocket-launch" aria-hidden="true"></i> Lancer l'import
     </button>
     <a href="<?= APP_URL ?>/pages/import_bobines.php" style="font-size:13px;color:var(--muted)">↩ Recommencer</a>
     <span style="font-size:12px;color:var(--muted);margin-left:auto">
-      ⚠️ Cette action va créer ou mettre à jour les bobines dans la base de données.
+      <i class="ph ph-warning" aria-hidden="true"></i> Cette action va créer ou mettre à jour les bobines dans la base de données.
     </span>
   </div>
 </form>

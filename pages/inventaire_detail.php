@@ -44,6 +44,11 @@ $role_slug    = $user['role_slug'] ?? '';
 $can_edit     = $inv['statut'] === 'brouillon' && can('inventaire_bobines','can_update');
 $can_validate = $inv['statut'] === 'brouillon'
     && in_array($role_slug, ['admin','superadmin','superviseur_operation','gestionnaire_stock_bobines','gestionnaire_stock']);
+$is_coord           = ($role_slug === 'coordinateur_site');
+// Seuls l'admin/superadmin (ou une délégation du module) peuvent interpeller
+// directement le site sur une ligne verrouillée, ou autoriser/refuser une
+// demande d'autorisation venue du coordinateur.
+$can_demander_site  = can('inventaire_sessions','can_read');
 $page_title  = 'Inventaire du ' . fmt_date($inv['date_inventaire']);
 $active_page = 'inventaire_bobines';
 
@@ -54,12 +59,13 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
     header('Content-Type: application/json');
     $action = $_POST['action'] ?? '';
 
-    // ── SAUVER UNE LIGNE (stock physique + écart connu)
+    // ── SAUVER UNE LIGNE (stock physique — l'écart connu est en lecture seule,
+    //    renseigné par le système à l'ouverture de l'inventaire, cf. n° 17
+    //    réunion ERP : la saisie libre était une source d'erreur.)
     if ($action==='sauver_ligne') {
         if (!$can_edit) json_response(false,'Inventaire non modifiable.');
         $detail_id      = (int)($_POST['detail_id']     ?? 0);
         $stock_physique = $_POST['stock_physique'] !== '' ? (int)$_POST['stock_physique'] : null;
-        $ecart_connu    = $_POST['ecart_connu']    !== '' ? (int)$_POST['ecart_connu']    : 0;
         $notes          = trim($_POST['notes'] ?? '');
 
         $det = db_fetch_one(
@@ -69,8 +75,9 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         );
         if (!$det) json_response(false,'Ligne introuvable.');
 
-        $stock_sys   = (int)$det['stock_systeme'];
-        $stock_phy   = $stock_physique !== null ? $stock_physique : (int)$det['stock_physique'];
+        $stock_sys    = (int)$det['stock_systeme'];
+        $stock_phy    = $stock_physique !== null ? $stock_physique : (int)$det['stock_physique'];
+        $ecart_connu  = (int)($det['ecart_connu_avant'] ?? 0);
         $ecart_mesure = $stock_phy - $stock_sys;       // écart détecté lors de l'inventaire
         $ecart_total  = $ecart_mesure + $ecart_connu;  // écart total = mesuré + connu
 
@@ -89,25 +96,198 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
             [$stock_phy, $ecart_mesure, $jours_sys, $jours_phy, $date_epuis, $notes, $detail_id]
         );
 
-        // Sauver l'écart connu dans ecarts_bobines si non nul
-        if ($ecart_connu != 0) {
-            // Supprimer l'éventuel écart connu précédent de cet inventaire pour cette bobine
-            db_query(
-                "DELETE FROM ecarts_bobines
-                 WHERE bobine_id=? AND source='manuel' AND inventaire_id IS NULL
-                   AND DATE(created_at)=CURRENT_DATE",
-                [$det['bobine_id']]
-            );
-            db_query(
-                "INSERT INTO ecarts_bobines (bobine_id,date_constat,stock_systeme,stock_physique,ecart,motif,source,statut,created_by)
-                 VALUES (?,?,?,?,?,?,?,?,?)",
-                [$det['bobine_id'], $inv['date_inventaire'], $stock_sys, $stock_phy,
-                 $ecart_connu, $notes ?: 'Écart connu déclaré lors inventaire #'.$inv_id,
-                 'manuel','ouvert',$user['id']]
-            );
+        json_response(true,'Sauvegardé.',['ecart_mesure'=>$ecart_mesure,'ecart_total'=>$ecart_total,'jours_phy'=>$jours_phy,'date_epuis'=>$date_epuis]);
+    }
+
+    // ── DEMANDER UNE MODIFICATION sur une ligne déjà saisie (verrouillée) —
+    //    réservé à l'admin/superadmin ou à la personne qui a ouvert la
+    //    session (délégation) : le site répond directement (ligne déjà
+    //    déverrouillée), pas d'étape d'autorisation.
+    if ($action==='demander_modif') {
+        if (!$can_demander_site) json_response(false,'Action réservée à l\'administrateur ou au responsable de session.');
+        $detail_id       = (int)($_POST['detail_id'] ?? 0);
+        $motif           = trim($_POST['motif'] ?? '');
+        $valeur_proposee = ($_POST['valeur_proposee'] ?? '') !== '' ? (int)$_POST['valeur_proposee'] : null;
+        if ($motif === '') json_response(false,'Le motif est obligatoire.');
+
+        $det = db_fetch_one(
+            "SELECT d.*, b.numero FROM inventaire_details_bobines d
+             JOIN op_bobines b ON b.id=d.bobine_id WHERE d.id=? AND d.inventaire_id=?",
+            [$detail_id, $inv_id]
+        );
+        if (!$det) json_response(false,'Ligne introuvable.');
+        if ((int)$det['stock_physique']===0 && (int)$det['ecart']===0) json_response(false,"Cette ligne n'a pas encore été saisie.");
+        if (db_fetch_value("SELECT COUNT(*) FROM inventaire_corrections WHERE detail_id=? AND statut IN ('en_attente','autorise')", [$detail_id])) {
+            json_response(false,'Une demande est déjà en cours pour cette ligne.');
         }
 
-        json_response(true,'Sauvegardé.',['ecart_mesure'=>$ecart_mesure,'ecart_total'=>$ecart_total,'jours_phy'=>$jours_phy,'date_epuis'=>$date_epuis]);
+        db_query(
+            "INSERT INTO inventaire_corrections (detail_id,inventaire_id,bobine_id,site_id,stock_physique_actuel,valeur_proposee,motif,demandeur_id,type)
+             VALUES (?,?,?,?,?,?,?,?,'demande_site')",
+            [$detail_id, $inv_id, $det['bobine_id'], $inv['site_id'], (int)$det['stock_physique'], $valeur_proposee, $motif, $user['id']]
+        );
+        $corr_id = (int)db_last_id();
+
+        $nom = trim(($user['prenom'] ?? '').' '.($user['nom'] ?? ''));
+        $coords = db_fetch_all(
+            "SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id
+             WHERE r.slug='coordinateur_site' AND u.actif=1 AND u.site_id=?",
+            [$inv['site_id']]
+        );
+        foreach ($coords as $c) {
+            db_query(
+                "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                [$c['id'], 'info', '🔁 Demande de modification',
+                 "$nom demande une modification sur la bobine {$det['numero']} de votre inventaire du " . fmt_date($inv['date_inventaire']) . " : $motif",
+                 '/pages/inventaire_detail.php?id=' . $inv_id]
+            );
+        }
+        audit_log($user['id'],'CREATE','inventaire_corrections',$corr_id,"Demande modif bobine {$det['numero']} inventaire #$inv_id");
+        json_response(true,'Demande envoyée au site.',['id'=>$corr_id]);
+    }
+
+    // ── DEMANDER UNE AUTORISATION DE MODIFICATION — le coordinateur (site)
+    //    ne peut pas rouvrir sa ligne lui-même : il demande l'accord de
+    //    l'admin, qui doit autoriser avant que le champ ne se déverrouille.
+    if ($action==='demander_autorisation') {
+        if (!$is_coord) json_response(false,'Action réservée au coordinateur de site.');
+        $detail_id       = (int)($_POST['detail_id'] ?? 0);
+        $motif           = trim($_POST['motif'] ?? '');
+        $valeur_proposee = ($_POST['valeur_proposee'] ?? '') !== '' ? (int)$_POST['valeur_proposee'] : null;
+        if ($motif === '') json_response(false,'Le motif est obligatoire.');
+
+        $det = db_fetch_one(
+            "SELECT d.*, b.numero FROM inventaire_details_bobines d
+             JOIN op_bobines b ON b.id=d.bobine_id WHERE d.id=? AND d.inventaire_id=?",
+            [$detail_id, $inv_id]
+        );
+        if (!$det) json_response(false,'Ligne introuvable.');
+        if ((int)$det['stock_physique']===0 && (int)$det['ecart']===0) json_response(false,"Cette ligne n'a pas encore été saisie.");
+        if (db_fetch_value("SELECT COUNT(*) FROM inventaire_corrections WHERE detail_id=? AND statut IN ('en_attente','autorise')", [$detail_id])) {
+            json_response(false,'Une demande est déjà en cours pour cette ligne.');
+        }
+
+        db_query(
+            "INSERT INTO inventaire_corrections (detail_id,inventaire_id,bobine_id,site_id,stock_physique_actuel,valeur_proposee,motif,demandeur_id,type)
+             VALUES (?,?,?,?,?,?,?,?,'demande_autorisation')",
+            [$detail_id, $inv_id, $det['bobine_id'], $inv['site_id'], (int)$det['stock_physique'], $valeur_proposee, $motif, $user['id']]
+        );
+        $corr_id = (int)db_last_id();
+
+        $nom = trim(($user['prenom'] ?? '').' '.($user['nom'] ?? ''));
+        $admins = db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug IN ('admin','superadmin') AND u.actif=1");
+        foreach ($admins as $a) {
+            db_query(
+                "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+                [$a['id'], 'info', '🔒 Demande d\'autorisation de modification',
+                 "$nom demande à modifier la bobine {$det['numero']} sur l'inventaire du " . fmt_date($inv['date_inventaire']) . " ({$inv['site_nom']}) : $motif",
+                 '/pages/inventaire_detail.php?id=' . $inv_id]
+            );
+        }
+        audit_log($user['id'],'CREATE','inventaire_corrections',$corr_id,"Demande autorisation bobine {$det['numero']} inventaire #$inv_id");
+        json_response(true,"Demande d'autorisation envoyée à l'administrateur.",['id'=>$corr_id]);
+    }
+
+    // ── AUTORISER une demande du coordinateur — déverrouille la ligne
+    if ($action==='autoriser_modif') {
+        if (!$can_demander_site) json_response(false,'Action réservée à l\'administrateur ou au responsable de session.');
+        $corr_id = (int)($_POST['correction_id'] ?? 0);
+        $corr = db_fetch_one(
+            "SELECT * FROM inventaire_corrections WHERE id=? AND inventaire_id=? AND type='demande_autorisation' AND statut='en_attente'",
+            [$corr_id, $inv_id]
+        );
+        if (!$corr) json_response(false,'Demande introuvable ou déjà traitée.');
+
+        db_query("UPDATE inventaire_corrections SET statut='autorise', autorise_par=?, autorise_at=NOW() WHERE id=?", [$user['id'], $corr_id]);
+        $det = db_fetch_one("SELECT numero FROM op_bobines WHERE id=?", [$corr['bobine_id']]);
+        $nom = trim(($user['prenom'] ?? '').' '.($user['nom'] ?? ''));
+        db_query(
+            "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+            [$corr['demandeur_id'], 'info', '✅ Autorisation accordée',
+             "$nom a autorisé la modification de la bobine {$det['numero']} : vous pouvez corriger la quantité physique.",
+             '/pages/inventaire_detail.php?id=' . $inv_id]
+        );
+        audit_log($user['id'],'UPDATE','inventaire_corrections',$corr_id,"Autorisation accordée bobine {$det['numero']} inventaire #$inv_id");
+        json_response(true,'Autorisation accordée — le site peut maintenant corriger la ligne.');
+    }
+
+    // ── REFUSER une demande du coordinateur — la ligne reste verrouillée
+    if ($action==='refuser_modif') {
+        if (!$can_demander_site) json_response(false,'Action réservée à l\'administrateur ou au responsable de session.');
+        $corr_id = (int)($_POST['correction_id'] ?? 0);
+        $motif_refus = trim($_POST['motif'] ?? '');
+        $corr = db_fetch_one(
+            "SELECT * FROM inventaire_corrections WHERE id=? AND inventaire_id=? AND type='demande_autorisation' AND statut='en_attente'",
+            [$corr_id, $inv_id]
+        );
+        if (!$corr) json_response(false,'Demande introuvable ou déjà traitée.');
+
+        db_query(
+            "UPDATE inventaire_corrections SET statut='refuse', reponse=?, traite_par=?, traite_at=NOW() WHERE id=?",
+            [$motif_refus ?: null, $user['id'], $corr_id]
+        );
+        $det = db_fetch_one("SELECT numero FROM op_bobines WHERE id=?", [$corr['bobine_id']]);
+        $nom = trim(($user['prenom'] ?? '').' '.($user['nom'] ?? ''));
+        db_query(
+            "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+            [$corr['demandeur_id'], 'info', '❌ Autorisation refusée',
+             "$nom a refusé la demande de modification sur la bobine {$det['numero']}" . ($motif_refus ? " : $motif_refus" : '.'),
+             '/pages/inventaire_detail.php?id=' . $inv_id]
+        );
+        audit_log($user['id'],'UPDATE','inventaire_corrections',$corr_id,"Autorisation refusée bobine {$det['numero']} inventaire #$inv_id");
+        json_response(true,'Demande refusée.');
+    }
+
+    // ── RÉPONDRE à une demande de modification — le site corrige la valeur.
+    //    Couvre les deux cas : demande directe de l'admin (en_attente) et
+    //    demande d'autorisation déjà accordée (autorise).
+    if ($action==='repondre_modif') {
+        if (!$can_edit) json_response(false,'Action non autorisée.');
+        $corr_id       = (int)($_POST['correction_id'] ?? 0);
+        $valeur_finale = ($_POST['valeur_finale'] ?? '') !== '' ? (int)$_POST['valeur_finale'] : null;
+        $reponse       = trim($_POST['reponse'] ?? '');
+        if ($valeur_finale === null) json_response(false,'La valeur corrigée est obligatoire.');
+
+        $corr = db_fetch_one("SELECT * FROM inventaire_corrections WHERE id=? AND inventaire_id=? AND statut IN ('en_attente','autorise')", [$corr_id, $inv_id]);
+        if (!$corr) json_response(false,'Demande introuvable ou déjà traitée.');
+        if ($corr['type'] === 'demande_autorisation' && $corr['statut'] !== 'autorise') {
+            json_response(false,"Cette demande doit d'abord être autorisée par l'administrateur.");
+        }
+
+        $det = db_fetch_one(
+            "SELECT d.*, b.stock_systeme, b.numero FROM inventaire_details_bobines d
+             JOIN op_bobines b ON b.id=d.bobine_id WHERE d.id=?",
+            [$corr['detail_id']]
+        );
+        $stock_sys    = (int)$det['stock_systeme'];
+        $ecart_mesure = $valeur_finale - $stock_sys;
+        $conso_moy    = (float)$det['conso_quotidienne_moy'];
+        $jours_phy    = $conso_moy > 0 ? (int)ceil($valeur_finale / $conso_moy) : null;
+        $date_epuis   = $jours_phy ? date('Y-m-d', strtotime("+{$jours_phy} days")) : null;
+
+        db_begin();
+        try {
+            db_query(
+                "UPDATE inventaire_details_bobines SET stock_physique=?,ecart=?,jours_restants_physique=?,date_epuisement_estime=? WHERE id=?",
+                [$valeur_finale, $ecart_mesure, $jours_phy, $date_epuis, $corr['detail_id']]
+            );
+            db_query(
+                "UPDATE inventaire_corrections SET statut='traite',valeur_finale=?,reponse=?,traite_par=?,traite_at=NOW() WHERE id=?",
+                [$valeur_finale, $reponse ?: null, $user['id'], $corr_id]
+            );
+            audit_log($user['id'],'UPDATE','inventaire_corrections',$corr_id,"Réponse modif bobine {$det['numero']} inventaire #$inv_id : $valeur_finale");
+            db_commit();
+        } catch (Exception $e) { db_rollback(); json_response(false,'Erreur: '.$e->getMessage()); }
+
+        $nom = trim(($user['prenom'] ?? '').' '.($user['nom'] ?? ''));
+        db_query(
+            "INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
+            [$corr['demandeur_id'], 'info', '↩ Réponse à votre demande',
+             "$nom a répondu à votre demande de modification sur la bobine {$det['numero']} : nouvelle valeur $valeur_finale.",
+             '/pages/inventaire_detail.php?id=' . $inv_id]
+        );
+
+        json_response(true,'Réponse envoyée.',['ecart_mesure'=>$ecart_mesure,'jours_phy'=>$jours_phy,'date_epuis'=>$date_epuis]);
     }
 
     // ── TOUT SAUVER
@@ -120,7 +300,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
             foreach ($lignes_data as $ld) {
                 $detail_id   = (int)($ld['id'] ?? 0);
                 $phy_val     = $ld['phy'] !== '' ? (int)$ld['phy'] : null;
-                $connu_val   = (int)($ld['connu'] ?? 0);
                 $notes       = trim($ld['notes'] ?? '');
                 if ($phy_val === null) continue;
 
@@ -143,15 +322,6 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
                     "UPDATE inventaire_details_bobines SET stock_physique=?,ecart=?,jours_restants_physique=?,date_epuisement_estime=?,notes=? WHERE id=?",
                     [$phy_val,$ecart_mes,$jours_phy,$date_epuis,$notes,$detail_id]
                 );
-
-                if ($connu_val != 0) {
-                    db_query(
-                        "INSERT INTO ecarts_bobines (bobine_id,date_constat,stock_systeme,stock_physique,ecart,motif,source,statut,created_by)
-                         VALUES (?,?,?,?,?,?,?,?,?)",
-                        [$det['bobine_id'],$inv['date_inventaire'],$stock_sys,$phy_val,
-                         $connu_val,'Écart connu – inventaire #'.$inv_id,'manuel','ouvert',$user['id']]
-                    );
-                }
                 $saved++;
             }
             db_commit();
@@ -164,13 +334,22 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         if (!$can_validate) json_response(false,'Seul le GSB ou un administrateur peut valider l\'inventaire.');
         $lignes = db_fetch_all("SELECT * FROM inventaire_details_bobines WHERE inventaire_id=?",[$inv_id]);
         $nb_ecarts = 0;
+        $total_physique = 0;
         db_begin();
         try {
             foreach ($lignes as $l) {
-                // Ignorer les lignes sans stock physique déclaré
-                if ($l['stock_physique'] === null || $l['stock_physique'] === '') continue;
+                // Ignorer les lignes sans stock physique déclaré. La colonne est
+                // NOT NULL (défaut 0 à la création, cf. inventaire_bobines.php),
+                // donc le seul moyen fiable de distinguer « jamais saisi » de
+                // « saisi à zéro » est le même critère que le récap de
+                // validation (n° 18) : stock_physique>0 OU un écart déjà stocké.
+                // Un test sur === null/'' ne se déclenche jamais et laissait
+                // passer toutes les lignes non saisies avec physique=0, ce qui
+                // vidait à tort le stock système de chaque bobine non comptée.
+                if ((int)$l['stock_physique'] <= 0 && (int)$l['ecart'] == 0) continue;
                 $phy     = (int)$l['stock_physique'];
                 $sys_inv = (int)$l['stock_systeme']; // snapshot au moment de la saisie
+                $total_physique += $phy;
 
                 // Toujours appliquer le stock physique déclaré — source de vérité
                 db_query(
@@ -207,8 +386,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
                     );
                 }
             }
-            db_query("UPDATE inventaires_bobines SET statut='valide',nb_ecarts=?,valide_par=?,valide_at=NOW() WHERE id=?",
-                [$nb_ecarts,$user['id'],$inv_id]);
+            db_query("UPDATE inventaires_bobines SET statut='valide',nb_ecarts=?,total_films_physique=?,valide_par=?,valide_at=NOW() WHERE id=?",
+                [$nb_ecarts,$total_physique,$user['id'],$inv_id]);
             audit_log($user['id'],'UPDATE','inventaire_bobines',$inv_id,"Validation inventaire #$inv_id — $nb_ecarts écart(s)");
             db_commit();
             json_response(true,"Inventaire validé. $nb_ecarts écart(s) traité(s).");
@@ -256,6 +435,31 @@ if (!empty($bobine_ids)) {
          GROUP BY bobine_id", $params_ec
     );
     foreach ($ecs as $ec) $ecarts_connus_map[$ec['bobine_id']] = $ec;
+}
+
+// Demandes de modification par ligne : la plus récente active (en_attente
+// ou autorise — déverrouille ou non selon le type), et la plus récente
+// close (traite/refuse, pour l'historique). Une ligne ne peut avoir
+// qu'une seule demande active à la fois (contrôlé à la création).
+$corrections_map = [];
+$corrections_rows = db_fetch_all(
+    "SELECT c.*, CONCAT(u1.prenom,' ',u1.nom) AS demandeur_nom, CONCAT(u2.prenom,' ',u2.nom) AS traite_par_nom
+     FROM inventaire_corrections c
+     LEFT JOIN users u1 ON u1.id = c.demandeur_id
+     LEFT JOIN users u2 ON u2.id = c.traite_par
+     WHERE c.inventaire_id = ?
+     ORDER BY c.created_at DESC",
+    [$inv_id]
+);
+foreach ($corrections_rows as $c) {
+    $did = (int)$c['detail_id'];
+    if (!isset($corrections_map[$did])) $corrections_map[$did] = ['active' => null, 'close' => null];
+    if (in_array($c['statut'], ['en_attente','autorise'], true) && !$corrections_map[$did]['active']) {
+        $corrections_map[$did]['active'] = $c;
+    }
+    if (in_array($c['statut'], ['traite','refuse'], true) && !$corrections_map[$did]['close']) {
+        $corrections_map[$did]['close'] = $c;
+    }
 }
 
 // Stats
@@ -448,29 +652,30 @@ input.saisie{width:80px;padding:5px 8px;border:1.5px solid #e2e8f0;border-radius
 input.saisie:focus{outline:none;border-color:var(--blue-mid,#1a56a0)}
 input.saisie.ok{border-color:#27ae60;background:#f0fdf4}
 input.saisie.nok{border-color:#e74c3c;background:#fff5f5}
-input.connu{width:70px;padding:5px 8px;border:1.5px dashed #f39c12;border-radius:6px;text-align:right;
-            font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;background:#fffbf0;transition:border-color .2s}
-input.connu:focus{outline:none;border-color:#e67e22}
-input.connu.filled{border-color:#e67e22;background:#fff3cd}
+input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacity:1}
 
 .ecart-val{font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800}
 .ecart-pos{color:#27ae60}
 .ecart-neg{color:#e74c3c}
 .ecart-zero{color:#27ae60}
 
-.badge-connu{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;white-space:nowrap}
+.badge-connu{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:700;white-space:nowrap}
 </style>
 
 <!-- TOOLBAR -->
 <div class="inv-toolbar">
   <div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+      <?php if ($inv['session_id'] && can('inventaire_sessions','can_read')): ?>
+      <a href="<?= APP_URL ?>/pages/inventaire_sessions.php?id=<?= (int)$inv['session_id'] ?>" style="color:var(--muted);font-size:13px;text-decoration:none">← Session</a>
+      <?php else: ?>
       <a href="<?= APP_URL ?>/pages/inventaire_bobines.php" style="color:var(--muted);font-size:13px;text-decoration:none">← Inventaires</a>
+      <?php endif; ?>
       <h2 style="font-family:'Montserrat',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">
         Inventaire du <?= fmt_date($inv['date_inventaire']) ?>
       </h2>
       <span style="padding:3px 10px;border-radius:6px;font-size:12px;font-weight:700;background:<?= $inv['statut']==='valide'?'#eafaf1':($inv['statut']==='brouillon'?'#fff8e7':'#fdf0ef') ?>;color:<?= $inv['statut']==='valide'?'#1e8449':($inv['statut']==='brouillon'?'#b7791f':'#c0392b') ?>">
-        <?= ['brouillon'=>'⏳ Brouillon','valide'=>'✅ Validé','annule'=>'❌ Annulé'][$inv['statut']]??$inv['statut'] ?>
+        <?= ['brouillon'=>'⏳ Brouillon','valide'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Validé','annule'=>'<i class="ph ph-x-circle" aria-hidden="true"></i> Annulé'][$inv['statut']]??$inv['statut'] ?>
       </span>
     </div>
     <div class="inv-meta">
@@ -485,42 +690,99 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
       <i class="ph-duotone ph-file-pdf"></i> PDF
     </a>
     <?php if($can_edit): ?>
-    <button class="btn btn-secondary" id="btnSauverTout" onclick="sauverTout()">💾 Tout sauver</button>
+    <button class="btn btn-secondary" id="btnSauverTout" onclick="sauverTout()"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Tout sauver</button>
     <?php endif; ?>
     <?php if($can_validate): ?>
-    <button class="btn btn-success" onclick="validerInventaire()">✅ Valider l'inventaire</button>
+    <button class="btn btn-success" onclick="ouvrirRecapValidation()"><i class="ph ph-check-circle" aria-hidden="true"></i> Valider l'inventaire</button>
     <?php endif; ?>
   </div>
 </div>
 
 <!-- STATS -->
 <div class="stat-chips">
-  <span class="chip blue">📦 Bobines : <strong id="statTotal"><?= count($lignes) ?></strong></span>
-  <span class="chip green">✅ OK : <strong id="statOk"><?= $nb_saisis - $nb_ecarts ?></strong></span>
-  <span class="chip red">⚠️ Écarts : <strong id="statEcarts"><?= $nb_ecarts ?></strong></span>
+  <span class="chip blue"><i class="ph ph-package" aria-hidden="true"></i> Bobines : <strong id="statTotal"><?= count($lignes) ?></strong></span>
+  <span class="chip green"><i class="ph ph-check-circle" aria-hidden="true"></i> OK : <strong id="statOk"><?= $nb_saisis - $nb_ecarts ?></strong></span>
+  <span class="chip red"><i class="ph ph-warning" aria-hidden="true"></i> Écarts : <strong id="statEcarts"><?= $nb_ecarts ?></strong></span>
   <span class="chip gray">⏳ Non saisis : <strong id="statNonSaisis"><?= $nb_non_saisi ?></strong></span>
   <?php
   $nb_ecarts_connus = count(array_filter($bobine_ids, fn($id)=>isset($ecarts_connus_map[$id])));
   if($nb_ecarts_connus>0):
   ?>
-  <span class="chip orange">📋 Écarts connus : <strong><?= $nb_ecarts_connus ?></strong></span>
+  <span class="chip orange"><i class="ph ph-clipboard-text" aria-hidden="true"></i> Écarts connus : <strong><?= $nb_ecarts_connus ?></strong></span>
   <?php endif; ?>
 </div>
 
 <div id="alertZone"></div>
 
+<!-- MODAL RÉCAP VALIDATION (n° 18 réunion ERP) -->
+<div id="modalRecapValidation" style="display:none;position:fixed;inset:0;background:rgba(13,31,53,.5);z-index:800;align-items:center;justify-content:center"
+     onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:white;border-radius:16px;padding:24px 26px;width:100%;max-width:560px;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <h3 style="font-family:'Montserrat',sans-serif;font-size:17px;font-weight:800;color:var(--navy);margin:0 0 4px"><i class="ph ph-clipboard-text" aria-hidden="true"></i> Récapitulatif avant validation</h3>
+    <p style="font-size:13px;color:var(--muted);margin:0 0 16px">Vérifiez les données ci-dessous avant d'enregistrer définitivement l'inventaire.</p>
+    <div id="recapStats" style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px"></div>
+    <div id="recapNonSaisi" style="display:none;background:#fff8e7;color:#b7791f;border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:14px"></div>
+    <div id="recapEcarts"></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:20px;padding-top:14px;border-top:1px solid var(--border)">
+      <button class="btn btn-secondary" onclick="document.getElementById('modalRecapValidation').style.display='none'">Non, modifier les infos</button>
+      <button class="btn btn-success" id="btnConfirmerValidation" onclick="confirmerValidation()"><i class="ph ph-check-circle" aria-hidden="true"></i> Oui, valider l'inventaire</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL MOTIF (partagée : demander modif au site / demander autorisation / refuser) -->
+<div id="modalMotif" style="display:none;position:fixed;inset:0;background:rgba(13,31,53,.5);z-index:800;align-items:center;justify-content:center"
+     onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:white;border-radius:16px;padding:22px 24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <h3 id="modalMotifTitre" style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin:0 0 14px"></h3>
+    <div id="modalMotifAlert"></div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label id="modalMotifLabel" style="font-size:12.5px;font-weight:700">Motif *</label>
+      <textarea id="modalMotifTexte" rows="3" class="form-control" placeholder="Expliquez la raison…"></textarea>
+    </div>
+    <div class="form-group" id="modalMotifValeurWrap" style="margin-bottom:6px">
+      <label style="font-size:12.5px;font-weight:700">Valeur proposée <span style="font-weight:400;color:var(--muted)">(optionnel)</span></label>
+      <input type="number" min="0" id="modalMotifValeur" class="form-control" placeholder="Laisser vide si vous n'avez pas de valeur précise">
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
+      <button class="btn btn-secondary" onclick="document.getElementById('modalMotif').style.display='none'">Annuler</button>
+      <button class="btn btn-primary" id="btnModalMotif" onclick="envoyerModalMotif()">Envoyer</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL RÉPONDRE À UNE DEMANDE -->
+<div id="modalRepondreModif" style="display:none;position:fixed;inset:0;background:rgba(13,31,53,.5);z-index:800;align-items:center;justify-content:center"
+     onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:white;border-radius:16px;padding:22px 24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin:0 0 6px">↩ Répondre à la demande</h3>
+    <p style="font-size:12.5px;color:var(--muted);margin:0 0 14px">
+      Corrigez d'abord la valeur dans la colonne « Qté physique », puis confirmez ici.
+    </p>
+    <div id="repModifAlert"></div>
+    <div class="form-group" style="margin-bottom:6px">
+      <label style="font-size:12.5px;font-weight:700">Commentaire <span style="font-weight:400;color:var(--muted)">(optionnel)</span></label>
+      <textarea id="repModifTexte" rows="2" class="form-control" placeholder="Précision sur la correction…"></textarea>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
+      <button class="btn btn-secondary" onclick="document.getElementById('modalRepondreModif').style.display='none'">Annuler</button>
+      <button class="btn btn-primary" id="btnEnvoyerRepModif" onclick="envoyerReponseModif()">Confirmer la correction</button>
+    </div>
+  </div>
+</div>
+
 <!-- LÉGENDE -->
 <div style="display:flex;gap:16px;font-size:12px;color:var(--muted);margin-bottom:12px;align-items:center">
-  <span>📝 <strong>Films comptés</strong> : stock réel compté physiquement</span>
+  <span><i class="ph ph-note-pencil" aria-hidden="true"></i> <strong>Films comptés</strong> : stock réel compté physiquement</span>
   <span style="border-left:1px solid var(--border);padding-left:16px">
-    <span style="border-bottom:2px dashed #f39c12;padding-bottom:1px"><strong>Écart connu</strong></span> : différence connue avant l'inventaire (saisir + ou -)
+    <span style="border-bottom:2px dashed #f39c12;padding-bottom:1px"><strong>Écart connu</strong></span> : différence connue avant l'inventaire, renseignée automatiquement par le système
   </span>
 </div>
 
 <!-- TABLEAU PRINCIPAL -->
 <div style="background:#e8f4fd;border:1px solid #90caf9;border-radius:10px;padding:10px 16px;margin-bottom:14px;font-size:13px;display:flex;gap:20px;flex-wrap:wrap">
-  <span>📌 <strong>Qté physique</strong> = photo figée à la date de l'inventaire</span>
-  <span style="border-left:1px solid #90caf9;padding-left:20px">🔴 <strong>Qté temps réel</strong> = stock actuel mis à jour en continu par les consommations</span>
+  <span><i class="ph ph-push-pin" aria-hidden="true"></i> <strong>Qté physique</strong> = photo figée à la date de l'inventaire</span>
+  <span style="border-left:1px solid #90caf9;padding-left:20px"><i class="ph ph-circle" aria-hidden="true"></i> <strong>Qté temps réel</strong> = stock actuel mis à jour en continu par les consommations</span>
   <span style="border-left:1px solid #90caf9;padding-left:20px;border-bottom:2px dashed #f39c12;padding-bottom:1px"><strong>Écart connu</strong> = différence connue avant l'inventaire</span>
 </div>
 
@@ -532,15 +794,18 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
           <th style="padding:10px 14px;text-align:left">Numéro</th>
           <th style="padding:10px 14px">Type</th>
           <th style="padding:10px 14px">Site</th>
-          <th style="padding:10px 14px;text-align:right">Qté système 🖥️</th>
-          <th style="padding:10px 14px;text-align:right;border-right:1px solid rgba(255,255,255,.15)">Qté physique 📌</th>
+          <th style="padding:10px 14px;text-align:right">Qté système <i class="ph ph-monitor" aria-hidden="true"></i></th>
+          <th style="padding:10px 14px;text-align:right;border-right:1px solid rgba(255,255,255,.15)">Qté physique <i class="ph ph-push-pin" aria-hidden="true"></i></th>
           <th style="padding:10px 14px;text-align:center">Écart connu</th>
           <th style="padding:10px 14px;text-align:center">Écart mesuré</th>
-          <th style="padding:10px 14px;text-align:right;background:rgba(255,255,255,.08);border-left:2px solid #f39c12">🔴 Qté temps réel</th>
+          <th style="padding:10px 14px;text-align:right;background:rgba(255,255,255,.08);border-left:2px solid #f39c12"><i class="ph ph-circle" aria-hidden="true"></i> Qté temps réel</th>
           <th style="padding:10px 14px;text-align:right;background:rgba(255,255,255,.08)">Conso/j moy</th>
           <th style="padding:10px 14px;text-align:right;background:rgba(255,255,255,.08)">Jours restants</th>
           <th style="padding:10px 14px;text-align:center;background:rgba(255,255,255,.08)">Épuisement estimé</th>
-          <?php if($can_edit): ?><th style="padding:10px 14px;text-align:center">💾</th><?php endif; ?>
+          <?php if($can_edit): ?>
+          <th style="padding:10px 14px;text-align:center">Enregistrement</th>
+          <th style="padding:10px 14px;text-align:left">Demande de modification</th>
+          <?php endif; ?>
         </tr>
       </thead>
       <tbody>
@@ -550,6 +815,15 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
         $ecart_mes  = (int)$l['ecart'];            // figé
         $saisi      = $l['stock_physique'] > 0 || $ecart_mes != 0;
         $ec_connu   = $ecarts_connus_map[$l['bobine_id']] ?? null;
+        $demande_active = $corrections_map[$l['id']]['active'] ?? null;
+        $demande_close  = $corrections_map[$l['id']]['close']  ?? null;
+        // Déverrouille la ligne : toujours pour une demande directe de
+        // l'admin (demande_site), seulement une fois autorisée pour une
+        // demande venant du coordinateur (demande_autorisation).
+        $deverrouille = $demande_active && (
+            $demande_active['type'] === 'demande_site'
+            || ($demande_active['type'] === 'demande_autorisation' && $demande_active['statut'] === 'autorise')
+        );
 
         // ── Données temps réel (dynamiques)
         $stock_rt   = (int)$l['stock_realtime'];          // stock actuel
@@ -564,15 +838,16 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
                 : ($ecart_mes != 0     ? '#fff5f5'
                 :                        'white'));
       ?>
-      <tr id="row-<?= $l['id'] ?>" style="border-bottom:1px solid #e2e8f0;background:<?= $row_bg ?>">
+      <tr id="row-<?= $l['id'] ?>" style="border-bottom:1px solid #e2e8f0;background:<?= $row_bg ?>"
+          data-numero="<?= h($l['numero']) ?>" data-connu="<?= (int)($l['ecart_connu_avant'] ?? 0) ?>">
 
         <!-- Numéro -->
         <td style="padding:9px 14px;font-family:monospace;font-weight:700;color:var(--navy);font-size:13px"><?= h($l['numero']) ?></td>
 
         <!-- Type -->
         <td style="padding:9px 14px;text-align:center">
-          <span style="background:#f1f5f9;padding:2px 7px;border-radius:4px;font-size:11px;font-weight:600"><?= h($l['type_code']) ?></span>
-          <?php if($l['format']): ?><br><span style="font-size:10px;color:#94a3b8"><?= h($l['format']) ?></span><?php endif; ?>
+          <span style="background:#f1f5f9;padding:2px 7px;border-radius:4px;font-size:12px;font-weight:600"><?= h($l['type_code']) ?></span>
+          <?php if($l['format']): ?><br><span style="font-size:12px;color:#94a3b8"><?= h($l['format']) ?></span><?php endif; ?>
         </td>
 
         <!-- Site -->
@@ -595,6 +870,8 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
                  placeholder="—"
                  data-sys="<?= $stock_rt ?>"
                  data-conso="<?= $conso_moy ?>"
+                 data-saved="<?= $saisi ? $stock_phy : '' ?>"
+                 <?= ($saisi && !$deverrouille) ? 'disabled' : '' ?>
                  oninput="onPhyInput(<?= $l['id'] ?>,<?= $stock_rt ?>,<?= $conso_moy ?>)">
           <?php else: ?>
           <span style="font-family:'Montserrat',sans-serif;font-weight:700;font-size:14px">
@@ -603,30 +880,23 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
           <?php endif; ?>
         </td>
 
-        <!-- Écart connu (saisie libre) -->
+        <!-- Écart connu — lecture seule, valeur système à l'ouverture de l'inventaire
+             (n° 17 réunion ERP : plus de saisie libre, source d'erreur) -->
         <td style="padding:9px 14px;text-align:center">
-          <?php if($can_edit): ?>
-          <input type="number"
-                 class="connu <?= $ec_connu?'filled':'' ?>"
-                 id="connu-<?= $l['id'] ?>"
-                 value="<?= $ec_connu ? (int)$ec_connu['total_ecart'] : '' ?>"
-                 placeholder="0"
-                 title="<?= $ec_connu ? h($ec_connu['detail']) : 'Ex: -15 ou +3' ?>"
-                 oninput="onConnuInput(<?= $l['id'] ?>)">
-          <?php else: ?>
-            <?php if($ec_connu): ?>
-            <span style="font-family:'Montserrat',sans-serif;font-weight:800;color:<?= (int)$ec_connu['total_ecart']<0?'#e74c3c':'#27ae60' ?>">
-              <?= (int)$ec_connu['total_ecart']>0?'+':'' ?><?= (int)$ec_connu['total_ecart'] ?>
+          <?php $ecart_connu_avant = (int)($l['ecart_connu_avant'] ?? 0); ?>
+          <?php if ($ecart_connu_avant !== 0): ?>
+            <span style="font-family:'Montserrat',sans-serif;font-weight:800;color:<?= $ecart_connu_avant<0?'#e74c3c':'#27ae60' ?>"
+                  title="Renseigné automatiquement à l'ouverture de l'inventaire">
+              <?= $ecart_connu_avant>0?'+':'' ?><?= $ecart_connu_avant ?>
             </span>
-            <?php else: ?><span style="color:#94a3b8">—</span><?php endif; ?>
-          <?php endif; ?>
+          <?php else: ?><span style="color:#94a3b8">—</span><?php endif; ?>
         </td>
 
         <!-- Écart mesuré (figé — calculé au moment de l'inventaire) -->
         <td style="padding:9px 14px;text-align:center" id="ecart-<?= $l['id'] ?>">
           <?php if($saisi): ?>
           <span class="ecart-val <?= $ecart_mes<0?'ecart-neg':($ecart_mes>0?'ecart-pos':'ecart-zero') ?>">
-            <?= $ecart_mes!=0?(($ecart_mes>0?'+':'').$ecart_mes.' films'):'✅ OK' ?>
+            <?= $ecart_mes!=0?(($ecart_mes>0?'+':'').$ecart_mes.' films'):'<i class="ph ph-check-circle" aria-hidden="true"></i> OK' ?>
           </span>
           <?php else: ?><span style="color:#94a3b8">—</span><?php endif; ?>
         </td>
@@ -642,7 +912,7 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
               <?= number_format($stock_rt) ?>
             </span>
             <?php if($saisi && $stock_rt !== $stock_phy): ?>
-            <span style="font-size:10px;color:<?= $stock_rt<$stock_phy?'#e74c3c':'#27ae60' ?>">
+            <span style="font-size:12px;color:<?= $stock_rt<$stock_phy?'#e74c3c':'#27ae60' ?>">
               <?= $stock_rt<$stock_phy ? '▼' : '▲' ?> <?= abs($stock_rt - $stock_phy) ?> depuis inventaire
             </span>
             <?php endif; ?>
@@ -670,9 +940,84 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
 
         <!-- Sauver -->
         <?php if($can_edit): ?>
-        <td style="padding:9px 14px;text-align:center">
-          <button style="background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;padding:4px 8px;border-radius:6px;cursor:pointer;font-size:12px"
-                  onclick="sauverLigne(<?= $l['id'] ?>)">💾</button>
+        <td style="padding:9px 14px;text-align:center;white-space:nowrap">
+          <span id="etat-<?= $l['id'] ?>"
+                style="display:<?= $saisi ? 'inline' : 'none' ?>;font-size:12px;font-weight:700;
+                       color:<?= $saisi ? '#1e8449' : '#b7791f' ?>;margin-right:8px">
+            <?= $saisi ? '<i class="ph ph-check-circle" aria-hidden="true"></i> Sauvegardé' : '<i class="ph ph-circle" aria-hidden="true"></i> En cours' ?>
+          </span>
+          <button id="btn-<?= $l['id'] ?>"
+                  style="display:<?= $saisi ? 'none' : 'inline-block' ?>;background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
+                  onclick="sauverLigne(<?= $l['id'] ?>)"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Enregistrer</button>
+        </td>
+
+        <!-- Demande de modification -->
+        <td style="padding:9px 14px;text-align:left;max-width:270px">
+          <?php if ($demande_active && $demande_active['type'] === 'demande_site'): ?>
+            <!-- Flux direct : admin/responsable de session -> site, réponse immédiate -->
+            <div style="background:#fff8e7;border:1px solid #f0d999;border-radius:8px;padding:8px 10px;margin-bottom:6px">
+              <div style="font-size:12px;font-weight:700;color:#b7791f"><i class="ph ph-diamond" aria-hidden="true"></i> Demandé par <?= h($demande_active['demandeur_nom'] ?? '—') ?></div>
+              <div style="font-size:12px;color:#5a4a1f;margin-top:2px"><?= h($demande_active['motif']) ?></div>
+              <?php if ($demande_active['valeur_proposee'] !== null): ?>
+              <div style="font-size:12px;color:#5a4a1f;margin-top:2px">Valeur proposée : <strong><?= (int)$demande_active['valeur_proposee'] ?></strong></div>
+              <?php endif; ?>
+            </div>
+            <?php if ($can_edit): ?>
+            <button style="background:#fef3e2;color:#b7791f;border:1px solid #f0d999;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
+                    onclick="repondreModif(<?= (int)$demande_active['id'] ?>,<?= $l['id'] ?>)">↩ Répondre</button>
+            <?php endif; ?>
+
+          <?php elseif ($demande_active && $demande_active['type'] === 'demande_autorisation' && $demande_active['statut'] === 'en_attente'): ?>
+            <!-- Le coordinateur a demandé l'autorisation de l'admin -->
+            <div style="background:#eaf2fb;border:1px solid #90caf9;border-radius:8px;padding:8px 10px;margin-bottom:6px">
+              <div style="font-size:12px;font-weight:700;color:#1565c0">⏳ Demandé par <?= h($demande_active['demandeur_nom'] ?? '—') ?> — en attente d'autorisation</div>
+              <div style="font-size:12px;color:#1a3a5c;margin-top:2px"><?= h($demande_active['motif']) ?></div>
+              <?php if ($demande_active['valeur_proposee'] !== null): ?>
+              <div style="font-size:12px;color:#1a3a5c;margin-top:2px">Valeur proposée : <strong><?= (int)$demande_active['valeur_proposee'] ?></strong></div>
+              <?php endif; ?>
+            </div>
+            <?php if ($can_demander_site): ?>
+            <div style="display:flex;gap:6px">
+              <button style="background:#eafaf1;color:#1e8449;border:1px solid #bfe6d0;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
+                      onclick="autoriserModif(<?= (int)$demande_active['id'] ?>)"><i class="ph ph-check-circle" aria-hidden="true"></i> Autoriser</button>
+              <button style="background:#fdf0ef;color:#c0392b;border:1px solid #f6c9c4;padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
+                      onclick="ouvrirModalMotif('refuser_modif',<?= (int)$demande_active['id'] ?>)"><i class="ph ph-x-circle" aria-hidden="true"></i> Refuser</button>
+            </div>
+            <?php else: ?>
+            <span style="font-size:12px;color:#94a3b8">En attente de réponse de l'administrateur</span>
+            <?php endif; ?>
+
+          <?php elseif ($demande_active && $demande_active['type'] === 'demande_autorisation' && $demande_active['statut'] === 'autorise'): ?>
+            <!-- Autorisation accordée : le site peut maintenant corriger -->
+            <div style="background:#eafaf1;border:1px solid #bfe6d0;border-radius:8px;padding:8px 10px;margin-bottom:6px">
+              <div style="font-size:12px;font-weight:700;color:#1e8449"><i class="ph ph-check-circle" aria-hidden="true"></i> Autorisation accordée</div>
+              <div style="font-size:12px;color:#1e5c3a;margin-top:2px">Corrigez la quantité physique puis confirmez.</div>
+            </div>
+            <?php if ($can_edit): ?>
+            <button style="background:#eafaf1;color:#1e8449;border:1px solid #bfe6d0;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:700"
+                    onclick="repondreModif(<?= (int)$demande_active['id'] ?>,<?= $l['id'] ?>)"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Enregistrer la correction</button>
+            <?php endif; ?>
+
+          <?php elseif ($saisi): ?>
+            <?php if ($demande_close && $demande_close['statut'] === 'traite'): ?>
+            <div style="font-size:12px;color:#1e8449;margin-bottom:6px">
+              <i class="ph ph-check-circle" aria-hidden="true"></i> Modifiée suite à demande (<?= h($demande_close['demandeur_nom'] ?? '—') ?> → <?= (int)$demande_close['valeur_finale'] ?>)
+            </div>
+            <?php elseif ($demande_close && $demande_close['statut'] === 'refuse'): ?>
+            <div style="font-size:12px;color:#c0392b;margin-bottom:6px">
+              <i class="ph ph-x-circle" aria-hidden="true"></i> Autorisation refusée<?= $demande_close['reponse'] ? ' : ' . h($demande_close['reponse']) : '' ?>
+            </div>
+            <?php endif; ?>
+            <?php if ($can_demander_site): ?>
+            <button style="background:#f8f9fb;color:#5a6480;border:1px solid #e2e8f0;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600"
+                    onclick="ouvrirModalMotif('demander_modif',<?= $l['id'] ?>)"><i class="ph ph-repeat" aria-hidden="true"></i> Demander modif au site</button>
+            <?php elseif ($is_coord): ?>
+            <button style="background:#f8f9fb;color:#5a6480;border:1px solid #e2e8f0;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:12px;font-weight:600"
+                    onclick="ouvrirModalMotif('demander_autorisation',<?= $l['id'] ?>)"><i class="ph ph-repeat" aria-hidden="true"></i> Demander une modification</button>
+            <?php endif; ?>
+          <?php else: ?>
+            <span style="font-size:12px;color:#94a3b8">—</span>
+          <?php endif; ?>
         </td>
         <?php endif; ?>
       </tr>
@@ -685,10 +1030,10 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
 <?php if($can_edit || $can_validate): ?>
 <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:16px">
   <?php if($can_edit): ?>
-  <button class="btn btn-secondary" onclick="sauverTout()">💾 Tout sauver</button>
+  <button class="btn btn-secondary" onclick="sauverTout()"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Tout sauver</button>
   <?php endif; ?>
   <?php if($can_validate): ?>
-  <button class="btn btn-success" style="font-size:14px;padding:10px 24px" onclick="validerInventaire()">✅ Valider l'inventaire</button>
+  <button class="btn btn-success" style="font-size:14px;padding:10px 24px" onclick="ouvrirRecapValidation()"><i class="ph ph-check-circle" aria-hidden="true"></i> Valider l'inventaire</button>
   <?php endif; ?>
 </div>
 <?php endif; ?>
@@ -697,9 +1042,24 @@ input.connu.filled{border-color:#e67e22;background:#fff3cd}
 function ap(data){ return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(data)}).then(r=>r.json()); }
 
 function toast(msg,type='success'){
-  const t=document.createElement('div');
+  let t=document.getElementById('toast-live');
+  if(!t){t=document.createElement('div');t.id='toast-live';t.setAttribute('role','status');t.setAttribute('aria-live','polite');t.setAttribute('aria-atomic','true');document.body.appendChild(t);}
+  clearTimeout(t._hideTimer);
   t.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.15);background:${type==='success'?'#27ae60':'#e74c3c'};color:white;max-width:380px`;
-  t.innerHTML=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),3500);
+  t.innerHTML=msg; t._hideTimer=setTimeout(()=>{t.style.display='none';},3500);
+}
+
+// État de la ligne : rien tant que rien n'est saisi, orange "En cours" tant
+// que la valeur diffère de la dernière sauvegardée, vert "Sauvegardé" sinon.
+function majEtat(id, val, saved){
+  const etatEl = document.getElementById('etat-'+id);
+  if(!etatEl) return;
+  if(val === ''){ etatEl.style.display='none'; return; }
+  if(val === saved){
+    etatEl.style.display='inline'; etatEl.style.color='#1e8449'; etatEl.textContent='✅ Sauvegardé';
+  } else {
+    etatEl.style.display='inline'; etatEl.style.color='#b7791f'; etatEl.textContent='🟠 En cours';
+  }
 }
 
 function onPhyInput(id, stockSys, consoMoy){
@@ -709,6 +1069,7 @@ function onPhyInput(id, stockSys, consoMoy){
   const jEl  = document.getElementById('jours-'+id);
   const eEl  = document.getElementById('epuis-'+id);
   const row  = document.getElementById('row-'+id);
+  majEtat(id, val, inp.dataset.saved||'');
 
   if(val === ''){
     inp.className='saisie'; ecEl.innerHTML='<span style="color:#94a3b8">—</span>';
@@ -738,23 +1099,83 @@ function onPhyInput(id, stockSys, consoMoy){
   updateStats();
 }
 
-function onConnuInput(id){
-  const inp = document.getElementById('connu-'+id);
-  inp.classList.toggle('filled', inp.value!=='' && inp.value!=='0');
-}
-
 async function sauverLigne(id){
-  const phyEl   = document.getElementById('phy-'+id);
-  const connuEl = document.getElementById('connu-'+id);
-  const phy   = phyEl   ? phyEl.value   : '';
-  const connu = connuEl ? connuEl.value : '0';
+  const phyEl = document.getElementById('phy-'+id);
+  const phy   = phyEl ? phyEl.value : '';
   if(phy===''){toast('Saisissez d\'abord le stock physique.','error');return;}
-  const d = await ap({action:'sauver_ligne',detail_id:id,stock_physique:phy,ecart_connu:connu||0,notes:''});
+  const d = await ap({action:'sauver_ligne',detail_id:id,stock_physique:phy,notes:''});
   if(d.success){
-    if(phyEl) phyEl.style.borderColor='#27ae60';
+    if(phyEl){ phyEl.style.borderColor='#27ae60'; phyEl.dataset.saved = phy; phyEl.disabled = true; }
+    majEtat(id, phy, phy);
+    const btnEl = document.getElementById('btn-'+id);
+    if(btnEl) btnEl.style.display='none';
     setTimeout(()=>{if(phyEl)phyEl.style.borderColor='';},2000);
     toast('Ligne sauvegardée.');
   } else toast('Erreur : '+d.message,'error');
+}
+
+// Modal motif partagée : mode = 'demander_modif' (admin -> site) |
+// 'demander_autorisation' (coordinateur -> admin) | 'refuser_modif'
+let modalMotifMode = null, modalMotifId = null;
+function ouvrirModalMotif(mode, id){
+  modalMotifMode = mode; modalMotifId = id;
+  document.getElementById('modalMotifTexte').value='';
+  document.getElementById('modalMotifValeur').value='';
+  document.getElementById('modalMotifAlert').innerHTML='';
+  const titres = {
+    demander_modif: '🔁 Demander une modification au site',
+    demander_autorisation: '🔁 Demander une modification',
+    refuser_modif: '❌ Refuser la demande',
+  };
+  document.getElementById('modalMotifTitre').textContent = titres[mode];
+  document.getElementById('modalMotifLabel').textContent = mode==='refuser_modif' ? 'Motif du refus (optionnel)' : 'Motif *';
+  document.getElementById('modalMotifValeurWrap').style.display = mode==='refuser_modif' ? 'none' : 'block';
+  document.getElementById('btnModalMotif').textContent = mode==='demander_modif' ? 'Envoyer au site'
+    : mode==='demander_autorisation' ? "Envoyer à l'administrateur" : 'Refuser';
+  document.getElementById('modalMotif').style.display='flex';
+}
+async function envoyerModalMotif(){
+  const motif = document.getElementById('modalMotifTexte').value.trim();
+  const alertEl = document.getElementById('modalMotifAlert');
+  if(modalMotifMode!=='refuser_modif' && !motif){ alertEl.innerHTML='<div style="background:#fdf0ef;color:#c0392b;padding:8px 12px;border-radius:8px;font-size:12.5px;margin-bottom:10px">Le motif est obligatoire.</div>'; return; }
+  const btn = document.getElementById('btnModalMotif');
+  btn.disabled = true;
+  let d;
+  if(modalMotifMode==='refuser_modif'){
+    d = await ap({action:'refuser_modif', correction_id:modalMotifId, motif});
+  } else {
+    const valeur = document.getElementById('modalMotifValeur').value;
+    d = await ap({action:modalMotifMode, detail_id:modalMotifId, motif, valeur_proposee:valeur});
+  }
+  btn.disabled = false;
+  if(d.success){ toast(d.message); setTimeout(()=>location.reload(), 800); }
+  else alertEl.innerHTML = `<div style="background:#fdf0ef;color:#c0392b;padding:8px 12px;border-radius:8px;font-size:12.5px;margin-bottom:10px">${d.message}</div>`;
+}
+async function autoriserModif(correctionId){
+  if(!confirm('Autoriser la modification de cette ligne par le site ?')) return;
+  const d = await ap({action:'autoriser_modif', correction_id:correctionId});
+  if(d.success){ toast(d.message); setTimeout(()=>location.reload(), 800); } else toast(d.message,'error');
+}
+
+let repModifCorrId = null, repModifDetailId = null;
+function repondreModif(correctionId, detailId){
+  repModifCorrId = correctionId; repModifDetailId = detailId;
+  document.getElementById('repModifTexte').value='';
+  document.getElementById('repModifAlert').innerHTML='';
+  document.getElementById('modalRepondreModif').style.display='flex';
+}
+async function envoyerReponseModif(){
+  const phyEl = document.getElementById('phy-'+repModifDetailId);
+  const valeur = phyEl ? phyEl.value : '';
+  const alertEl = document.getElementById('repModifAlert');
+  if(valeur===''){ alertEl.innerHTML='<div style="background:#fdf0ef;color:#c0392b;padding:8px 12px;border-radius:8px;font-size:12.5px;margin-bottom:10px">Renseignez la qté physique corrigée avant de confirmer.</div>'; return; }
+  const reponse = document.getElementById('repModifTexte').value.trim();
+  const btn = document.getElementById('btnEnvoyerRepModif');
+  btn.disabled = true; btn.textContent = '⏳…';
+  const d = await ap({action:'repondre_modif', correction_id:repModifCorrId, valeur_finale:valeur, reponse});
+  btn.disabled = false; btn.textContent = 'Confirmer la correction';
+  if(d.success){ toast(d.message); setTimeout(()=>location.reload(), 800); }
+  else alertEl.innerHTML = `<div style="background:#fdf0ef;color:#c0392b;padding:8px 12px;border-radius:8px;font-size:12.5px;margin-bottom:10px">${d.message}</div>`;
 }
 
 async function sauverTout(){
@@ -765,23 +1186,98 @@ async function sauverTout(){
   rows.forEach(row=>{
     const id=row.id.replace('row-','');
     const phyEl=document.getElementById('phy-'+id);
-    const connuEl=document.getElementById('connu-'+id);
-    if(phyEl&&phyEl.value!=='') lignes.push({id,phy:phyEl.value,connu:connuEl?connuEl.value||0:0,notes:''});
+    if(phyEl&&!phyEl.disabled&&phyEl.value!=='') lignes.push({id,phy:phyEl.value,notes:''});
   });
   if(!lignes.length){toast('Aucune valeur à sauvegarder.','error');if(btn){btn.disabled=false;btn.textContent='💾 Tout sauver';}return;}
   const d=await ap({action:'sauver_tout',lignes:JSON.stringify(lignes)});
   if(btn){btn.disabled=false;btn.textContent='💾 Tout sauver';}
   if(d.success){
+    lignes.forEach(l=>{
+      const phyEl=document.getElementById('phy-'+l.id);
+      if(phyEl){ phyEl.dataset.saved = l.phy; phyEl.disabled = true; }
+      majEtat(l.id, l.phy, l.phy);
+      const btnEl=document.getElementById('btn-'+l.id);
+      if(btnEl) btnEl.style.display='none';
+    });
     toast(d.message);
-    document.getElementById('alertZone').innerHTML=`<div style="background:#eafaf1;padding:10px 16px;border-radius:8px;font-size:13px;color:#1e8449;margin-bottom:12px">✅ ${d.message}</div>`;
+    document.getElementById('alertZone').innerHTML=`<div style="background:#eafaf1;padding:10px 16px;border-radius:8px;font-size:13px;color:#1e8449;margin-bottom:12px"><i class="ph ph-check-circle" aria-hidden="true"></i> ${d.message}</div>`;
   } else toast('Erreur : '+d.message,'error');
 }
 
-async function validerInventaire(){
-  if(!confirm('Valider cet inventaire ?\nLes écarts seront appliqués au stock système.')) return;
-  const d=await ap({action:'valider'});
+function ouvrirRecapValidation(){
+  const rows = document.querySelectorAll('tr[id^="row-"]');
+  let total = rows.length, saisis = 0, nonSaisis = 0;
+  const lignesEcart = [];
+  rows.forEach(row=>{
+    const id     = row.id.replace('row-','');
+    const phyEl  = document.getElementById('phy-'+id);
+    const connu  = parseInt(row.dataset.connu||'0');
+    const numero = row.dataset.numero||'';
+    if(!phyEl || phyEl.value===''){
+      nonSaisis++;
+      if(connu!==0) lignesEcart.push({numero, mesure:null, connu});
+      return;
+    }
+    saisis++;
+    const sys    = parseInt(phyEl.dataset.sys||'0');
+    const mesure = parseInt(phyEl.value) - sys;
+    if(mesure!==0 || connu!==0) lignesEcart.push({numero, mesure, connu});
+  });
+
+  document.getElementById('recapStats').innerHTML = `
+    <div style="text-align:center;padding:10px;background:var(--tertiary,#f1f5f9);border-radius:8px">
+      <div style="font-size:20px;font-weight:900;color:var(--navy)">${total}</div>
+      <div style="font-size:10.5px;color:var(--muted)">Bobines</div>
+    </div>
+    <div style="text-align:center;padding:10px;background:#eafaf1;border-radius:8px">
+      <div style="font-size:20px;font-weight:900;color:#1e8449">${saisis}</div>
+      <div style="font-size:10.5px;color:#1e8449">Saisies</div>
+    </div>
+    <div style="text-align:center;padding:10px;background:${lignesEcart.length?'#fdf0ef':'#eafaf1'};border-radius:8px">
+      <div style="font-size:20px;font-weight:900;color:${lignesEcart.length?'#c0392b':'#1e8449'}">${lignesEcart.length}</div>
+      <div style="font-size:10.5px;color:${lignesEcart.length?'#c0392b':'#1e8449'}">Avec écart</div>
+    </div>
+    <div style="text-align:center;padding:10px;background:${nonSaisis?'#fff8e7':'var(--tertiary,#f1f5f9)'};border-radius:8px">
+      <div style="font-size:20px;font-weight:900;color:${nonSaisis?'#b7791f':'var(--navy)'}">${nonSaisis}</div>
+      <div style="font-size:10.5px;color:${nonSaisis?'#b7791f':'var(--muted)'}">Non saisies</div>
+    </div>`;
+
+  const nonSaisiEl = document.getElementById('recapNonSaisi');
+  if(nonSaisis>0){
+    nonSaisiEl.style.display='block';
+    nonSaisiEl.innerHTML = `<i class="ph ph-warning" aria-hidden="true"></i> ${nonSaisis} bobine(s) sans stock physique saisi ne seront pas prises en compte dans la validation.`;
+  } else nonSaisiEl.style.display='none';
+
+  const recapEl = document.getElementById('recapEcarts');
+  if(lignesEcart.length){
+    recapEl.innerHTML = `<div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:8px">Lignes avec écart</div>
+      <div style="border:1px solid var(--border);border-radius:8px;overflow:hidden;max-height:220px;overflow-y:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:12.5px">
+          <thead><tr style="background:#f1f5f9"><th style="padding:6px 10px;text-align:left">Numéro</th>
+            <th style="padding:6px 10px;text-align:right">Écart mesuré</th>
+            <th style="padding:6px 10px;text-align:right">Écart connu</th></tr></thead>
+          <tbody>${lignesEcart.map(l=>`<tr style="border-top:1px solid var(--border)">
+            <td style="padding:6px 10px;font-family:monospace">${l.numero}</td>
+            <td style="padding:6px 10px;text-align:right;font-weight:700;color:${l.mesure===null?'#94a3b8':(l.mesure<0?'#e74c3c':l.mesure>0?'#27ae60':'#94a3b8')}">${l.mesure===null?'—':(l.mesure>0?'+':'')+l.mesure}</td>
+            <td style="padding:6px 10px;text-align:right;font-weight:700;color:${l.connu<0?'#e74c3c':l.connu>0?'#27ae60':'#94a3b8'}">${l.connu!==0?(l.connu>0?'+':'')+l.connu:'—'}</td>
+          </tr>`).join('')}</tbody>
+        </table>
+      </div>`;
+  } else {
+    recapEl.innerHTML = `<div style="background:#eafaf1;color:#1e8449;border-radius:8px;padding:10px 14px;font-size:13px"><i class="ph ph-check-circle" aria-hidden="true"></i> Aucun écart, tous les stocks concordent.</div>`;
+  }
+
+  document.getElementById('modalRecapValidation').style.display='flex';
+}
+
+async function confirmerValidation(){
+  const btn = document.getElementById('btnConfirmerValidation');
+  btn.disabled = true; btn.textContent = '⏳ Validation…';
+  const d = await ap({action:'valider'});
+  document.getElementById('modalRecapValidation').style.display='none';
+  btn.disabled = false; btn.textContent = "✅ Oui, valider l'inventaire";
   if(d.success){toast(d.message);setTimeout(()=>location.href='inventaire_bobines.php',1500);}
-  else{document.getElementById('alertZone').innerHTML=`<div style="background:#fdf0ef;padding:10px 16px;border-radius:8px;font-size:13px;color:#c0392b;margin-bottom:12px">❌ ${d.message}</div>`;}
+  else{document.getElementById('alertZone').innerHTML=`<div style="background:#fdf0ef;padding:10px 16px;border-radius:8px;font-size:13px;color:#c0392b;margin-bottom:12px"><i class="ph ph-x-circle" aria-hidden="true"></i> ${d.message}</div>`;}
 }
 
 function updateStats(){

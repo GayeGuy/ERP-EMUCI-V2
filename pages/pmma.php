@@ -390,11 +390,11 @@ include __DIR__ . '/../templates/header.php';
 .pmma-head{padding:12px 16px;background:var(--navy);display:flex;justify-content:space-between;align-items:center}
 .pmma-site{color:white;font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700}
 .pmma-body{padding:14px 16px}
-.pmma-alert{background:#fee2e2;color:#991b1b;padding:5px 10px;border-radius:8px;font-size:11px;margin-top:8px;font-weight:600}
+.pmma-alert{background:#fee2e2;color:#991b1b;padding:5px 10px;border-radius:8px;font-size:12px;margin-top:8px;font-weight:600}
 .kpi-bar{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px}
 .kpi{background:white;border:1px solid var(--border);border-radius:12px;padding:14px 16px}
 .kpi-val{font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900;line-height:1}
-.kpi-lbl{font-size:11px;color:var(--muted);font-weight:600;margin-top:3px}
+.kpi-lbl{font-size:12px;color:var(--muted);font-weight:600;margin-top:3px}
 .filter-bar{background:white;border:1px solid var(--border);border-radius:12px;padding:14px 18px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:20px}
 .filter-bar label{font-size:12px;font-weight:600;color:var(--navy);display:block;margin-bottom:4px}
 .filter-bar input,.filter-bar select{padding:8px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:white;outline:none}
@@ -445,16 +445,16 @@ include __DIR__ . '/../templates/header.php';
 <!-- FILTRE BAR -->
 <div class="filter-bar">
   <div>
-    <label>Du</label>
+    <label for="fFrom">Du</label>
     <input type="date" id="fFrom" value="<?= h($f_from) ?>">
   </div>
   <div>
-    <label>Au</label>
+    <label for="fTo">Au</label>
     <input type="date" id="fTo" value="<?= h($f_to) ?>">
   </div>
   <?php if (!$site_force): ?>
   <div>
-    <label>Site</label>
+    <label for="fSite">Site</label>
     <select id="fSite">
       <option value="0">Tous les sites</option>
       <?php foreach ($sites_list as $s): ?>
@@ -470,7 +470,7 @@ include __DIR__ . '/../templates/header.php';
 </div>
 
 <!-- KPI -->
-<div class="kpi-bar">
+<div class="kpi-bar" id="pmmaKpis">
   <?php
   $total_stock = array_sum(array_column($stock_par_site, 'quantite'));
   ?>
@@ -480,7 +480,7 @@ include __DIR__ . '/../templates/header.php';
   </div>
   <?php if ($nb_stock_bas > 0): ?>
   <div class="kpi" style="border-color:#fca5a5;background:#fff5f5">
-    <div class="kpi-val" style="color:var(--danger)"><?= $nb_stock_bas ?></div>
+    <div class="kpi-val" style="color:var(--danger-d)"><?= $nb_stock_bas ?></div>
     <div class="kpi-lbl">Type(s) en stock bas</div>
   </div>
   <?php endif; ?>
@@ -490,7 +490,7 @@ include __DIR__ . '/../templates/header.php';
   </div>
   <?php if ($grand_total['endommages'] > 0): ?>
   <div class="kpi" style="border-color:#fca5a5">
-    <div class="kpi-val" style="color:var(--danger)"><?= fmt_number($grand_total['endommages']) ?></div>
+    <div class="kpi-val" style="color:var(--danger-d)"><?= fmt_number($grand_total['endommages']) ?></div>
     <div class="kpi-lbl">Endommagés sur la période</div>
   </div>
   <?php endif; ?>
@@ -503,6 +503,7 @@ include __DIR__ . '/../templates/header.php';
 </div>
 
 <!-- STOCK PAR SITE -->
+<div id="pmmaStock">
 <div style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">
   <i class="ph-duotone ph-package" style="vertical-align:middle"></i> Stock actuel par site
 </div>
@@ -522,13 +523,13 @@ include __DIR__ . '/../templates/header.php';
       <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
         <div>
           <div style="font-size:13px;font-weight:600;color:var(--navy)"><?= h($item['type_pmma']) ?></div>
-          <div style="font-size:11px;color:var(--muted)">Seuil : <?= (int)($item['seuil_alerte'] ?? 10) ?></div>
+          <div style="font-size:12px;color:var(--muted)">Seuil : <?= (int)($item['seuil_alerte'] ?? 10) ?></div>
         </div>
         <div style="text-align:right">
-          <div style="font-family:'Montserrat',sans-serif;font-size:26px;font-weight:900;color:<?= $item['quantite'] < ($item['seuil_alerte'] ?? 10) ? 'var(--danger)' : 'var(--blue)' ?>">
+          <div style="font-family:'Montserrat',sans-serif;font-size:26px;font-weight:900;color:<?= $item['quantite'] < ($item['seuil_alerte'] ?? 10) ? 'var(--danger-d)' : 'var(--blue)' ?>">
             <?= (int)$item['quantite'] ?>
           </div>
-          <div style="font-size:10px;color:var(--muted)">unités</div>
+          <div style="font-size:12px;color:var(--muted)">unités</div>
         </div>
       </div>
       <?php if ($item['quantite'] < ($item['seuil_alerte'] ?? 10)): ?>
@@ -539,9 +540,10 @@ include __DIR__ . '/../templates/header.php';
   </div>
   <?php endforeach; ?>
 </div>
+</div>
 
 <!-- TABLEAU CONSOMMATION -->
-<div class="card">
+<div class="card" id="pmmaResultCard">
   <div class="card-header">
     <h3><i class="ph-duotone ph-clipboard-text" style="vertical-align:middle"></i>
       Consommation PMMA — Points journaliers
@@ -571,15 +573,15 @@ include __DIR__ . '/../templates/header.php';
         <tr>
           <td><?= h(fmt_date($c['date_point'])) ?></td>
           <?php if (!$site_force): ?><td><?= h($c['site_nom']) ?></td><?php endif; ?>
-          <td><span style="background:#e0f0ff;color:#0d5c8a;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700">
+          <td><span style="background:#e0f0ff;color:#0d5c8a;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:700">
             <?= h($c['type_pmma'] ?: 'Standard') ?>
           </span></td>
           <td style="text-align:center;font-weight:700;color:var(--blue)"><?= (int)$c['utilises'] ?></td>
-          <td style="text-align:center;font-weight:600;color:<?= $c['endommages'] > 0 ? 'var(--danger)' : 'var(--muted)' ?>">
+          <td style="text-align:center;font-weight:600;color:<?= $c['endommages'] > 0 ? 'var(--danger-d)' : 'var(--muted)' ?>">
             <?= (int)$c['endommages'] ?: '—' ?>
           </td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px"><?= (int)$c['total_sortis'] ?></td>
-          <td style="text-align:center;font-weight:700;color:<?= is_int($restant) && $restant < 10 ? 'var(--danger)' : 'var(--navy)' ?>">
+          <td style="text-align:center;font-weight:700;color:<?= is_int($restant) && $restant < 10 ? 'var(--danger-d)' : 'var(--navy)' ?>">
             <?= is_int($restant) ? $restant : $restant ?>
           </td>
         </tr>
@@ -588,7 +590,7 @@ include __DIR__ . '/../templates/header.php';
         <tr style="background:#f0f4ff">
           <td colspan="<?= $site_force ? 2 : 3 ?>" style="font-weight:700;color:var(--navy)">TOTAL PÉRIODE</td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;color:var(--blue)"><?= $grand_total['utilises'] ?></td>
-          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;color:var(--danger)"><?= $grand_total['endommages'] ?: '—' ?></td>
+          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;color:var(--danger-d)"><?= $grand_total['endommages'] ?: '—' ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;font-size:16px;color:var(--navy)"><?= $grand_total['total'] ?></td>
           <td></td>
         </tr>
@@ -604,7 +606,7 @@ include __DIR__ . '/../templates/header.php';
   <div class="modal">
     <div class="mhdr">
       <h3><i class="ph-duotone ph-download-simple"></i> Entrée PMMA</h3>
-      <button class="mclose" onclick="document.getElementById('mEntree').classList.remove('open')">✕</button>
+      <button class="mclose" onclick="document.getElementById('mEntree').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div class="mbody">
       <div id="alertEntree"></div>
@@ -640,7 +642,7 @@ include __DIR__ . '/../templates/header.php';
   <div class="modal">
     <div class="mhdr">
       <h3><i class="ph-duotone ph-upload-simple"></i> Sortie PMMA</h3>
-      <button class="mclose" onclick="document.getElementById('mSortie').classList.remove('open')">✕</button>
+      <button class="mclose" onclick="document.getElementById('mSortie').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div class="mbody">
       <div id="alertSortie"></div>
@@ -684,6 +686,35 @@ function ap(d){
     for(const[k,v] of Object.entries(d)) if(v!==undefined) fd.append(k,v);
     return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
 }
+// ── Filtres sans rechargement de page (meme pattern que equipements.php et
+// pages/operations/bobines.php : fetch + DOMParser remplace les zones).
+let pmmaEnVol = null;
+function pmmaCharger(url){
+  if(!window.fetch || !window.DOMParser){ location.href = url; return; }
+  if(pmmaEnVol) try{ pmmaEnVol.abort(); }catch(e){}
+  const ctrl = window.AbortController ? new AbortController() : null;
+  pmmaEnVol = ctrl;
+  fetch(url, {credentials:'same-origin', signal: ctrl?ctrl.signal:undefined, headers:{'X-Requested-With':'fetch'}})
+    .then(r => { if(!r.ok) throw new Error(r.status); return r.text(); })
+    .then(html => {
+      if(pmmaEnVol !== ctrl) return;
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      ['pmmaKpis','pmmaStock','pmmaResultCard'].forEach(id => {
+        const neuf = doc.getElementById(id);
+        const ancien = document.getElementById(id);
+        if(!neuf || !ancien) throw new Error('structure');
+        ancien.replaceWith(neuf);
+      });
+      history.pushState({pmma:1}, '', url);
+      pmmaEnVol = null;
+    })
+    .catch(e => {
+      if(e && e.name==='AbortError') return;
+      pmmaEnVol = null;
+      location.href = url;
+    });
+}
+window.addEventListener('popstate', function(ev){ if(ev.state && ev.state.pmma) location.reload(); });
 function appliquerFiltres(){
     const p=new URLSearchParams();
     p.set('from',document.getElementById('fFrom').value);
@@ -692,11 +723,11 @@ function appliquerFiltres(){
     const site=document.getElementById('fSite').value;
     if(site!=='0') p.set('site',site);
     <?php endif; ?>
-    location.href='?'+p.toString();
+    pmmaCharger(location.pathname+'?'+p.toString());
 }
 function resetFiltres(){
     const today=new Date(),y=today.getFullYear(),m=String(today.getMonth()+1).padStart(2,'0'),d=String(today.getDate()).padStart(2,'0');
-    location.href='?from='+y+'-'+m+'-01&to='+y+'-'+m+'-'+d;
+    pmmaCharger(location.pathname+'?from='+y+'-'+m+'-01&to='+y+'-'+m+'-'+d);
 }
 <?php if($can_saisie): ?>
 async function enregistrerEntree(){

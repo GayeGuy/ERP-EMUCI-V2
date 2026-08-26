@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         if (!$site_id || $qte <= 0) json_response(false,'Site et quantité obligatoires.');
         $site = db_fetch_one("SELECT nom FROM sites WHERE id=?",[$site_id]);
         db_query("INSERT INTO op_stock_rivets (site_id,quantite) VALUES (?,?)
-                  ON DUPLICATE KEY UPDATE quantite = quantite + VALUES(quantite)",[$site_id,$qte]);
+                  ON CONFLICT (site_id,type_rivet) DO UPDATE SET quantite=op_stock_rivets.quantite+?",[$site_id,$qte,$qte]);
         audit_log($user['id'],'CREATE','operations',$site_id,"Approvisionnement $qte rivets → {$site['nom']} ($notes)");
         $nouveau = (int)db_fetch_value("SELECT quantite FROM op_stock_rivets WHERE site_id=?",[$site_id]);
         json_response(true,"$qte rivets ajoutés. Stock total : $nouveau.");
@@ -47,8 +47,8 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         $new_qte = (int)($_POST['new_qte']  ?? 0);
         $motif   = trim($_POST['motif']      ?? '');
         $old     = (int)db_fetch_value("SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=?",[$site_id]);
-        db_query("INSERT INTO op_stock_rivets (site_id,quantite) VALUES (?,?) ON DUPLICATE KEY UPDATE quantite = VALUES(quantite)",
-            [$site_id,$new_qte]);
+        db_query("INSERT INTO op_stock_rivets (site_id,quantite) VALUES (?,?) ON CONFLICT (site_id,type_rivet) DO UPDATE SET quantite=?",
+            [$site_id,$new_qte,$new_qte]);
         audit_log($user['id'],'UPDATE','operations',$site_id,"Ajustement rivets site:$site_id : $old → $new_qte ($motif)");
         json_response(true,'Stock ajusté.');
     }
@@ -68,11 +68,11 @@ $stocks = db_fetch_all(
             COALESCE(sr.quantite,0) AS quantite,
             COALESCE((SELECT SUM(p.rivets_utilises+p.rivets_endommages)
                       FROM op_points_journaliers p
-                      WHERE p.site_id=s.id AND DATE_FORMAT(p.date_point,'%Y-%m')=DATE_FORMAT(CURRENT_DATE,'%Y-%m')),0) AS utilises_mois
+                      WHERE p.site_id=s.id AND TO_CHAR(p.date_point,'YYYY-MM')=TO_CHAR(CURRENT_DATE,'YYYY-MM')),0) AS utilises_mois
      FROM sites s
      JOIN op_stock_rivets sr ON sr.site_id=s.id
-     WHERE s.actif=1 " . ($site_force_r ? "AND s.id=$site_force_r" : "") . "
-     ORDER BY s.nom, FIELD(sr.type_rivet, 'gonflable','eclate')"
+     WHERE s.actif=1 " . ($f_site ? "AND s.id=$f_site" : "") . "
+     ORDER BY s.nom, array_position(ARRAY['gonflable','eclate']::text[], (sr.type_rivet)::text)"
 );
 
 // ── HISTORIQUE CONSOMMATION (points journaliers)
@@ -243,13 +243,13 @@ include __DIR__ . '/../../templates/header.php';
 .kpi-bar{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:20px}
 .kpi{background:white;border:1px solid var(--border);border-radius:12px;padding:14px 16px}
 .kpi-val{font-family:'Montserrat',sans-serif;font-size:28px;font-weight:900;line-height:1}
-.kpi-lbl{font-size:11px;color:var(--muted);font-weight:600;margin-top:3px}
+.kpi-lbl{font-size:12px;color:var(--muted);font-weight:600;margin-top:3px}
 .pmma-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:16px;margin-bottom:24px}
 .pmma-card{background:white;border-radius:14px;border:1px solid var(--border);overflow:hidden}
 .pmma-head{padding:12px 16px;background:var(--navy);display:flex;justify-content:space-between;align-items:center}
 .pmma-site{color:white;font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700}
 .pmma-body{padding:14px 16px}
-.pmma-alert{background:#fee2e2;color:#991b1b;padding:5px 10px;border-radius:8px;font-size:11px;margin-top:8px;font-weight:600}
+.pmma-alert{background:#fee2e2;color:#991b1b;padding:5px 10px;border-radius:8px;font-size:12px;margin-top:8px;font-weight:600}
 .modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(10,22,40,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center}
 .modal-overlay.open{display:flex}
 .modal{background:white;border-radius:16px;width:480px;max-width:95vw;max-height:92vh;overflow-y:auto;animation:mIn .25s cubic-bezier(.22,1,.36,1)}
@@ -281,7 +281,7 @@ include __DIR__ . '/../../templates/header.php';
     ?>
     <?php if($can_appro): ?>
     <button class="btn btn-primary" onclick="document.getElementById('mAppro').classList.add('open')">+ Approvisionner</button>
-    <button class="btn btn-secondary" onclick="document.getElementById('mAjust').classList.add('open')">⚖️ Ajustement</button>
+    <button class="btn btn-secondary" onclick="document.getElementById('mAjust').classList.add('open')"><i class="ph ph-scales" aria-hidden="true"></i> Ajustement</button>
     <?php endif; ?>
   </div>
 </div>
@@ -289,16 +289,16 @@ include __DIR__ . '/../../templates/header.php';
 <!-- FILTRE BAR -->
 <div class="filter-bar">
   <div>
-    <label>Du</label>
+    <label for="fFrom">Du</label>
     <input type="date" id="fFrom" value="<?= h($f_from) ?>">
   </div>
   <div>
-    <label>Au</label>
+    <label for="fTo">Au</label>
     <input type="date" id="fTo" value="<?= h($f_to) ?>">
   </div>
   <?php if (!$site_force_r): ?>
   <div>
-    <label>Site</label>
+    <label for="fSite">Site</label>
     <select id="fSite">
       <option value="0">Tous les sites</option>
       <?php foreach ($sites_list as $s): ?>
@@ -320,7 +320,7 @@ $kpi_eclat  = array_sum(array_map(fn($r) => $r['type_rivet']==='eclate'    ? (in
 $kpi_mois   = array_sum(array_column($stocks, 'utilises_mois'));
 $nb_bas     = count(array_filter($stocks, fn($r) => (int)$r['quantite'] < 200));
 ?>
-<div class="kpi-bar">
+<div class="kpi-bar" id="rivKpis">
   <div class="kpi">
     <div class="kpi-val" style="color:var(--blue)"><?= fmt_number($kpi_gonfl) ?></div>
     <div class="kpi-lbl">Gonflables en stock</div>
@@ -335,13 +335,14 @@ $nb_bas     = count(array_filter($stocks, fn($r) => (int)$r['quantite'] < 200));
   </div>
   <?php if ($nb_bas > 0): ?>
   <div class="kpi" style="border-color:#fca5a5;background:#fff5f5">
-    <div class="kpi-val" style="color:var(--danger)"><?= $nb_bas ?></div>
+    <div class="kpi-val" style="color:var(--danger-d)"><?= $nb_bas ?></div>
     <div class="kpi-lbl">Type(s) en stock bas</div>
   </div>
   <?php endif; ?>
 </div>
 
 <!-- STOCK CARDS -->
+<div id="rivStock">
 <div style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">
   <i class="ph-duotone ph-package" style="vertical-align:middle"></i> Stock actuel par site
 </div>
@@ -362,16 +363,16 @@ foreach ($stocks as $r) {
       $lbl     = $item['type_rivet'] === 'gonflable' ? 'Gonflables' : 'Éclatés';
       $qty     = (int)$item['quantite'];
       $low     = $qty < 200;
-      $clr     = $low ? 'var(--danger)' : 'var(--blue)';
+      $clr     = $low ? 'var(--danger-d)' : 'var(--blue)';
     ?>
     <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
       <div>
         <div style="font-size:13px;font-weight:600;color:var(--navy)"><?= $lbl ?></div>
-        <div style="font-size:11px;color:var(--muted)">Ce mois : <?= fmt_number($item['utilises_mois']) ?></div>
+        <div style="font-size:12px;color:var(--muted)">Ce mois : <?= fmt_number($item['utilises_mois']) ?></div>
       </div>
       <div style="text-align:right">
         <div style="font-family:'Montserrat',sans-serif;font-size:26px;font-weight:900;color:<?= $clr ?>"><?= fmt_number($qty) ?></div>
-        <div style="font-size:10px;color:var(--muted)">unités</div>
+        <div style="font-size:12px;color:var(--muted)">unités</div>
       </div>
     </div>
     <?php if ($low): ?>
@@ -382,9 +383,10 @@ foreach ($stocks as $r) {
 </div>
 <?php endforeach; ?>
 </div>
+</div>
 
 <!-- HISTORIQUE -->
-<div class="card">
+<div class="card" id="rivResultCard">
   <div class="card-header">
     <h3><i class="ph-duotone ph-clipboard-text" style="vertical-align:middle"></i>
       Consommation rivets — Points journaliers
@@ -399,8 +401,8 @@ foreach ($stocks as $r) {
         <th>Date</th>
         <?php if(!$site_force_r): ?><th>Site</th><?php endif; ?>
         <th>Engins</th>
-        <th style="text-align:center">🔵 Gonfl.</th>
-        <th style="text-align:center">🔴 Éclatés</th>
+        <th style="text-align:center"><i class="ph ph-circle" aria-hidden="true"></i> Gonfl.</th>
+        <th style="text-align:center"><i class="ph ph-circle" aria-hidden="true"></i> Éclatés</th>
         <th style="text-align:center">Endommagés</th>
         <th style="text-align:center">Total sortis</th>
       </tr></thead>
@@ -414,7 +416,7 @@ foreach ($stocks as $r) {
           <td style="text-align:center;font-weight:700"><?= $r['total_engins'] ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:700;color:#1565c0"><?= $r['rivets_gonflables'] ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:700;color:#880e4f"><?= $r['rivets_eclates'] ?></td>
-          <td style="text-align:center;color:<?= $r['rivets_endommages']>0 ? 'var(--danger)' : 'var(--muted)' ?>;font-weight:600"><?= $r['rivets_endommages']?:0 ?></td>
+          <td style="text-align:center;color:<?= $r['rivets_endommages']>0 ? 'var(--danger-d)' : 'var(--muted)' ?>;font-weight:600"><?= $r['rivets_endommages']?:0 ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px"><?= $r['total_sortis'] ?></td>
         </tr>
       <?php endforeach; ?>
@@ -422,7 +424,7 @@ foreach ($stocks as $r) {
           <td colspan="<?= $site_force_r ? 2 : 3 ?>" style="font-weight:700;color:var(--navy)">TOTAL PÉRIODE</td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;color:#1565c0"><?= $total_gonfl ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;color:#880e4f"><?= $total_eclat ?></td>
-          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;color:var(--danger)"><?= $total_endom ?></td>
+          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;color:var(--danger-d)"><?= $total_endom ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:900;font-size:16px;color:var(--navy)"><?= $grand_total_sortis ?></td>
         </tr>
       <?php endif; ?>
@@ -434,7 +436,7 @@ foreach ($stocks as $r) {
 <!-- MODAL APPROVISIONNER -->
 <div class="modal-overlay" id="mAppro">
   <div class="modal">
-    <div class="mhdr"><h3>+ Approvisionner en rivets</h3><button class="mclose" onclick="document.getElementById('mAppro').classList.remove('open')">✕</button></div>
+    <div class="mhdr"><h3>+ Approvisionner en rivets</h3><button class="mclose" onclick="document.getElementById('mAppro').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody">
       <div id="apAlert"></div>
       <div class="form-group"><label>Site *</label>
@@ -452,7 +454,7 @@ foreach ($stocks as $r) {
     </div>
     <div class="mfoot">
       <button class="btn btn-secondary" onclick="document.getElementById('mAppro').classList.remove('open')">Annuler</button>
-      <button class="btn btn-primary" onclick="saveAppro()">✅ Valider</button>
+      <button class="btn btn-primary" onclick="saveAppro()"><i class="ph ph-check-circle" aria-hidden="true"></i> Valider</button>
     </div>
   </div>
 </div>
@@ -460,7 +462,7 @@ foreach ($stocks as $r) {
 <!-- MODAL AJUSTEMENT -->
 <div class="modal-overlay" id="mAjust">
   <div class="modal">
-    <div class="mhdr"><h3>⚖️ Ajustement stock rivets</h3><button class="mclose" onclick="document.getElementById('mAjust').classList.remove('open')">✕</button></div>
+    <div class="mhdr"><h3><i class="ph ph-scales" aria-hidden="true"></i> Ajustement stock rivets</h3><button class="mclose" onclick="document.getElementById('mAjust').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody">
       <div id="ajAlert"></div>
       <div class="form-group"><label>Site *</label>
@@ -478,7 +480,7 @@ foreach ($stocks as $r) {
     </div>
     <div class="mfoot">
       <button class="btn btn-secondary" onclick="document.getElementById('mAjust').classList.remove('open')">Annuler</button>
-      <button class="btn btn-primary" onclick="saveAjust()">✅ Appliquer</button>
+      <button class="btn btn-primary" onclick="saveAjust()"><i class="ph ph-check-circle" aria-hidden="true"></i> Appliquer</button>
     </div>
   </div>
 </div>
@@ -493,6 +495,35 @@ function saveAjust(){
   ap({action:'ajuster',site_id:document.getElementById('aj-site').value,new_qte:document.getElementById('aj-qte').value,motif:document.getElementById('aj-motif').value})
     .then(d=>{if(d.success){toast(d.message,'success');document.getElementById('mAjust').classList.remove('open');setTimeout(()=>location.reload(),800);}else document.getElementById('ajAlert').innerHTML=`<div class="alert alert-danger">${d.message}</div>`;});
 }
+// ── Filtres sans rechargement de page (meme pattern que equipements.php et
+// pages/operations/bobines.php : fetch + DOMParser remplace les zones).
+let rivEnVol = null;
+function rivCharger(url){
+  if(!window.fetch || !window.DOMParser){ location.href = url; return; }
+  if(rivEnVol) try{ rivEnVol.abort(); }catch(e){}
+  const ctrl = window.AbortController ? new AbortController() : null;
+  rivEnVol = ctrl;
+  fetch(url, {credentials:'same-origin', signal: ctrl?ctrl.signal:undefined, headers:{'X-Requested-With':'fetch'}})
+    .then(r => { if(!r.ok) throw new Error(r.status); return r.text(); })
+    .then(html => {
+      if(rivEnVol !== ctrl) return;
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      ['rivKpis','rivStock','rivResultCard'].forEach(id => {
+        const neuf = doc.getElementById(id);
+        const ancien = document.getElementById(id);
+        if(!neuf || !ancien) throw new Error('structure');
+        ancien.replaceWith(neuf);
+      });
+      history.pushState({riv:1}, '', url);
+      rivEnVol = null;
+    })
+    .catch(e => {
+      if(e && e.name==='AbortError') return;
+      rivEnVol = null;
+      location.href = url;
+    });
+}
+window.addEventListener('popstate', function(ev){ if(ev.state && ev.state.riv) location.reload(); });
 function appliquerFiltres(){
     const p=new URLSearchParams();
     p.set('from',document.getElementById('fFrom').value);
@@ -501,11 +532,11 @@ function appliquerFiltres(){
     const site=document.getElementById('fSite').value;
     if(site!=='0') p.set('site',site);
     <?php endif; ?>
-    location.href='?'+p.toString();
+    rivCharger(location.pathname+'?'+p.toString());
 }
 function resetFiltres(){
     const today=new Date(),y=today.getFullYear(),m=String(today.getMonth()+1).padStart(2,'0'),d=String(today.getDate()).padStart(2,'0');
-    location.href='?from='+y+'-'+m+'-01&to='+y+'-'+m+'-'+d;
+    rivCharger(location.pathname+'?from='+y+'-'+m+'-01&to='+y+'-'+m+'-'+d);
 }
 ['mAppro','mAjust'].forEach(id=>document.getElementById(id).addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');}));
 </script>

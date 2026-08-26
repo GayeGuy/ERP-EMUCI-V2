@@ -58,12 +58,12 @@ $sheet->getDefaultRowDimension()->setRowHeight(18);
 if ($type==='equipements') {
     require_permission('equipements','can_export');
     $w=[]; $p=[];
-    if(!empty($_GET['q'])){$w[]='(e.numero_serie_interne LIKE ? OR e.numero_serie_origine LIKE ? OR e.marque LIKE ?)';$s='%'.$_GET['q'].'%';$p=array_merge($p,[$s,$s,$s]);}
+    if(!empty($_GET['q'])){$w[]='(e.numero_serie_interne ILIKE ? OR e.numero_serie_origine ILIKE ? OR e.marque ILIKE ?)';$s='%'.$_GET['q'].'%';$p=array_merge($p,[$s,$s,$s]);}
     if(!empty($_GET['nom'])){$w[]='e.nomenclature_id=?';$p[]=(int)$_GET['nom'];}
     if(!empty($_GET['etat'])){$w[]='e.etat=?';$p[]=$_GET['etat'];}
     if(!empty($_GET['site'])){$w[]='e.site_id=?';$p[]=(int)$_GET['site'];}
     $w[]='e.actif=1';
-    $rows=db_fetch_all("SELECT e.numero_chrono,e.numero_serie_interne,e.numero_serie_origine,n.libelle AS type,e.marque,e.modele,e.etat,s.nom AS site,CONCAT(u.prenom,' ',u.nom) AS utilisateur,e.date_acquisition,e.date_mise_en_service,e.date_fin_cycle,e.observations FROM equipements e JOIN nomenclatures n ON n.id=e.nomenclature_id LEFT JOIN sites s ON s.id=e.site_id LEFT JOIN users u ON u.id=e.utilisateur_id WHERE ".implode(' AND ',$w)." ORDER BY e.numero_chrono DESC",$p);
+    $rows=db_fetch_all("SELECT e.numero_chrono,e.numero_serie_interne,e.numero_serie_origine,COALESCE(n.libelle,'—') AS type,e.marque,e.modele,e.etat,s.nom AS site,CONCAT(u.prenom,' ',u.nom) AS utilisateur,e.date_acquisition,e.date_mise_en_service,e.date_fin_cycle,e.observations FROM equipements e LEFT JOIN nomenclatures n ON n.id=e.nomenclature_id LEFT JOIN sites s ON s.id=e.site_id LEFT JOIN users u ON u.id=e.utilisateur_id WHERE ".implode(' AND ',$w)." ORDER BY e.numero_chrono DESC",$p);
     $sheet->setTitle('Équipements');
     $sheet->fromArray(['#','N° Interne','N° Série Fabricant','Type','Marque','Modèle','État','Site','Utilisateur','Date Acquisition','Mise en service','Fin de cycle','Observations'],null,'A1');
     apply_header($sp,'A1:M1'); $sheet->getRowDimension(1)->setRowHeight(22);
@@ -81,7 +81,7 @@ if ($type==='equipements') {
 // ── CONSOMMABLES ─────────────────────────────────────────────
 elseif ($type==='consommables') {
     require_permission('consommables','can_export');
-    $rows=db_fetch_all("SELECT c.code,c.libelle,c.unite,c.stock_global,c.seuil_alerte,GROUP_CONCAT(DISTINCT s.nom ORDER BY s.nom SEPARATOR ', ') AS sites FROM consommables c LEFT JOIN stock_consommables_site sc ON sc.consommable_id=c.id LEFT JOIN sites s ON s.id=sc.site_id GROUP BY c.id ORDER BY c.libelle");
+    $rows=db_fetch_all("SELECT a.code,a.libelle,a.unite,a.stock_global,a.seuil_alerte,STRING_AGG(DISTINCT s.nom, ', ' ORDER BY s.nom) AS sites FROM articles a LEFT JOIN stock_site ss ON ss.article_id=a.id LEFT JOIN sites s ON s.id=ss.site_id GROUP BY a.id ORDER BY a.libelle");
     $sheet->setTitle('Consommables');
     $sheet->fromArray(['Code','Libellé','Unité','Stock Global','Seuil Alerte','Sites'],null,'A1');
     apply_header($sp,'A1:F1');
@@ -99,7 +99,7 @@ elseif ($type==='consommables') {
 // ── LIVRAISONS ───────────────────────────────────────────────
 elseif ($type==='livraisons') {
     require_permission('consommables','can_export');
-    $rows=db_fetch_all("SELECT lc.date_livraison,c.libelle AS consommable,c.unite,lc.quantite,s.nom AS site,lc.bon_livraison,lc.notes,CONCAT(u.prenom,' ',u.nom) AS agent FROM livraisons_consommables lc JOIN consommables c ON c.id=lc.consommable_id JOIN sites s ON s.id=lc.site_id LEFT JOIN users u ON u.id=lc.created_by ORDER BY lc.date_livraison DESC");
+    $rows=db_fetch_all("SELECT lc.date_livraison,a.libelle AS consommable,a.unite,lc.quantite,s.nom AS site,lc.bon_livraison,lc.notes,CONCAT(u.prenom,' ',u.nom) AS agent FROM livraisons_consommables lc JOIN articles a ON a.id=lc.consommable_id JOIN sites s ON s.id=lc.site_id LEFT JOIN users u ON u.id=lc.created_by ORDER BY lc.date_livraison DESC");
     $sheet->setTitle('Livraisons');
     $sheet->fromArray(['Date','Consommable','Unité','Quantité','Site','Bon livraison','Notes','Agent'],null,'A1');
     apply_header($sp,'A1:H1');
@@ -174,16 +174,16 @@ elseif ($type==='couts_sites') {
     } else {
         // Détail : ligne par article × site
         $rows = db_fetch_all(
-            "SELECT s.nom AS site, c.code, c.libelle AS article, c.unite,
+            "SELECT s.nom AS site, a.code, a.libelle AS article, a.unite,
                     COALESCE(SUM(lc.quantite),0)         AS qte,
                     COALESCE(AVG(lc.prix_unitaire),0)    AS prix_unit_moy,
                     COALESCE(SUM(lc.prix_total),0)       AS cout_total
              FROM livraisons_consommables lc
              JOIN sites s ON s.id=lc.site_id
-             JOIN consommables c ON c.id=lc.consommable_id
+             JOIN articles a ON a.id=lc.consommable_id
              WHERE lc.date_livraison BETWEEN ? AND ? $where_site
                AND lc.prix_total > 0
-             GROUP BY s.id, c.id ORDER BY s.nom, cout_total DESC",
+             GROUP BY s.id, a.id ORDER BY s.nom, cout_total DESC",
             [$date_debut, $date_fin]
         );
         $sheet->setTitle('Détail coûts');
@@ -223,19 +223,21 @@ elseif ($type==='bilan_mensuel') {
     $mois  = (int)($_GET['mois']  ?? date('n'));
     $date_debut = sprintf('%04d-%02d-01', $annee, $mois);
     $date_fin   = date('Y-m-t', strtotime($date_debut));
-    $mois_label = strftime('%B %Y', strtotime($date_debut)) ?: date('Y-m', strtotime($date_debut));
+    $mois_fr = [1=>'janvier',2=>'février',3=>'mars',4=>'avril',5=>'mai',6=>'juin',
+                7=>'juillet',8=>'août',9=>'septembre',10=>'octobre',11=>'novembre',12=>'décembre'];
+    $mois_label = ($mois_fr[$mois] ?? $mois) . ' ' . $annee;
 
     $rows = db_fetch_all(
-        "SELECT s.nom AS site, c.code, c.libelle AS article, c.unite,
+        "SELECT s.nom AS site, a.code, a.libelle AS article, a.unite,
                 COALESCE(SUM(lc.quantite),0)         AS qte,
                 COALESCE(AVG(lc.prix_unitaire),0)    AS prix_unit_moy,
                 COALESCE(SUM(lc.prix_total),0)       AS cout_total
          FROM livraisons_consommables lc
          JOIN sites s ON s.id=lc.site_id
-         JOIN consommables c ON c.id=lc.consommable_id
-         WHERE YEAR(lc.date_livraison)=? AND MONTH(lc.date_livraison)=?
+         JOIN articles a ON a.id=lc.consommable_id
+         WHERE EXTRACT(YEAR FROM lc.date_livraison)=? AND EXTRACT(MONTH FROM lc.date_livraison)=?
            AND lc.prix_total > 0
-         GROUP BY s.id, c.id ORDER BY s.nom, cout_total DESC",
+         GROUP BY s.id, a.id ORDER BY s.nom, cout_total DESC",
         [$annee, $mois]
     );
 
@@ -295,7 +297,7 @@ elseif ($type==='interventions') {
     // Maintenance_info ne voit que ses propres interventions
     if ($user['role_slug']==='maintenance_info') { $where[]='im.technicien_id=?'; $params[]=$user['id']; }
     if ($f_site) { $where[]='im.site_id=?'; $params[]=$f_site; }
-    if ($f_mois) { $where[]='DATE_FORMAT(im.date_intervention,"%Y-%m")=?'; $params[]=$f_mois; }
+    if ($f_mois) { $where[]="TO_CHAR(im.date_intervention,'YYYY-MM')=?"; $params[]=$f_mois; }
     $rows = db_fetch_all(
         "SELECT im.date_intervention, s.nom AS site, im.type_action, im.description,
                 e.numero_serie_interne AS equipement, im.probleme_signale, im.solution_apportee,
@@ -321,6 +323,49 @@ elseif ($type==='interventions') {
     auto_size($sheet,11);
     $filename='interventions_'.date('Ymd_His').'.xlsx';
     audit_log($user['id'],'EXPORT','interventions',null,"Export Excel interventions");
+}
+
+// ── AFFECTATIONS / MOUVEMENTS ÉQUIPEMENTS ─────────────────────
+elseif ($type==='mouvements') {
+    require_permission('affectations','can_export');
+    $f_site = (int)($_GET['site'] ?? 0);
+    $f_type = trim($_GET['type_mouv'] ?? '');
+    $where  = ['1=1']; $params = [];
+    if ($f_site) { $where[] = '(me.site_source_id=? OR me.site_dest_id=?)'; $params[] = $f_site; $params[] = $f_site; }
+    if ($f_type) { $where[] = 'me.type=?'; $params[] = $f_type; }
+    $rows = db_fetch_all(
+        "SELECT me.created_at, me.type, e.numero_serie_interne, COALESCE(n.libelle,'—') AS type_equip,
+                s1.nom AS site_source, s2.nom AS site_dest,
+                CONCAT(ud.prenom,' ',ud.nom) AS user_dest,
+                CONCAT(u.prenom,' ',u.nom) AS agent,
+                me.fichier_bl, me.notes
+         FROM mouvements_equipements me
+         JOIN equipements e ON e.id=me.equipement_id
+         LEFT JOIN nomenclatures n ON n.id=e.nomenclature_id
+         LEFT JOIN sites s1 ON s1.id=me.site_source_id
+         LEFT JOIN sites s2 ON s2.id=me.site_dest_id
+         LEFT JOIN users u  ON u.id=me.created_by
+         LEFT JOIN users ud ON ud.id=me.user_dest_id
+         WHERE " . implode(' AND ', $where) . "
+         ORDER BY me.created_at DESC",
+        $params
+    );
+    $type_labels = ['entree'=>'Entrée','sortie'=>'Sortie','transfert'=>'Transfert','reforme'=>'Réforme','maintenance'=>'Maintenance'];
+    $sheet->setTitle('Mouvements');
+    $sheet->fromArray(['Date','Type','Équipement','Type équipement','Site source','Site destination','Utilisateur assigné','Agent','Bon de livraison','Notes'],null,'A1');
+    apply_header($sp,'A1:J1'); $sheet->getRowDimension(1)->setRowHeight(22);
+    $row=2; foreach($rows as $r){
+        $sheet->fromArray([
+            $r['created_at'], $type_labels[$r['type']] ?? $r['type'], $r['numero_serie_interne'], $r['type_equip'],
+            $r['site_source'] ?? '—', $r['site_dest'] ?? '—', trim($r['user_dest'] ?? '') ?: '—',
+            $r['agent'] ?? '—', $r['fichier_bl'] ? 'Oui' : 'Non', $r['notes'] ?? '',
+        ],null,"A$row");
+        stripe($sheet,"A$row:J$row"); $row++;
+    }
+    if($row>2) apply_data($sp,"A2:J".($row-1));
+    auto_size($sheet,10);
+    $filename='mouvements_'.date('Ymd_His').'.xlsx';
+    audit_log($user['id'],'EXPORT','affectations',null,"Export Excel mouvements équipements (".count($rows)." lignes)");
 }
 
 else { http_response_code(400); die('Type d\'export non reconnu.'); }

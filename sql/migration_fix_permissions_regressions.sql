@@ -2,12 +2,12 @@
 --  Correctif : régressions introduites par migration_permissions_27modules.sql
 --  Idempotente et strictement additive (GREATEST : ne retire jamais un droit
 --  existant, ne fait que compléter ce qui manque).
---  2026-07-30 — Variante MySQL.
+--  2026-07-30
 -- ============================================================
 --
 --  Constat : migration_permissions_27modules.sql a remplacé, pour chaque
 --  ligne (role_id, module) qu'elle touche, TOUTES les colonnes de droits par
---  ses propres valeurs (ON DUPLICATE KEY UPDATE can_read=VALUES(can_read)...).
+--  ses propres valeurs (ON CONFLICT ... DO UPDATE SET can_read=EXCLUDED...).
 --  Deux effets de bord distincts :
 --
 --   1. validation_stock_matin.php vérifie désormais can('validation_stock',
@@ -30,10 +30,8 @@
 --  rôle avait DÉJÀ un droit plus large que ce que la migration précédente a
 --  écrit dessus (elle écrase sans lire l'existant), on ne veut pas l'écraser
 --  une seconde fois avec une valeur encore plus basse.
---
---  Repose sur la clé unique permissions_uq_role_module (role_id, module).
 -- ============================================================
-START TRANSACTION;
+BEGIN;
 
 -- ── 1. validation_stock_matin.php : restaurer l'accès des trois rôles bloqués
 INSERT INTO permissions (role_id, module, can_read, can_create, can_update, can_delete, can_export)
@@ -41,12 +39,12 @@ SELECT r.id, m.module, m.r, m.c, m.u, m.d, m.e
 FROM roles r
 CROSS JOIN (VALUES
 --  module               r  c  u  d  e
-    ROW('validation_stock', 1, 1, 0, 0, 0)
+    ('validation_stock', 1, 1, 0, 0, 0)
 ) AS m(module, r, c, u, d, e)
 WHERE r.slug IN ('gestionnaire_stock', 'superviseur_operation', 'superviseur_it')
-ON DUPLICATE KEY UPDATE
-    can_read   = GREATEST(can_read,   VALUES(can_read)),
-    can_create = GREATEST(can_create, VALUES(can_create));
+ON CONFLICT (role_id, module) DO UPDATE SET
+    can_read   = GREATEST(permissions.can_read,   EXCLUDED.can_read),
+    can_create = GREATEST(permissions.can_create, EXCLUDED.can_create);
 
 -- ── 2. Dashboard : bloc "Dernières activités" (module audit)
 --     Profils concernés : general (lecteur, controleur_production,
@@ -58,8 +56,8 @@ WHERE r.slug IN (
     'lecteur', 'controleur_production', 'gestionnaire_stock', 'superviseur_achat',
     'maintenance_info', 'support_it', 'superviseur_operation'
 )
-ON DUPLICATE KEY UPDATE
-    can_read = GREATEST(can_read, VALUES(can_read));
+ON CONFLICT (role_id, module) DO UPDATE SET
+    can_read = GREATEST(permissions.can_read, EXCLUDED.can_read);
 
 -- ── 3. Dashboard : bloc "Interventions du mois" (module interventions)
 INSERT INTO permissions (role_id, module, can_read, can_create, can_update, can_delete, can_export)
@@ -69,8 +67,8 @@ WHERE r.slug IN (
     'lecteur', 'controleur_production', 'superviseur_achat',
     'superviseur_it', 'support_it', 'superviseur_operation'
 )
-ON DUPLICATE KEY UPDATE
-    can_read = GREATEST(can_read, VALUES(can_read));
+ON CONFLICT (role_id, module) DO UPDATE SET
+    can_read = GREATEST(permissions.can_read, EXCLUDED.can_read);
 
 -- ── 4. Dashboard : bloc "Bobines actives" / "Rivets en stock" pour
 --     superviseur_achat (profil general), constatés absents et non
@@ -78,10 +76,10 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO permissions (role_id, module, can_read, can_create, can_update, can_delete, can_export)
 SELECT r.id, m.module, 1, 0, 0, 0, 0
 FROM roles r
-CROSS JOIN (VALUES ROW('bobines'), ROW('rivets')) AS m(module)
+CROSS JOIN (VALUES ('bobines'), ('rivets')) AS m(module)
 WHERE r.slug = 'superviseur_achat'
-ON DUPLICATE KEY UPDATE
-    can_read = GREATEST(can_read, VALUES(can_read));
+ON CONFLICT (role_id, module) DO UPDATE SET
+    can_read = GREATEST(permissions.can_read, EXCLUDED.can_read);
 
 -- ── 5. Dashboard : bloc "Commandes de bobines" pour gestionnaire_operation.
 --     Le bloc pointait vers le module 'commandes' (corrigé en
@@ -94,8 +92,8 @@ INSERT INTO permissions (role_id, module, can_read, can_create, can_update, can_
 SELECT r.id, 'commandes_bobines', 1, 0, 0, 0, 0
 FROM roles r
 WHERE r.slug = 'gestionnaire_operation'
-ON DUPLICATE KEY UPDATE
-    can_read = GREATEST(can_read, VALUES(can_read));
+ON CONFLICT (role_id, module) DO UPDATE SET
+    can_read = GREATEST(permissions.can_read, EXCLUDED.can_read);
 
 COMMIT;
 

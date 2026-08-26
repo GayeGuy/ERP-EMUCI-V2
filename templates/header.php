@@ -37,7 +37,14 @@ $unread = count($notifs);
     :root {
       /* Brand */
       --primary:    #7C92FF;
-      --primary-d:  #5B76FF;
+      /* -d = variante « texte lisible » : marque et texte ont des exigences de
+         contraste différentes (AA texte = 4.5:1 sur fond clair), donc deux
+         rôles distincts plutôt qu'une seule teinte réutilisée partout.
+         #7C92FF ne passe pas (2.83:1) ; #3D4FD1 passe (6.49:1) en gardant la
+         même teinte. Ne remplace jamais --primary : l'icône active de la
+         sidebar (fond sombre) a besoin de la teinte claire, qui y passe déjà
+         (4.94:1) — la foncer inverserait le problème. */
+      --primary-d:  #3D4FD1;
       --primary-l:  #E8ECFF;
       --secondary:  #A5D8FF;
       --secondary-l:#E8F5FF;
@@ -57,12 +64,21 @@ $unread = count($notifs);
       --lighter:    #F0F4FF;
       --white:      #ffffff;
       --text:       #1E2B4A;
-      --muted:      #64748B;
+      --muted:      #4B5563;
       --border:     #E2E8F0;
       --danger:     #F87171;
       --success:    #34D399;
       --warning:    #FBBF24;
       --info:       #7C92FF;
+      /* Variantes « texte lisible » des couleurs d'état, même logique que
+         --primary-d ci-dessus : #F87171/#34D399/#FBBF24 ne passent pas AA en
+         texte sur fond clair (2.77 / 1.92 / 1.67:1). À utiliser pour tout
+         color: sur fond clair, ou tout fond plein avec texte blanc dessus
+         (bouton, pastille) ; --danger/--success/--warning restent la couleur
+         « marque » (bordures, puces, fonds décoratifs pâles). */
+      --danger-d:   #C0392B;
+      --success-d:  #0A7A52;
+      --warning-d:  #8A5A00;
       --sidebar-w:  252px;
       --topbar-h:   64px;
       --radius:     16px;
@@ -104,18 +120,18 @@ $unread = count($notifs);
       font-size: 20px; flex-shrink: 0;
       box-shadow: 0 4px 14px rgba(124,146,255,.4);
     }
-    .brand-text h1 {
+    .brand-text p {
       font-family: 'Plus Jakarta Sans', sans-serif;
       font-size: 16px; font-weight: 800; color: white;
-      letter-spacing: -.3px;
+      letter-spacing: -.3px; margin: 0;
     }
-    .brand-text span { font-size: 11px; color: rgba(165,216,255,.6); }
+    .brand-text span { font-size: 12px; color: rgba(165,216,255,.6); }
 
     .sidebar-nav { flex: 1; padding: 12px 0; }
 
     .nav-section {
       padding: 16px 20px 5px;
-      font-size: 10px; font-weight: 700; letter-spacing: 1.4px;
+      font-size: 12px; font-weight: 700; letter-spacing: 1.4px;
       color: rgba(255,255,255,.35);
       text-transform: uppercase;
     }
@@ -129,7 +145,7 @@ $unread = count($notifs);
       font-size: 13.5px; font-weight: 500;
       border-radius: 12px;
       border-left: none;
-      transition: all .18s cubic-bezier(.4,0,.2,1);
+      transition: background-color .18s cubic-bezier(.4,0,.2,1), border-color .18s cubic-bezier(.4,0,.2,1), color .18s cubic-bezier(.4,0,.2,1), box-shadow .18s cubic-bezier(.4,0,.2,1), transform .18s cubic-bezier(.4,0,.2,1), opacity .18s cubic-bezier(.4,0,.2,1);
     }
     .nav-item:hover {
       color: white;
@@ -141,18 +157,18 @@ $unread = count($notifs);
       font-weight: 700;
       box-shadow: 0 2px 12px rgba(0,0,0,.12);
     }
-    .nav-item.active i { color: var(--primary); }
+    .nav-item.active i { color: var(--primary-d); }
     .nav-item .nav-icon {
       width: 34px; height: 34px;
       display: flex; align-items: center; justify-content: center;
       flex-shrink: 0;
       border-radius: 10px;
       background: rgba(255,255,255,.1);
-      transition: all .18s;
+      transition: background-color .18s, border-color .18s, color .18s, box-shadow .18s, transform .18s, opacity .18s;
     }
     .nav-item .nav-icon i { font-size: 17px; line-height: 1; color: white; transition: color .18s; }
     .nav-item:hover .nav-icon { background: rgba(255,255,255,.18); }
-    .nav-item.active .nav-icon { background: var(--primary); box-shadow: 0 4px 12px rgba(124,146,255,.5); }
+    .nav-item.active .nav-icon { background: var(--primary-d); box-shadow: 0 4px 12px rgba(124,146,255,.5); }
     .nav-item.active .nav-icon i { color: white; }
     .nav-item.nav-equip.active .nav-icon { background: rgba(124,146,255,.3); box-shadow: none; }
     .nav-item.nav-equip.active {
@@ -160,11 +176,11 @@ $unread = count($notifs);
       background: rgba(255,255,255,.12);
       box-shadow: none;
     }
-    .nav-item.nav-equip.active i { color: var(--primary); }
+    .nav-item.nav-equip.active i { color: var(--primary-d); }
     .nav-badge {
       margin-left: auto;
-      background: var(--primary);
-      color: white; font-size: 10px; font-weight: 700;
+      background: var(--primary-d);
+      color: white; font-size: 12px; font-weight: 700;
       padding: 2px 7px; border-radius: 20px;
     }
 
@@ -189,7 +205,7 @@ $unread = count($notifs);
     .user-card-link:hover { background: rgba(255,255,255,.10); }
     .user-avatar {
       width: 36px; height: 36px; border-radius: 10px;
-      background: linear-gradient(135deg, var(--primary), #A5D8FF);
+      background: var(--primary-d);
       display: flex; align-items: center; justify-content: center;
       color: white; font-size: 13px; font-weight: 700; flex-shrink: 0;
     }
@@ -226,8 +242,14 @@ $unread = count($notifs);
     }
     .topbar-title {
       font-family: 'Plus Jakarta Sans', sans-serif;
-      font-size: 17px; font-weight: 700;
-      color: var(--navy); flex: 1;
+      font-size: 17px; font-weight: 700; margin: 0;
+      color: var(--navy); flex: 1; min-width: 0;
+      /* Pas de white-space:nowrap ici : la sous-ligne <small> (dashboard.php,
+         dashboard_legacy.php) est un bloc à part, un nowrap sur le parent la
+         forcerait sur la même ligne. min-width:0 suffit à corriger le bug
+         (flex item qui refuse de rétrécir sous son contenu, cf. .main-wrap
+         plus haut) : le titre repasse à la ligne plutôt que de pousser les
+         actions de la barre du haut hors du viewport. */
     }
     .topbar-title small {
       display: block;
@@ -235,22 +257,22 @@ $unread = count($notifs);
       font-size: 12px; font-weight: 400; color: var(--muted);
       margin-top: 1px;
     }
-    .topbar-actions { display: flex; align-items: center; gap: 10px; }
+    .topbar-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 
     .notif-btn {
       position: relative;
-      width: 40px; height: 40px; border-radius: 12px;
+      width: 44px; height: 44px; border-radius: 12px;
       border: 1.5px solid var(--border);
       background: var(--tertiary);
       display: flex; align-items: center; justify-content: center;
       cursor: pointer; font-size: 18px;
-      transition: all .15s;
+      transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
     }
-    .notif-btn:hover { background: var(--primary-l); border-color: var(--primary); }
+    .notif-btn:hover { background: var(--primary-l); border-color: var(--primary-d); }
     .notif-count {
       position: absolute; top: -5px; right: -5px;
-      background: var(--danger); color: white;
-      font-size: 10px; font-weight: 700;
+      background: var(--danger-d); color: white;
+      font-size: 12px; font-weight: 700;
       width: 18px; height: 18px; border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
     }
@@ -274,17 +296,23 @@ $unread = count($notifs);
       display: flex; align-items: center; justify-content: space-between;
     }
     .notif-header h4 { font-size: 14px; font-weight: 700; color: var(--navy); font-family: 'Plus Jakarta Sans',sans-serif; }
-    .notif-header a  { font-size: 12px; color: var(--primary); text-decoration: none; font-weight: 600; }
+    .notif-header a  { font-size: 12px; color: var(--primary-d); text-decoration: none; font-weight: 600; }
     .notif-list { max-height: 320px; overflow-y: auto; }
     .notif-item { padding: 12px 18px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .15s; }
     .notif-item:hover { background: var(--tertiary); }
     .notif-item:last-child { border-bottom: none; }
     .notif-item .n-titre { font-size: 13px; font-weight: 600; color: var(--navy); }
-    .notif-item .n-date  { font-size: 11px; color: var(--muted); margin-top: 3px; }
+    .notif-item .n-date  { font-size: 12px; color: var(--muted); margin-top: 3px; }
     .notif-empty { padding: 28px; text-align: center; color: var(--muted); font-size: 13px; }
 
     /* ===== PAGE CONTENT ===== */
-    .page-content { flex: 1; padding: 28px; }
+    /* min-width:0 : même raison que .main-wrap ci-dessus, un niveau plus bas.
+       Flex item par défaut refuse de descendre sous la largeur de son
+       contenu (min-width:auto) — un tableau large dans .page-content
+       l'étirait donc au-delà du viewport, entraînant tout .main-wrap (barre
+       du haut comprise) dans le débordement au lieu de rester contenu par
+       le overflow-x:auto de .table-wrap. */
+    .page-content { flex: 1; min-width: 0; padding: 28px; }
 
     /* ===== BADGES ===== */
     .badge { padding: 4px 11px; border-radius: 20px; font-size: 11.5px; font-weight: 600; letter-spacing: .2px; }
@@ -321,7 +349,7 @@ $unread = count($notifs);
       background: var(--tertiary) !important;
       color: var(--muted) !important;
       padding: 12px 16px;
-      font-size: 11px; font-weight: 700; letter-spacing: .8px;
+      font-size: 12px; font-weight: 700; letter-spacing: .8px;
       text-align: left;
       border-bottom: 1.5px solid var(--border);
       white-space: nowrap;
@@ -340,24 +368,31 @@ $unread = count($notifs);
 
     /* ===== BUTTONS ===== */
     .btn {
-      display: inline-flex; align-items: center; gap: 7px;
+      display: inline-flex; align-items: center; justify-content: center; gap: 7px;
       padding: 10px 20px;
+      min-height: 44px; /* plancher tactile — cf. n° réunion ERP « adapt » */
       border-radius: var(--radius-sm);
       font-family: 'Manrope', sans-serif;
       font-size: 13px; font-weight: 700;
       cursor: pointer; border: none; text-decoration: none;
-      transition: all .18s cubic-bezier(.4,0,.2,1);
+      transition: background-color .18s cubic-bezier(.4,0,.2,1), border-color .18s cubic-bezier(.4,0,.2,1), color .18s cubic-bezier(.4,0,.2,1), box-shadow .18s cubic-bezier(.4,0,.2,1), transform .18s cubic-bezier(.4,0,.2,1), opacity .18s cubic-bezier(.4,0,.2,1);
       letter-spacing: .1px;
     }
-    .btn-primary   { background: var(--primary); color: white; box-shadow: 0 2px 12px rgba(124,146,255,.35); }
+    .btn-primary   { background: var(--primary-d); color: white; box-shadow: 0 2px 12px rgba(124,146,255,.35); }
     .btn-primary:hover { background: var(--primary-d); box-shadow: 0 4px 16px rgba(124,146,255,.45); transform: translateY(-1px); }
     .btn-secondary { background: white; color: var(--navy); border: 1.5px solid var(--border); }
-    .btn-secondary:hover { background: var(--tertiary); border-color: var(--primary); color: var(--primary-d); }
+    .btn-secondary:hover { background: var(--tertiary); border-color: var(--primary-d); color: var(--primary-d); }
     .btn-danger    { background: #FEE2E2; color: #991B1B; border: 1.5px solid #FCA5A5; }
-    .btn-danger:hover  { background: var(--danger); color: white; border-color: var(--danger); }
+    .btn-danger:hover  { background: var(--danger-d); color: white; border-color: var(--danger-d); }
     .btn-success   { background: #D1FAE5; color: #065F46; border: 1.5px solid #6EE7B7; }
-    .btn-success:hover { background: var(--success); color: white; border-color: var(--success); }
-    .btn-sm { padding: 6px 13px; font-size: 12px; border-radius: 8px; }
+    .btn-success:hover { background: var(--success-d); color: white; border-color: var(--success-d); }
+    /* Exception volontaire au plancher de 44px : action secondaire répétée
+       dans une colonne « Actions » de tableau (plusieurs par ligne, cf.
+       equipements.php, bobines.php, commandes.php...). Un plancher de 44px
+       y ferait exploser la hauteur de chaque ligne dans un tableau déjà
+       dense. À revoir si l'app doit un jour cibler l'usage tactile plutôt
+       que le clic souris pour ces écrans. */
+    .btn-sm { padding: 6px 13px; font-size: 12px; border-radius: 8px; min-height: 32px; }
 
     /* ===== FORMS ===== */
     .form-row { display: grid; gap: 16px; margin-bottom: 16px; }
@@ -368,6 +403,22 @@ $unread = count($notifs);
       margin-bottom: 7px; color: var(--navy);
       font-family: 'Manrope', sans-serif; letter-spacing: .1px;
     }
+    /* Marquage automatique des champs obligatoires : un seul endroit à tenir
+       à jour plutôt qu'un <span>*</span> à ajouter à la main dans chaque
+       formulaire (fait dans quelques pages seulement jusqu'ici). Ne s'affiche
+       que pour l'attribut required natif — les champs obligatoires
+       uniquement en JS (upload, motif conditionnel…) gardent leur marquage
+       manuel existant, non concerné par cette règle. */
+    .form-group:has(> .form-control:required) > label::after,
+    .form-group:has(> input:required) > label::after,
+    .form-group:has(> select:required) > label::after,
+    .form-group:has(> textarea:required) > label::after,
+    .ach-fg:has(> input:required) > label::after,
+    .ach-fg:has(> select:required) > label::after,
+    .ach-fg:has(> textarea:required) > label::after {
+      content: " *";
+      color: var(--danger-d);
+    }
     .form-control {
       width: 100%; padding: 11px 14px;
       border: 1.5px solid var(--border);
@@ -377,23 +428,47 @@ $unread = count($notifs);
       transition: border-color .15s, box-shadow .15s;
     }
     .form-control:focus {
-      border-color: var(--primary);
+      border-color: var(--primary-d);
       box-shadow: 0 0 0 3px rgba(124,146,255,.15);
     }
     select.form-control { cursor: pointer; }
     textarea.form-control { resize: vertical; min-height: 80px; }
 
+    /* Cible tactile : .btn a deja un plancher 44px (cf. P1 « adapt »), mais
+       .form-control (env. 37px avec son padding actuel) ne l'a pas. Limité
+       aux largeurs tactiles pour ne pas alourdir les formulaires/tableaux
+       denses en desktop — le critère WCAG cible le tactile, pas la souris. */
+    @media (max-width: 768px) {
+      .form-control:not(textarea) { min-height: 44px; box-sizing: border-box; }
+      /* .fsel : redéfini localement (padding différent) dans une dizaine de
+         pages plutôt que centralisé — un seul plancher ici, quelle que soit
+         la page, au lieu de reprendre chaque définition locale. */
+      .fsel { min-height: 44px !important; box-sizing: border-box !important; }
+    }
+
+    /* Anneau de focus clavier global : beaucoup de pages posent
+       outline:none localement (boutons, liens, .form-control, lignes de
+       tableau cliquables) sans le remplacer, ce qui rend la navigation au
+       clavier invisible. Un seul bloc ici plutôt qu'un correctif par page —
+       :focus-visible ne se déclenche qu'au clavier, jamais au clic souris. */
+    :focus-visible {
+      outline: 2px solid var(--primary-d) !important;
+      outline-offset: 2px !important;
+    }
+
     /* ===== PAGINATION ===== */
     .pagination { display: flex; align-items: center; gap: 4px; padding: 16px; flex-wrap: wrap; }
     .page-btn {
-      padding: 8px 13px; border-radius: 10px;
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 8px 13px; min-height: 44px; min-width: 44px; box-sizing: border-box;
+      border-radius: 10px;
       border: 1.5px solid var(--border);
       font-size: 13px; color: var(--text);
-      text-decoration: none; transition: all .15s;
+      text-decoration: none; transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;
       font-weight: 500;
     }
-    .page-btn:hover { background: var(--primary-l); border-color: var(--primary); color: var(--primary-d); }
-    .page-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+    .page-btn:hover { background: var(--primary-l); border-color: var(--primary-d); color: var(--primary-d); }
+    .page-btn.active { background: var(--primary-d); color: white; border-color: var(--primary-d); }
     .page-info { margin-left: auto; font-size: 12px; color: var(--muted); }
 
     /* ===== ALERTS ===== */
@@ -410,7 +485,18 @@ $unread = count($notifs);
       .sidebar .nav-item span:not(.nav-icon), .sidebar .sidebar-footer .user-info,
       .sidebar .nav-badge { display: none; }
       .main-wrap { margin-left: 68px; }
-      .form-row.cols-2, .form-row.cols-3 { grid-template-columns: 1fr; }
+      .form-row.cols-2, .form-row.cols-3 { grid-template-columns: minmax(0,1fr); }
+      /* Rail réduit à 68px : le pied de sidebar (avatar + logout) ne
+         tenait déjà plus dans cette largeur avant même ce correctif — il
+         débordait silencieusement, masqué par overflow-x:hidden sur
+         .sidebar (donc invisible plutôt que planté). Le bouton logout est
+         redondant avec celui du menu utilisateur de la barre du haut : on
+         le masque ici plutôt que de le contraindre dans un espace qui n'a
+         jamais été prévu pour lui, et on retire le padding du user-card
+         pour que l'avatar (36px) tienne dans les 36px utiles du rail. */
+      .sidebar .sidebar-footer .logout-btn { display: none; }
+      .sidebar .sidebar-footer .user-card { padding: 0; justify-content: center; background: none; }
+      .sidebar .sidebar-footer .user-card-link { flex: 0 0 auto; padding: 0; margin: 0; }
     }
   </style>
   <script src="https://unpkg.com/@phosphor-icons/web@2.1.1/src/index.js"></script>
@@ -420,7 +506,7 @@ $unread = count($notifs);
   .nav-group-label {
     display: flex; align-items: center; gap: 8px;
     padding: 14px 20px 6px;
-    font-size: 10px; font-weight: 700; letter-spacing: 1.4px;
+    font-size: 12px; font-weight: 700; letter-spacing: 1.4px;
     color: rgba(255,255,255,.35);
     text-transform: uppercase;
     border-top: 1px solid rgba(255,255,255,.07);
@@ -455,6 +541,12 @@ $unread = count($notifs);
     --border:   #2D4060;
     --tertiary: #162032;
     --white:    #1E293B;
+    --lighter:  #162032;
+    /* --card n'est jamais défini ailleurs dans le dépôt : les ~20 usages en
+       var(--card,#fff) (module demandes internes, admin/permissions.php)
+       retombent tous sur le repli #fff. Le définir ici suffit à les
+       basculer en sombre sans toucher chaque fichier individuellement. */
+    --card:     #1E293B;
   }
 
   /* 2 — Surfaces principales */
@@ -505,7 +597,7 @@ $unread = count($notifs);
   /* 8 — Pagination */
   [data-theme="dark"] .page-btn        { background: #1E293B; color: #CBD5E1; border-color: #334155; }
   [data-theme="dark"] .page-btn:hover  { background: #253349; border-color: var(--primary); color: #93C5FD; }
-  [data-theme="dark"] .page-btn.active { background: var(--primary); color: white; border-color: var(--primary); }
+  [data-theme="dark"] .page-btn.active { background: var(--primary-d); color: white; border-color: var(--primary-d); }
   [data-theme="dark"] .page-info       { color: #7A99BE; }
 
   /* 9 — Notifications dropdown */
@@ -546,6 +638,7 @@ $unread = count($notifs);
 
   /* 13 — Éléments inline courants dans les pages */
   [data-theme="dark"] .table-wrap          { background: #1E293B; }
+  [data-theme="dark"] .vue-table td        { background: #1E293B; }
   [data-theme="dark"] .vue-table tbody tr:nth-child(even) td { background: #1A2848; }
   [data-theme="dark"] .vue-table tr.total-row td { background: #0F172A !important; color: #E2E8F0 !important; }
   [data-theme="dark"] h2, [data-theme="dark"] h3,
@@ -599,7 +692,7 @@ $unread = count($notifs);
   /* ═══ TAB BUTTONS ═══ */
   [data-theme="dark"] .tab-btn       { color: #94A3B8 !important; background: transparent; border-color: #334155 !important; }
   [data-theme="dark"] .tab-btn:hover { color: #E2E8F0 !important; }
-  [data-theme="dark"] .tab-btn.active { color: var(--primary) !important; border-color: var(--primary) !important; }
+  [data-theme="dark"] .tab-btn.active { color: var(--primary-d) !important; border-color: var(--primary) !important; }
 
   /* ═══ COMMANDES BOBINES — statuts pills ═══ */
   [data-theme="dark"] .s-attente        { background: #451A03 !important; }
@@ -630,6 +723,253 @@ $unread = count($notifs);
   [data-theme="dark"] .s-reserved       { background: #1C3B6E !important; color: #93C5FD !important; }
   [data-theme="dark"] .s-declared_broken { background: #4A1D1D !important; color: #FCA5A5 !important; }
   [data-theme="dark"] .s-lost           { background: #253349 !important; color: #94A3B8 !important; }
+
+  /* ═══ COUVERTURE STRUCTURELLE ═══
+     Chaque page définit ses propres classes de carte/panneau avec un fond
+     blanc en dur (background:white/#fff) plutôt que de réutiliser .card.
+     Sans ceci, le texte redevient clair (cf. --navy redéfini plus haut)
+     sur un fond resté blanc : illisible. Recensé par script sur tout le
+     dépôt (79 sélecteurs), regroupé ici plutôt que repris page par page —
+     un fond de carte uniforme partout plutôt qu'une teinte par page. */
+  [data-theme="dark"] .modal, [data-theme="dark"] .mhdr, [data-theme="dark"] .mfoot,
+  [data-theme="dark"] .kpi, [data-theme="dark"] .kpi-card, [data-theme="dark"] .stat-tile,
+  [data-theme="dark"] .ik, [data-theme="dark"] .pmma-card, [data-theme="dark"] .deleg-card,
+  [data-theme="dark"] .dept-panel, [data-theme="dark"] .modal-box, [data-theme="dark"] .nom-card,
+  [data-theme="dark"] .affecte-item, [data-theme="dark"] .autocomplete-results, [data-theme="dark"] .sit-card,
+  [data-theme="dark"] .ag-kpi, [data-theme="dark"] .ag-modal, [data-theme="dark"] .art-card,
+  [data-theme="dark"] .conso-card, [data-theme="dark"] .dash-card, [data-theme="dark"] .di-modal .box,
+  [data-theme="dark"] .di-back, [data-theme="dark"] .di-cstep, [data-theme="dark"] .di-plat,
+  [data-theme="dark"] .ek, [data-theme="dark"] .import-card, [data-theme="dark"] .stat-card,
+  [data-theme="dark"] .ld-box, [data-theme="dark"] .ses-k, [data-theme="dark"] .site-chip,
+  [data-theme="dark"] .bk, [data-theme="dark"] .veh-card, [data-theme="dark"] .point-preview,
+  [data-theme="dark"] .emuci-card, [data-theme="dark"] .profil-card, [data-theme="dark"] .rkpi,
+  [data-theme="dark"] .r-card, [data-theme="dark"] .cout-kpi, [data-theme="dark"] .rg-filters,
+  [data-theme="dark"] .rg-card, [data-theme="dark"] .rg-card-full, [data-theme="dark"] .rg-info,
+  [data-theme="dark"] .rk, [data-theme="dark"] .kk, [data-theme="dark"] .vsm-kpi,
+  [data-theme="dark"] .vsm-section, [data-theme="dark"] .card, [data-theme="dark"] .month-inp,
+  [data-theme="dark"] .ch-box, [data-theme="dark"] .biz-m, [data-theme="dark"] .eq-sel,
+  [data-theme="dark"] .di-btn-ghost, [data-theme="dark"] .btn-vsm-detail, [data-theme="dark"] .vsm-dec-btn,
+  [data-theme="dark"] .detail-btn, [data-theme="dark"] .btn-csv, [data-theme="dark"] .btn-xlsx,
+  [data-theme="dark"] .btn-pptx, [data-theme="dark"] .btn-pdf,
+  [data-theme="dark"] .filter-bar, [data-theme="dark"] .filtre-bar, [data-theme="dark"] .vsm-filters,
+  [data-theme="dark"] .add-form, [data-theme="dark"] .ag-drop, [data-theme="dark"] .ag-filters,
+  [data-theme="dark"] .biz-cov-bar, [data-theme="dark"] .biz-mix, [data-theme="dark"] .biz-risk-r,
+  [data-theme="dark"] .bstat-retiree, [data-theme="dark"] .btn-ghost, [data-theme="dark"] .btn-n1-off,
+  [data-theme="dark"] .chip.gray, [data-theme="dark"] .kpi-m, [data-theme="dark"] .pfw-q,
+  [data-theme="dark"] .pj-pill.veh, [data-theme="dark"] .point-badge.suivi, [data-theme="dark"] .prio-normale,
+  [data-theme="dark"] .site-picker, [data-theme="dark"] .site-statut.non_commence,
+  [data-theme="dark"] .statut-annulee, [data-theme="dark"] .statut-suivi {
+    background: #1E293B !important;
+    border-color: #334155 !important;
+  }
+  [data-theme="dark"] .btn-sm:hover, [data-theme="dark"] .dept-card:hover {
+    background: #253349 !important;
+  }
+  /* .perm-tab.active (et motifs similaires) : fond var(--navy) + texte blanc
+     fixe. --navy redevient clair plus haut (pensé pour le texte), donc ce
+     fond-là devient clair aussi tout en gardant un texte blanc — illisible.
+     On fige la combinaison plutôt que de suivre la variable. */
+  [data-theme="dark"] .perm-tab.active {
+    background: var(--primary-d) !important;
+    color: #fff !important;
+  }
+  [data-theme="dark"] .perm-tab:hover { background: #253349 !important; }
+
+  /* Même bug que .perm-tab.active ci-dessus, sur les autres éléments qui
+     utilisent var(--navy) comme fond plein (badge, en-tête, avatar rond)
+     avec du texte blanc en dur — recensés par script sur tout le dépôt. */
+  [data-theme="dark"] .ag-btn-pri, [data-theme="dark"] .ag-table thead th,
+  [data-theme="dark"] .bilan-site-hdr, [data-theme="dark"] .biz-dot-a,
+  [data-theme="dark"] .btn-add, [data-theme="dark"] .btn-primary,
+  [data-theme="dark"] .coord-bob-table th, [data-theme="dark"] .deleg-head,
+  [data-theme="dark"] .dept-card.active .dept-ico, [data-theme="dark"] .ecarts-table thead th,
+  [data-theme="dark"] .filtre-bar button, [data-theme="dark"] .form-section-num,
+  [data-theme="dark"] .matrice-table th, [data-theme="dark"] .pdg-bar::after,
+  [data-theme="dark"] .pmma-head, [data-theme="dark"] .resp-avatar,
+  [data-theme="dark"] .seg-op, [data-theme="dark"] .sit-head, [data-theme="dark"] .sq-op,
+  [data-theme="dark"] .stat-tile-total, [data-theme="dark"] .table-wrap thead th,
+  [data-theme="dark"] .user-avatar-sm {
+    background: #1E2B4A !important;
+  }
+
+  /* Champs de formulaire locaux (hors .form-control) : même traitement que
+     les champs génériques, un ton plus sombre que les cartes ci-dessus. */
+  [data-theme="dark"] .filter-bar input, [data-theme="dark"] .filter-bar select,
+  [data-theme="dark"] .filtre-bar input, [data-theme="dark"] .filtre-bar select,
+  [data-theme="dark"] .rg-field input, [data-theme="dark"] .rg-field select,
+  [data-theme="dark"] .vsm-filters input, [data-theme="dark"] .vsm-filters select,
+  [data-theme="dark"] .ag-filters input, [data-theme="dark"] .ag-filters select,
+  [data-theme="dark"] .add-form select {
+    background: #0F172A !important;
+    color: #E2E8F0 !important;
+    border-color: #334155 !important;
+  }
+
+  /* Lignes de tableau alternées/survolées declarées localement (hors table
+     generique deja couverte plus haut). */
+  [data-theme="dark"] .ag-table tbody tr:nth-child(even) td,
+  [data-theme="dark"] .coord-bob-table tr:nth-child(even) td,
+  [data-theme="dark"] .ecarts-table tbody tr:nth-child(even) td,
+  [data-theme="dark"] .vue-table tbody tr:nth-child(even) td {
+    background: #1A2848 !important;
+  }
+  [data-theme="dark"] .dv2-t tbody tr:hover td,
+  [data-theme="dark"] .sites-table tr:hover td,
+  [data-theme="dark"] .ag-table tbody tr:hover td,
+  [data-theme="dark"] .ecarts-table tbody tr:hover td,
+  [data-theme="dark"] .vsm-tbl tbody tr:hover td,
+  [data-theme="dark"] .ptbl tr:hover td,
+  [data-theme="dark"] .vue-table tbody tr:not(.total-row):hover td,
+  [data-theme="dark"] .dash-lien:hover,
+  [data-theme="dark"] .dept-card:hover,
+  [data-theme="dark"] .di-back:hover,
+  [data-theme="dark"] .di-btn-ghost:hover:not([disabled]),
+  [data-theme="dark"] .notif-item:hover {
+    background: #253349 !important;
+  }
+
+  /* Barres d'en-tête de section (mêmes classes de bandeau que .vsm-section-hdr,
+     répétées sous d'autres noms page par page). */
+  [data-theme="dark"] .vsm-section-hdr,
+  [data-theme="dark"] .rg-card-hdr,
+  [data-theme="dark"] .rg-info-hdr,
+  [data-theme="dark"] .di-actions,
+  [data-theme="dark"] .di-lbl,
+  [data-theme="dark"] .vsm-dec-help,
+  [data-theme="dark"] .kpi-cell,
+  [data-theme="dark"] .btn-annul,
+  [data-theme="dark"] .btn-sec {
+    background: #162032 !important;
+    border-color: #334155 !important;
+  }
+  /* Petits badges "fond clair + texte var(--navy)" restants (compteurs). */
+  [data-theme="dark"] .dept-ico, [data-theme="dark"] .member-ava,
+  [data-theme="dark"] .vsm-cnt, [data-theme="dark"] .vsm-tab-badge {
+    background: #253349 !important;
+    color: #E2E8F0 !important;
+  }
+  /* Pastilles neutres gris clair (.prio-normale et semblables) : fond assombri
+     plus haut, mais texte reste #64748b/#475569 (gris clair d'origine, pense
+     pour un fond pale) -> trop peu contraste sur le nouveau fond sombre. */
+  [data-theme="dark"] .statut-annulee, [data-theme="dark"] .chip.gray,
+  [data-theme="dark"] .site-statut.non_commence, [data-theme="dark"] .point-badge.suivi,
+  [data-theme="dark"] .prio-normale, [data-theme="dark"] .statut-suivi,
+  [data-theme="dark"] .s-lost, [data-theme="dark"] .st-annule {
+    color: #94A3B8 !important;
+  }
+  /* Numeros/valeurs colores en ligne (style="color:#xxx"), calibres pour un
+     fond blanc, desormais sur des cartes/tableaux assombris. */
+  [data-theme="dark"] .main-wrap [style*="color:#1D4ED8"],
+  [data-theme="dark"] .main-wrap [style*="color: #1D4ED8"],
+  [data-theme="dark"] .main-wrap [style*="color:#1d4ed8"],
+  [data-theme="dark"] .main-wrap [style*="color: #1d4ed8"] { color: #60A5FA !important; }
+  [data-theme="dark"] .main-wrap [style*="color:#065f46"],
+  [data-theme="dark"] .main-wrap [style*="color:#065F46"] { color: #34D399 !important; }
+  [data-theme="dark"] .main-wrap [style*="color:#92400e"],
+  [data-theme="dark"] .main-wrap [style*="color:#92400E"] { color: #FBBF24 !important; }
+  [data-theme="dark"] .main-wrap [style*="color:#e65100"] { color: #FB923C !important; }
+  [data-theme="dark"] .main-wrap [style*="color:#991b1b"],
+  [data-theme="dark"] .main-wrap [style*="color:#991B1B"] { color: #FCA5A5 !important; }
+  [data-theme="dark"] .main-wrap [style*="color:#c0392b"],
+  [data-theme="dark"] .main-wrap [style*="color:#c62828"] { color: #FCA5A5 !important; }
+  [data-theme="dark"] .step.s-valide .s-num  { color: #60A5FA !important; }
+  [data-theme="dark"] .step.s-recu .s-num    { color: #34D399 !important; }
+  [data-theme="dark"] .step.s-attente .s-num,
+  [data-theme="dark"] .st-en_attente         { color: #FBBF24 !important; }
+  [data-theme="dark"] .step.s-livraison .s-num { color: #FB923C !important; }
+  [data-theme="dark"] .ac-type-badge, [data-theme="dark"] .count-cell,
+  [data-theme="dark"] .cell-empty {
+    background: #253349 !important;
+    color: #E2E8F0 !important;
+  }
+  /* .sites-table th force color:#475569!important localement ; meme
+     specificite que la regle generique th{} plus haut mais chargee apres
+     (donc gagnante) -> on la re-surclasse avec un selecteur plus specifique. */
+  [data-theme="dark"] .sites-table th {
+    background: #162032 !important;
+    color: #94A3B8 !important;
+  }
+  /* .kpi utilise --kpi-c (posee en inline style par tuile) pour son accent de
+     texte/avant : les teintes choisies pour un fond blanc n'ont plus assez
+     de contraste sur .kpi assombri. */
+  [data-theme="dark"] .main-wrap [style*="--kpi-c:#1B75BC"] { --kpi-c: #60A5FA; }
+  [data-theme="dark"] .main-wrap [style*="--kpi-c:#1565c0"] { --kpi-c: #60A5FA; }
+  [data-theme="dark"] .main-wrap [style*="--kpi-c:#2e7d32"] { --kpi-c: #34D399; }
+  [data-theme="dark"] .main-wrap [style*="--kpi-c:#7b1fa2"] { --kpi-c: #C084FC; }
+
+  /* templates/dash_style.php (dashboard.php + pdg_overview.php) — meme
+     famille de bugs que plus haut, propre a ce gabarit. */
+  [data-theme="dark"] .biz-hero { background: #1E2B4A !important; }
+  [data-theme="dark"] .biz-card, [data-theme="dark"] .kpi-m {
+    background: #1E293B !important;
+    border-color: #334155 !important;
+  }
+  [data-theme="dark"] .pdg-sub, [data-theme="dark"] .card-sub,
+  [data-theme="dark"] .ch-sub, [data-theme="dark"] .kpi-m-lbl {
+    color: #94A3B8 !important;
+  }
+  /* --biz-muted (local a .biz/.eq, ~18 classes) : meme redefinition que
+     --muted plus haut, portee sur cette variable locale au gabarit. */
+  [data-theme="dark"] .biz, [data-theme="dark"] .eq { --biz-muted: #94A3B8; }
+
+  /* Garde-fou générique : tout fond blanc laissé en style="" inline sur une
+     page non encore migrée individuellement (mêmes teintes que la carte). */
+  [data-theme="dark"] .main-wrap [style*="background:#fff"]:not([style*="background:#fff5f5"]),
+  [data-theme="dark"] .main-wrap [style*="background: #fff"]:not([style*="background: #fff5f5"]),
+  [data-theme="dark"] .main-wrap [style*="background:#ffffff"],
+  [data-theme="dark"] .main-wrap [style*="background: #ffffff"] {
+    background: #1E293B !important;
+    color: #E2E8F0 !important;
+  }
+  /* Fonds gris/bleu pale neutres (encarts d'info, badges de code) laisses en
+     dur — pas les teintes semantiques rouge/vert/jaune des badges de statut,
+     volontairement inchangees (texte sature deja lisible sur son propre
+     fond quel que soit le theme). */
+  [data-theme="dark"] .main-wrap [style*="background:#f8fafc"],
+  [data-theme="dark"] .main-wrap [style*="background:#f1f5f9"],
+  [data-theme="dark"] .main-wrap [style*="background:#f8f9fa"],
+  [data-theme="dark"] .main-wrap [style*="background:#f8f9fb"],
+  [data-theme="dark"] .main-wrap [style*="background:#e2e8f0"],
+  [data-theme="dark"] .main-wrap [style*="background:#e8f4fd"],
+  [data-theme="dark"] .main-wrap [style*="background:#e3f2fd"],
+  [data-theme="dark"] .main-wrap [style*="background:#eff6ff"],
+  [data-theme="dark"] .main-wrap [style*="background:#f0f4ff"],
+  [data-theme="dark"] .main-wrap [style*="background:#e8f4f9"],
+  [data-theme="dark"] .main-wrap [style*="background:#eaf2fb"],
+  [data-theme="dark"] .main-wrap [style*="background:#f0f7ff"],
+  [data-theme="dark"] .main-wrap [style*="background:#f0f9ff"],
+  [data-theme="dark"] .main-wrap [style*="background:#eef2ff"],
+  [data-theme="dark"] .main-wrap [style*="background:#e0f0ff"],
+  [data-theme="dark"] .main-wrap [style*="background:#e8f0fe"],
+  [data-theme="dark"] .main-wrap [style*="background:#eef0f8"] {
+    background: #1E293B !important;
+    color: #E2E8F0 !important;
+  }
+  [data-theme="dark"] .main-wrap [style*="background:var(--navy)"],
+  [data-theme="dark"] .main-wrap [style*="background: var(--navy)"],
+  [data-theme="dark"] .main-wrap [style*="background:var(--navy,"] {
+    background: #1E2B4A !important;
+    color: #fff !important;
+  }
+
+  /* Dégradés décoratifs qui utilisent var(--navy) comme couleur de FOND
+     (bannières, en-têtes de rôle) plutôt que comme couleur de texte : la
+     redéfinition de --navy plus haut (pensée pour le texte) les délave en
+     clair. On les repointe sur la teinte navy d'origine, indépendamment du
+     thème — ce sont des éléments de marque, pas du texte lisible. */
+  [data-theme="dark"] .welcome-banner,
+  [data-theme="dark"] .role-header,
+  [data-theme="dark"] .capa-result,
+  [data-theme="dark"] .nom-code,
+  [data-theme="dark"] .profil-avatar-section {
+    background: linear-gradient(135deg, #1E2B4A, #2D3E6E 60%, #3B5098) !important;
+  }
+  [data-theme="dark"] .main-wrap [style*="linear-gradient(90deg,var(--navy)"] {
+    background: linear-gradient(90deg, #3B5098, transparent) !important;
+  }
+  [data-theme="dark"] .main-wrap [style*="linear-gradient(270deg,var(--navy)"] {
+    background: linear-gradient(270deg, #3B5098, transparent) !important;
+  }
   </style>
 
   <script>
@@ -640,6 +980,27 @@ $unread = count($notifs);
     var t    = pref === 'dark' ? 'dark' : pref === 'light' ? 'light' : (sys ? 'dark' : 'light');
     document.documentElement.setAttribute('data-theme', t);
   })();
+
+  /* Bascule rapide depuis la topbar (clair <-> sombre). Réutilise la même
+     clé localStorage que le sélecteur complet de Mon Profil — les deux
+     restent synchronisés, aucune préférence "auto" ici (raccourci volontairement
+     simple : cycler 3 états depuis une icône sans libellé serait peu clair). */
+  function toggleThemeQuick() {
+    var current = document.documentElement.getAttribute('data-theme') || 'light';
+    var next = current === 'dark' ? 'light' : 'dark';
+    localStorage.setItem('ds-theme-pref', next);
+    document.documentElement.setAttribute('data-theme', next);
+    syncThemeToggleIcon();
+    document.querySelectorAll('.theme-opt').forEach(function (el) {
+      el.classList.toggle('active', el.dataset.pref === next);
+    });
+  }
+  function syncThemeToggleIcon() {
+    var icon = document.getElementById('theme-toggle-icon');
+    if (!icon) return;
+    var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    icon.className = dark ? 'ph ph-sun' : 'ph ph-moon';
+  }
   </script>
 </head>
 <body>
@@ -656,7 +1017,7 @@ $unread = count($notifs);
       </svg>
     </div>
     <div class="brand-text">
-      <h1>DigiStock</h1>
+      <p>ERP EMUCI</p>
       <span>by EMUCI</span>
     </div>
   </div>
@@ -720,13 +1081,19 @@ $unread = count($notifs);
 
   <!-- TOP BAR -->
   <header class="topbar">
-    <div class="topbar-title">
+    <h1 class="topbar-title">
       <?= h($page_title ?? 'Dashboard') ?>
       <?php if (!empty($page_subtitle)): ?>
         <small><?= h($page_subtitle) ?></small>
       <?php endif; ?>
-    </div>
+    </h1>
     <div class="topbar-actions">
+
+      <!-- Thème -->
+      <button class="notif-btn" onclick="toggleThemeQuick()" title="Basculer le thème clair/sombre" aria-label="Basculer le thème clair/sombre">
+        <i class="ph" id="theme-toggle-icon" style="font-size:19px;color:var(--muted)" aria-hidden="true"></i>
+      </button>
+      <script>syncThemeToggleIcon();</script>
 
       <!-- Notifications -->
       <button class="notif-btn" onclick="toggleNotifs()" title="Notifications">
@@ -739,7 +1106,7 @@ $unread = count($notifs);
       <!-- User menu -->
       <div style="position:relative" id="user-menu-wrap">
         <button type="button" onclick="toggleUserMenu(event)" id="user-chip"
-                style="display:flex;align-items:center;gap:10px;padding:6px 12px 6px 6px;background:var(--tertiary);border-radius:40px;border:1.5px solid var(--border);cursor:pointer;transition:all .15s;font-family:inherit">
+                style="display:flex;align-items:center;gap:10px;padding:6px 12px 6px 6px;background:var(--tertiary);border-radius:40px;border:1.5px solid var(--border);cursor:pointer;transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;font-family:inherit">
           <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--primary),var(--secondary));display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:700;font-family:'Plus Jakarta Sans',sans-serif;flex-shrink:0">
             <?= strtoupper(substr($user['prenom']??'',0,1).substr($user['nom']??'',0,1)) ?>
           </div>
@@ -755,7 +1122,7 @@ $unread = count($notifs);
           <a href="<?= APP_URL ?>/pages/mon_profil.php" class="um-item"
              style="display:flex;align-items:center;gap:10px;padding:12px 16px;text-decoration:none;font-size:13px;font-weight:500;transition:background .12s;color:var(--text)"
              onmouseover="this.style.background='var(--tertiary)'" onmouseout="this.style.background=''">
-            <i class="ph-duotone ph-user-circle" style="font-size:18px;color:var(--primary)"></i>
+            <i class="ph-duotone ph-user-circle" style="font-size:18px;color:var(--primary-d)"></i>
             Mon profil
           </a>
           <div style="height:1px;background:var(--border)"></div>
@@ -774,12 +1141,12 @@ $unread = count($notifs);
   <!-- NOTIFICATION DROPDOWN -->
   <div class="notif-dropdown" id="notif-dropdown">
     <div class="notif-header">
-      <h4>Notifications <?php if ($unread): ?><span style="color:var(--danger)">(<?= $unread ?>)</span><?php endif; ?></h4>
+      <h4>Notifications <?php if ($unread): ?><span style="color:var(--danger-d)">(<?= $unread ?>)</span><?php endif; ?></h4>
       <a href="javascript:void(0)" onclick="markAllRead()">Tout marquer lu</a>
     </div>
     <div class="notif-list">
       <?php if (empty($notifs)): ?>
-        <div class="notif-empty">✅ Aucune notification</div>
+        <div class="notif-empty"><i class="ph ph-check-circle" aria-hidden="true"></i> Aucune notification</div>
       <?php else: ?>
         <?php foreach ($notifs as $n): ?>
           <div class="notif-item" onclick="readNotif(<?= $n['id'] ?>, '<?= h($n['lien']??'') ?>')">

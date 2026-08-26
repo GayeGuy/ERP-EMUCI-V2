@@ -1,5 +1,5 @@
 -- ============================================================
---  Fix : permissions d'action pour les flags restants (variante MySQL)
+--  Fix : permissions d'action pour les flags restants
 --  2026-07-30
 -- ============================================================
 --
@@ -20,23 +20,23 @@
 --  Idempotent.
 -- ============================================================
 
-START TRANSACTION;
+BEGIN;
 
 -- 1. superviseur_operation → commandes_bobines : can_update = 1
-UPDATE permissions p
-JOIN roles r ON p.role_id = r.id
-SET p.can_update = 1
-WHERE p.module = 'commandes_bobines'
+UPDATE permissions SET can_update = 1
+FROM roles r
+WHERE permissions.role_id = r.id
+  AND permissions.module = 'commandes_bobines'
   AND r.slug = 'superviseur_operation'
-  AND p.can_update <> 1;
+  AND permissions.can_update <> 1;
 
 -- 2. pmma saisie (can_create) pour les rôles qui saisissent des mouvements
-UPDATE permissions p
-JOIN roles r ON p.role_id = r.id
-SET p.can_create = 1
-WHERE p.module = 'pmma'
+UPDATE permissions SET can_create = 1
+FROM roles r
+WHERE permissions.role_id = r.id
+  AND permissions.module = 'pmma'
   AND r.slug IN ('gestionnaire_stock_bobines', 'gestionnaire_stock', 'superviseur_operation')
-  AND p.can_create <> 1;
+  AND permissions.can_create <> 1;
 
 COMMIT;
 

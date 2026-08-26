@@ -64,7 +64,7 @@ include __DIR__ . '/../templates/header.php';
 }
 .big-avatar {
   width: 80px; height: 80px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--blue-mid, #1a56a0), var(--accent-d));
+  background: var(--primary-d);
   display: flex; align-items: center; justify-content: center;
   font-size: 32px; font-weight: 700; margin: 0 auto 12px;
   border: 3px solid rgba(255,255,255,.3);
@@ -86,13 +86,13 @@ include __DIR__ . '/../templates/header.php';
   padding: 14px 24px; font-size: 13.5px; font-weight: 500;
   color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent;
   background: none; border-top: none; border-left: none; border-right: none;
-  transition: all .15s; font-family: 'DM Sans', sans-serif;
+  transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s; font-family: 'DM Sans', sans-serif;
 }
 .tab-btn.active { color: var(--blue-mid, #1a56a0); border-bottom-color: var(--blue-mid, #1a56a0); }
 .tab-pane { display: none; padding: 24px; }
 .tab-pane.active { display: block; }
 
-@media(max-width:900px){ .profil-grid{ grid-template-columns:1fr; } }
+@media(max-width:900px){ .profil-grid{ grid-template-columns:minmax(0,1fr); } }
 </style>
 
 <div class="profil-grid">
@@ -106,10 +106,10 @@ include __DIR__ . '/../templates/header.php';
         <div class="role-badge"><?= h($user['role_nom']) ?></div>
       </div>
       <div class="profil-meta">
-        <div class="meta-item"><span class="m-icon">✉</span><span class="m-val"><?= h($user['email']) ?></span></div>
-        <div class="meta-item"><span class="m-icon">📱</span><span class="m-val"><?= h($user['telephone'] ?: '—') ?></span></div>
-        <div class="meta-item"><span class="m-icon">📅</span><span class="m-val">Inscrit le <?= fmt_date($user['created_at']) ?></span></div>
-        <div class="meta-item"><span class="m-icon">🕐</span><span class="m-val">Dernière connexion : <?= fmt_datetime($user['last_login']) ?></span></div>
+        <div class="meta-item"><span class="m-icon"><i class="ph ph-envelope-simple" aria-hidden="true"></i></span><span class="m-val"><?= h($user['email']) ?></span></div>
+        <div class="meta-item"><span class="m-icon"><i class="ph ph-device-mobile" aria-hidden="true"></i></span><span class="m-val"><?= h($user['telephone'] ?: '—') ?></span></div>
+        <div class="meta-item"><span class="m-icon"><i class="ph ph-calendar" aria-hidden="true"></i></span><span class="m-val">Inscrit le <?= fmt_date($user['created_at']) ?></span></div>
+        <div class="meta-item"><span class="m-icon"><i class="ph ph-clock" aria-hidden="true"></i></span><span class="m-val">Dernière connexion : <?= fmt_datetime($user['last_login']) ?></span></div>
       </div>
     </div>
   </div>
@@ -117,9 +117,9 @@ include __DIR__ . '/../templates/header.php';
   <!-- COLONNE DROITE -->
   <div class="profil-card">
     <div class="tabs">
-      <button class="tab-btn active" onclick="showTab('infos',this)">📝 Informations</button>
-      <button class="tab-btn" onclick="showTab('password',this)">🔒 Mot de passe</button>
-      <button class="tab-btn" onclick="showTab('activites',this)">📋 Activités</button>
+      <button class="tab-btn active" onclick="showTab('infos',this)"><i class="ph ph-note-pencil" aria-hidden="true"></i> Informations</button>
+      <button class="tab-btn" onclick="showTab('password',this)"><i class="ph ph-lock" aria-hidden="true"></i> Mot de passe</button>
+      <button class="tab-btn" onclick="showTab('activites',this)"><i class="ph ph-clipboard-text" aria-hidden="true"></i> Activités</button>
     </div>
 
     <!-- TAB : INFOS -->
@@ -139,7 +139,7 @@ include __DIR__ . '/../templates/header.php';
       <div class="form-group"><label>Téléphone</label>
         <input type="text" class="form-control" id="f-tel" value="<?= h($user['telephone'] ?? '') ?>" placeholder="+225 00 00 00 00">
       </div>
-      <button class="btn btn-primary" onclick="saveInfos()">💾 Enregistrer</button>
+      <button class="btn btn-primary" onclick="saveInfos()"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Enregistrer</button>
     </div>
 
     <!-- TAB : MOT DE PASSE -->
@@ -154,7 +154,7 @@ include __DIR__ . '/../templates/header.php';
       <div class="form-group"><label>Confirmer le nouveau mot de passe</label>
         <input type="password" class="form-control" id="f-confirm-pwd" placeholder="••••••••">
       </div>
-      <button class="btn btn-primary" onclick="changePwd()">🔒 Modifier le mot de passe</button>
+      <button class="btn btn-primary" onclick="changePwd()"><i class="ph ph-lock" aria-hidden="true"></i> Modifier le mot de passe</button>
     </div>
 
     <!-- TAB : ACTIVITÉS -->
@@ -180,14 +180,14 @@ include __DIR__ . '/../templates/header.php';
 <style>
 .audit-item { display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border); }
 .audit-item:last-child{border-bottom:none;}
-.audit-action-badge{font-size:10px;font-weight:700;padding:3px 7px;border-radius:5px;flex-shrink:0;margin-top:2px;text-transform:uppercase;letter-spacing:.5px;}
+.audit-action-badge{font-size:12px;font-weight:700;padding:3px 7px;border-radius:5px;flex-shrink:0;margin-top:2px;text-transform:uppercase;letter-spacing:.5px;}
 .audit-action-badge.CREATE{background:#d5f5e3;color:#1e8449;}
 .audit-action-badge.UPDATE{background:#d6eaf8;color:#1a5276;}
 .audit-action-badge.DELETE{background:#fdedec;color:#922b21;}
 .audit-action-badge.LOGIN{background:#fef9e7;color:#9a7d0a;}
 .audit-action-badge.LOGOUT{background:#eaecee;color:#424949;}
 .audit-desc{font-size:12.5px;flex:1;}
-.audit-meta{font-size:11px;color:var(--muted);margin-top:2px;}
+.audit-meta{font-size:12px;color:var(--muted);margin-top:2px;}
 </style>
 
 <script>

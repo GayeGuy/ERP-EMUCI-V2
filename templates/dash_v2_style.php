@@ -121,7 +121,7 @@
 .dv2-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--d-4);
   margin-bottom:var(--d-4)}
 @media(max-width:1000px){.dv2-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media(max-width:520px){.dv2-kpis{grid-template-columns:1fr}}
+@media(max-width:520px){.dv2-kpis{grid-template-columns:minmax(0,1fr)}}
 
 .dv2-k{background:var(--d-surface);border:1px solid var(--d-line);border-radius:var(--d-r);
   padding:var(--d-5);box-shadow:var(--d-sh);min-width:0}
@@ -191,7 +191,7 @@
    longueur code la part. */
 .dv2-split{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--d-4);
   margin-top:var(--d-5);padding-top:var(--d-5);border-top:1px solid var(--d-line)}
-@media(max-width:600px){.dv2-split{grid-template-columns:1fr;gap:var(--d-3)}}
+@media(max-width:600px){.dv2-split{grid-template-columns:minmax(0,1fr);gap:var(--d-3)}}
 .dv2-sp-v{display:flex;align-items:baseline;gap:6px;font-family:'Plus Jakarta Sans',sans-serif;
   font-size:20px;font-weight:800;letter-spacing:-.5px}
 .dv2-sp-i{font-size:13px}
@@ -250,7 +250,7 @@
 
 /* Pastilles d'état */
 .dv2-p{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;
-  font-size:11px;font-weight:700;white-space:nowrap}
+  font-size:12px;font-weight:700;white-space:nowrap}
 .dv2-p-g{background:var(--d-green-l);color:var(--d-green)}
 .dv2-p-o{background:var(--d-amber-l);color:var(--d-amber)}
 .dv2-p-r{background:var(--d-red-l);color:var(--d-red)}

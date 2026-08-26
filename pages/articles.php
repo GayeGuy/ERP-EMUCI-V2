@@ -46,13 +46,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $desc  = trim($_POST['description']            ?? '');
         $seuil = (int)($_POST['seuil_alerte']          ?? 10);
         $prix  = (int)($_POST['prix_unitaire']         ?? 0);
+        $famille_id = (int)($_POST['famille_id']       ?? 0) ?: null;
         if (!$code || !$lib) json_response(false, 'Code et libellé obligatoires.');
         if (db_fetch_value("SELECT COUNT(*) FROM articles WHERE code=?", [$code]) > 0)
             json_response(false, "Le code $code existe déjà.");
         db_query(
-            "INSERT INTO articles (code,libelle,type_article,unite,description,seuil_alerte,prix_unitaire)
-             VALUES (?,?,?,?,?,?,?)",
-            [$code, $lib, $type, $unite, $desc, $seuil, $prix]
+            "INSERT INTO articles (code,libelle,type_article,unite,description,seuil_alerte,prix_unitaire,famille_id)
+             VALUES (?,?,?,?,?,?,?,?)",
+            [$code, $lib, $type, $unite, $desc, $seuil, $prix, $famille_id]
         );
         $id = (int)db_last_id();
         audit_log($user['id'], 'CREATE', 'articles', $id, "Création article $code — $lib");
@@ -69,12 +70,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $desc  = trim($_POST['description']    ?? '');
         $seuil = (int)($_POST['seuil_alerte']  ?? 10);
         $prix  = (int)($_POST['prix_unitaire'] ?? 0);
+        $famille_id = (int)($_POST['famille_id'] ?? 0) ?: null;
         if (!$lib) json_response(false, 'Libellé obligatoire.');
         $old = db_fetch_one("SELECT * FROM articles WHERE id=?", [$id]);
         db_query(
-            "UPDATE articles SET libelle=?,type_article=?,unite=?,description=?,seuil_alerte=?,prix_unitaire=? WHERE id=?",
-            [$lib, $type, $unite, $desc, $seuil, $prix, $id]
+            "UPDATE articles SET libelle=?,type_article=?,unite=?,description=?,seuil_alerte=?,prix_unitaire=?,famille_id=? WHERE id=?",
+            [$lib, $type, $unite, $desc, $seuil, $prix, $famille_id, $id]
         );
+        // Reclassement possible à tout moment (Bloc 1, point 9) : sans effet
+        // rétroactif, les lignes de FEB déjà émises portent déjà leur propre
+        // famille_id, copié au moment de la composition (ach_creer_feb).
+        if ((int)($old['famille_id'] ?? 0) !== (int)($famille_id ?? 0)) {
+            $ancienne = $old['famille_id'] ? db_fetch_value("SELECT libelle FROM familles_achat WHERE id=?", [$old['famille_id']]) : '—';
+            $nouvelle = $famille_id ? db_fetch_value("SELECT libelle FROM familles_achat WHERE id=?", [$famille_id]) : '—';
+            audit_log($user['id'], 'UPDATE', 'articles', $id, "Reclassement article {$old['code']} : famille « $ancienne » → « $nouvelle »");
+        }
         audit_log($user['id'], 'UPDATE', 'articles', $id, "Modification article {$old['code']}", $old);
         json_response(true, 'Article mis à jour.');
     }
@@ -102,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             $rec_id  = null;
 
             // Enregistrer la réception globale si table receptions_fournisseur existe
-            $has_rf = (bool)db_fetch_value("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='receptions_fournisseur'");
+            $has_rf = (bool)db_fetch_value("SELECT to_regclass('public.receptions_fournisseur') IS NOT NULL");
             if ($has_rf) {
                 db_query(
                     "INSERT INTO receptions_fournisseur (numero_reception,fournisseur,date_reception,statut,notes,created_by)
@@ -118,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             }
 
             // Compat legacy : enregistrer aussi dans receptions_consommables si elle existe
-            $has_old = (bool)db_fetch_value("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='receptions_consommables'");
+            $has_old = (bool)db_fetch_value("SELECT to_regclass('public.receptions_consommables') IS NOT NULL");
             if ($has_old) {
                 db_query(
                     "INSERT INTO receptions_consommables (consommable_id,quantite,prix_unitaire,prix_total,date_reception,fournisseur,numero_bon,notes,created_by)
@@ -133,7 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
             // Enregistrer mouvement
             $new_stock = (int)db_fetch_value("SELECT stock_global FROM articles WHERE id=?", [$article_id]);
-            if ((bool)db_fetch_value("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='mouvements_stock'")) {
+            if ((bool)db_fetch_value("SELECT to_regclass('public.mouvements_stock') IS NOT NULL")) {
                 db_query(
                     "INSERT INTO mouvements_stock (article_id,type_mouvement,quantite,solde_apres,reference,notes,created_by)
                      VALUES (?,?,?,?,?,?,?)",
@@ -178,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             $num_dist = 'DS-'.date('Ymd').'-'.str_pad(rand(1,999),3,'0',STR_PAD_LEFT);
 
             // compat legacy livraisons_consommables
-            $has_lc = (bool)db_fetch_value("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='livraisons_consommables'");
+            $has_lc = (bool)db_fetch_value("SELECT to_regclass('public.livraisons_consommables') IS NOT NULL");
             if ($has_lc) {
                 db_query(
                     "INSERT INTO livraisons_consommables (consommable_id,site_id,type_mouvement,quantite,prix_unitaire,prix_total,date_livraison,bon_livraison,fichier_bl,notes,created_by)
@@ -189,7 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             }
 
             // Nouvelle table distributions_site
-            $has_ds = (bool)db_fetch_value("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='distributions_site'");
+            $has_ds = (bool)db_fetch_value("SELECT to_regclass('public.distributions_site') IS NOT NULL");
             $dist_id = null;
             if ($has_ds) {
                 db_query(
@@ -208,12 +218,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             // Stock global -
             db_query("UPDATE articles SET stock_global = stock_global - ? WHERE id=?", [$qte, $article_id]);
             // Stock site +
-            db_query("INSERT INTO stock_site (article_id,site_id,quantite) VALUES (?,?,?) ON DUPLICATE KEY UPDATE quantite = quantite + VALUES(quantite)",
-                [$article_id,$site_id,$qte]);
-
-            // compat legacy stock_consommables_site
-            db_query("INSERT INTO stock_consommables_site (consommable_id,site_id,quantite) VALUES (?,?,?) ON DUPLICATE KEY UPDATE quantite = quantite + VALUES(quantite)",
-                [$article_id,$site_id,$qte]);
+            db_query("INSERT INTO stock_site (article_id,site_id,quantite) VALUES (?,?,?) ON CONFLICT (article_id,site_id) DO UPDATE SET quantite = stock_site.quantite + ?",
+                [$article_id,$site_id,$qte,$qte]);
 
             // Réception site en_attente
             db_query(
@@ -224,7 +230,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
             // Mouvement stock
             $new_stock = (int)db_fetch_value("SELECT stock_global FROM articles WHERE id=?", [$article_id]);
-            if ((bool)db_fetch_value("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='mouvements_stock'")) {
+            if ((bool)db_fetch_value("SELECT to_regclass('public.mouvements_stock') IS NOT NULL")) {
                 db_query(
                     "INSERT INTO mouvements_stock (article_id,site_id,type_mouvement,quantite,solde_apres,reference,notes,created_by)
                      VALUES (?,?,?,?,?,?,?,?)",
@@ -291,8 +297,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $diff = $new_qte - $old_qte;
         db_begin();
         try {
-            db_query("INSERT INTO stock_site (article_id,site_id,quantite) VALUES (?,?,?) ON DUPLICATE KEY UPDATE quantite = VALUES(quantite)",
-                [$article_id,$site_id,$new_qte]);
+            db_query("INSERT INTO stock_site (article_id,site_id,quantite) VALUES (?,?,?) ON CONFLICT (article_id,site_id) DO UPDATE SET quantite=?",
+                [$article_id,$site_id,$new_qte,$new_qte]);
             db_query("UPDATE articles SET stock_global = stock_global + ? WHERE id=?", [$diff, $article_id]);
             audit_log($user['id'],'UPDATE','articles',$article_id,
                 "Ajustement site:$site_id : $old_qte → $new_qte ($motif)");
@@ -313,36 +319,68 @@ $site_force = ($is_coord && $user['site_id']) ? (int)$user['site_id'] : 0;
 $search   = trim($_GET['q']       ?? '');
 $f_alerte = (int)($_GET['alerte'] ?? 0);
 $f_type   = trim($_GET['type']    ?? '');
+// Filtre site manuel (superviseur achat, etc.) — remplace l'ancien écran
+// « Stock magasin » d'Achats, jamais consulté en pratique : au lieu d'un
+// écran séparé, un site (magasin ou non) se choisit ici, et le nombre
+// affiché sur chaque carte devient alors sa quantité sur CE site plutôt
+// que le stock central agrégé.
+$f_site      = $site_force ?: (int)($_GET['site'] ?? 0);
 $where = ['1=1']; $params = [];
-if ($search)   { $where[] = '(a.code LIKE ? OR a.libelle LIKE ?)'; $s="%$search%"; $params=[$s,$s]; }
+if ($search)   { $where[] = '(a.code ILIKE ? OR a.libelle ILIKE ?)'; $s="%$search%"; $params=[$s,$s]; }
 if ($f_alerte) { $where[] = 'a.stock_global <= a.seuil_alerte'; }
 if ($f_type)   { $where[] = 'a.type_article=?'; $params[] = $f_type; }
-if ($site_force) {
+if ($f_site) {
     $where[] = 'EXISTS (SELECT 1 FROM stock_site ss WHERE ss.article_id=a.id AND ss.site_id=?)';
-    $params[] = $site_force;
+    $params[] = $f_site;
 }
 $wsql = implode(' AND ', $where);
 
 $articles_list = db_fetch_all(
     "SELECT a.*,
             COUNT(DISTINCT ss.site_id) AS nb_sites,
+            COALESCE(ss_f.quantite, 0) AS stock_site_filtre,
             COALESCE((SELECT SUM(quantite) FROM receptions_consommables r
                       WHERE r.consommable_id=a.id
-                        AND r.date_reception >= (CURRENT_DATE - INTERVAL 30 DAY)),0) AS receptions_30j,
+                        AND r.date_reception >= (CURRENT_DATE - INTERVAL '30 DAY')),0) AS receptions_30j,
             COALESCE((SELECT SUM(quantite) FROM livraisons_consommables l
                       WHERE l.consommable_id=a.id AND l.type_mouvement='distribution'
-                        AND l.date_livraison >= (CURRENT_DATE - INTERVAL 30 DAY)),0) AS distributions_30j
+                        AND l.date_livraison >= (CURRENT_DATE - INTERVAL '30 DAY')),0) AS distributions_30j
      FROM articles a
      LEFT JOIN stock_site ss ON ss.article_id=a.id
-     WHERE $wsql GROUP BY a.id ORDER BY a.type_article, a.libelle", $params
+     LEFT JOIN stock_site ss_f ON ss_f.article_id=a.id AND ss_f.site_id=?
+     WHERE $wsql GROUP BY a.id, ss_f.quantite ORDER BY a.type_article, a.libelle",
+    array_merge([$f_site ?: 0], $params)
 );
 
 $sites_list  = db_fetch_all("SELECT id,nom,type FROM sites WHERE actif=1 ORDER BY nom");
+$familles_achat = db_fetch_all("SELECT id, code, libelle FROM familles_achat WHERE actif=1 ORDER BY libelle");
+
+// Saisie libre (hors référentiel) au magasin : lignes FEB sans article_id,
+// jamais présentes dans stock_site — reprise de l'ancien écran Achats
+// « Stock magasin », visible seulement pour qui suit les achats.
+$lignes_libres = [];
+if (can('achats_suivi', 'can_read')) {
+    $where_libre  = ["fl.article_id IS NULL", "fl.type_achat IS DISTINCT FROM 'DAI'", "(fs.quantite_recue - fs.quantite_expediee) > 0", "s.type = 'magasin'"];
+    $params_libre = [];
+    if ($f_site)  { $where_libre[] = 'fs.site_id = ?'; $params_libre[] = $f_site; }
+    if ($search)  { $where_libre[] = 'fl.designation ILIKE ?'; $params_libre[] = '%' . $search . '%'; }
+    $lignes_libres = db_fetch_all(
+        "SELECT f.numero AS feb_numero, fl.designation, fl.unite, s.nom AS site_nom,
+                (fs.quantite_recue - fs.quantite_expediee) AS quantite_magasin
+         FROM feb_suivi fs
+         JOIN feb_lignes fl ON fl.id = fs.feb_ligne_id
+         JOIN feb f         ON f.id  = fs.feb_id
+         JOIN sites s       ON s.id = fs.site_id
+         WHERE " . implode(' AND ', $where_libre) . "
+         ORDER BY f.numero",
+        $params_libre
+    );
+}
 
 $kpi_total   = count($articles_list);
 $kpi_alertes = count(array_filter($articles_list, fn($a) => $a['stock_global'] <= $a['seuil_alerte']));
-$kpi_receptions_mois = (int)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM receptions_consommables WHERE date_reception >= DATE_FORMAT(CURRENT_DATE,'%Y-%m-01')");
-$kpi_distrib_mois    = (int)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM livraisons_consommables WHERE type_mouvement='distribution' AND date_livraison >= DATE_FORMAT(CURRENT_DATE,'%Y-%m-01')");
+$kpi_receptions_mois = (int)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM receptions_consommables WHERE date_reception >= date_trunc('month',CURRENT_DATE)::date");
+$kpi_distrib_mois    = (int)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM livraisons_consommables WHERE type_mouvement='distribution' AND date_livraison >= date_trunc('month',CURRENT_DATE)::date");
 
 include __DIR__ . '/../templates/header.php';
 ?>
@@ -353,17 +391,17 @@ include __DIR__ . '/../templates/header.php';
 .art-card.alerte{border-left:4px solid var(--danger)}
 .art-card.warning{border-left:4px solid var(--warning)}
 .ac-header{padding:13px 15px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
-.ac-type-badge{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;background:var(--primary-l);color:var(--primary-d)}
-.ac-code{width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#06033A,#1B75BC);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;color:white;letter-spacing:.5px;text-align:center;padding:4px;flex-shrink:0}
+.ac-type-badge{padding:2px 8px;border-radius:20px;font-size:12px;font-weight:700;background:var(--primary-l);color:var(--primary-d)}
+.ac-code{width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#06033A,#1B75BC);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:white;letter-spacing:.5px;text-align:center;padding:4px;flex-shrink:0}
 .ac-info h4{font-size:13px;font-weight:700;color:var(--navy);margin-bottom:2px}
-.ac-info span{font-size:11px;color:var(--muted)}
+.ac-info span{font-size:12px;color:var(--muted)}
 .ac-stock{padding:12px 15px;display:flex;align-items:center;gap:12px}
 .ac-stock-num{font-size:26px;font-weight:800;color:var(--navy);line-height:1;font-family:'Plus Jakarta Sans',sans-serif}
 .stock-bar{height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:4px}
 .stock-fill{height:100%;border-radius:3px}
 .ac-footer{padding:8px 15px;background:var(--tertiary);display:flex;align-items:center;justify-content:space-between;border-top:1px solid var(--border);font-size:11.5px}
 .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px;overflow-x:auto;gap:0}
-.tab-btn{padding:11px 18px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition:all .15s;white-space:nowrap;font-family:'Manrope',sans-serif}
+.tab-btn{padding:11px 18px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;white-space:nowrap;font-family:'Manrope',sans-serif}
 .tab-btn.active{color:var(--primary-d);border-bottom-color:var(--primary-d)}
 .tab-pane{display:none}.tab-pane.active{display:block}
 .modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(10,22,40,.5);backdrop-filter:blur(4px);align-items:center;justify-content:center}
@@ -375,7 +413,7 @@ include __DIR__ . '/../templates/header.php';
 .mclose{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:none;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center}
 .mbody{padding:22px}
 .mfoot{padding:13px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;background:white}
-.flux-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700}
+.flux-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:12px;font-weight:700}
 .flux-badge.reception{background:#e8f5e9;color:#2e7d32}
 .flux-badge.distribution{background:#e3f2fd;color:#1565c0}
 </style>
@@ -383,12 +421,13 @@ include __DIR__ . '/../templates/header.php';
 <!-- KPIs -->
 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px">
   <?php foreach([
-    ['ph-cube',       'Articles',       $kpi_total,                   '',             '#1B75BC'],
-    ['ph-warning',    'Alertes stock',  $kpi_alertes,                 'à réappro',    '#F87171'],
-    ['ph-arrow-down', 'Reçu ce mois',   fmt_number($kpi_receptions_mois), 'en stock', '#34D399'],
-    ['ph-arrow-up',   'Distribué',      fmt_number($kpi_distrib_mois),    'vs sites',  '#7C92FF'],
-  ] as [$ico,$lbl,$val,$sub,$col]): ?>
-  <div style="background:white;border:1.5px solid var(--border);border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:14px;border-top:3px solid <?= $col ?>">
+    ['ph-cube',       'Articles',       $kpi_total,                   '',             '#1B75BC', false],
+    ['ph-warning',    'Alertes stock',  $kpi_alertes,                 'à réappro',    '#F87171', true],
+    ['ph-arrow-down', 'Reçu ce mois',   fmt_number($kpi_receptions_mois), 'en stock', '#34D399', false],
+    ['ph-arrow-up',   'Distribué',      fmt_number($kpi_distrib_mois),    'vs sites',  '#7C92FF', false],
+  ] as [$ico,$lbl,$val,$sub,$col,$cliquable]): ?>
+  <div<?= $cliquable ? ' onclick="filtrerAlertes()" role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')filtrerAlertes()"' : '' ?>
+       style="background:white;border:1.5px solid var(--border);border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:14px;border-top:3px solid <?= $col ?><?= $cliquable ? ';cursor:pointer' : '' ?>">
     <div style="width:44px;height:44px;border-radius:12px;background:var(--tertiary);display:flex;align-items:center;justify-content:center;flex-shrink:0">
       <i class="ph-duotone <?= $ico ?>" style="font-size:22px;color:<?= $col ?>"></i>
     </div>
@@ -415,20 +454,29 @@ include __DIR__ . '/../templates/header.php';
   <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
     <div style="position:relative;flex:1;min-width:200px">
       <i class="ph-duotone ph-magnifying-glass" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted)"></i>
-      <input type="text" id="searchQ" value="<?= h($search) ?>" placeholder="Rechercher un article…"
+      <input type="text" id="searchQ" value="<?= h($search) ?>" placeholder="Rechercher un article…" aria-label="Rechercher un article"
         style="width:100%;padding:10px 14px 10px 38px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;outline:none;font-family:'Manrope',sans-serif"
         oninput="filterArticles(this.value)">
     </div>
-    <select id="filterType" onchange="filterArticles()"
+    <select id="filterType" onchange="filterArticles()" aria-label="Filtrer par type d'article"
       style="padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none;font-family:'Manrope',sans-serif">
       <option value="">Tous les types</option>
       <?php foreach($TYPES_ARTICLE as $k=>$l): ?>
       <option value="<?= $k ?>" <?= $f_type===$k?'selected':'' ?>><?= $l ?></option>
       <?php endforeach; ?>
     </select>
+    <?php if (!$is_coord): ?>
+    <select id="filterSite" onchange="filterBySite(this.value)" aria-label="Filtrer par site"
+      style="padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none;font-family:'Manrope',sans-serif">
+      <option value="">Tous les sites (stock central)</option>
+      <?php foreach($sites_list as $s): ?>
+      <option value="<?= $s['id'] ?>" <?= $f_site===(int)$s['id']?'selected':'' ?>><?= h($s['nom']) ?><?= $s['type']==='magasin'?' (magasin)':'' ?></option>
+      <?php endforeach; ?>
+    </select>
+    <?php endif; ?>
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:9px 13px;border:1.5px solid var(--border);border-radius:9px;background:white">
       <input type="checkbox" id="alerteOnly" <?= $f_alerte?'checked':'' ?> onchange="filterArticles()">
-      <i class="ph-duotone ph-warning" style="color:var(--warning)"></i> Alertes
+      <i class="ph-duotone ph-warning" style="color:var(--warning-d)"></i> Alertes
     </label>
     <?php if(can('consommables','can_create')): ?>
     <button class="btn btn-primary" onclick="openMA()">
@@ -439,7 +487,10 @@ include __DIR__ . '/../templates/header.php';
 
   <div class="art-grid" id="artGrid">
   <?php foreach($articles_list as $a):
-    $ratio = $a['seuil_alerte']>0 ? $a['stock_global']/$a['seuil_alerte'] : 2;
+    // Un site est filtré : la carte montre sa quantité sur CE site plutôt
+    // que le stock central agrégé (remplace l'ancien écran « Stock magasin »).
+    $stock_affiche = $f_site ? (int)$a['stock_site_filtre'] : (int)$a['stock_global'];
+    $ratio = $a['seuil_alerte']>0 ? $stock_affiche/$a['seuil_alerte'] : 2;
     $pct   = min(100, $ratio * 100);
     $cls   = $ratio<=0?'alerte':($ratio<=1?'warning':'');
     $fill  = $ratio<=0.5?'var(--danger)':($ratio<=1?'var(--warning)':'var(--success)');
@@ -454,27 +505,27 @@ include __DIR__ . '/../templates/header.php';
         <h4><?= h($a['libelle']) ?></h4>
         <div style="display:flex;gap:5px;align-items:center">
           <span class="ac-type-badge"><?= $TYPES_ARTICLE[$a['type_article']]??$a['type_article'] ?></span>
-          <span style="font-size:11px;color:var(--muted)"><?= $UNITES[$a['unite']]??$a['unite'] ?></span>
+          <span style="font-size:12px;color:var(--muted)"><?= $UNITES[$a['unite']]??$a['unite'] ?></span>
         </div>
       </div>
-      <?php if($ratio<=0): ?><span style="font-size:18px">🔴</span>
-      <?php elseif($cls): ?><span style="font-size:18px">🟡</span>
+      <?php if($ratio<=0): ?><span style="font-size:18px"><i class="ph ph-circle" aria-hidden="true"></i></span>
+      <?php elseif($cls): ?><span style="font-size:18px"><i class="ph ph-circle" aria-hidden="true"></i></span>
       <?php endif; ?>
     </div>
     <div class="ac-stock">
       <div>
-        <div class="ac-stock-num" style="color:<?= $ratio<=0?'var(--danger)':($ratio<=1?'var(--warning)':'var(--navy)') ?>">
-          <?= fmt_number($a['stock_global']) ?>
+        <div class="ac-stock-num" style="color:<?= $ratio<=0?'var(--danger-d)':($ratio<=1?'var(--warning-d)':'var(--navy)') ?>">
+          <?= fmt_number($stock_affiche) ?>
         </div>
         <div style="font-size:10.5px;color:var(--muted)"><?= $UNITES[$a['unite']]??$a['unite'] ?></div>
       </div>
       <div style="flex:1">
-        <div style="display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px">
           <span style="color:var(--muted)">Seuil : <?= $a['seuil_alerte'] ?></span>
-          <span style="color:<?= $cls?'var(--danger)':'var(--success)' ?>;font-weight:700"><?= round($pct) ?>%</span>
+          <span style="color:<?= $cls?'var(--danger-d)':'var(--success-d)' ?>;font-weight:700"><?= round($pct) ?>%</span>
         </div>
         <div class="stock-bar"><div class="stock-fill" style="width:<?= $pct ?>%;background:<?= $fill ?>"></div></div>
-        <div style="font-size:10px;color:var(--muted);margin-top:3px;display:flex;gap:8px">
+        <div style="font-size:12px;color:var(--muted);margin-top:3px;display:flex;gap:8px">
           <?php if($a['receptions_30j']>0): ?><span>+<?= fmt_number($a['receptions_30j']) ?> reçus</span><?php endif; ?>
           <?php if($a['distributions_30j']>0): ?><span>-<?= fmt_number($a['distributions_30j']) ?> distrib.</span><?php endif; ?>
         </div>
@@ -495,6 +546,34 @@ include __DIR__ . '/../templates/header.php';
   </div>
   <?php endif; ?>
   </div>
+
+  <?php if (can('achats_suivi', 'can_read') && !empty($lignes_libres)): ?>
+  <div class="card" style="margin-top:20px">
+    <div class="card-header"><h3><i class="ph-duotone ph-note"></i> Saisie libre (hors référentiel)</h3></div>
+    <div class="card-body" style="padding:0">
+      <div style="overflow-x:auto">
+      <table class="ach-table" style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr>
+          <th style="background:#f8fafc;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border)">FEB</th>
+          <th style="background:#f8fafc;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border)">Désignation</th>
+          <th style="background:#f8fafc;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border)">Site</th>
+          <th style="background:#f8fafc;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border)">Quantité</th>
+        </tr></thead>
+        <tbody>
+          <?php foreach($lignes_libres as $ll): ?>
+          <tr>
+            <td style="padding:10px 14px;border-bottom:1px solid var(--border);font-family:monospace;color:var(--muted)"><?= h($ll['feb_numero']) ?></td>
+            <td style="padding:10px 14px;border-bottom:1px solid var(--border)"><?= h($ll['designation']) ?></td>
+            <td style="padding:10px 14px;border-bottom:1px solid var(--border)"><?= h($ll['site_nom']) ?></td>
+            <td style="padding:10px 14px;border-bottom:1px solid var(--border);font-weight:700"><?= fmt_number($ll['quantite_magasin']) ?> <?= h($ll['unite'] ?: '') ?></td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+  <?php endif; ?>
 </div>
 
 <!-- ═══ TAB RÉCEPTION ═══ -->
@@ -525,7 +604,7 @@ include __DIR__ . '/../templates/header.php';
           <div style="padding:12px;border-radius:9px;background:var(--tertiary);border:1px solid var(--border);display:flex;align-items:center;gap:12px" id="recStockIndicator">
             <div style="font-size:22px;font-weight:800;color:var(--navy);font-family:'Plus Jakarta Sans',sans-serif" id="recStockVal">0</div>
             <div>
-              <div style="font-size:11px;color:var(--muted);font-weight:600">Stock actuel</div>
+              <div style="font-size:12px;color:var(--muted);font-weight:600">Stock actuel</div>
               <div style="font-size:12px" id="recStockMsg"></div>
             </div>
           </div>
@@ -590,7 +669,7 @@ include __DIR__ . '/../templates/header.php';
           <div style="padding:12px;border-radius:9px;display:flex;align-items:center;gap:12px" id="distStockIndicator">
             <div style="font-size:22px;font-weight:800;font-family:'Plus Jakarta Sans',sans-serif" id="distStockVal">0</div>
             <div>
-              <div style="font-size:11px;color:var(--muted);font-weight:600">Disponible en stock central</div>
+              <div style="font-size:12px;color:var(--muted);font-weight:600">Disponible en stock central</div>
               <div style="font-size:12px" id="distStockMsg"></div>
             </div>
           </div>
@@ -624,12 +703,12 @@ include __DIR__ . '/../templates/header.php';
         </div>
         <div class="form-group" style="background:#fff8e7;border:2px dashed #f59e0b;border-radius:10px;padding:13px;margin-bottom:13px">
           <label style="font-size:13px;font-weight:700;color:#b7791f;display:block;margin-bottom:6px">
-            <i class="ph-duotone ph-paperclip"></i> Bon de livraison <span style="color:var(--danger)">*</span>
-            <span style="font-size:11px;font-weight:400;color:var(--muted)"> — PDF ou image obligatoire</span>
+            <i class="ph-duotone ph-paperclip"></i> Bon de livraison <span style="color:var(--danger-d)">*</span>
+            <span style="font-size:12px;font-weight:400;color:var(--muted)"> — PDF ou image obligatoire</span>
           </label>
           <input type="file" id="distFichierBL" accept=".pdf,.jpg,.jpeg,.png,.webp"
             style="width:100%;padding:8px;border:1.5px solid #f59e0b;border-radius:8px;font-size:13px;background:white">
-          <div id="distBLPreview" style="display:none;margin-top:6px;font-size:12px;color:var(--success);font-weight:600"></div>
+          <div id="distBLPreview" style="display:none;margin-top:6px;font-size:12px;color:var(--success-d);font-weight:600"></div>
         </div>
         <div class="form-group"><label>Notes</label>
           <textarea class="form-control" id="distNotes" rows="2" placeholder="Destination, motif…"></textarea>
@@ -684,9 +763,9 @@ include __DIR__ . '/../templates/header.php';
             <td style="font-size:12px;white-space:nowrap"><?= fmt_date($h['date_op']) ?></td>
             <td><span class="flux-badge <?= $h['type_op'] ?>"><?= $h['type_op']==='reception'?'Réception':'Distribution' ?></span></td>
             <td><strong style="font-size:11.5px;color:var(--navy)"><?= h($h['art_code']) ?></strong> <?= h($h['art_lib']) ?></td>
-            <td style="text-align:right;font-weight:800;font-size:15px;color:<?= $h['type_op']==='reception'?'var(--success)':'var(--primary)' ?>">
+            <td style="text-align:right;font-weight:800;font-size:15px;color:<?= $h['type_op']==='reception'?'var(--success-d)':'var(--primary-d)' ?>">
               <?= $h['type_op']==='reception'?'+':'-' ?><?= fmt_number($h['quantite']) ?>
-              <span style="font-size:11px;font-weight:400;color:var(--muted)"><?= $h['unite'] ?></span>
+              <span style="font-size:12px;font-weight:400;color:var(--muted)"><?= $h['unite'] ?></span>
             </td>
             <td style="font-size:12px"><?= $h['type_op']==='reception' ? h($h['ref1']??'—') : h($h['site_nom']??'—') ?></td>
             <td style="font-size:12px"><?= h($h['agent']??'—') ?></td>
@@ -701,7 +780,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- MODAL CRÉER/MODIFIER ARTICLE -->
 <div class="modal-overlay" id="mA">
   <div class="modal" style="width:540px">
-    <div class="mhdr"><h3 id="mAT">Nouvel article</h3><button class="mclose" onclick="closeMA()">✕</button></div>
+    <div class="mhdr"><h3 id="mAT">Nouvel article</h3><button class="mclose" onclick="closeMA()"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody">
       <div id="mAAlert"></div>
       <input type="hidden" id="aId">
@@ -722,6 +801,15 @@ include __DIR__ . '/../templates/header.php';
         <select class="form-control" id="aType">
           <?php foreach($TYPES_ARTICLE as $k=>$l): ?><option value="<?= $k ?>"><?= $l ?></option><?php endforeach; ?>
         </select>
+      </div>
+      <div class="form-group"><label>Famille d'achat</label>
+        <select class="form-control" id="aFamille">
+          <option value="">— Aucune —</option>
+          <?php foreach($familles_achat as $fa): ?>
+            <option value="<?= $fa['id'] ?>"><?= h($fa['libelle']) ?> (<?= h($fa['code']) ?>)</option>
+          <?php endforeach; ?>
+        </select>
+        <div style="font-size:11.5px;color:var(--muted);margin-top:4px">Rattachement au référentiel achat (budget, comptabilité). Reclassable à tout moment, sans effet sur les FEB déjà émises.</div>
       </div>
       <div class="form-row cols-2">
         <div class="form-group"><label>Seuil d'alerte</label>
@@ -745,7 +833,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- MODAL DÉTAIL ARTICLE -->
 <div class="modal-overlay" id="mAD">
   <div class="modal" style="width:620px">
-    <div class="mhdr"><h3 id="adT">Détail article</h3><button class="mclose" onclick="document.getElementById('mAD').classList.remove('open')">✕</button></div>
+    <div class="mhdr"><h3 id="adT">Détail article</h3><button class="mclose" onclick="document.getElementById('mAD').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody" id="adB">Chargement…</div>
   </div>
 </div>
@@ -755,6 +843,13 @@ function showTab(id,btn){
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('#mainTabs .tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active'); btn.classList.add('active');
+}
+function filtrerAlertes(){
+  document.getElementById('alerteOnly').checked = true;
+  filterArticles();
+  const stockTabBtn = document.querySelector('#mainTabs .tab-btn');
+  if(stockTabBtn) showTab('stock', stockTabBtn);
+  document.getElementById('artGrid')?.scrollIntoView({behavior:'smooth', block:'start'});
 }
 function filterArticles(){
   const q=document.getElementById('searchQ').value.toLowerCase();
@@ -766,6 +861,15 @@ function filterArticles(){
     const mT=!t||c.dataset.type===t;
     c.style.display=(mQ&&mA&&mT)?'':'none';
   });
+}
+function filterBySite(siteId){
+  const url=new URL(window.location.href);
+  if(siteId) url.searchParams.set('site',siteId); else url.searchParams.delete('site');
+  const q=document.getElementById('searchQ').value;
+  if(q) url.searchParams.set('q',q); else url.searchParams.delete('q');
+  const t=document.getElementById('filterType').value;
+  if(t) url.searchParams.set('type',t); else url.searchParams.delete('type');
+  window.location.href=url.toString();
 }
 function updStockActuel(pfx){
   const sel=document.getElementById(pfx+(pfx==='rec'?'Art':'Art'));
@@ -779,10 +883,10 @@ function updStockActuel(pfx){
   info.style.display='block';
   val.textContent=stock.toLocaleString('fr-FR');
   ind.style.background=stock<=0?'#FEE2E2':stock<=seuil?'#FEF3C7':'#D1FAE5';
-  val.style.color=stock<=0?'var(--danger)':stock<=seuil?'var(--warning)':'var(--success)';
-  msg.innerHTML=stock<=0?'<span style="color:var(--danger);font-weight:600">Stock épuisé</span>':
-                stock<=seuil?'<span style="color:var(--warning);font-weight:600">Stock bas</span>':
-                '<span style="color:var(--success)">Stock suffisant</span>';
+  val.style.color=stock<=0?'var(--danger-d)':stock<=seuil?'var(--warning-d)':'var(--success-d)';
+  msg.innerHTML=stock<=0?'<span style="color:var(--danger-d);font-weight:600">Stock épuisé</span>':
+                stock<=seuil?'<span style="color:var(--warning-d);font-weight:600">Stock bas</span>':
+                '<span style="color:var(--success-d)">Stock suffisant</span>';
   if(o.dataset.prix>0){
     const pEl=document.getElementById(pfx==='rec'?'recPrix':'distPrix');
     if(pEl&&pEl.value==0) pEl.value=o.dataset.prix;
@@ -868,6 +972,7 @@ function resetAF(){
   ['aId','aCode','aLib','aDesc'].forEach(i=>document.getElementById(i).value='');
   document.getElementById('aSeuil').value='10'; document.getElementById('aPrix').value='0';
   document.getElementById('aUnite').value='unite'; document.getElementById('aType').value='autre';
+  document.getElementById('aFamille').value='';
   document.getElementById('mAAlert').innerHTML=''; document.getElementById('mAT').textContent='Nouvel article';
   document.getElementById('aCode').disabled=false;
 }
@@ -878,7 +983,7 @@ function saveArticle(){
     code:document.getElementById('aCode').value,libelle:document.getElementById('aLib').value,
     type_article:document.getElementById('aType').value,unite:document.getElementById('aUnite').value,
     seuil_alerte:document.getElementById('aSeuil').value,prix_unitaire:document.getElementById('aPrix').value||0,
-    description:document.getElementById('aDesc').value,
+    description:document.getElementById('aDesc').value,famille_id:document.getElementById('aFamille').value,
   }).then(d=>{
     btn.disabled=false;
     if(d.success){toast(d.message,'success');closeMA();setTimeout(()=>location.reload(),800);}
@@ -913,14 +1018,14 @@ function viewArticle(id){
            ['Prix unitaire',r.prix_unitaire>0?r.prix_unitaire.toLocaleString('fr-FR')+' FCFA':'—'],
            ['Seuil alerte',r.seuil_alerte]
           ].map(([l,v])=>`<div style="padding:6px 0;border-bottom:1px solid var(--border)">
-            <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">${l}</div>
+            <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">${l}</div>
             <div style="font-size:13.5px">${v}</div></div>`).join('')}
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px">
         <div><h4 style="font-size:13px;margin-bottom:10px;color:var(--navy)">Stock par site</h4>${sites}<h4 style="font-size:13px;margin:14px 0 10px;color:var(--navy)">Dernières réceptions</h4>${recs}</div>
         <div><h4 style="font-size:13px;margin-bottom:10px;color:var(--navy)">Dernières distributions</h4>${dists}</div>
       </div>
-      ${<?= can('consommables','can_update')?'true':'false' ?>?`<div style="text-align:right;margin-top:16px"><button class="btn btn-secondary btn-sm" onclick="editArticle(${r.id})">✏️ Modifier</button></div>`:''}`;
+      ${<?= can('consommables','can_update')?'true':'false' ?>?`<div style="text-align:right;margin-top:16px"><button class="btn btn-secondary btn-sm" onclick="editArticle(${r.id})"><i class="ph ph-pencil-simple" aria-hidden="true"></i> Modifier</button></div>`:''}`;
   });
 }
 function editArticle(id){
@@ -932,6 +1037,7 @@ function editArticle(id){
     document.getElementById('aUnite').value=r.unite; document.getElementById('aSeuil').value=r.seuil_alerte;
     document.getElementById('aPrix').value=r.prix_unitaire||0; document.getElementById('aDesc').value=r.description||'';
     document.getElementById('aType').value=r.type_article||'autre';
+    document.getElementById('aFamille').value=r.famille_id||'';
     document.getElementById('mAD').classList.remove('open'); document.getElementById('mA').classList.add('open');
   });
 }

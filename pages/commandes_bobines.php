@@ -290,7 +290,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             "SELECT b.id, b.numero, b.type_code, b.films_restants,
                     COALESCE(s.nom,'Entrepôt') AS site_actuel
              FROM op_bobines b LEFT JOIN sites s ON s.id=b.site_id
-             WHERE b.numero LIKE ? LIMIT 1",
+             WHERE b.numero ILIKE ? LIMIT 1",
             ["%$numero%"]
         );
         if (!$bob) json_response(false,"Bobine '$numero' introuvable.");
@@ -349,11 +349,11 @@ include __DIR__ . '/../templates/header.php';
 .s-expedie{background:#FFF7ED}.s-expedie .sv{color:#C2410C}
 .s-recu{background:#D1FAE5}.s-recu .sv{color:#065F46}
 
-.st-badge{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+.st-badge{padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap}
 .detail-btn{display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:7px;
   font-size:11.5px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);
-  background:white;color:var(--navy);transition:all .15s}
-.detail-btn:hover{background:var(--tertiary);border-color:var(--primary);color:var(--primary)}
+  background:white;color:var(--navy);transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;}
+.detail-btn:hover{background:var(--tertiary);border-color:var(--primary);color:var(--primary-d)}
 .st-en_attente{background:#FEF3C7;color:#92400E}
 .st-valide{background:#DBEAFE;color:#1D4ED8}
 .st-en_preparation{background:#FFF7ED;color:#C2410C}
@@ -371,22 +371,22 @@ include __DIR__ . '/../templates/header.php';
   </div>
   <div class="cb-step s-valide" onclick="filtrer('valide')">
     <div class="sv"><?= $kpi['valide'] ?></div>
-    <div class="sl">📋 À préparer</div>
+    <div class="sl"><i class="ph ph-clipboard-text" aria-hidden="true"></i> À préparer</div>
   </div>
   <div class="cb-step s-expedie" onclick="filtrer('expedie')">
     <div class="sv"><?= $kpi['expedie'] ?></div>
-    <div class="sl">🚚 Expédiées</div>
+    <div class="sl"><i class="ph ph-truck" aria-hidden="true"></i> Expédiées</div>
   </div>
   <div class="cb-step s-recu" onclick="filtrer('recu')">
     <div class="sv"><?= $kpi['recu'] ?></div>
-    <div class="sl">✅ Reçues</div>
+    <div class="sl"><i class="ph ph-check-circle" aria-hidden="true"></i> Reçues</div>
   </div>
 </div>
 
 <!-- TOOLBAR -->
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
   <form method="GET" id="frmFiltres" style="display:flex;gap:8px;align-items:center">
-    <select name="statut" id="selStatut" onchange="this.form.submit()"
+    <select name="statut" id="selStatut" onchange="this.form.submit()" aria-label="Filtrer par statut"
       style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
       <option value="">Tous statuts</option>
       <option value="en_attente"  <?= $f_statut==='en_attente'?'selected':'' ?>>⏳ En attente</option>
@@ -411,7 +411,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- LISTE -->
 <div class="card">
   <div class="card-header">
-    <h3><i class="ph-duotone ph-film-strip" style="color:var(--primary)"></i> Commandes Bobines
+    <h3><i class="ph-duotone ph-film-strip" style="color:var(--primary-d)"></i> Commandes Bobines
       <span style="font-size:12px;font-weight:400;color:var(--muted)">(<?= count($commandes) ?>)</span>
     </h3>
   </div>
@@ -432,10 +432,10 @@ include __DIR__ . '/../templates/header.php';
         <tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted)">Aucune commande.</td></tr>
       <?php else: foreach($commandes as $cmd): ?>
         <tr>
-          <td style="font-family:monospace;font-weight:700;color:var(--primary);font-size:12px"><?= h($cmd['numero']) ?></td>
+          <td style="font-family:monospace;font-weight:700;color:var(--primary-d);font-size:12px"><?= h($cmd['numero']) ?></td>
           <td>
             <div style="font-weight:700;color:var(--navy)"><?= h($cmd['type_bobine']) ?></div>
-            <div style="font-size:11px;color:var(--muted)"><?= h($cmd['libelle_type']) ?></div>
+            <div style="font-size:12px;color:var(--muted)"><?= h($cmd['libelle_type']) ?></div>
             <?php if($cmd['numeros_bobines']): ?>
             <div style="margin-top:5px;display:flex;flex-wrap:wrap;gap:3px">
               <?php foreach(explode(', ', $cmd['numeros_bobines']) as $num): ?>
@@ -453,26 +453,26 @@ include __DIR__ . '/../templates/header.php';
           </td>
           <td>
             <span class="st-badge st-<?= $cmd['statut'] ?>">
-              <?= ['en_attente'=>'⏳ En attente','valide'=>'📋 À préparer','expedie'=>'🚚 Expédiée',
-                   'recu'=>'✅ Reçue','rejete'=>'❌ Rejetée','annule'=>'Annulée'][$cmd['statut']] ?? $cmd['statut'] ?>
+              <?= ['en_attente'=>'⏳ En attente','valide'=>'<i class="ph ph-clipboard-text" aria-hidden="true"></i> À préparer','expedie'=>'<i class="ph ph-truck" aria-hidden="true"></i> Expédiée',
+                   'recu'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Reçue','rejete'=>'<i class="ph ph-x-circle" aria-hidden="true"></i> Rejetée','annule'=>'Annulée'][$cmd['statut']] ?? $cmd['statut'] ?>
             </span>
           </td>
           <td style="font-size:12px"><?= h($cmd['demandeur']??'—') ?></td>
           <td style="text-align:center;white-space:nowrap">
             <div style="display:flex;gap:4px;justify-content:center">
             <?php if($is_sup && $cmd['statut']==='en_attente'): ?>
-              <button class="btn btn-primary btn-sm" onclick="valider(<?= $cmd['id'] ?>,'<?= h($cmd['numero']) ?>')">✅ Valider</button>
-              <button class="btn btn-danger btn-sm"  onclick="rejeter(<?= $cmd['id'] ?>,'<?= h($cmd['numero']) ?>')">❌ Rejeter</button>
+              <button class="btn btn-primary btn-sm" onclick="valider(<?= $cmd['id'] ?>,'<?= h($cmd['numero']) ?>')"><i class="ph ph-check-circle" aria-hidden="true"></i> Valider</button>
+              <button class="btn btn-danger btn-sm"  onclick="rejeter(<?= $cmd['id'] ?>,'<?= h($cmd['numero']) ?>')"><i class="ph ph-x-circle" aria-hidden="true"></i> Rejeter</button>
             <?php endif; ?>
             <?php if($is_gsb && $cmd['statut']==='valide'): ?>
-              <button class="btn btn-primary btn-sm" onclick="ouvrirPreparation(<?= $cmd['id'] ?>,'<?= h($cmd['numero']) ?>','<?= h($cmd['type_bobine']) ?>','<?= $cmd['site_id'] ?>')">🎞️ Préparer</button>
+              <button class="btn btn-primary btn-sm" onclick="ouvrirPreparation(<?= $cmd['id'] ?>,'<?= h($cmd['numero']) ?>','<?= h($cmd['type_bobine']) ?>','<?= $cmd['site_id'] ?>')"><i class="ph ph-film-strip" aria-hidden="true"></i> Préparer</button>
             <?php endif; ?>
             <?php if($cmd['statut']==='expedie' && ($is_coord || $is_gsb)): ?>
-              <button class="btn btn-success btn-sm" onclick="confirmerReception(<?= $cmd['id'] ?>)">✅ Réceptionner</button>
+              <button class="btn btn-success btn-sm" onclick="confirmerReception(<?= $cmd['id'] ?>)"><i class="ph ph-check-circle" aria-hidden="true"></i> Réceptionner</button>
             <?php endif; ?>
             <?php if($cmd['statut']==='en_attente' && ($is_coord || $is_sup)): ?>
               <button class="btn btn-sm" style="background:#FEE2E2;color:#991B1B;border:1.5px solid #FCA5A5"
-                      onclick="annuler(<?= $cmd['id'] ?>)">✕</button>
+                      onclick="annuler(<?= $cmd['id'] ?>)"><i class="ph ph-x" aria-hidden="true"></i></button>
             <?php endif; ?>
             <?php if(in_array($cmd['statut'],['expedie','recu']) && $cmd['nb_bobines']>0): ?>
               <button class="detail-btn" onclick="voirDetailCommande(<?= $cmd['id'] ?>,'<?= h($cmd['numero']) ?>')">
@@ -496,13 +496,13 @@ include __DIR__ . '/../templates/header.php';
       <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)">
         <i class="ph-duotone ph-film-strip"></i> Demander une bobine
       </h3>
-      <button onclick="fermer('Nouvelle')" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+      <button onclick="fermer('Nouvelle')" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div id="alertNouvelle"></div>
 
     <div class="form-group" style="margin-bottom:16px">
       <label style="font-size:13px;font-weight:700;color:var(--navy);display:block;margin-bottom:6px">
-        Type de bobine <span style="color:var(--danger)">*</span>
+        Type de bobine <span style="color:var(--danger-d)">*</span>
       </label>
       <select class="form-control" id="nTypeBobine" onchange="checkDispo()">
         <option value="">— Sélectionner le type —</option>
@@ -537,7 +537,7 @@ include __DIR__ . '/../templates/header.php';
     <input type="hidden" id="vCmdId">
     <input type="hidden" id="vDecision">
     <div id="motifGrp" style="display:none;margin-bottom:14px">
-      <label style="font-size:13px;font-weight:700;color:var(--danger);display:block;margin-bottom:6px">Motif de rejet *</label>
+      <label style="font-size:13px;font-weight:700;color:var(--danger-d);display:block;margin-bottom:6px">Motif de rejet *</label>
       <textarea class="form-control" id="vMotif" rows="2" placeholder="Raison du rejet…"></textarea>
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px">
@@ -557,7 +557,7 @@ include __DIR__ . '/../templates/header.php';
         <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)" id="titlePrep">Préparer la commande</h3>
         <div id="subtitlePrep" style="font-size:12px;color:var(--muted);margin-top:3px"></div>
       </div>
-      <button onclick="fermer('Prep')" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+      <button onclick="fermer('Prep')" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div id="alertPrep"></div>
 
@@ -586,7 +586,7 @@ include __DIR__ . '/../templates/header.php';
       <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)">
         <i class="ph-duotone ph-arrows-left-right"></i> Transférer une bobine
       </h3>
-      <button onclick="fermer('Transfert')" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+      <button onclick="fermer('Transfert')" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div id="alertTransfert"></div>
 
@@ -635,7 +635,7 @@ async function voirDetailCommande(cmdId, numCmd){
           <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)" id="dcTitle"></h3>
           <div id="dcSub" style="font-size:12px;color:var(--muted);margin-top:2px"></div>
         </div>
-        <button onclick="document.getElementById('modalDetailCmd').remove()" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+        <button onclick="document.getElementById('modalDetailCmd').remove()" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
       </div>
       <div id="dcBody">Chargement…</div>
     </div>`;
@@ -658,26 +658,26 @@ async function voirDetailCommande(cmdId, numCmd){
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:18px">
       <div style="text-align:center;padding:11px;background:var(--tertiary);border-radius:10px">
         <div style="font-size:20px;font-weight:900;color:var(--navy)">${lignes.length}</div>
-        <div style="font-size:11px;color:var(--muted);font-weight:600">Bobines affectées</div>
+        <div style="font-size:12px;color:var(--muted);font-weight:600">Bobines affectées</div>
       </div>
       <div style="text-align:center;padding:11px;background:var(--tertiary);border-radius:10px">
         <div style="font-size:13px;font-weight:700;color:var(--navy)">${cmd.site_nom}</div>
-        <div style="font-size:11px;color:var(--muted);font-weight:600">Site</div>
+        <div style="font-size:12px;color:var(--muted);font-weight:600">Site</div>
       </div>
       <div style="text-align:center;padding:11px;background:var(--tertiary);border-radius:10px">
         <div style="font-size:13px;font-weight:700;color:var(--navy)">${cmd.gsb_nom||'—'}</div>
-        <div style="font-size:11px;color:var(--muted);font-weight:600">Préparé par</div>
+        <div style="font-size:12px;color:var(--muted);font-weight:600">Préparé par</div>
       </div>
     </div>
-    <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">🎞️ Numéros de bobines affectées</div>
+    <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px"><i class="ph ph-film-strip" aria-hidden="true"></i> Numéros de bobines affectées</div>
     <div style="border:1.5px solid var(--border);border-radius:10px;overflow:hidden">
       <table style="width:100%;border-collapse:collapse">
         <thead><tr style="background:#06033A">
-          <th style="padding:9px 12px;color:white;font-size:11px;text-align:left">N° Bobine</th>
-          <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Qté livrée</th>
-          <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Films restants</th>
-          <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Consommé</th>
-          <th style="padding:9px 12px;color:white;font-size:11px;text-align:center">Statut</th>
+          <th style="padding:9px 12px;color:white;font-size:12px;text-align:left">N° Bobine</th>
+          <th style="padding:9px 12px;color:white;font-size:12px;text-align:center">Qté livrée</th>
+          <th style="padding:9px 12px;color:white;font-size:12px;text-align:center">Films restants</th>
+          <th style="padding:9px 12px;color:white;font-size:12px;text-align:center">Consommé</th>
+          <th style="padding:9px 12px;color:white;font-size:12px;text-align:center">Statut</th>
         </tr></thead>
         <tbody>`;
 
@@ -692,7 +692,7 @@ async function voirDetailCommande(cmdId, numCmd){
       <td style="padding:9px 12px;text-align:center;font-weight:700;color:${restants===0?'#DC2626':restants<100?'#D97706':'#065F46'}">${restants}</td>
       <td style="padding:9px 12px;text-align:center">
         <span style="font-weight:700;color:#1D4ED8">${consomme}</span>
-        ${pct>0?`<span style="color:var(--muted);font-size:10px"> (${pct}%)</span>`:''}
+        ${pct>0?`<span style="color:var(--muted);font-size:12px"> (${pct}%)</span>`:''}
       </td>
       <td style="padding:9px 12px;text-align:center">
         ${l.statut_ligne==='recu'
@@ -729,10 +729,10 @@ async function checkDispo(){
   info.style.display='block';
   if(nb>0){
     info.style.background='#D1FAE5'; info.style.color='#065F46';
-    info.innerHTML=`✅ <strong>${nb}</strong> bobine(s) de ce type disponible(s) en entrepôt.`;
+    info.innerHTML=`<i class="ph ph-check-circle" aria-hidden="true"></i> <strong>${nb}</strong> bobine(s) de ce type disponible(s) en entrepôt.`;
   } else {
     info.style.background='#FEF3C7'; info.style.color='#92400E';
-    info.innerHTML=`⚠️ Aucune bobine disponible en entrepôt pour l'instant. La demande sera transmise au GSB qui vérifiera.`;
+    info.innerHTML=`<i class="ph ph-warning" aria-hidden="true"></i> Aucune bobine disponible en entrepôt pour l'instant. La demande sera transmise au GSB qui vérifiera.`;
   }
 }
 async function envoyerDemande(){
@@ -785,17 +785,17 @@ async function ouvrirPreparation(cmdId, num, type, siteId){
   const d = await ap({action:'get_bobines_dispo',type_bobine:type});
   const bobines = d.data || [];
   if(bobines.length===0){
-    document.getElementById('listeBobinesDispo').innerHTML='<div style="padding:20px;text-align:center;color:var(--danger)">❌ Aucune bobine disponible en entrepôt pour ce type.</div>';
+    document.getElementById('listeBobinesDispo').innerHTML='<div style="padding:20px;text-align:center;color:var(--danger-d)">❌ Aucune bobine disponible en entrepôt pour ce type.</div>';
     return;
   }
   let html='<table style="width:100%;border-collapse:collapse">';
   html+=`<thead><tr style="background:#F8FAFC">
-    <th style="padding:9px 12px;font-size:11px;font-weight:700;color:var(--muted);text-align:center;width:44px">
+    <th style="padding:9px 12px;font-size:12px;font-weight:700;color:var(--muted);text-align:center;width:44px">
       <input type="checkbox" id="selectAll" onchange="toggleAll(this)">
     </th>
-    <th style="padding:9px 12px;font-size:11px;font-weight:700;color:var(--muted)">N° Bobine</th>
-    <th style="padding:9px 12px;font-size:11px;font-weight:700;color:var(--muted)">Format</th>
-    <th style="padding:9px 12px;font-size:11px;font-weight:700;color:var(--muted);text-align:center">Films restants</th>
+    <th style="padding:9px 12px;font-size:12px;font-weight:700;color:var(--muted)">N° Bobine</th>
+    <th style="padding:9px 12px;font-size:12px;font-weight:700;color:var(--muted)">Format</th>
+    <th style="padding:9px 12px;font-size:12px;font-weight:700;color:var(--muted);text-align:center">Films restants</th>
   </tr></thead><tbody>`;
   bobines.forEach((b,i)=>{
     html+=`<tr style="border-top:1px solid var(--border);background:${i%2===0?'white':'#F8FAFC'}">

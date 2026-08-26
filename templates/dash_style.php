@@ -49,14 +49,14 @@
 .month-inp:focus{border-color:#1B75BC;box-shadow:0 0 0 3px rgba(27,117,188,.12)}
 
 /* ── Pastilles d'état, partagées par les bandeaux de la page */
-.hc-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;margin-top:8px}
+.hc-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:20px;font-size:12px;font-weight:700;margin-top:8px}
 .hc-green{background:#d1fae5;color:#065f46}
 .hc-orange{background:#fff7ed;color:#c2410c}
 .hc-red{background:#fee2e2;color:#991b1b}
 
 /* ── SITE PERFORMANCE SECTION */
 .perf-wrap{display:grid;grid-template-columns:1fr 1.6fr;gap:16px;margin-bottom:20px}
-@media(max-width:820px){.perf-wrap{grid-template-columns:1fr}}
+@media(max-width:820px){.perf-wrap{grid-template-columns:minmax(0,1fr)}}
 .card{background:#fff;border:1.5px solid var(--border,#e2e8f0);border-radius:18px;padding:20px 22px}
 .card-ttl{font-size:13px;font-weight:800;color:var(--navy,#06033A);margin:0 0 4px}
 .card-sub{font-size:12px;color:#475569;margin-bottom:18px}
@@ -70,14 +70,14 @@
 .site-row:last-child{border-bottom:none}
 .site-av{width:34px;height:34px;border-radius:50%;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff;letter-spacing:0}
 .site-name{font-size:13px;font-weight:700;color:var(--navy,#06033A)}
-.site-sub{font-size:11px;color:#475569}
+.site-sub{font-size:12px;color:#475569}
 .site-mini-bar{flex:1;min-width:60px}
 .site-mini-fill{height:4px;border-radius:2px;background:currentColor}
 .site-pct{font-size:12px;font-weight:800;color:var(--navy,#06033A);min-width:38px;text-align:right}
 
 /* Performance table */
 .ptbl{width:100%;border-collapse:collapse}
-.ptbl th{font-size:10px;font-weight:700;color:#475569!important;text-transform:uppercase;letter-spacing:.4px;
+.ptbl th{font-size:12px;font-weight:700;color:#475569!important;text-transform:uppercase;letter-spacing:.4px;
   padding:9px 10px;border-bottom:2px solid var(--border,#e2e8f0);text-align:right;white-space:nowrap}
 .ptbl th:first-child{text-align:left}
 .ptbl td{padding:11px 10px;border-bottom:1px solid var(--border,#f1f5f9);font-size:13px;text-align:right;vertical-align:middle}
@@ -88,7 +88,7 @@
 .mvh-g{background:#d1fae5;color:#065f46}
 .mvh-o{background:#fff7ed;color:#c2410c}
 .mvh-r{background:#fee2e2;color:#991b1b}
-.att-dot{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:#c2410c}
+.att-dot{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;color:#c2410c}
 
 /* ── PFW + ÉVOLUTION CÔTE À CÔTE */
 .pfw-evol-row{display:flex;gap:14px;align-items:stretch;margin-bottom:20px}
@@ -98,7 +98,7 @@
 
 /* ── CHARTS ROW */
 .charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
-@media(max-width:580px){.charts-row{grid-template-columns:1fr}}
+@media(max-width:580px){.charts-row{grid-template-columns:minmax(0,1fr)}}
 .ch-box{background:#fff;border:1.5px solid var(--border,#e2e8f0);border-radius:18px;padding:20px 22px}
 /* Sans min-width:0, une piste de grille ne descend pas sous la taille de
    son contenu : un canvas trop large élargit sa colonne et pousse les
@@ -107,10 +107,10 @@
 .ch-box canvas{display:block;max-width:100%}
 .pfw-right canvas{display:block;max-width:100%}
 .ch-ttl{font-size:13px;font-weight:800;color:var(--navy,#06033A);margin-bottom:4px}
-.ch-sub{font-size:11px;color:#475569;margin-bottom:14px}
+.ch-sub{font-size:12px;color:#475569;margin-bottom:14px}
 .donut-wrap{display:flex;align-items:center;justify-content:center;gap:16px;padding:8px 0}
 .leg-list{display:flex;flex-direction:column;gap:7px}
-.leg-item{display:flex;align-items:center;gap:7px;font-size:11px;color:#475569}
+.leg-item{display:flex;align-items:center;gap:7px;font-size:12px;color:#475569}
 .leg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
 .leg-val{margin-left:auto;font-weight:700;color:var(--navy,#06033A);font-size:12px}
 
@@ -120,33 +120,33 @@
 .pdg-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;align-items:start}
 .pdg-grid > .plein{grid-column:1/-1}
 .pdg-grid > *{min-width:0}
-@media(max-width:820px){.pdg-grid{grid-template-columns:1fr}}
+@media(max-width:820px){.pdg-grid{grid-template-columns:minmax(0,1fr)}}
 
 /* ── BOTTOM ROW */
 .bottom-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:20px}
-@media(max-width:720px){.bottom-row{grid-template-columns:1fr}}
+@media(max-width:720px){.bottom-row{grid-template-columns:minmax(0,1fr)}}
 
 /* ── Demandes table */
 .dtbl{width:100%;border-collapse:collapse;font-size:12px}
-.dtbl th{font-size:10px;font-weight:700;color:#475569!important;text-transform:uppercase;padding:7px 8px;
+.dtbl th{font-size:12px;font-weight:700;color:#475569!important;text-transform:uppercase;padding:7px 8px;
   border-bottom:2px solid var(--border,#e2e8f0);text-align:left;letter-spacing:.3px}
 .dtbl td{padding:9px 8px;border-bottom:1px solid #f1f5f9}
 .dtbl tr:last-child td{border-bottom:none}
-.d-statut{display:inline-block;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700}
+.d-statut{display:inline-block;padding:2px 8px;border-radius:8px;font-size:12px;font-weight:700}
 .ds-att{background:#fff7ed;color:#c2410c}
 .ds-enc{background:#dbeafe;color:#1e40af}
 .kpi-mini{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
 .kpi-m{background:#f8fafc;border-radius:12px;padding:14px 16px}
 .kpi-m-val{font-size:24px;font-weight:900;font-family:'Montserrat',sans-serif;line-height:1}
-.kpi-m-lbl{font-size:10px;color:#475569;font-weight:700;text-transform:uppercase;margin-top:4px;letter-spacing:.3px}
+.kpi-m-lbl{font-size:12px;color:#475569;font-weight:700;text-transform:uppercase;margin-top:4px;letter-spacing:.3px}
 
 /* ── Alertes */
 .atbl{width:100%;border-collapse:collapse;font-size:12px}
-.atbl th{font-size:10px;font-weight:700;color:#475569!important;text-transform:uppercase;padding:7px 8px;
+.atbl th{font-size:12px;font-weight:700;color:#475569!important;text-transform:uppercase;padding:7px 8px;
   border-bottom:2px solid var(--border,#e2e8f0);text-align:left;letter-spacing:.3px}
 .atbl td{padding:9px 8px;border-bottom:1px solid #f1f5f9;vertical-align:middle}
 .atbl tr:last-child td{border-bottom:none}
-.type-pill{display:inline-block;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700;background:#fff7ed;color:#c2410c}
+.type-pill{display:inline-block;padding:2px 8px;border-radius:8px;font-size:12px;font-weight:700;background:#fff7ed;color:#c2410c}
 
 /* ── Stock mini row */
 .stock-stat-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid #f1f5f9;font-size:13px}
@@ -156,23 +156,23 @@
 /* ── Widget Performance par site */
 .pfw-card{background:#fff;border:1.5px solid var(--border,#e2e8f0);border-radius:20px;overflow:hidden;margin-bottom:20px}
 .pfw-top{display:flex;justify-content:space-between;align-items:center;padding:16px 22px;border-bottom:1px solid #f1f5f9;flex-wrap:wrap;gap:10px}
-.pfw-site-lbl{font-size:11px;color:#5a6678;letter-spacing:.3px;margin-bottom:3px;text-transform:uppercase;font-weight:700}
+.pfw-site-lbl{font-size:12px;color:#5a6678;letter-spacing:.3px;margin-bottom:3px;text-transform:uppercase;font-weight:700}
 .pfw-site-sel{display:flex;align-items:center;gap:6px;cursor:pointer}
 .pfw-site-sel select{font-size:16px;font-weight:900;color:#06033A;background:transparent;border:none;outline:none;cursor:pointer;font-family:inherit;appearance:none;-webkit-appearance:none;padding-right:4px}
-.pfw-site-arr{font-size:11px;color:#5a6678}
+.pfw-site-arr{font-size:12px;color:#5a6678}
 .pfw-quarters{display:flex;gap:5px;align-items:center}
-.pfw-q{padding:4px 11px;border-radius:16px;border:1.5px solid #e2e8f0;background:#f8fafc;font-size:11px;font-weight:700;color:#5a6678;cursor:pointer;font-family:inherit;transition:.15s;white-space:nowrap}
+.pfw-q{padding:4px 11px;border-radius:16px;border:1.5px solid #e2e8f0;background:#f8fafc;font-size:12px;font-weight:700;color:#5a6678;cursor:pointer;font-family:inherit;transition:.15s;white-space:nowrap}
 .pfw-q:hover{border-color:#06033A;color:#06033A}
 .pfw-q.active{background:#06033A;color:#fff;border-color:#06033A}
-.pfw-legend{display:flex;align-items:center;gap:14px;padding:10px 20px 0;font-size:11px;color:#64748b}
+.pfw-legend{display:flex;align-items:center;gap:14px;padding:10px 20px 0;font-size:12px;color:#64748b}
 .pfw-leg-i{display:flex;align-items:center;gap:5px;font-weight:600}
 .pfw-leg-sq{width:10px;height:10px;border-radius:2px;flex-shrink:0}
 .pfw-body{display:grid;grid-template-columns:200px 1fr;min-height:250px}
-@media(max-width:700px){.pfw-body{grid-template-columns:1fr}}
+@media(max-width:700px){.pfw-body{grid-template-columns:minmax(0,1fr)}}
 .pfw-left{padding:22px 16px 22px 20px;display:flex;gap:10px;transition:background .35s;border-radius:0 0 0 18px}
-.pfw-vert{writing-mode:vertical-rl;transform:rotate(180deg);font-size:10px;font-weight:700;color:rgba(255,255,255,.55);letter-spacing:.8px;text-transform:uppercase;flex-shrink:0;align-self:center}
+.pfw-vert{writing-mode:vertical-rl;transform:rotate(180deg);font-size:12px;font-weight:700;color:rgba(255,255,255,.55);letter-spacing:.8px;text-transform:uppercase;flex-shrink:0;align-self:center}
 .pfw-stats{flex:1;display:flex;flex-direction:column;justify-content:center;gap:18px}
-.pfw-stat-lbl{font-size:11px;color:rgba(255,255,255,.65);margin-bottom:3px;font-weight:600}
+.pfw-stat-lbl{font-size:12px;color:rgba(255,255,255,.65);margin-bottom:3px;font-weight:600}
 .pfw-stat-val{font-size:21px;font-weight:900;color:#fff;font-family:'Montserrat',sans-serif;line-height:1}
 .pfw-right{padding:18px 20px 10px;position:relative;overflow:hidden}
 .pfw-empty{display:flex;align-items:center;justify-content:center;height:100%;color:#5a6678;font-size:13px}
@@ -180,17 +180,17 @@
 /* ══════════ BANDEAU PERFORMANCE BUSINESS ══════════ */
 .biz{--biz-muted:#5a6678;display:flex;flex-direction:column;gap:14px;margin-bottom:20px}
 .biz-hd{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
-.biz-hd-t{font-size:11px;font-weight:700;color:var(--biz-muted);text-transform:uppercase;letter-spacing:.5px}
+.biz-hd-t{font-size:12px;font-weight:700;color:var(--biz-muted);text-transform:uppercase;letter-spacing:.5px}
 .biz-hd-s{font-size:12px;color:var(--biz-muted)}
 
 .biz-lead{display:grid;grid-template-columns:1.4fr 1fr;gap:14px}
-@media(max-width:900px){.biz-lead{grid-template-columns:1fr}}
+@media(max-width:900px){.biz-lead{grid-template-columns:minmax(0,1fr)}}
 
 /* Carte de tête : taux de service */
 .biz-hero{background:var(--navy,#06033A);border-radius:18px;padding:22px 26px;color:#fff;position:relative;overflow:hidden}
 .biz-hero::after{content:'';position:absolute;right:-30px;bottom:-30px;width:150px;height:150px;
   background:rgba(255,255,255,.05);border-radius:50%}
-.biz-hero-lbl{font-size:10px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.5px}
+.biz-hero-lbl{font-size:12px;font-weight:700;color:rgba(255,255,255,.6);text-transform:uppercase;letter-spacing:.5px}
 .biz-hero-val{font-size:44px;font-weight:900;letter-spacing:-1.5px;line-height:1;font-family:'Montserrat',sans-serif;
   margin-top:8px;font-variant-numeric:tabular-nums}
 .biz-hero-u{font-size:20px;margin-left:3px;color:rgba(255,255,255,.5)}
@@ -198,24 +198,24 @@
 .biz-hero-note b{color:#fff;font-weight:700}
 /* Barre de composition de la demande */
 .biz-dem{display:flex;height:26px;border-radius:7px;overflow:hidden;margin-top:14px;background:rgba(255,255,255,.1);position:relative;z-index:1}
-.biz-dem-s{display:flex;align-items:center;padding:0 9px;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;
+.biz-dem-s{display:flex;align-items:center;padding:0 9px;font-size:12px;font-weight:700;white-space:nowrap;overflow:hidden;
   font-variant-numeric:tabular-nums}
 .biz-dem-ok{background:#86efac;color:#052e16}
 .biz-dem-ko{background:#fca5a5;color:#450a0a}
-.biz-dem-key{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:11px;color:rgba(255,255,255,.6);position:relative;z-index:1}
+.biz-dem-key{display:flex;gap:16px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:rgba(255,255,255,.6);position:relative;z-index:1}
 .biz-dem-key b{color:#fff;font-weight:700;font-variant-numeric:tabular-nums}
 .biz-dot{display:inline-block;width:8px;height:8px;border-radius:3px;margin-right:5px;vertical-align:middle}
 
 /* Quatre métriques compactes */
 .biz-mx{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-@media(max-width:580px){.biz-mx{grid-template-columns:1fr}}
+@media(max-width:580px){.biz-mx{grid-template-columns:minmax(0,1fr)}}
 .biz-m{background:#fff;border:1.5px solid var(--border,#e2e8f0);border-radius:18px;padding:16px 18px;display:flex;flex-direction:column}
 .biz-m-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;min-height:32px}
-.biz-m-lbl{font-size:10px;font-weight:700;color:var(--biz-muted);text-transform:uppercase;letter-spacing:.5px}
+.biz-m-lbl{font-size:12px;font-weight:700;color:var(--biz-muted);text-transform:uppercase;letter-spacing:.5px}
 .biz-m-val{font-size:26px;font-weight:900;color:var(--navy,#06033A);font-family:'Montserrat',sans-serif;line-height:1;
   margin-top:6px;font-variant-numeric:tabular-nums}
 .biz-m-u{font-size:14px;color:var(--biz-muted);margin-left:3px;font-weight:700}
-.biz-m-sub{font-size:11px;color:var(--biz-muted);margin-top:6px;line-height:1.45}
+.biz-m-sub{font-size:12px;color:var(--biz-muted);margin-top:6px;line-height:1.45}
 .biz-m-na{color:var(--biz-muted)}
 
 /* Mix produit */
@@ -242,7 +242,7 @@
 .biz-mix-k-t{font-size:11.5px;color:var(--biz-muted);font-weight:600}
 .biz-mix-k-v{font-size:19px;font-weight:900;color:var(--navy,#06033A);font-family:'Montserrat',sans-serif;
   line-height:1;margin-top:4px;font-variant-numeric:tabular-nums}
-.biz-mix-k-p{font-size:11px;color:var(--biz-muted);margin-top:3px}
+.biz-mix-k-p{font-size:12px;color:var(--biz-muted);margin-top:3px}
 /* Absence de saisie : la barre reste, vide et rayée, pour dire « rien
    à répartir » plutôt que de laisser croire à un bloc manquant. */
 .biz-mix-vide{background:repeating-linear-gradient(-45deg,#f1f5f9 0 6px,#e8edf3 6px 12px)}
@@ -251,7 +251,7 @@
 
 /* Couverture + fiabilité */
 .biz-split{display:grid;grid-template-columns:1.15fr 1fr;gap:14px}
-@media(max-width:900px){.biz-split{grid-template-columns:1fr}}
+@media(max-width:900px){.biz-split{grid-template-columns:minmax(0,1fr)}}
 .biz-cov{display:flex;flex-direction:column;gap:2px}
 .biz-cov-r{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(70px,1.5fr) auto;align-items:center;gap:12px;
   padding:9px 0;border-bottom:1px solid #f1f5f9}
@@ -268,12 +268,12 @@
 .cov-tip{position:fixed;z-index:9999;background:#06033A;color:#fff;border-radius:10px;padding:10px 14px;font-size:12px;min-width:180px;max-width:260px;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.22);opacity:0;transition:opacity .15s}
 .cov-tip-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.08)}
 .cov-tip-row:last-child{border-bottom:none}
-.cov-tip-lbl{color:#cbd5e1;font-size:11px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cov-tip-lbl{color:#cbd5e1;font-size:12px;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cov-tip-val{font-weight:700;color:#fff;white-space:nowrap;font-variant-numeric:tabular-nums}
 .biz-cov-d{display:flex;align-items:baseline;gap:5px;justify-content:flex-end;white-space:nowrap}
 .biz-cov-num{font-size:18px;font-weight:900;color:var(--navy,#06033A);font-family:'Montserrat',sans-serif;
   font-variant-numeric:tabular-nums}
-.biz-cov-u{font-size:11px;color:var(--biz-muted);font-weight:700}
+.biz-cov-u{font-size:12px;color:var(--biz-muted);font-weight:700}
 
 .biz-risk{display:flex;flex-direction:column;gap:9px}
 .biz-risk-r{display:flex;align-items:center;gap:11px;background:#f8fafc;border-radius:12px;padding:12px 14px}
@@ -281,7 +281,7 @@
   font-size:15px;flex-shrink:0;background:#fff7ed;color:#c2410c}
 .biz-risk-b{flex:1;min-width:0}
 .biz-risk-t{font-size:12.5px;font-weight:700;color:var(--navy,#06033A)}
-.biz-risk-s{font-size:11px;color:var(--biz-muted);margin-top:2px;line-height:1.4}
+.biz-risk-s{font-size:12px;color:var(--biz-muted);margin-top:2px;line-height:1.4}
 .biz-risk-n{font-size:20px;font-weight:900;color:var(--navy,#06033A);font-family:'Montserrat',sans-serif;
   font-variant-numeric:tabular-nums}
 .biz-risk-ok{display:flex;align-items:center;gap:11px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:12px;padding:14px}
@@ -311,12 +311,12 @@
 .sq-hs{background:#dc2626}
 
 .eq-body{display:grid;grid-template-columns:210px 1fr;gap:22px;align-items:start}
-@media(max-width:820px){.eq-body{grid-template-columns:1fr}}
+@media(max-width:820px){.eq-body{grid-template-columns:minmax(0,1fr)}}
 .eq-stats{display:flex;flex-direction:column;gap:11px}
 .eq-big{font-size:40px;font-weight:900;color:var(--navy,#06033A);font-family:'Montserrat',sans-serif;
   line-height:1;font-variant-numeric:tabular-nums}
 .eq-big-u{font-size:18px;color:var(--biz-muted);margin-left:2px}
-.eq-big-l{font-size:10px;font-weight:700;color:var(--biz-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px}
+.eq-big-l{font-size:12px;font-weight:700;color:var(--biz-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px}
 .eq-r{display:flex;align-items:center;gap:9px;font-size:12.5px}
 .eq-r-n{font-weight:900;color:var(--navy,#06033A);font-family:'Montserrat',sans-serif;
   font-variant-numeric:tabular-nums;margin-left:auto;font-size:15px}
@@ -343,7 +343,7 @@
 .seg-hs{background:#dc2626}
 .eq-xax{grid-column:2;grid-row:2;display:flex;gap:10px;padding:9px 2px 0}
 .eq-xc{flex:1;min-width:0;text-align:center}
-.eq-xl{font-size:11px;font-weight:700;color:var(--navy,#06033A);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.eq-xl{font-size:12px;font-weight:700;color:var(--navy,#06033A);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* Une colonne peu volumineuse mais très dégradée doit se lire :
    le taux prend le pas sur la hauteur de la barre. */
 .eq-xn{font-size:10.5px;color:var(--biz-muted);font-weight:600;font-variant-numeric:tabular-nums;margin-top:2px}
@@ -423,7 +423,7 @@
    à gauche et valeur à droite, plutôt que quatre cartes hautes empilées.
    Même information, moitié moins de hauteur avant d'atteindre le contenu. */
 @media(max-width:580px){
-  .biz-mx{grid-template-columns:1fr;gap:8px}
+  .biz-mx{grid-template-columns:minmax(0,1fr);gap:8px}
   .biz-m{flex-direction:row;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px}
   .biz-m-hd{min-height:0;flex-direction:row-reverse;align-items:center;justify-content:flex-end;
     gap:10px;flex:1;min-width:0}
@@ -469,7 +469,7 @@
    valeur, la même paire donne 5,56:1. L'opacité est donc retirée : le
    contraste entre le chiffre et son libellé passe par la taille et la
    graisse, qui ne coûtent rien en lisibilité. */
-.syn-l{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
+.syn-l{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;
   margin-top:6px;line-height:1.3}
 
 </style>

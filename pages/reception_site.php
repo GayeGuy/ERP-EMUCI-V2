@@ -69,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $rec = db_fetch_one("SELECT rs.*, s.nom AS site_nom, c.libelle AS conso_lib, e.numero_serie_interne AS equip_num
                               FROM receptions_site rs
                               LEFT JOIN sites s ON s.id=rs.site_id
-                              LEFT JOIN consommables c ON c.id=rs.consommable_id
+                              LEFT JOIN articles c ON c.id=rs.consommable_id
                               LEFT JOIN equipements e ON e.id=rs.equipement_id
                               WHERE rs.id=?", [$id]);
         if (!$rec) json_response(false, 'Réception introuvable.');
@@ -134,7 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
         $rec = db_fetch_one("SELECT rs.*, s.nom AS site_nom, c.libelle AS conso_lib
                               FROM receptions_site rs LEFT JOIN sites s ON s.id=rs.site_id
-                              LEFT JOIN consommables c ON c.id=rs.consommable_id WHERE rs.id=?", [$id]);
+                              LEFT JOIN articles c ON c.id=rs.consommable_id WHERE rs.id=?", [$id]);
         if (!$rec) json_response(false, 'Réception introuvable.');
 
         db_begin();
@@ -174,7 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     CONCAT(u.prenom,' ',u.nom) AS createur
              FROM receptions_site rs
              JOIN sites s ON s.id=rs.site_id
-             LEFT JOIN consommables c ON c.id=rs.consommable_id
+             LEFT JOIN articles c ON c.id=rs.consommable_id
              LEFT JOIN equipements e ON e.id=rs.equipement_id
              LEFT JOIN nomenclatures n ON n.id=e.nomenclature_id
              LEFT JOIN users u ON u.id=rs.created_by
@@ -214,7 +214,7 @@ $receptions = db_fetch_all(
             CONCAT(u.prenom,' ',u.nom) AS createur
      FROM receptions_site rs
      JOIN sites s ON s.id = rs.site_id
-     LEFT JOIN consommables c ON c.id = rs.consommable_id
+     LEFT JOIN articles c ON c.id = rs.consommable_id
      LEFT JOIN equipements e ON e.id = rs.equipement_id
      LEFT JOIN nomenclatures n ON n.id = e.nomenclature_id
      LEFT JOIN users u ON u.id = rs.created_by
@@ -239,9 +239,9 @@ include __DIR__ . '/../templates/header.php';
 .rk-icon{font-size:26px;flex-shrink:0}
 .rk-val{font-family:'Montserrat',sans-serif;font-size:26px;font-weight:800;color:var(--navy)}
 .rk-label{font-size:11.5px;color:var(--muted);margin-top:2px}
-.rk.warning .rk-val{color:var(--warning)}
-.rk.danger .rk-val{color:var(--danger)}
-.rk.success .rk-val{color:var(--success)}
+.rk.warning .rk-val{color:var(--warning-d)}
+.rk.danger .rk-val{color:var(--danger-d)}
+.rk.success .rk-val{color:var(--success-d)}
 
 .statut-badge{display:inline-block;padding:3px 10px;border-radius:6px;font-size:11.5px;font-weight:700}
 .statut-badge.en_attente{background:#fff8e7;color:#b7791f}
@@ -260,11 +260,11 @@ include __DIR__ . '/../templates/header.php';
     <div><div class="rk-val"><?= $kpi_attente ?></div><div class="rk-label">En attente de réception</div></div>
   </div>
   <div class="rk success">
-    <div class="rk-icon">✅</div>
+    <div class="rk-icon"><i class="ph ph-check-circle" aria-hidden="true"></i></div>
     <div><div class="rk-val"><?= $kpi_receptionne ?></div><div class="rk-label">Réceptionnées</div></div>
   </div>
   <div class="rk danger">
-    <div class="rk-icon">⚠️</div>
+    <div class="rk-icon"><i class="ph ph-warning" aria-hidden="true"></i></div>
     <div><div class="rk-val"><?= $kpi_litige ?></div><div class="rk-label">En litige</div></div>
   </div>
 </div>
@@ -273,20 +273,20 @@ include __DIR__ . '/../templates/header.php';
 <form method="GET" class="filter-bar">
   <?php if(!$is_coord): ?>
   <label style="font-size:13px;font-weight:500">Site :</label>
-  <select name="site" class="fsel" onchange="this.form.submit()">
+  <select name="site" class="fsel" aria-label="Filtrer par site" onchange="this.form.submit()">
     <option value="0">Tous les sites</option>
     <?php foreach($sites_list as $s): ?>
     <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
     <?php endforeach; ?>
   </select>
   <?php endif; ?>
-  <select name="statut" class="fsel" onchange="this.form.submit()">
+  <select name="statut" class="fsel" aria-label="Filtrer par statut" onchange="this.form.submit()">
     <option value="">Tous les statuts</option>
     <option value="en_attente"  <?= $f_statut==='en_attente'?'selected':'' ?>>⏳ En attente</option>
     <option value="receptionnee" <?= $f_statut==='receptionnee'?'selected':'' ?>>✅ Réceptionnées</option>
     <option value="litige"      <?= $f_statut==='litige'?'selected':'' ?>>⚠️ Litige</option>
   </select>
-  <select name="type" class="fsel" onchange="this.form.submit()">
+  <select name="type" class="fsel" aria-label="Filtrer par type" onchange="this.form.submit()">
     <option value="">Tous les types</option>
     <option value="consommable" <?= $f_type==='consommable'?'selected':'' ?>>🧴 Consommables</option>
     <option value="equipement"  <?= $f_type==='equipement'?'selected':'' ?>>💻 Équipements</option>
@@ -297,7 +297,7 @@ include __DIR__ . '/../templates/header.php';
 <div class="card" style="padding:0;overflow:hidden">
   <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
     <h3 style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:700;color:var(--navy)">
-      📦 Liste des réceptions
+      <i class="ph ph-package" aria-hidden="true"></i> Liste des réceptions
     </h3>
     <span style="font-size:12px;color:var(--muted)"><?= count($receptions) ?> enregistrement(s)</span>
   </div>
@@ -322,7 +322,7 @@ include __DIR__ . '/../templates/header.php';
           <td style="font-size:13px;font-weight:500"><?= h($r['site_nom']) ?></td>
           <td>
             <span style="font-size:11.5px;font-weight:700;color:<?= $r['type_reception']==='consommable'?'#27ae60':'#1a56a0' ?>">
-              <?= $r['type_reception']==='consommable'?'🧴 Consommable':'💻 Équipement' ?>
+              <?= $r['type_reception']==='consommable'?'<i class="ph ph-flask" aria-hidden="true"></i> Consommable':'<i class="ph ph-desktop" aria-hidden="true"></i> Équipement' ?>
             </span>
           </td>
           <td style="font-size:13px">
@@ -331,7 +331,7 @@ include __DIR__ . '/../templates/header.php';
               <?php if($r['quantite']): ?><span style="color:var(--muted);font-size:12px"> · <?= fmt_number($r['quantite'],1) ?> <?= h($r['unite']??'') ?></span><?php endif; ?>
             <?php else: ?>
               <?= h($r['equip_type']??'—') ?>
-              <?php if($r['equip_numero']): ?><br><span style="font-family:monospace;font-size:11px;color:var(--muted)"><?= h($r['equip_numero']) ?></span><?php endif; ?>
+              <?php if($r['equip_numero']): ?><br><span style="font-family:monospace;font-size:12px;color:var(--muted)"><?= h($r['equip_numero']) ?></span><?php endif; ?>
             <?php endif; ?>
           </td>
           <td style="text-align:right;font-weight:700;font-family:'Montserrat',sans-serif">
@@ -339,14 +339,14 @@ include __DIR__ . '/../templates/header.php';
           </td>
           <td><span class="statut-badge <?= $r['statut'] ?>"><?= match($r['statut']){
             'en_attente'  =>'⏳ En attente',
-            'receptionnee'=>'✅ Réceptionnée',
-            'litige'      =>'⚠️ Litige',
+            'receptionnee'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Réceptionnée',
+            'litige'      =>'<i class="ph ph-warning" aria-hidden="true"></i> Litige',
             default       =>h($r['statut'])
           } ?></span></td>
           <td><?= upload_link($r['fichier_fiche']??'','fiche','Voir fiche') ?></td>
           <td style="text-align:center;white-space:nowrap">
             <!-- Bouton Détail : tout le monde -->
-            <button class="btn btn-sm" style="background:#e8f4fd;color:#1a56a0;border:none;padding:4px 8px;border-radius:6px;cursor:pointer" onclick="openDetail(<?= $r['id'] ?>)">🔍 Détail</button>
+            <button class="btn btn-sm" style="background:#e8f4fd;color:#1a56a0;border:none;padding:4px 8px;border-radius:6px;cursor:pointer" onclick="openDetail(<?= $r['id'] ?>)"><i class="ph ph-magnifying-glass" aria-hidden="true"></i> Détail</button>
 
             <?php
             $role = $user['role_slug'];
@@ -356,18 +356,18 @@ include __DIR__ . '/../templates/header.php';
 
             <?php if($r['statut']==='en_attente' && $peut_receptionner): ?>
               <!-- Coordinateur : réceptionner ou signaler litige -->
-              <button class="btn btn-sm btn-success" onclick="openReceptionner(<?= $r['id'] ?>)" style="margin-left:4px">✅ Réceptionner</button>
-              <button class="btn btn-sm btn-danger"  onclick="openLitige(<?= $r['id'] ?>)" style="margin-left:4px">⚠️ Litige</button>
+              <button class="btn btn-sm btn-success" onclick="openReceptionner(<?= $r['id'] ?>)" style="margin-left:4px"><i class="ph ph-check-circle" aria-hidden="true"></i> Réceptionner</button>
+              <button class="btn btn-sm btn-danger"  onclick="openLitige(<?= $r['id'] ?>)" style="margin-left:4px"><i class="ph ph-warning" aria-hidden="true"></i> Litige</button>
 
             <?php elseif($r['statut']==='litige' && $peut_traiter_litige): ?>
               <!-- Gestionnaire/Admin : traiter le litige -->
-              <button class="btn btn-sm" style="background:#fff3cd;color:#856404;border:1px solid #ffc107;padding:5px 10px;border-radius:6px;cursor:pointer;margin-left:4px;font-weight:600" onclick="openTraiterLitige(<?= $r['id'] ?>)">🔧 Traiter litige</button>
+              <button class="btn btn-sm" style="background:#fff3cd;color:#856404;border:1px solid #ffc107;padding:5px 10px;border-radius:6px;cursor:pointer;margin-left:4px;font-weight:600" onclick="openTraiterLitige(<?= $r['id'] ?>)"><i class="ph ph-wrench" aria-hidden="true"></i> Traiter litige</button>
 
             <?php elseif($r['statut']==='receptionnee'): ?>
-              <span style="font-size:12px;color:var(--success);margin-left:4px">✔ Validé</span>
+              <span style="font-size:12px;color:var(--success-d);margin-left:4px"><i class="ph ph-check-circle" aria-hidden="true"></i> Validé</span>
 
             <?php elseif($r['statut']==='litige' && $is_coord): ?>
-              <span style="font-size:12px;color:var(--danger);margin-left:4px">⚠ En cours de traitement</span>
+              <span style="font-size:12px;color:var(--danger-d);margin-left:4px"><i class="ph ph-warning" aria-hidden="true"></i> En cours de traitement</span>
 
             <?php elseif($r['statut']==='en_attente' && !$is_coord): ?>
               <span style="font-size:12px;color:var(--muted);margin-left:4px">⏳ Attente coordinateur</span>
@@ -384,18 +384,18 @@ include __DIR__ . '/../templates/header.php';
 <div id="modalReceptionner" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:28px;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin-bottom:18px">
-      ✅ Valider la réception
+      <i class="ph ph-check-circle" aria-hidden="true"></i> Valider la réception
     </h3>
     <input type="hidden" id="recId">
 
     <div class="form-group" style="margin-bottom:14px">
       <label style="font-size:13px;font-weight:600;color:var(--text);display:block;margin-bottom:6px">
-        📎 Fiche signée <span style="color:var(--danger)">*</span>
-        <span style="font-size:11px;font-weight:400;color:var(--muted)">(PDF ou image — obligatoire)</span>
+        <i class="ph ph-paperclip" aria-hidden="true"></i> Fiche signée <span style="color:var(--danger-d)">*</span>
+        <span style="font-size:12px;font-weight:400;color:var(--muted)">(PDF ou image — obligatoire)</span>
       </label>
       <input type="file" id="recFiche" accept=".pdf,.jpg,.jpeg,.png,.webp"
              style="width:100%;padding:8px;border:2px dashed var(--border);border-radius:8px;font-size:13px;cursor:pointer;background:var(--lighter)">
-      <div id="recFichePreview" style="display:none;margin-top:8px;font-size:12px;color:var(--success)"></div>
+      <div id="recFichePreview" style="display:none;margin-top:8px;font-size:12px;color:var(--success-d)"></div>
     </div>
 
     <div class="form-group" style="margin-bottom:18px">
@@ -405,7 +405,7 @@ include __DIR__ . '/../templates/header.php';
 
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button class="btn btn-secondary" onclick="closeModal('modalReceptionner')">Annuler</button>
-      <button class="btn btn-success" id="btnRecValider" onclick="doReceptionner()">✅ Valider la réception</button>
+      <button class="btn btn-success" id="btnRecValider" onclick="doReceptionner()"><i class="ph ph-check-circle" aria-hidden="true"></i> Valider la réception</button>
     </div>
   </div>
 </div>
@@ -413,17 +413,17 @@ include __DIR__ . '/../templates/header.php';
 <!-- MODAL LITIGE -->
 <div id="modalLitige" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:28px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-    <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--danger);margin-bottom:18px">
-      ⚠️ Signaler un litige
+    <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--danger-d);margin-bottom:18px">
+      <i class="ph ph-warning" aria-hidden="true"></i> Signaler un litige
     </h3>
     <input type="hidden" id="litId">
     <div class="form-group">
-      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">Motif du litige <span style="color:var(--danger)">*</span></label>
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">Motif du litige <span style="color:var(--danger-d)">*</span></label>
       <textarea id="litNotes" rows="4" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;resize:vertical" placeholder="Décrivez le problème constaté (manque, dommage, erreur...)"></textarea>
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
       <button class="btn btn-secondary" onclick="closeModal('modalLitige')">Annuler</button>
-      <button class="btn btn-danger" onclick="doLitige()">⚠️ Confirmer le litige</button>
+      <button class="btn btn-danger" onclick="doLitige()"><i class="ph ph-warning" aria-hidden="true"></i> Confirmer le litige</button>
     </div>
   </div>
 </div>
@@ -432,8 +432,8 @@ include __DIR__ . '/../templates/header.php';
 <div id="modalDetail" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:28px;width:600px;max-width:95vw;max-height:85vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
-      <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy)">🔍 Détail réception</h3>
-      <button onclick="closeModal('modalDetail')" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)">✕</button>
+      <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy)"><i class="ph ph-magnifying-glass" aria-hidden="true"></i> Détail réception</h3>
+      <button onclick="closeModal('modalDetail')" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted)"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div id="detailContent" style="font-size:13px">
       <div style="text-align:center;color:var(--muted);padding:20px">Chargement…</div>
@@ -441,7 +441,7 @@ include __DIR__ . '/../templates/header.php';
 
     <!-- FIL DE DISCUSSION LITIGE -->
     <div id="litFil" style="display:none;margin-top:18px;border-top:1px solid var(--border);padding-top:16px">
-      <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">💬 Discussion litige</h4>
+      <h4 style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px"><i class="ph ph-chat-circle" aria-hidden="true"></i> Discussion litige</h4>
       <div id="litMessages" style="max-height:200px;overflow-y:auto;margin-bottom:12px;display:flex;flex-direction:column;gap:8px"></div>
       <div style="display:flex;gap:8px">
         <textarea id="litMsg" rows="2" style="flex:1;padding:8px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;resize:none" placeholder="Votre message…"></textarea>
@@ -454,26 +454,26 @@ include __DIR__ . '/../templates/header.php';
 <!-- MODAL TRAITER LITIGE (gestionnaire) -->
 <div id="modalTraiterLitige" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:28px;width:500px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
-    <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin-bottom:18px">🔧 Traiter le litige</h3>
+    <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin-bottom:18px"><i class="ph ph-wrench" aria-hidden="true"></i> Traiter le litige</h3>
     <input type="hidden" id="traitId">
     <div class="form-group" style="margin-bottom:14px">
       <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px">Action à effectuer</label>
       <div style="display:flex;gap:10px">
         <label style="display:flex;align-items:center;gap:6px;padding:10px 16px;border:2px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;flex:1">
-          <input type="radio" name="action_type" value="renvoi" checked> 🔄 Renvoyer la commande
+          <input type="radio" name="action_type" value="renvoi" checked> <i class="ph ph-arrow-clockwise" aria-hidden="true"></i> Renvoyer la commande
         </label>
         <label style="display:flex;align-items:center;gap:6px;padding:10px 16px;border:2px solid var(--border);border-radius:8px;cursor:pointer;font-size:13px;flex:1">
-          <input type="radio" name="action_type" value="cloture"> ✅ Clôturer le litige
+          <input type="radio" name="action_type" value="cloture"> <i class="ph ph-check-circle" aria-hidden="true"></i> Clôturer le litige
         </label>
       </div>
     </div>
     <div class="form-group" style="margin-bottom:18px">
-      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">Notes / Actions effectuées <span style="color:var(--danger)">*</span></label>
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:6px">Notes / Actions effectuées <span style="color:var(--danger-d)">*</span></label>
       <textarea id="traitNotes" rows="4" style="width:100%;padding:10px;border:1.5px solid var(--border);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:13px;resize:vertical" placeholder="Ex: Commande renvoyée le 19/04, manque de 5 unités compensé…"></textarea>
     </div>
     <div style="display:flex;gap:10px;justify-content:flex-end">
       <button class="btn btn-secondary" onclick="closeModal('modalTraiterLitige')">Annuler</button>
-      <button class="btn btn-primary" onclick="doTraiterLitige()">🔧 Valider le traitement</button>
+      <button class="btn btn-primary" onclick="doTraiterLitige()"><i class="ph ph-wrench" aria-hidden="true"></i> Valider le traitement</button>
     </div>
   </div>
 </div>
@@ -495,7 +495,7 @@ function openDetail(id){
   fd.append('action','get_detail'); fd.append('id',id);
   fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd})
     .then(r=>r.json()).then(d=>{
-      if(!d.success){document.getElementById('detailContent').innerHTML='<div style="color:var(--danger)">Erreur.</div>';return;}
+      if(!d.success){document.getElementById('detailContent').innerHTML='<div style="color:var(--danger-d)">Erreur.</div>';return;}
       const rec = d.data.rec;
       const statutColor = rec.statut==='receptionnee'?'#1e8449':rec.statut==='litige'?'#c0392b':'#b7791f';
       const statutBg    = rec.statut==='receptionnee'?'#eafaf1':rec.statut==='litige'?'#fdf0ef':'#fff8e7';
@@ -503,24 +503,24 @@ function openDetail(id){
 
       let html = `
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
-          <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Site</div><div style="font-weight:700">${rec.site_nom}</div></div>
-          <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Statut</div>
+          <div><div style="font-size:12px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Site</div><div style="font-weight:700">${rec.site_nom}</div></div>
+          <div><div style="font-size:12px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Statut</div>
             <span style="padding:3px 10px;border-radius:6px;font-size:12px;font-weight:700;background:${statutBg};color:${statutColor}">${statutLabel}</span>
           </div>
-          <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Date réception</div><div>${rec.date_reception}</div></div>
-          <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Type</div>
-            <div>${rec.type_reception==='consommable'?'🧴 Consommable':'💻 Équipement'}</div>
+          <div><div style="font-size:12px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Date réception</div><div>${rec.date_reception}</div></div>
+          <div><div style="font-size:12px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Type</div>
+            <div>${rec.type_reception==='consommable'?'<i class="ph ph-flask" aria-hidden="true"></i> Consommable':'<i class="ph ph-desktop" aria-hidden="true"></i> Équipement'}</div>
           </div>`;
 
       if(rec.type_reception==='consommable'){
-        html += `<div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Article</div>
+        html += `<div><div style="font-size:12px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Article</div>
           <div style="font-weight:600">${rec.conso_lib||'—'} <small style="color:var(--muted)">(${rec.conso_code||''})</small></div></div>
-          <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Quantité</div>
+          <div><div style="font-size:12px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Quantité</div>
           <div style="font-weight:700;font-size:16px">${rec.quantite||'—'} <small>${rec.unite||''}</small></div></div>`;
       } else {
-        html += `<div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Équipement</div>
+        html += `<div><div style="font-size:12px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">Équipement</div>
           <div style="font-weight:600">${rec.equip_type||'—'}</div></div>
-          <div><div style="font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">N° Série</div>
+          <div><div style="font-size:12px;color:var(--muted);margin-bottom:3px;text-transform:uppercase">N° Série</div>
           <div style="font-family:monospace;font-size:12px">${rec.equip_num||'—'}</div></div>`;
       }
       html += `</div>`;
@@ -550,7 +550,7 @@ function openDetail(id){
         const cont = document.getElementById('litMessages');
         cont.innerHTML = msgs.length ? msgs.map(m=>`
           <div style="background:var(--lighter);padding:8px 12px;border-radius:8px;font-size:12.5px">
-            <strong>${m.auteur}</strong> <span style="color:var(--muted);font-size:11px">(${m.role_nom}) · ${m.created_at}</span><br>
+            <strong>${m.auteur}</strong> <span style="color:var(--muted);font-size:12px">(${m.role_nom}) · ${m.created_at}</span><br>
             ${m.message}
           </div>`).join('') : '<div style="color:var(--muted);font-size:12px;text-align:center">Aucun message encore.</div>';
         cont.scrollTop = cont.scrollHeight;
@@ -569,7 +569,7 @@ async function sendMessage(){
     document.getElementById('litMsg').value='';
     const cont = document.getElementById('litMessages');
     cont.innerHTML += `<div style="background:#e8f4fd;padding:8px 12px;border-radius:8px;font-size:12.5px">
-      <strong>${d.data.nom}</strong> <span style="color:var(--muted);font-size:11px">· ${d.data.heure}</span><br>${d.data.msg}</div>`;
+      <strong>${d.data.nom}</strong> <span style="color:var(--muted);font-size:12px">· ${d.data.heure}</span><br>${d.data.msg}</div>`;
     cont.scrollTop = cont.scrollHeight;
   }
 }

@@ -22,30 +22,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     if ($action === 'update_profile') {
         $prenom = trim($_POST['prenom'] ?? '');
         $nom    = trim($_POST['nom']    ?? '');
-        $email  = strtolower(trim($_POST['email'] ?? ''));
         $tel    = trim($_POST['telephone'] ?? '');
+        // L'email est l'identifiant de connexion et le canal de réinitialisation :
+        // il n'est plus modifiable ici. Seul un administrateur peut le changer
+        // (pages/admin/users.php). Toute valeur postée est ignorée.
+        $email  = $user['email'];
 
         if (!$prenom || !$nom)
             json_response(false, 'Prénom et nom sont obligatoires.');
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL))
-            json_response(false, 'Adresse email invalide.');
         if (strlen($prenom) > 80 || strlen($nom) > 80)
             json_response(false, 'Nom ou prénom trop long (80 caractères max).');
 
-        $exists = db_fetch_value(
-            "SELECT COUNT(*) FROM users WHERE email=? AND id!=?",
-            [$email, $user['id']]
-        );
-        if ($exists > 0)
-            json_response(false, 'Cette adresse email est déjà utilisée par un autre compte.');
-
         db_query(
-            "UPDATE users SET prenom=?, nom=?, email=?, telephone=? WHERE id=?",
-            [$prenom, $nom, $email, $tel ?: null, $user['id']]
+            "UPDATE users SET prenom=?, nom=?, telephone=? WHERE id=?",
+            [$prenom, $nom, $tel ?: null, $user['id']]
         );
         audit_log(
             $user['id'], 'UPDATE', 'users', $user['id'],
-            "Mise à jour profil : {$user['prenom']} {$user['nom']} ({$user['email']}) → $prenom $nom ($email)"
+            "Mise à jour profil : {$user['prenom']} {$user['nom']} → $prenom $nom"
         );
         json_response(true, 'Profil mis à jour avec succès.');
     }
@@ -124,7 +118,7 @@ include __DIR__ . '/../templates/header.php';
 /* ── Carte résumé ──────────────────────────────────────────── */
 .profil-avatar {
   width: 88px; height: 88px; border-radius: 50%;
-  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  background: var(--primary-d);
   display: flex; align-items: center; justify-content: center;
   font-size: 32px; font-weight: 800; color: #fff;
   font-family: 'Plus Jakarta Sans', sans-serif;
@@ -135,7 +129,7 @@ include __DIR__ . '/../templates/header.php';
 .profil-role-pill {
   display: inline-block;
   background: var(--primary-l); color: var(--primary-d);
-  font-size: 11px; font-weight: 700;
+  font-size: 12px; font-weight: 700;
   padding: 3px 12px; border-radius: 20px;
   letter-spacing: .3px; margin-bottom: 18px;
 }
@@ -145,7 +139,7 @@ include __DIR__ . '/../templates/header.php';
   font-size: 12.5px;
 }
 .profil-meta:last-child { border-bottom: none; }
-.profil-meta i { font-size: 16px; color: var(--primary); flex-shrink: 0; margin-top: 2px; }
+.profil-meta i { font-size: 16px; color: var(--primary-d); flex-shrink: 0; margin-top: 2px; }
 .profil-meta-val { color: var(--text); font-weight: 600; word-break: break-all; line-height: 1.3; }
 .profil-meta-lbl { font-size: 10.5px; color: var(--muted); margin-top: 2px; }
 
@@ -156,7 +150,7 @@ include __DIR__ . '/../templates/header.php';
   border: 2px solid var(--border);
   border-radius: 14px; padding: 18px 14px;
   text-align: center; cursor: pointer;
-  transition: all .18s; background: white;
+  transition: background-color .18s, border-color .18s, color .18s, box-shadow .18s, transform .18s, opacity .18s; background: white;
   user-select: none;
 }
 .theme-opt:hover { border-color: var(--primary); background: var(--primary-l); }
@@ -167,7 +161,7 @@ include __DIR__ . '/../templates/header.php';
 }
 .theme-opt .t-em  { font-size: 30px; margin-bottom: 8px; line-height: 1; display: block; }
 .theme-opt .t-lbl { font-size: 13px; font-weight: 700; color: var(--navy); display: block; }
-.theme-opt .t-sub { font-size: 11px; color: var(--muted); margin-top: 3px; display: block; }
+.theme-opt .t-sub { font-size: 12px; color: var(--muted); margin-top: 3px; display: block; }
 .theme-opt.active .t-lbl { color: var(--primary-d); }
 
 /* ── Force mot de passe ────────────────────────────────────── */
@@ -176,7 +170,7 @@ include __DIR__ . '/../templates/header.php';
 
 /* ── Responsive ────────────────────────────────────────────── */
 @media (max-width: 720px) {
-  .profil-layout { grid-template-columns: 1fr; }
+  .profil-layout { grid-template-columns: minmax(0,1fr); }
   .theme-opts { flex-direction: column; }
   .theme-opt { min-width: 0; }
 }
@@ -199,7 +193,7 @@ include __DIR__ . '/../templates/header.php';
 .sig-pad:hover { border-color: var(--primary); }
 .sig-toolbar { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; align-items: center; }
 .sig-current { margin-top: 16px; padding: 12px 14px; background: var(--tertiary); border-radius: 10px; border: 1px solid var(--border); }
-.sig-current-lbl { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--muted); letter-spacing: .4px; margin-bottom: 8px; }
+.sig-current-lbl { font-size: 12px; font-weight: 700; text-transform: uppercase; color: var(--muted); letter-spacing: .4px; margin-bottom: 8px; }
 [data-theme="dark"] .sig-pad { border-color: #4B6A9A; background: #ffffff; }
 </style>
 
@@ -275,7 +269,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="card">
       <div class="card-header">
         <h3>
-          <i class="ph-duotone ph-user-circle" style="margin-right:8px;color:var(--primary)"></i>
+          <i class="ph-duotone ph-user-circle" style="margin-right:8px;color:var(--primary-d)"></i>
           Informations personnelles
         </h3>
       </div>
@@ -284,29 +278,35 @@ include __DIR__ . '/../templates/header.php';
         <form id="form-profil" autocomplete="off">
           <div class="form-row cols-2">
             <div class="form-group">
-              <label>Prénom</label>
-              <input type="text" class="form-control" name="prenom"
+              <label for="inp-prenom">Prénom</label>
+              <input type="text" class="form-control" name="prenom" id="inp-prenom"
                      value="<?= h($user['prenom']) ?>" required maxlength="80">
             </div>
             <div class="form-group">
-              <label>Nom</label>
-              <input type="text" class="form-control" name="nom"
+              <label for="inp-nom">Nom</label>
+              <input type="text" class="form-control" name="nom" id="inp-nom"
                      value="<?= h($user['nom']) ?>" required maxlength="80">
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Adresse email</label>
+              <label>Adresse email
+                <span style="font-weight:400;color:var(--muted)">(non modifiable)</span>
+              </label>
               <input type="email" class="form-control" name="email"
-                     value="<?= h($user['email']) ?>" required>
+                     value="<?= h($user['email']) ?>" readonly disabled
+                     style="background:var(--input,#f0f4f8);color:var(--muted);cursor:not-allowed">
+              <small style="color:var(--muted);font-size:12px">
+                L'adresse email sert d'identifiant de connexion. Contactez un administrateur pour la modifier.
+              </small>
             </div>
           </div>
           <div class="form-row">
             <div class="form-group">
-              <label>Téléphone
+              <label for="inp-telephone">Téléphone
                 <span style="font-weight:400;color:var(--muted)">(optionnel)</span>
               </label>
-              <input type="tel" class="form-control" name="telephone"
+              <input type="tel" class="form-control" name="telephone" id="inp-telephone"
                      value="<?= h($user['telephone'] ?? '') ?>" maxlength="20">
             </div>
           </div>
@@ -321,7 +321,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="card">
       <div class="card-header">
         <h3>
-          <i class="ph-duotone ph-lock-key" style="margin-right:8px;color:var(--primary)"></i>
+          <i class="ph-duotone ph-lock-key" style="margin-right:8px;color:var(--primary-d)"></i>
           Changer le mot de passe
         </h3>
       </div>
@@ -330,25 +330,25 @@ include __DIR__ . '/../templates/header.php';
         <form id="form-pwd" autocomplete="off">
           <div class="form-row">
             <div class="form-group">
-              <label>Mot de passe actuel</label>
-              <input type="password" class="form-control" name="old_password"
+              <label for="inp-old-pw">Mot de passe actuel</label>
+              <input type="password" class="form-control" name="old_password" id="inp-old-pw"
                      required autocomplete="current-password">
             </div>
           </div>
           <div class="form-row cols-2">
             <div class="form-group">
-              <label>Nouveau mot de passe</label>
+              <label for="inp-npw">Nouveau mot de passe</label>
               <input type="password" class="form-control" name="new_password"
                      id="inp-npw" required minlength="8" autocomplete="new-password">
               <div class="pw-track"><div class="pw-fill" id="pw-bar"></div></div>
-              <div style="font-size:11px;margin-top:4px;font-weight:600;min-height:16px"
+              <div style="font-size:12px;margin-top:4px;font-weight:600;min-height:16px"
                    id="pw-strength-lbl"></div>
             </div>
             <div class="form-group">
-              <label>Confirmer le nouveau mot de passe</label>
+              <label for="inp-cpw">Confirmer le nouveau mot de passe</label>
               <input type="password" class="form-control" name="confirm_password"
                      id="inp-cpw" required autocomplete="new-password">
-              <div style="font-size:11px;margin-top:4px;font-weight:600;min-height:16px"
+              <div style="font-size:12px;margin-top:4px;font-weight:600;min-height:16px"
                    id="pw-match-lbl"></div>
             </div>
           </div>
@@ -363,7 +363,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="card">
       <div class="card-header">
         <h3>
-          <i class="ph-duotone ph-paint-bucket" style="margin-right:8px;color:var(--primary)"></i>
+          <i class="ph-duotone ph-paint-bucket" style="margin-right:8px;color:var(--primary-d)"></i>
           Préférences d'affichage
         </h3>
       </div>
@@ -373,22 +373,22 @@ include __DIR__ . '/../templates/header.php';
         </p>
         <div class="theme-opts">
           <div class="theme-opt" data-pref="light" onclick="setThemePref('light')">
-            <span class="t-em">☀️</span>
+            <span class="t-em"><i class="ph ph-sun" aria-hidden="true"></i></span>
             <span class="t-lbl">Clair</span>
             <span class="t-sub">Toujours en mode clair</span>
           </div>
           <div class="theme-opt" data-pref="dark" onclick="setThemePref('dark')">
-            <span class="t-em">🌙</span>
+            <span class="t-em"><i class="ph ph-moon" aria-hidden="true"></i></span>
             <span class="t-lbl">Sombre</span>
             <span class="t-sub">Toujours en mode sombre</span>
           </div>
           <div class="theme-opt" data-pref="auto" onclick="setThemePref('auto')">
-            <span class="t-em">💻</span>
+            <span class="t-em"><i class="ph ph-desktop" aria-hidden="true"></i></span>
             <span class="t-lbl">Système</span>
             <span class="t-sub">Suit les réglages de l'OS</span>
           </div>
         </div>
-        <div id="theme-fb" style="margin-top:14px;font-size:12.5px;color:var(--primary);font-weight:600;min-height:20px"></div>
+        <div id="theme-fb" style="margin-top:14px;font-size:12.5px;color:var(--primary-d);font-weight:600;min-height:20px"></div>
       </div>
     </div>
 
@@ -396,7 +396,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="card">
       <div class="card-header">
         <h3>
-          <i class="ph-duotone ph-pen-nib" style="margin-right:8px;color:var(--primary)"></i>
+          <i class="ph-duotone ph-pen-nib" style="margin-right:8px;color:var(--primary-d)"></i>
           Signature électronique
         </h3>
       </div>
@@ -475,7 +475,7 @@ document.getElementById('form-profil').addEventListener('submit', async function
       document.getElementById('js-initiales').textContent =
         (prenom[0] || '').toUpperCase() + (nom[0] || '').toUpperCase();
       document.getElementById('js-fullname').textContent  = prenom + ' ' + nom;
-      document.getElementById('js-email-display').textContent = this.email.value.trim();
+      // L'email n'est plus modifiable depuis cette page : rien à rafraîchir.
     }
   } catch { alertBox('alert-profil', false, 'Erreur réseau.'); }
 
@@ -546,6 +546,7 @@ function setThemePref(pref) {
   document.querySelectorAll('.theme-opt').forEach(el =>
     el.classList.toggle('active', el.dataset.pref === pref)
   );
+  if (typeof syncThemeToggleIcon === 'function') syncThemeToggleIcon();
 
   const msgs = { light: '☀️ Thème clair', dark: '🌙 Thème sombre', auto: '💻 Thème système' };
   const fb = document.getElementById('theme-fb');
