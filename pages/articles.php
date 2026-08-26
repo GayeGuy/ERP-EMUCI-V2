@@ -319,19 +319,26 @@ $site_force = ($is_coord && $user['site_id']) ? (int)$user['site_id'] : 0;
 $search   = trim($_GET['q']       ?? '');
 $f_alerte = (int)($_GET['alerte'] ?? 0);
 $f_type   = trim($_GET['type']    ?? '');
+// Filtre site manuel (superviseur achat, etc.) — remplace l'ancien écran
+// « Stock magasin » d'Achats, jamais consulté en pratique : au lieu d'un
+// écran séparé, un site (magasin ou non) se choisit ici, et le nombre
+// affiché sur chaque carte devient alors sa quantité sur CE site plutôt
+// que le stock central agrégé.
+$f_site      = $site_force ?: (int)($_GET['site'] ?? 0);
 $where = ['1=1']; $params = [];
 if ($search)   { $where[] = '(a.code ILIKE ? OR a.libelle ILIKE ?)'; $s="%$search%"; $params=[$s,$s]; }
 if ($f_alerte) { $where[] = 'a.stock_global <= a.seuil_alerte'; }
 if ($f_type)   { $where[] = 'a.type_article=?'; $params[] = $f_type; }
-if ($site_force) {
+if ($f_site) {
     $where[] = 'EXISTS (SELECT 1 FROM stock_site ss WHERE ss.article_id=a.id AND ss.site_id=?)';
-    $params[] = $site_force;
+    $params[] = $f_site;
 }
 $wsql = implode(' AND ', $where);
 
 $articles_list = db_fetch_all(
     "SELECT a.*,
             COUNT(DISTINCT ss.site_id) AS nb_sites,
+            COALESCE(ss_f.quantite, 0) AS stock_site_filtre,
             COALESCE((SELECT SUM(quantite) FROM receptions_consommables r
                       WHERE r.consommable_id=a.id
                         AND r.date_reception >= (CURRENT_DATE - INTERVAL '30 DAY')),0) AS receptions_30j,
@@ -340,11 +347,35 @@ $articles_list = db_fetch_all(
                         AND l.date_livraison >= (CURRENT_DATE - INTERVAL '30 DAY')),0) AS distributions_30j
      FROM articles a
      LEFT JOIN stock_site ss ON ss.article_id=a.id
-     WHERE $wsql GROUP BY a.id ORDER BY a.type_article, a.libelle", $params
+     LEFT JOIN stock_site ss_f ON ss_f.article_id=a.id AND ss_f.site_id=?
+     WHERE $wsql GROUP BY a.id, ss_f.quantite ORDER BY a.type_article, a.libelle",
+    array_merge([$f_site ?: 0], $params)
 );
 
 $sites_list  = db_fetch_all("SELECT id,nom,type FROM sites WHERE actif=1 ORDER BY nom");
 $familles_achat = db_fetch_all("SELECT id, code, libelle FROM familles_achat WHERE actif=1 ORDER BY libelle");
+
+// Saisie libre (hors référentiel) au magasin : lignes FEB sans article_id,
+// jamais présentes dans stock_site — reprise de l'ancien écran Achats
+// « Stock magasin », visible seulement pour qui suit les achats.
+$lignes_libres = [];
+if (can('achats_suivi', 'can_read')) {
+    $where_libre  = ["fl.article_id IS NULL", "fl.type_achat IS DISTINCT FROM 'DAI'", "(fs.quantite_recue - fs.quantite_expediee) > 0", "s.type = 'magasin'"];
+    $params_libre = [];
+    if ($f_site)  { $where_libre[] = 'fs.site_id = ?'; $params_libre[] = $f_site; }
+    if ($search)  { $where_libre[] = 'fl.designation ILIKE ?'; $params_libre[] = '%' . $search . '%'; }
+    $lignes_libres = db_fetch_all(
+        "SELECT f.numero AS feb_numero, fl.designation, fl.unite, s.nom AS site_nom,
+                (fs.quantite_recue - fs.quantite_expediee) AS quantite_magasin
+         FROM feb_suivi fs
+         JOIN feb_lignes fl ON fl.id = fs.feb_ligne_id
+         JOIN feb f         ON f.id  = fs.feb_id
+         JOIN sites s       ON s.id = fs.site_id
+         WHERE " . implode(' AND ', $where_libre) . "
+         ORDER BY f.numero",
+        $params_libre
+    );
+}
 
 $kpi_total   = count($articles_list);
 $kpi_alertes = count(array_filter($articles_list, fn($a) => $a['stock_global'] <= $a['seuil_alerte']));
@@ -433,6 +464,15 @@ include __DIR__ . '/../templates/header.php';
       <option value="<?= $k ?>" <?= $f_type===$k?'selected':'' ?>><?= $l ?></option>
       <?php endforeach; ?>
     </select>
+    <?php if (!$is_coord): ?>
+    <select id="filterSite" onchange="filterBySite(this.value)" aria-label="Filtrer par site"
+      style="padding:10px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none;font-family:'Manrope',sans-serif">
+      <option value="">Tous les sites (stock central)</option>
+      <?php foreach($sites_list as $s): ?>
+      <option value="<?= $s['id'] ?>" <?= $f_site===(int)$s['id']?'selected':'' ?>><?= h($s['nom']) ?><?= $s['type']==='magasin'?' (magasin)':'' ?></option>
+      <?php endforeach; ?>
+    </select>
+    <?php endif; ?>
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:9px 13px;border:1.5px solid var(--border);border-radius:9px;background:white">
       <input type="checkbox" id="alerteOnly" <?= $f_alerte?'checked':'' ?> onchange="filterArticles()">
       <i class="ph-duotone ph-warning" style="color:var(--warning-d)"></i> Alertes
@@ -446,7 +486,10 @@ include __DIR__ . '/../templates/header.php';
 
   <div class="art-grid" id="artGrid">
   <?php foreach($articles_list as $a):
-    $ratio = $a['seuil_alerte']>0 ? $a['stock_global']/$a['seuil_alerte'] : 2;
+    // Un site est filtré : la carte montre sa quantité sur CE site plutôt
+    // que le stock central agrégé (remplace l'ancien écran « Stock magasin »).
+    $stock_affiche = $f_site ? (int)$a['stock_site_filtre'] : (int)$a['stock_global'];
+    $ratio = $a['seuil_alerte']>0 ? $stock_affiche/$a['seuil_alerte'] : 2;
     $pct   = min(100, $ratio * 100);
     $cls   = $ratio<=0?'alerte':($ratio<=1?'warning':'');
     $fill  = $ratio<=0.5?'var(--danger)':($ratio<=1?'var(--warning)':'var(--success)');
@@ -471,7 +514,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="ac-stock">
       <div>
         <div class="ac-stock-num" style="color:<?= $ratio<=0?'var(--danger-d)':($ratio<=1?'var(--warning-d)':'var(--navy)') ?>">
-          <?= fmt_number($a['stock_global']) ?>
+          <?= fmt_number($stock_affiche) ?>
         </div>
         <div style="font-size:10.5px;color:var(--muted)"><?= $UNITES[$a['unite']]??$a['unite'] ?></div>
       </div>
@@ -502,6 +545,34 @@ include __DIR__ . '/../templates/header.php';
   </div>
   <?php endif; ?>
   </div>
+
+  <?php if (can('achats_suivi', 'can_read') && !empty($lignes_libres)): ?>
+  <div class="card" style="margin-top:20px">
+    <div class="card-header"><h3><i class="ph-duotone ph-note"></i> Saisie libre (hors référentiel)</h3></div>
+    <div class="card-body" style="padding:0">
+      <div style="overflow-x:auto">
+      <table class="ach-table" style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr>
+          <th style="background:#f8fafc;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border)">FEB</th>
+          <th style="background:#f8fafc;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border)">Désignation</th>
+          <th style="background:#f8fafc;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border)">Site</th>
+          <th style="background:#f8fafc;color:var(--muted);font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;padding:10px 14px;text-align:left;border-bottom:1px solid var(--border)">Quantité</th>
+        </tr></thead>
+        <tbody>
+          <?php foreach($lignes_libres as $ll): ?>
+          <tr>
+            <td style="padding:10px 14px;border-bottom:1px solid var(--border);font-family:monospace;color:var(--muted)"><?= h($ll['feb_numero']) ?></td>
+            <td style="padding:10px 14px;border-bottom:1px solid var(--border)"><?= h($ll['designation']) ?></td>
+            <td style="padding:10px 14px;border-bottom:1px solid var(--border)"><?= h($ll['site_nom']) ?></td>
+            <td style="padding:10px 14px;border-bottom:1px solid var(--border);font-weight:700"><?= fmt_number($ll['quantite_magasin']) ?> <?= h($ll['unite'] ?: '') ?></td>
+          </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+  <?php endif; ?>
 </div>
 
 <!-- ═══ TAB RÉCEPTION ═══ -->
@@ -782,6 +853,15 @@ function filterArticles(){
     const mT=!t||c.dataset.type===t;
     c.style.display=(mQ&&mA&&mT)?'':'none';
   });
+}
+function filterBySite(siteId){
+  const url=new URL(window.location.href);
+  if(siteId) url.searchParams.set('site',siteId); else url.searchParams.delete('site');
+  const q=document.getElementById('searchQ').value;
+  if(q) url.searchParams.set('q',q); else url.searchParams.delete('q');
+  const t=document.getElementById('filterType').value;
+  if(t) url.searchParams.set('type',t); else url.searchParams.delete('type');
+  window.location.href=url.toString();
 }
 function updStockActuel(pfx){
   const sel=document.getElementById(pfx+(pfx==='rec'?'Art':'Art'));
