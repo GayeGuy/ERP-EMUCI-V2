@@ -58,7 +58,7 @@ $sheet->getDefaultRowDimension()->setRowHeight(18);
 if ($type==='equipements') {
     require_permission('equipements','can_export');
     $w=[]; $p=[];
-    if(!empty($_GET['q'])){$w[]='(e.numero_serie_interne ILIKE ? OR e.numero_serie_origine ILIKE ? OR e.marque ILIKE ?)';$s='%'.$_GET['q'].'%';$p=array_merge($p,[$s,$s,$s]);}
+    if(!empty($_GET['q'])){$w[]='(e.numero_serie_interne LIKE ? OR e.numero_serie_origine LIKE ? OR e.marque LIKE ?)';$s='%'.$_GET['q'].'%';$p=array_merge($p,[$s,$s,$s]);}
     if(!empty($_GET['nom'])){$w[]='e.nomenclature_id=?';$p[]=(int)$_GET['nom'];}
     if(!empty($_GET['etat'])){$w[]='e.etat=?';$p[]=$_GET['etat'];}
     if(!empty($_GET['site'])){$w[]='e.site_id=?';$p[]=(int)$_GET['site'];}
@@ -81,7 +81,7 @@ if ($type==='equipements') {
 // ── CONSOMMABLES ─────────────────────────────────────────────
 elseif ($type==='consommables') {
     require_permission('consommables','can_export');
-    $rows=db_fetch_all("SELECT a.code,a.libelle,a.unite,a.stock_global,a.seuil_alerte,STRING_AGG(DISTINCT s.nom, ', ' ORDER BY s.nom) AS sites FROM articles a LEFT JOIN stock_site ss ON ss.article_id=a.id LEFT JOIN sites s ON s.id=ss.site_id GROUP BY a.id ORDER BY a.libelle");
+    $rows=db_fetch_all("SELECT a.code,a.libelle,a.unite,a.stock_global,a.seuil_alerte,GROUP_CONCAT(DISTINCT s.nom ORDER BY s.nom SEPARATOR ', ') AS sites FROM articles a LEFT JOIN stock_site ss ON ss.article_id=a.id LEFT JOIN sites s ON s.id=ss.site_id GROUP BY a.id ORDER BY a.libelle");
     $sheet->setTitle('Consommables');
     $sheet->fromArray(['Code','Libellé','Unité','Stock Global','Seuil Alerte','Sites'],null,'A1');
     apply_header($sp,'A1:F1');
@@ -235,7 +235,7 @@ elseif ($type==='bilan_mensuel') {
          FROM livraisons_consommables lc
          JOIN sites s ON s.id=lc.site_id
          JOIN articles a ON a.id=lc.consommable_id
-         WHERE EXTRACT(YEAR FROM lc.date_livraison)=? AND EXTRACT(MONTH FROM lc.date_livraison)=?
+         WHERE YEAR(lc.date_livraison)=? AND MONTH(lc.date_livraison)=?
            AND lc.prix_total > 0
          GROUP BY s.id, a.id ORDER BY s.nom, cout_total DESC",
         [$annee, $mois]
@@ -297,7 +297,7 @@ elseif ($type==='interventions') {
     // Maintenance_info ne voit que ses propres interventions
     if ($user['role_slug']==='maintenance_info') { $where[]='im.technicien_id=?'; $params[]=$user['id']; }
     if ($f_site) { $where[]='im.site_id=?'; $params[]=$f_site; }
-    if ($f_mois) { $where[]="TO_CHAR(im.date_intervention,'YYYY-MM')=?"; $params[]=$f_mois; }
+    if ($f_mois) { $where[]="DATE_FORMAT(im.date_intervention,'%Y-%m')=?"; $params[]=$f_mois; }
     $rows = db_fetch_all(
         "SELECT im.date_intervention, s.nom AS site, im.type_action, im.description,
                 e.numero_serie_interne AS equipement, im.probleme_signale, im.solution_apportee,
