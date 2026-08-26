@@ -6,11 +6,8 @@
 //  Cette page ne contient plus ni requête ni mise en forme : elle demande
 //  au registre les blocs du profil de l'utilisateur et les affiche. Tout
 //  est dans includes/dashboard.php, qui explique le pourquoi de ce
-//  découpage.
-//
-//  La version précédente est conservée telle quelle dans
-//  pages/dashboard_legacy.php : c'est la page d'atterrissage de tout le
-//  monde après connexion, un retour arrière doit être immédiat.
+//  découpage. C'est la page d'atterrissage de tout le monde après
+//  connexion.
 // ------------------------------------------------------------
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/session.php';

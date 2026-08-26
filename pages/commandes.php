@@ -406,11 +406,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                          ON CONFLICT (article_id,site_id) DO UPDATE SET quantite = stock_site.quantite + ?",
                         [$lr['article_id'],$cmd['site_id'],$lr['qte'],$lr['qte']]
                     );
-                    db_query(
-                        "INSERT INTO stock_consommables_site (consommable_id,site_id,quantite) VALUES (?,?,?)
-                         ON CONFLICT (consommable_id,site_id) DO UPDATE SET quantite = stock_consommables_site.quantite + ?",
-                        [$lr['article_id'],$cmd['site_id'],$lr['qte'],$lr['qte']]
-                    );
                 }
             }
 
@@ -591,11 +586,10 @@ if (isset($_GET['export'], $_GET['id'])) {
                 }
                 $ctx[$l['id']] = [
                     'stock_site' => (int)(db_fetch_value(
-                        "SELECT COALESCE(ss.quantite, scs.quantite, 0)
+                        "SELECT COALESCE(ss.quantite, 0)
                          FROM articles a
-                         LEFT JOIN stock_site ss  ON ss.article_id=a.id AND ss.site_id=?
-                         LEFT JOIN stock_consommables_site scs ON scs.consommable_id=a.id AND scs.site_id=?
-                         WHERE a.id=?", [$sid,$sid,$aid]) ?? 0),
+                         LEFT JOIN stock_site ss ON ss.article_id=a.id AND ss.site_id=?
+                         WHERE a.id=?", [$sid,$aid]) ?? 0),
                     'derniere'   => $fn_derniere(),
                     'conso'      => $fn_conso(),
                 ];
@@ -688,7 +682,7 @@ $_sid = $site_force ?: 0;
 $articles_dispo = db_fetch_all(
     "SELECT a.id, a.code, a.libelle, a.unite, a.prix_unitaire, a.stock_global, a.type_article,
             -- Stock sur le site du coordinateur (ou 0 si pas de site)
-            COALESCE(ss.quantite, scs.quantite, 0) AS stock_site,
+            COALESCE(ss.quantite, 0) AS stock_site,
             -- Dernière quantité commandée pour cet article sur ce site
             COALESCE((
                 SELECT cl2.quantite FROM commande_lignes cl2
@@ -709,10 +703,9 @@ $articles_dispo = db_fetch_all(
                   AND c3.recu_at >= (CURRENT_DATE - INTERVAL '4 WEEK')
             ), 0) AS conso
      FROM articles a
-     LEFT JOIN stock_site ss  ON ss.article_id  = a.id AND ss.site_id  = ?
-     LEFT JOIN stock_consommables_site scs ON scs.consommable_id = a.id AND scs.site_id = ?
+     LEFT JOIN stock_site ss ON ss.article_id = a.id AND ss.site_id = ?
      ORDER BY a.libelle",
-    [$_sid, $_sid, $_sid, $_sid, $_sid, $_sid]
+    [$_sid, $_sid, $_sid, $_sid, $_sid]
 );
 
 // ── PMMA : stock + historique par type
