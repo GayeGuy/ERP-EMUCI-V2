@@ -64,15 +64,17 @@ CREATE TABLE IF NOT EXISTS agents (
     created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
-    KEY agents_nom_idx (nom, prenom)
+    KEY agents_nom_idx (nom, prenom),
     -- Note : la contrainte PG etait un UNIQUE INDEX partiel (matricule IS NOT
     -- NULL AND matricule <> ''), sans equivalent direct en MySQL. Un UNIQUE
     -- classique laisserait NULL passer plusieurs fois (comportement MySQL
     -- standard) mais bloquerait plusieurs matricules vides '' — a surveiller
     -- si des agents sont crees sans matricule renseigne comme chaine vide.
+    -- Inline (pas un CREATE INDEX separe) pour rester idempotent : MySQL
+    -- n'a pas de CREATE INDEX IF NOT EXISTS, mais CREATE TABLE IF NOT
+    -- EXISTS protege aussi les index qu'il declare.
+    UNIQUE KEY agents_matricule_uidx (matricule)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
-CREATE UNIQUE INDEX agents_matricule_uidx ON agents (matricule);
 
 CREATE TABLE IF NOT EXISTS familles_achat (
     id               INT UNSIGNED NOT NULL AUTO_INCREMENT,
