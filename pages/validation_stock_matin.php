@@ -270,7 +270,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         db_query(
             "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,bobines_snapshot,gsb_user_id,gsb_at)
              VALUES (?,?,'valide_auto',0,?,?,NOW())
-             ON CONFLICT (site_id,date_validation) DO UPDATE SET statut='valide_auto',nb_ecarts=0,bobines_snapshot=EXCLUDED.bobines_snapshot,gsb_user_id=EXCLUDED.gsb_user_id,gsb_at=NOW()",
+             ON DUPLICATE KEY UPDATE statut='valide_auto',nb_ecarts=0,bobines_snapshot=VALUES(bobines_snapshot),gsb_user_id=VALUES(gsb_user_id),gsb_at=NOW()",
             [$site_id,$date,$snapshot,$user['id']]
         );
         // Notifier coordinateurs du site
@@ -442,9 +442,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             db_query(
                 "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,details_ecarts,bobines_snapshot,gsb_user_id,gsb_at,commentaire)
                  VALUES (?,?,?,?,?,?,?,NOW(),?)
-                 ON CONFLICT (site_id,date_validation) DO UPDATE SET statut=EXCLUDED.statut,nb_ecarts=EXCLUDED.nb_ecarts,
-                 details_ecarts=EXCLUDED.details_ecarts,bobines_snapshot=EXCLUDED.bobines_snapshot,
-                 gsb_user_id=EXCLUDED.gsb_user_id,gsb_at=NOW(),commentaire=EXCLUDED.commentaire",
+                 ON DUPLICATE KEY UPDATE statut=VALUES(statut),nb_ecarts=VALUES(nb_ecarts),
+                 details_ecarts=VALUES(details_ecarts),bobines_snapshot=VALUES(bobines_snapshot),
+                 gsb_user_id=VALUES(gsb_user_id),gsb_at=NOW(),commentaire=VALUES(commentaire)",
                 [$site_id,$date,$statut_site,count($decisions),$details_json,$bobines_json,$user['id'],$comment_site]
             );
 
@@ -922,15 +922,20 @@ $f_site = (int)($_GET['site'] ?? 0);
 //    récente d'ecarts_bobines fait foi. Retourne une map bobine_id => décision.
 function _decisions_bobines_site(int $site_id, string $date): array {
     $rows = db_fetch_all(
-        "SELECT DISTINCT ON (e.bobine_id)
-                e.bobine_id, e.statut, e.motif, e.stock_systeme, e.stock_physique, e.ecart, e.created_at,
-                b.numero, b.type_code, b.format,
-                CONCAT(u.prenom,' ',u.nom) AS par_nom
-         FROM ecarts_bobines e
-         JOIN op_bobines b ON b.id = e.bobine_id
-         LEFT JOIN users u ON u.id = e.created_by
-         WHERE e.source = 'validation_stock' AND e.date_constat = ? AND b.site_id = ?
-         ORDER BY e.bobine_id, e.id DESC",
+        "SELECT bobine_id, statut, motif, stock_systeme, stock_physique, ecart, created_at,
+                numero, type_code, format, par_nom
+         FROM (
+             SELECT e.bobine_id, e.statut, e.motif, e.stock_systeme, e.stock_physique, e.ecart, e.created_at,
+                    b.numero, b.type_code, b.format,
+                    CONCAT(u.prenom,' ',u.nom) AS par_nom,
+                    ROW_NUMBER() OVER (PARTITION BY e.bobine_id ORDER BY e.id DESC) AS rn
+             FROM ecarts_bobines e
+             JOIN op_bobines b ON b.id = e.bobine_id
+             LEFT JOIN users u ON u.id = e.created_by
+             WHERE e.source = 'validation_stock' AND e.date_constat = ? AND b.site_id = ?
+         ) t
+         WHERE rn = 1
+         ORDER BY bobine_id",
         [$date, $site_id]
     );
     $map = [];
@@ -1093,7 +1098,7 @@ if ($can_valider) {
             db_query(
                 "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,bobines_snapshot,gsb_user_id,gsb_at)
                  VALUES (?,?,'valide_auto',0,?,?,NOW())
-                 ON CONFLICT (site_id,date_validation) DO UPDATE SET statut='valide_auto',nb_ecarts=0,bobines_snapshot=EXCLUDED.bobines_snapshot,gsb_user_id=EXCLUDED.gsb_user_id,gsb_at=NOW()",
+                 ON DUPLICATE KEY UPDATE statut='valide_auto',nb_ecarts=0,bobines_snapshot=VALUES(bobines_snapshot),gsb_user_id=VALUES(gsb_user_id),gsb_at=NOW()",
                 [(int)$s['id'], $f_date, $snapshot, $user['id']]
             );
             $coords = db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1", [(int)$s['id']]);
@@ -1275,7 +1280,7 @@ if ($can_valider) {
          FROM validations_stock_matin v
          JOIN sites s ON s.id=v.site_id
          LEFT JOIN users u ON u.id=v.gsb_user_id
-         WHERE v.date_validation >= (CURRENT_DATE - INTERVAL '30 DAY')
+         WHERE v.date_validation >= (CURRENT_DATE - INTERVAL 30 DAY)
          ORDER BY v.date_validation DESC, s.nom",
         []
     );
