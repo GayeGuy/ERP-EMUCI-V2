@@ -112,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             $rec_id  = null;
 
             // Enregistrer la réception globale si table receptions_fournisseur existe
-            $has_rf = (bool)db_fetch_value("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='receptions_fournisseur'");
+            $has_rf = (bool)db_fetch_value("SELECT to_regclass('public.receptions_fournisseur') IS NOT NULL");
             if ($has_rf) {
                 db_query(
                     "INSERT INTO receptions_fournisseur (numero_reception,fournisseur,date_reception,statut,notes,created_by)
@@ -128,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             }
 
             // Compat legacy : enregistrer aussi dans receptions_consommables si elle existe
-            $has_old = (bool)db_fetch_value("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='receptions_consommables'");
+            $has_old = (bool)db_fetch_value("SELECT to_regclass('public.receptions_consommables') IS NOT NULL");
             if ($has_old) {
                 db_query(
                     "INSERT INTO receptions_consommables (consommable_id,quantite,prix_unitaire,prix_total,date_reception,fournisseur,numero_bon,notes,created_by)
@@ -143,7 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
             // Enregistrer mouvement
             $new_stock = (int)db_fetch_value("SELECT stock_global FROM articles WHERE id=?", [$article_id]);
-            if ((bool)db_fetch_value("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='mouvements_stock'")) {
+            if ((bool)db_fetch_value("SELECT to_regclass('public.mouvements_stock') IS NOT NULL")) {
                 db_query(
                     "INSERT INTO mouvements_stock (article_id,type_mouvement,quantite,solde_apres,reference,notes,created_by)
                      VALUES (?,?,?,?,?,?,?)",
@@ -188,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             $num_dist = 'DS-'.date('Ymd').'-'.str_pad(rand(1,999),3,'0',STR_PAD_LEFT);
 
             // compat legacy livraisons_consommables
-            $has_lc = (bool)db_fetch_value("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='livraisons_consommables'");
+            $has_lc = (bool)db_fetch_value("SELECT to_regclass('public.livraisons_consommables') IS NOT NULL");
             if ($has_lc) {
                 db_query(
                     "INSERT INTO livraisons_consommables (consommable_id,site_id,type_mouvement,quantite,prix_unitaire,prix_total,date_livraison,bon_livraison,fichier_bl,notes,created_by)
@@ -199,7 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             }
 
             // Nouvelle table distributions_site
-            $has_ds = (bool)db_fetch_value("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='distributions_site'");
+            $has_ds = (bool)db_fetch_value("SELECT to_regclass('public.distributions_site') IS NOT NULL");
             $dist_id = null;
             if ($has_ds) {
                 db_query(
@@ -234,7 +234,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
             // Mouvement stock
             $new_stock = (int)db_fetch_value("SELECT stock_global FROM articles WHERE id=?", [$article_id]);
-            if ((bool)db_fetch_value("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='mouvements_stock'")) {
+            if ((bool)db_fetch_value("SELECT to_regclass('public.mouvements_stock') IS NOT NULL")) {
                 db_query(
                     "INSERT INTO mouvements_stock (article_id,site_id,type_mouvement,quantite,solde_apres,reference,notes,created_by)
                      VALUES (?,?,?,?,?,?,?,?)",
