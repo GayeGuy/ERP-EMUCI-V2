@@ -69,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $rec = db_fetch_one("SELECT rs.*, s.nom AS site_nom, c.libelle AS conso_lib, e.numero_serie_interne AS equip_num
                               FROM receptions_site rs
                               LEFT JOIN sites s ON s.id=rs.site_id
-                              LEFT JOIN consommables c ON c.id=rs.consommable_id
+                              LEFT JOIN articles c ON c.id=rs.consommable_id
                               LEFT JOIN equipements e ON e.id=rs.equipement_id
                               WHERE rs.id=?", [$id]);
         if (!$rec) json_response(false, 'Réception introuvable.');
@@ -134,7 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
         $rec = db_fetch_one("SELECT rs.*, s.nom AS site_nom, c.libelle AS conso_lib
                               FROM receptions_site rs LEFT JOIN sites s ON s.id=rs.site_id
-                              LEFT JOIN consommables c ON c.id=rs.consommable_id WHERE rs.id=?", [$id]);
+                              LEFT JOIN articles c ON c.id=rs.consommable_id WHERE rs.id=?", [$id]);
         if (!$rec) json_response(false, 'Réception introuvable.');
 
         db_begin();
@@ -174,7 +174,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     CONCAT(u.prenom,' ',u.nom) AS createur
              FROM receptions_site rs
              JOIN sites s ON s.id=rs.site_id
-             LEFT JOIN consommables c ON c.id=rs.consommable_id
+             LEFT JOIN articles c ON c.id=rs.consommable_id
              LEFT JOIN equipements e ON e.id=rs.equipement_id
              LEFT JOIN nomenclatures n ON n.id=e.nomenclature_id
              LEFT JOIN users u ON u.id=rs.created_by
@@ -214,7 +214,7 @@ $receptions = db_fetch_all(
             CONCAT(u.prenom,' ',u.nom) AS createur
      FROM receptions_site rs
      JOIN sites s ON s.id = rs.site_id
-     LEFT JOIN consommables c ON c.id = rs.consommable_id
+     LEFT JOIN articles c ON c.id = rs.consommable_id
      LEFT JOIN equipements e ON e.id = rs.equipement_id
      LEFT JOIN nomenclatures n ON n.id = e.nomenclature_id
      LEFT JOIN users u ON u.id = rs.created_by
