@@ -421,12 +421,13 @@ include __DIR__ . '/../templates/header.php';
 <!-- KPIs -->
 <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:22px">
   <?php foreach([
-    ['ph-cube',       'Articles',       $kpi_total,                   '',             '#1B75BC'],
-    ['ph-warning',    'Alertes stock',  $kpi_alertes,                 'à réappro',    '#F87171'],
-    ['ph-arrow-down', 'Reçu ce mois',   fmt_number($kpi_receptions_mois), 'en stock', '#34D399'],
-    ['ph-arrow-up',   'Distribué',      fmt_number($kpi_distrib_mois),    'vs sites',  '#7C92FF'],
-  ] as [$ico,$lbl,$val,$sub,$col]): ?>
-  <div style="background:white;border:1.5px solid var(--border);border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:14px;border-top:3px solid <?= $col ?>">
+    ['ph-cube',       'Articles',       $kpi_total,                   '',             '#1B75BC', false],
+    ['ph-warning',    'Alertes stock',  $kpi_alertes,                 'à réappro',    '#F87171', true],
+    ['ph-arrow-down', 'Reçu ce mois',   fmt_number($kpi_receptions_mois), 'en stock', '#34D399', false],
+    ['ph-arrow-up',   'Distribué',      fmt_number($kpi_distrib_mois),    'vs sites',  '#7C92FF', false],
+  ] as [$ico,$lbl,$val,$sub,$col,$cliquable]): ?>
+  <div<?= $cliquable ? ' onclick="filtrerAlertes()" role="button" tabindex="0" onkeydown="if(event.key===\'Enter\')filtrerAlertes()"' : '' ?>
+       style="background:white;border:1.5px solid var(--border);border-radius:14px;padding:16px 20px;display:flex;align-items:center;gap:14px;border-top:3px solid <?= $col ?><?= $cliquable ? ';cursor:pointer' : '' ?>">
     <div style="width:44px;height:44px;border-radius:12px;background:var(--tertiary);display:flex;align-items:center;justify-content:center;flex-shrink:0">
       <i class="ph-duotone <?= $ico ?>" style="font-size:22px;color:<?= $col ?>"></i>
     </div>
@@ -842,6 +843,13 @@ function showTab(id,btn){
   document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('#mainTabs .tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active'); btn.classList.add('active');
+}
+function filtrerAlertes(){
+  document.getElementById('alerteOnly').checked = true;
+  filterArticles();
+  const stockTabBtn = document.querySelector('#mainTabs .tab-btn');
+  if(stockTabBtn) showTab('stock', stockTabBtn);
+  document.getElementById('artGrid')?.scrollIntoView({behavior:'smooth', block:'start'});
 }
 function filterArticles(){
   const q=document.getElementById('searchQ').value.toLowerCase();
