@@ -162,8 +162,7 @@ function ach_numero_feb(int $exercice): string {
     if ($transaction_locale) db_begin();
     try {
         db_query(
-            "INSERT INTO feb_compteurs (exercice, dernier_numero) VALUES (?, 0)
-             ON CONFLICT (exercice) DO NOTHING",
+            "INSERT IGNORE INTO feb_compteurs (exercice, dernier_numero) VALUES (?, 0)",
             [$exercice]
         );
         $row = db_fetch_one(
@@ -234,7 +233,7 @@ function ach_debiter_stock_magasin(int $article_id, int $quantite): array {
            JOIN sites s ON s.id = ss.site_id
           WHERE ss.article_id = ? AND s.type = 'magasin' AND s.actif = 1 AND ss.quantite > 0
           ORDER BY ss.quantite DESC, ss.site_id
-          FOR UPDATE OF ss",
+          FOR UPDATE",
         [$article_id]
     );
 
@@ -261,8 +260,8 @@ function ach_debiter_stock_magasin(int $article_id, int $quantite): array {
 function ach_crediter_stock_departement(int $article_id, int $departement_id, int $quantite): void {
     db_query(
         "INSERT INTO stock_departement (article_id, departement_id, quantite) VALUES (?,?,?)
-         ON CONFLICT (article_id, departement_id) DO UPDATE SET quantite = stock_departement.quantite + ?, updated_at = CURRENT_TIMESTAMP",
-        [$article_id, $departement_id, $quantite, $quantite]
+         ON DUPLICATE KEY UPDATE quantite = quantite + VALUES(quantite), updated_at = CURRENT_TIMESTAMP",
+        [$article_id, $departement_id, $quantite]
     );
 }
 
@@ -1083,10 +1082,12 @@ function ach_soumettre_budget(int $departement_id, int $exercice, array $user): 
     $st = db_query(
         "INSERT INTO budget_validations (departement_id, exercice, statut, soumis_par, soumis_le)
          VALUES (?,?,'soumis',?,NOW())
-         ON CONFLICT (departement_id, exercice) DO UPDATE SET
-             statut = 'soumis', soumis_par = ?, soumis_le = NOW(), motif_rejet = NULL
-         WHERE budget_validations.statut IN ('brouillon', 'rejete')",
-        [$departement_id, $exercice, (int)$user['id'], (int)$user['id']]
+         ON DUPLICATE KEY UPDATE
+             soumis_par  = IF(statut IN ('brouillon','rejete'), VALUES(soumis_par), soumis_par),
+             soumis_le   = IF(statut IN ('brouillon','rejete'), NOW(), soumis_le),
+             motif_rejet = IF(statut IN ('brouillon','rejete'), NULL, motif_rejet),
+             statut      = IF(statut IN ('brouillon','rejete'), 'soumis', statut)",
+        [$departement_id, $exercice, (int)$user['id']]
     );
     if ($st->rowCount() === 0) {
         throw new AchValidationException("Ce budget vient d'être traité par quelqu'un d'autre — rechargez l'écran.");
@@ -1292,8 +1293,8 @@ function ach_lancer_validation(int $feb_id, array $user): array {
     try {
         $controle = ach_controle_budget($feb_id);
         db_query(
-            "UPDATE feb SET workflow_snapshot=?::jsonb, etape_actuelle=0, statut='en_validation',
-                    date_lancement_validation=?, signatures='[]'::jsonb, historique=?::jsonb,
+            "UPDATE feb SET workflow_snapshot=?, etape_actuelle=0, statut='en_validation',
+                    date_lancement_validation=?, signatures='[]', historique=?,
                     etape_rejet=NULL, motif_rejet=NULL, n1_user_id=?
               WHERE id=?",
             [json_encode($workflow, JSON_UNESCAPED_UNICODE), $now, json_encode($historique, JSON_UNESCAPED_UNICODE), $n1_user_id, $feb_id]
@@ -1403,7 +1404,7 @@ function ach_endosser_n1(int $feb_id, array $user, bool $accepte, string $commen
         // brouillon à reprendre, comme un rejet de palier plus tard dans le
         // cycle renvoie à prise_en_charge.
         $stmt = db_query(
-            "UPDATE feb SET statut='brouillon', motif_rejet=?, historique=?::jsonb
+            "UPDATE feb SET statut='brouillon', motif_rejet=?, historique=?
               WHERE id=? AND statut='en_attente_n1'",
             [$commentaire, $histJson, $feb_id]
         );
@@ -1414,7 +1415,7 @@ function ach_endosser_n1(int $feb_id, array $user, bool $accepte, string $commen
     }
 
     $stmt = db_query(
-        "UPDATE feb SET statut='soumise', historique=?::jsonb WHERE id=? AND statut='en_attente_n1'",
+        "UPDATE feb SET statut='soumise', historique=? WHERE id=? AND statut='en_attente_n1'",
         [$histJson, $feb_id]
     );
     if ($stmt->rowCount() === 0) return false;
@@ -1504,7 +1505,7 @@ function ach_viser(int $feb_id, array $user, bool $accepte, string $commentaire 
 
     if (!$accepte) {
         $stmt = db_query(
-            "UPDATE feb SET statut='rejetee', etape_rejet=?, motif_rejet=?, signatures=?::jsonb, historique=?::jsonb
+            "UPDATE feb SET statut='rejetee', etape_rejet=?, motif_rejet=?, signatures=?, historique=?
               WHERE id=? AND etape_actuelle=?",
             [$cur, $commentaire, $sigJson, $histJson, $feb_id, $cur]
         );
@@ -1526,7 +1527,7 @@ function ach_viser(int $feb_id, array $user, bool $accepte, string $commentaire 
         try {
             $controle = ach_controle_budget($feb_id);
             $stmt = db_query(
-                "UPDATE feb SET statut='confirmee', date_confirmation=?, signatures=?::jsonb, historique=?::jsonb
+                "UPDATE feb SET statut='confirmee', date_confirmation=?, signatures=?, historique=?
                   WHERE id=? AND etape_actuelle=?",
                 [$now, $sigJson, $histJson, $feb_id, $cur]
             );
@@ -1570,7 +1571,7 @@ function ach_viser(int $feb_id, array $user, bool $accepte, string $commentaire 
     }
 
     $stmt = db_query(
-        "UPDATE feb SET etape_actuelle=?, signatures=?::jsonb, historique=?::jsonb WHERE id=? AND etape_actuelle=?",
+        "UPDATE feb SET etape_actuelle=?, signatures=?, historique=? WHERE id=? AND etape_actuelle=?",
         [$next, $sigJson, $histJson, $feb_id, $cur]
     );
     if ($stmt->rowCount() === 0) return false;
@@ -1592,7 +1593,7 @@ function ach_notifier_demandeur_feb(int $feb_id, string $message): void {
 function ach_reprendre_feb_rejetee(int $feb_id, array $user): bool {
     $uid = (int)$user['id'];
     $stmt = db_query(
-        "UPDATE feb SET statut='prise_en_charge', etape_actuelle=-1, signatures='[]'::jsonb,
+        "UPDATE feb SET statut='prise_en_charge', etape_actuelle=-1, signatures='[]',
                 workflow_snapshot=NULL, etape_rejet=NULL, motif_rejet=NULL
           WHERE id=? AND acheteur_id=? AND statut='rejetee'",
         [$feb_id, $uid]
@@ -1614,7 +1615,7 @@ function ach_reprendre_feb_rejetee(int $feb_id, array $user): bool {
 function ach_admin_reouvrir_validation(int $feb_id, array $user): bool {
     $uid = (int)$user['id'];
     $stmt = db_query(
-        "UPDATE feb SET statut='prise_en_charge', etape_actuelle=-1, signatures='[]'::jsonb,
+        "UPDATE feb SET statut='prise_en_charge', etape_actuelle=-1, signatures='[]',
                 workflow_snapshot=NULL, etape_rejet=NULL, motif_rejet=NULL, date_lancement_validation=NULL
           WHERE id=? AND statut='en_validation'",
         [$feb_id]
@@ -1806,7 +1807,7 @@ function ach_viser_affectation(int $affectation_id, array $user, bool $accepte, 
 
     if (!$accepte) {
         $stmt = db_query(
-            "UPDATE equipement_affectations SET statut='rejetee', etape_rejet=?, motif_rejet=?, signatures=?::jsonb, historique=?::jsonb
+            "UPDATE equipement_affectations SET statut='rejetee', etape_rejet=?, motif_rejet=?, signatures=?, historique=?
               WHERE id=? AND etape_actuelle=?",
             [$cur, $commentaire, $sigJson, $histJson, $affectation_id, $cur]
         );
@@ -1836,7 +1837,7 @@ function ach_viser_affectation(int $affectation_id, array $user, bool $accepte, 
         // consommables. date_mise_en_service n'est donc posée qu'à cette
         // confirmation, pas ici.
         $stmt = db_query(
-            "UPDATE equipement_affectations SET statut='validee', valide_le=?, signatures=?::jsonb, historique=?::jsonb
+            "UPDATE equipement_affectations SET statut='validee', valide_le=?, signatures=?, historique=?
               WHERE id=? AND etape_actuelle=?",
             [$now, $sigJson, $histJson, $affectation_id, $cur]
         );
@@ -1866,7 +1867,7 @@ function ach_viser_affectation(int $affectation_id, array $user, bool $accepte, 
     }
 
     $stmt = db_query(
-        "UPDATE equipement_affectations SET etape_actuelle=?, signatures=?::jsonb, historique=?::jsonb
+        "UPDATE equipement_affectations SET etape_actuelle=?, signatures=?, historique=?
           WHERE id=? AND etape_actuelle=?",
         [$next, $sigJson, $histJson, $affectation_id, $cur]
     );
@@ -2192,8 +2193,8 @@ function ach_receptionner(int $suivi_id, int $quantite, string $date, ?string $b
             db_query("UPDATE articles SET stock_global = stock_global + ? WHERE id=?", [$quantite, $ligne['article_id']]);
             db_query(
                 "INSERT INTO stock_site (article_id, site_id, quantite) VALUES (?,?,?)
-                 ON CONFLICT (article_id, site_id) DO UPDATE SET quantite = stock_site.quantite + ?",
-                [$ligne['article_id'], $ligne['site_id'], $quantite, $quantite]
+                 ON DUPLICATE KEY UPDATE quantite = quantite + VALUES(quantite)",
+                [$ligne['article_id'], $ligne['site_id'], $quantite]
             );
         }
 
@@ -2523,7 +2524,7 @@ function ach_dashboard_kpis(array $user, ?array $depts, string $du, string $au):
 
     // Taux de service sur stock — la mesure directe que J3 a rendue possible.
     $arb = db_fetch_one(
-        "SELECT COUNT(*) FILTER (WHERE fl.arbitrage='stock') AS nb_stock, COUNT(*) AS nb_total
+        "SELECT SUM(CASE WHEN fl.arbitrage='stock' THEN 1 ELSE 0 END) AS nb_stock, COUNT(*) AS nb_total
          FROM feb_lignes fl JOIN feb f ON f.id=fl.feb_id
          WHERE f.date_soumission BETWEEN ? AND ?$clause",
         array_merge([$du, $au], $pd)
@@ -2531,26 +2532,25 @@ function ach_dashboard_kpis(array $user, ?array $depts, string $du, string $au):
     $taux_service_stock = $arb && (int)$arb['nb_total'] > 0 ? round(100 * (int)$arb['nb_stock'] / (int)$arb['nb_total'], 1) : null;
 
     $delai_prise_charge = ach_delais_jours(
-        "SELECT EXTRACT(EPOCH FROM (date_prise_charge - date_soumission))/86400 AS d
+        "SELECT TIMESTAMPDIFF(SECOND, date_soumission, date_prise_charge)/86400 AS d
          FROM feb f WHERE date_prise_charge IS NOT NULL AND date_soumission BETWEEN ? AND ?$clause",
         array_merge([$du, $au], $pd)
     );
     $delai_validation = ach_delais_jours(
-        "SELECT EXTRACT(EPOCH FROM (date_confirmation - date_lancement_validation))/86400 AS d
+        "SELECT TIMESTAMPDIFF(SECOND, date_lancement_validation, date_confirmation)/86400 AS d
          FROM feb f WHERE date_confirmation IS NOT NULL AND date_lancement_validation IS NOT NULL AND date_soumission BETWEEN ? AND ?$clause",
         array_merge([$du, $au], $pd)
     );
     $delai_livraison = ach_delais_jours(
-        "SELECT EXTRACT(EPOCH FROM (fs.date_livraison_reelle - f.date_confirmation))/86400 AS d
+        "SELECT TIMESTAMPDIFF(SECOND, f.date_confirmation, fs.date_livraison_reelle)/86400 AS d
          FROM feb_suivi fs JOIN feb f ON f.id=fs.feb_id
          WHERE fs.date_livraison_reelle IS NOT NULL AND f.date_confirmation IS NOT NULL AND f.date_soumission BETWEEN ? AND ?$clause",
         array_merge([$du, $au], $pd)
     );
     // date_da/date_bc sont des DATE, pas des TIMESTAMP comme les trois delais
-    // ci-dessus : leur soustraction donne déjà un entier (nombre de jours),
-    // pas un intervalle — EXTRACT(EPOCH FROM ...) y échoue (42883).
+    // ci-dessus : DATEDIFF donne directement un entier (nombre de jours).
     $delai_da_bc = ach_delais_jours(
-        "SELECT (fs.date_bc - fs.date_da) AS d
+        "SELECT DATEDIFF(fs.date_bc, fs.date_da) AS d
          FROM feb_suivi fs JOIN feb f ON f.id=fs.feb_id
          WHERE fs.date_bc IS NOT NULL AND fs.date_da IS NOT NULL AND f.date_soumission BETWEEN ? AND ?$clause",
         array_merge([$du, $au], $pd)
@@ -2560,7 +2560,7 @@ function ach_dashboard_kpis(array $user, ?array $depts, string $du, string $au):
     // place du sigle OTIF (point 15) : receptionnee, sans clôture de
     // reliquat, et livrée au plus tard à la date prévue.
     $liv = db_fetch_one(
-        "SELECT COUNT(*) FILTER (WHERE fs.date_livraison_reelle <= fs.date_livraison_prevue) AS nb_temps, COUNT(*) AS nb_total
+        "SELECT SUM(CASE WHEN fs.date_livraison_reelle <= fs.date_livraison_prevue THEN 1 ELSE 0 END) AS nb_temps, COUNT(*) AS nb_total
          FROM feb_suivi fs JOIN feb f ON f.id=fs.feb_id
          WHERE fs.quantite_recue >= fs.quantite_commandee AND fs.cloture_reliquat=0
            AND fs.date_livraison_reelle IS NOT NULL AND f.date_soumission BETWEEN ? AND ?$clause",
@@ -2620,11 +2620,11 @@ function ach_alertes_retard_validation(?array $depts): array {
     return db_fetch_all(
         "SELECT f.id, f.numero, f.objet, f.montant_total, f.date_lancement_validation,
                 CONCAT(u.prenom,' ',u.nom) AS demandeur_nom, d.label AS departement_label,
-                DATE_PART('day', NOW() - f.date_lancement_validation) AS jours_ecoules
+                TIMESTAMPDIFF(DAY, f.date_lancement_validation, NOW()) AS jours_ecoules
          FROM feb f
          LEFT JOIN users u ON u.id=f.demandeur_id
          LEFT JOIN departements d ON d.id=f.departement_id
-         WHERE f.statut='en_validation' AND f.date_lancement_validation < NOW() - (?::text || ' days')::interval$clause
+         WHERE f.statut='en_validation' AND f.date_lancement_validation < DATE_SUB(NOW(), INTERVAL ? DAY)$clause
          ORDER BY f.date_lancement_validation ASC",
         array_merge([$seuil], $pd)
     );
@@ -2655,7 +2655,7 @@ function ach_alertes_depassement_budget(?array $depts, string $du, string $au): 
          JOIN feb f ON f.id = a.entite_id AND a.module = 'achats'
          LEFT JOIN users u        ON u.id = f.demandeur_id
          LEFT JOIN departements d ON d.id = f.departement_id
-         WHERE a.description ILIKE '%dépassement de%' AND a.created_at BETWEEN ? AND ?$clause
+         WHERE a.description LIKE '%dépassement de%' AND a.created_at BETWEEN ? AND ?$clause
          ORDER BY a.created_at DESC",
         array_merge([$du . ' 00:00:00', $au . ' 23:59:59'], $pd)
     );
