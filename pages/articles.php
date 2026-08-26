@@ -221,10 +221,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             db_query("INSERT INTO stock_site (article_id,site_id,quantite) VALUES (?,?,?) ON CONFLICT (article_id,site_id) DO UPDATE SET quantite = stock_site.quantite + ?",
                 [$article_id,$site_id,$qte,$qte]);
 
-            // compat legacy stock_consommables_site
-            db_query("INSERT INTO stock_consommables_site (consommable_id,site_id,quantite) VALUES (?,?,?) ON CONFLICT (consommable_id,site_id) DO UPDATE SET quantite = stock_consommables_site.quantite + ?",
-                [$article_id,$site_id,$qte,$qte]);
-
             // Réception site en_attente
             db_query(
                 "INSERT INTO receptions_site (site_id,type_reception,consommable_id,quantite,date_reception,statut,created_by)
