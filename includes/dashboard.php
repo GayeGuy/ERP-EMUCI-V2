@@ -1089,22 +1089,22 @@ function dash_registre(): array {
         'soustitre' => 'Sous le seuil d\'alerte',
         'module'    => 'consommables',
         'largeur'   => 'plein',
-        'lien'      => ['/pages/consommables.php', 'Gérer'],
+        'lien'      => ['/pages/articles.php', 'Gérer'],
         'donnees'   => function (array $p) {
             // Le coordinateur raisonne sur le stock de son site, les autres
             // sur le stock global : ce ne sont pas les mêmes tables.
             if ($p['site_id']) {
                 return db_fetch_all(
-                    "SELECT c.libelle, c.unite, sc.quantite AS stock, c.seuil_alerte
-                     FROM stock_consommables_site sc
-                     JOIN consommables c ON c.id = sc.consommable_id
-                     WHERE sc.site_id = ? AND sc.quantite <= c.seuil_alerte
-                     ORDER BY (sc.quantite / NULLIF(c.seuil_alerte,0)) ASC
+                    "SELECT a.libelle, a.unite, ss.quantite AS stock, a.seuil_alerte
+                     FROM stock_site ss
+                     JOIN articles a ON a.id = ss.article_id
+                     WHERE ss.site_id = ? AND ss.quantite <= a.seuil_alerte
+                     ORDER BY (ss.quantite / NULLIF(a.seuil_alerte,0)) ASC
                      LIMIT 8", [$p['site_id']]);
             }
             return db_fetch_all(
                 "SELECT libelle, unite, stock_global AS stock, seuil_alerte
-                 FROM consommables
+                 FROM articles
                  WHERE stock_global <= seuil_alerte
                  ORDER BY (stock_global / NULLIF(seuil_alerte,0)) ASC
                  LIMIT 8");
@@ -1177,7 +1177,7 @@ function dash_registre(): array {
                         n.libelle AS equip_type
                  FROM receptions_site rs
                  JOIN sites s ON s.id = rs.site_id
-                 LEFT JOIN consommables c ON c.id = rs.consommable_id
+                 LEFT JOIN articles c ON c.id = rs.consommable_id
                  LEFT JOIN equipements e ON e.id = rs.equipement_id
                  LEFT JOIN nomenclatures n ON n.id = e.nomenclature_id
                  WHERE 1=1 $w
@@ -1222,11 +1222,11 @@ function dash_registre(): array {
         'donnees'   => function (array $p) {
             if (!$p['site_id']) return [];
             return db_fetch_all(
-                "SELECT c.libelle, c.unite, sc.quantite, c.seuil_alerte
-                 FROM stock_consommables_site sc
-                 JOIN consommables c ON c.id = sc.consommable_id
-                 WHERE sc.site_id = ?
-                 ORDER BY (sc.quantite / NULLIF(c.seuil_alerte,0)) ASC
+                "SELECT a.libelle, a.unite, ss.quantite, a.seuil_alerte
+                 FROM stock_site ss
+                 JOIN articles a ON a.id = ss.article_id
+                 WHERE ss.site_id = ?
+                 ORDER BY (ss.quantite / NULLIF(a.seuil_alerte,0)) ASC
                  LIMIT 10", [$p['site_id']]);
         },
         'rendu' => function (array $d) {
