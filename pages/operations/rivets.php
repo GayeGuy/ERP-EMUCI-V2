@@ -71,7 +71,7 @@ $stocks = db_fetch_all(
                       WHERE p.site_id=s.id AND TO_CHAR(p.date_point,'YYYY-MM')=TO_CHAR(CURRENT_DATE,'YYYY-MM')),0) AS utilises_mois
      FROM sites s
      JOIN op_stock_rivets sr ON sr.site_id=s.id
-     WHERE s.actif=1 " . ($site_force_r ? "AND s.id=$site_force_r" : "") . "
+     WHERE s.actif=1 " . ($f_site ? "AND s.id=$f_site" : "") . "
      ORDER BY s.nom, array_position(ARRAY['gonflable','eclate']::text[], (sr.type_rivet)::text)"
 );
 
@@ -320,7 +320,7 @@ $kpi_eclat  = array_sum(array_map(fn($r) => $r['type_rivet']==='eclate'    ? (in
 $kpi_mois   = array_sum(array_column($stocks, 'utilises_mois'));
 $nb_bas     = count(array_filter($stocks, fn($r) => (int)$r['quantite'] < 200));
 ?>
-<div class="kpi-bar">
+<div class="kpi-bar" id="rivKpis">
   <div class="kpi">
     <div class="kpi-val" style="color:var(--blue)"><?= fmt_number($kpi_gonfl) ?></div>
     <div class="kpi-lbl">Gonflables en stock</div>
@@ -342,6 +342,7 @@ $nb_bas     = count(array_filter($stocks, fn($r) => (int)$r['quantite'] < 200));
 </div>
 
 <!-- STOCK CARDS -->
+<div id="rivStock">
 <div style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">
   <i class="ph-duotone ph-package" style="vertical-align:middle"></i> Stock actuel par site
 </div>
@@ -382,9 +383,10 @@ foreach ($stocks as $r) {
 </div>
 <?php endforeach; ?>
 </div>
+</div>
 
 <!-- HISTORIQUE -->
-<div class="card">
+<div class="card" id="rivResultCard">
   <div class="card-header">
     <h3><i class="ph-duotone ph-clipboard-text" style="vertical-align:middle"></i>
       Consommation rivets — Points journaliers
@@ -493,6 +495,35 @@ function saveAjust(){
   ap({action:'ajuster',site_id:document.getElementById('aj-site').value,new_qte:document.getElementById('aj-qte').value,motif:document.getElementById('aj-motif').value})
     .then(d=>{if(d.success){toast(d.message,'success');document.getElementById('mAjust').classList.remove('open');setTimeout(()=>location.reload(),800);}else document.getElementById('ajAlert').innerHTML=`<div class="alert alert-danger">${d.message}</div>`;});
 }
+// ── Filtres sans rechargement de page (meme pattern que equipements.php et
+// pages/operations/bobines.php : fetch + DOMParser remplace les zones).
+let rivEnVol = null;
+function rivCharger(url){
+  if(!window.fetch || !window.DOMParser){ location.href = url; return; }
+  if(rivEnVol) try{ rivEnVol.abort(); }catch(e){}
+  const ctrl = window.AbortController ? new AbortController() : null;
+  rivEnVol = ctrl;
+  fetch(url, {credentials:'same-origin', signal: ctrl?ctrl.signal:undefined, headers:{'X-Requested-With':'fetch'}})
+    .then(r => { if(!r.ok) throw new Error(r.status); return r.text(); })
+    .then(html => {
+      if(rivEnVol !== ctrl) return;
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      ['rivKpis','rivStock','rivResultCard'].forEach(id => {
+        const neuf = doc.getElementById(id);
+        const ancien = document.getElementById(id);
+        if(!neuf || !ancien) throw new Error('structure');
+        ancien.replaceWith(neuf);
+      });
+      history.pushState({riv:1}, '', url);
+      rivEnVol = null;
+    })
+    .catch(e => {
+      if(e && e.name==='AbortError') return;
+      rivEnVol = null;
+      location.href = url;
+    });
+}
+window.addEventListener('popstate', function(ev){ if(ev.state && ev.state.riv) location.reload(); });
 function appliquerFiltres(){
     const p=new URLSearchParams();
     p.set('from',document.getElementById('fFrom').value);
@@ -501,11 +532,11 @@ function appliquerFiltres(){
     const site=document.getElementById('fSite').value;
     if(site!=='0') p.set('site',site);
     <?php endif; ?>
-    location.href='?'+p.toString();
+    rivCharger(location.pathname+'?'+p.toString());
 }
 function resetFiltres(){
     const today=new Date(),y=today.getFullYear(),m=String(today.getMonth()+1).padStart(2,'0'),d=String(today.getDate()).padStart(2,'0');
-    location.href='?from='+y+'-'+m+'-01&to='+y+'-'+m+'-'+d;
+    rivCharger(location.pathname+'?from='+y+'-'+m+'-01&to='+y+'-'+m+'-'+d);
 }
 ['mAppro','mAjust'].forEach(id=>document.getElementById(id).addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');}));
 </script>
