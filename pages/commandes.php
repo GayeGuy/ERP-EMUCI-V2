@@ -801,12 +801,28 @@ $equipements_list = db_fetch_all(
     [$_sid ?: 0]
 );
 
+// Compteurs des etapes KPI : perimetre site uniquement, independant du
+// statut filtre, pour rester exacts et cliquables meme quand un statut
+// est deja actif (cf. equipements.php pour le meme correctif).
+$where_kpi = ['1=1']; $params_kpi = [];
+if ($site_force)  { $where_kpi[] = 'c.site_id=?'; $params_kpi[] = $site_force; }
+elseif ($f_site)  { $where_kpi[] = 'c.site_id=?'; $params_kpi[] = $f_site; }
+$kpi_row = db_fetch_one(
+    "SELECT SUM(CASE WHEN c.statut='en_attente' THEN 1 ELSE 0 END) AS attente,
+            SUM(CASE WHEN c.statut='en_attente_livraison' THEN 1 ELSE 0 END) AS attente_liv,
+            SUM(CASE WHEN c.statut='en_cours_livraison' THEN 1 ELSE 0 END) AS en_cours,
+            SUM(CASE WHEN c.statut='recu' THEN 1 ELSE 0 END) AS recu,
+            SUM(CASE WHEN c.statut='modification_demandee' THEN 1 ELSE 0 END) AS a_corriger
+     FROM commandes c
+     WHERE ".implode(' AND ',$where_kpi),
+    $params_kpi
+);
 $kpi = [
-    'attente'        => count(array_filter($commandes,fn($c)=>$c['statut']==='en_attente')),
-    'attente_liv'    => count(array_filter($commandes,fn($c)=>$c['statut']==='en_attente_livraison')),
-    'en_cours'       => count(array_filter($commandes,fn($c)=>$c['statut']==='en_cours_livraison')),
-    'recu'           => count(array_filter($commandes,fn($c)=>$c['statut']==='recu')),
-    'a_corriger'     => count(array_filter($commandes,fn($c)=>$c['statut']==='modification_demandee')),
+    'attente'        => (int)($kpi_row['attente'] ?? 0),
+    'attente_liv'    => (int)($kpi_row['attente_liv'] ?? 0),
+    'en_cours'       => (int)($kpi_row['en_cours'] ?? 0),
+    'recu'           => (int)($kpi_row['recu'] ?? 0),
+    'a_corriger'     => (int)($kpi_row['a_corriger'] ?? 0),
 ];
 
 // ── Export PDF (Dompdf — pas de URL navigateur, couleurs marque, signatures)
@@ -1137,7 +1153,7 @@ include __DIR__ . '/../templates/header.php';
 </style>
 
 <!-- ÉTAPES WORKFLOW (KPIs cliquables) -->
-<div class="cmd-steps">
+<div class="cmd-steps" id="cmdSteps">
   <div class="step s-attente" onclick="filtrer('en_attente')">
     <div class="s-num"><?= $kpi['attente'] ?></div>
     <div class="s-lbl">⏳ À valider</div>
@@ -1164,14 +1180,14 @@ include __DIR__ . '/../templates/header.php';
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;flex-wrap:wrap;gap:10px">
   <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center" id="frmFiltres">
     <?php if(!$site_force): ?>
-    <select name="site" onchange="this.form.submit()" aria-label="Filtrer par site" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
+    <select name="site" onchange="cmdFiltrer(this.form)" aria-label="Filtrer par site" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
       <option value="">Tous les sites</option>
       <?php foreach($sites_list as $s): ?>
       <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
       <?php endforeach; ?>
     </select>
     <?php endif; ?>
-    <select name="statut" id="selStatut" onchange="this.form.submit()" aria-label="Filtrer par statut" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
+    <select name="statut" id="selStatut" onchange="cmdFiltrer(this.form)" aria-label="Filtrer par statut" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
       <option value="">Tous statuts</option>
       <option value="en_attente" <?= $f_statut==='en_attente'?'selected':'' ?>>⏳ En attente validation</option>
       <option value="modification_demandee" <?= $f_statut==='modification_demandee'?'selected':'' ?>>✏️ À corriger</option>
@@ -1189,7 +1205,7 @@ include __DIR__ . '/../templates/header.php';
 </div>
 
 <!-- LISTE COMMANDES -->
-<div class="card">
+<div class="card" id="cmdResultCard">
   <div class="card-header">
     <h3><i class="ph-duotone ph-shopping-cart"></i> Commandes <span style="font-size:12px;font-weight:400;color:var(--muted)">(<?= count($commandes) ?>)</span></h3>
   </div>
@@ -1708,7 +1724,39 @@ function corrigerDepuisDetail() {
   fermer('Detail');
   ouvrirCorrection(currentDetailId, currentDetailNumero);
 }
-function filtrer(s){document.getElementById('selStatut').value=s;document.getElementById('frmFiltres').submit();}
+// ── Filtres sans rechargement de page (memes id que la page normale, cf.
+// pages/operations/bobines.php et pages/equipements.php pour le meme pattern).
+let cmdEnVol = null;
+function cmdCharger(url){
+  if(!window.fetch || !window.DOMParser){ location.href = url; return; }
+  if(cmdEnVol) try{ cmdEnVol.abort(); }catch(e){}
+  const ctrl = window.AbortController ? new AbortController() : null;
+  cmdEnVol = ctrl;
+  fetch(url, {credentials:'same-origin', signal: ctrl?ctrl.signal:undefined, headers:{'X-Requested-With':'fetch'}})
+    .then(r => { if(!r.ok) throw new Error(r.status); return r.text(); })
+    .then(html => {
+      if(cmdEnVol !== ctrl) return;
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      ['cmdSteps','cmdResultCard'].forEach(id => {
+        const neuf = doc.getElementById(id);
+        const ancien = document.getElementById(id);
+        if(!neuf || !ancien) throw new Error('structure');
+        ancien.replaceWith(neuf);
+      });
+      history.pushState({cmd:1}, '', url);
+      cmdEnVol = null;
+    })
+    .catch(e => {
+      if(e && e.name==='AbortError') return;
+      cmdEnVol = null;
+      location.href = url;
+    });
+}
+function cmdFiltrer(form){
+  cmdCharger(location.pathname + '?' + new URLSearchParams(new FormData(form)).toString());
+}
+window.addEventListener('popstate', function(ev){ if(ev.state && ev.state.cmd) location.reload(); });
+function filtrer(s){document.getElementById('selStatut').value=s;cmdFiltrer(document.getElementById('frmFiltres'));}
 
 // ── Correction (coordinateur) des lignes signalées par le superviseur
 let currentCorrectionId = null, lignesCorrection = [];
