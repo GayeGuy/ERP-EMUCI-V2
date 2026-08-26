@@ -24,18 +24,18 @@ $ml = ['01'=>'Janvier','02'=>'Février','03'=>'Mars','04'=>'Avril','05'=>'Mai','
 
 // ── PÉRIODE — mensuel (comportement d'origine) ou annuel (n° du rapport
 // réunion ERP : point d'une année complète). $date_fmt/$periode_val
-// pilotent tous les TO_CHAR(...)='?' de la page ; $periode_val_prec sert
+// pilotent tous les DATE_FORMAT(...)='?' de la page ; $periode_val_prec sert
 // aux comparaisons vs période précédente.
 $periode = ($_GET['periode'] ?? '') === 'annuel' ? 'annuel' : 'mensuel';
 $annee_max = (int)date('Y');
-$annee_min = (int)(db_fetch_value("SELECT MIN(EXTRACT(YEAR FROM date_point)) FROM op_points_journaliers") ?? $annee_max);
+$annee_min = (int)(db_fetch_value("SELECT MIN(YEAR(date_point)) FROM op_points_journaliers") ?? $annee_max);
 if ($annee_min > $annee_max) $annee_min = $annee_max;
 
 if ($periode === 'annuel') {
     $annee_filtre = (int)($_GET['annee'] ?? $annee_max);
     if ($annee_filtre < 2000 || $annee_filtre > 2100) $annee_filtre = $annee_max;
     $annee            = (string)$annee_filtre;
-    $date_fmt         = 'YYYY';
+    $date_fmt         = '%Y';
     $periode_val      = $annee;
     $periode_val_prec = (string)($annee_filtre - 1);
     $mois_display     = 'Année ' . $annee;
@@ -44,7 +44,7 @@ if ($periode === 'annuel') {
 } else {
     $annee_filtre     = (int)substr($mois, 0, 4);
     $annee            = substr($mois, 0, 4);
-    $date_fmt         = 'YYYY-MM';
+    $date_fmt         = '%Y-%m';
     $periode_val      = $mois;
     $mois_prec        = date('Y-m', strtotime($mois.'-01 -1 month'));
     $periode_val_prec = $mois_prec;
@@ -75,7 +75,7 @@ $ops = db_fetch_one(
             COALESCE(SUM(rivets_utilises),0) AS rivets_utilises,
             COALESCE(ROUND(AVG(NULLIF(moyenne_prod,0)),1),0) AS moy_prod
      FROM op_points_journaliers
-     WHERE TO_CHAR(date_point,'$date_fmt')=? AND statut != 'brouillon' $sf",
+     WHERE DATE_FORMAT(date_point,'$date_fmt')=? AND statut != 'brouillon' $sf",
     [$periode_val]
 );
 
@@ -84,7 +84,7 @@ $ops_prec = db_fetch_one(
     "SELECT COALESCE(SUM(total_engins),0) AS total_engins,
             COALESCE(SUM(total_plaques),0) AS total_plaques
      FROM op_points_journaliers
-     WHERE TO_CHAR(date_point,'$date_fmt')=? AND statut != 'brouillon' $sf",
+     WHERE DATE_FORMAT(date_point,'$date_fmt')=? AND statut != 'brouillon' $sf",
     [$periode_val_prec]
 );
 $engins_curr = (int)($ops['total_engins'] ?? 0);
@@ -102,7 +102,7 @@ $prod_par_site = db_fetch_all(
             SUM(CASE WHEN p.statut='en_attente_validation' THEN 1 ELSE 0 END) AS en_attente
      FROM sites s
      LEFT JOIN op_points_journaliers p ON p.site_id=s.id
-                AND TO_CHAR(p.date_point,'$date_fmt')=? AND p.statut != 'brouillon'
+                AND DATE_FORMAT(p.date_point,'$date_fmt')=? AND p.statut != 'brouillon'
      WHERE s.actif=1 $sf_s
      GROUP BY s.id, s.nom, s.type ORDER BY engins DESC",
     [$periode_val]
@@ -128,20 +128,20 @@ $films_mois = (int)db_fetch_value(
     "SELECT COALESCE(SUM(fu.films_utilises),0)
      FROM op_films_utilises fu
      JOIN op_points_journaliers p ON p.id=fu.point_id
-     WHERE TO_CHAR(p.date_point,'$date_fmt')=? $sf_p",
+     WHERE DATE_FORMAT(p.date_point,'$date_fmt')=? $sf_p",
     [$periode_val]
 );
 $films_mois_prec = (int)db_fetch_value(
     "SELECT COALESCE(SUM(fu.films_utilises),0)
      FROM op_films_utilises fu
      JOIN op_points_journaliers p ON p.id=fu.point_id
-     WHERE TO_CHAR(p.date_point,'$date_fmt')=? $sf_p",
+     WHERE DATE_FORMAT(p.date_point,'$date_fmt')=? $sf_p",
     [$periode_val_prec]
 );
 $films_par_site = db_fetch_all(
     "SELECT s.nom, COALESCE(SUM(fu.films_utilises),0) AS films
      FROM sites s
-     LEFT JOIN op_points_journaliers p ON p.site_id=s.id AND TO_CHAR(p.date_point,'$date_fmt')=?
+     LEFT JOIN op_points_journaliers p ON p.site_id=s.id AND DATE_FORMAT(p.date_point,'$date_fmt')=?
      LEFT JOIN op_films_utilises fu ON fu.point_id=p.id
      WHERE s.actif=1 $sf_s
      GROUP BY s.id, s.nom ORDER BY films DESC",
@@ -150,7 +150,7 @@ $films_par_site = db_fetch_all(
 $films_detail_raw = db_fetch_all(
     "SELECT s.nom AS site, b.type_code, COALESCE(SUM(fu.films_utilises),0) AS films
      FROM sites s
-     JOIN op_points_journaliers p ON p.site_id=s.id AND TO_CHAR(p.date_point,'$date_fmt')=?
+     JOIN op_points_journaliers p ON p.site_id=s.id AND DATE_FORMAT(p.date_point,'$date_fmt')=?
      JOIN op_films_utilises fu ON fu.point_id=p.id
      JOIN op_bobines b ON b.id=fu.bobine_id
      WHERE s.actif=1 $sf_s
@@ -171,7 +171,7 @@ $cmd_stats = db_fetch_one(
     "SELECT SUM(CASE WHEN statut='en_attente' THEN 1 ELSE 0 END) AS en_attente,
             SUM(CASE WHEN statut='en_attente_livraison' THEN 1 ELSE 0 END) AS a_livrer,
             SUM(CASE WHEN statut='en_cours_livraison' THEN 1 ELSE 0 END) AS en_route,
-            SUM(CASE WHEN statut='livre' AND TO_CHAR(created_at,'$date_fmt')=? THEN 1 ELSE 0 END) AS livrees_mois
+            SUM(CASE WHEN statut='livre' AND DATE_FORMAT(created_at,'$date_fmt')=? THEN 1 ELSE 0 END) AS livrees_mois
      FROM commandes WHERE 1=1 $sf",
     [$periode_val]
 );
@@ -181,7 +181,7 @@ $rivets = db_fetch_all(
     "SELECT s.nom, sr.type_rivet, COALESCE(sr.quantite,0) AS quantite
      FROM sites s JOIN op_stock_rivets sr ON sr.site_id=s.id
      WHERE s.actif=1 $sf_s
-     ORDER BY s.nom, array_position(ARRAY['gonflable','eclate']::text[], (sr.type_rivet)::text)"
+     ORDER BY s.nom, FIELD(sr.type_rivet, 'gonflable','eclate')"
 );
 $rps = [];
 foreach ($rivets as $r) $rps[$r['nom']][$r['type_rivet']] = (int)$r['quantite'];
@@ -220,8 +220,8 @@ $total_alertes  = $points_attente + $cmd_en_attente + $alertes_stock + $rivets_b
 $sf_di      = $site_id ? "AND d.demandeur_id IN (SELECT id FROM users WHERE site_id = $site_id)" : "";
 $sf_di_bare = $site_id ? "AND demandeur_id IN (SELECT id FROM users WHERE site_id = $site_id)"   : "";
 $di_pending = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE statut IN ('en_attente','en_cours') $sf_di_bare");
-$di_mois    = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE TO_CHAR(created_at,'$date_fmt')=? AND statut != 'brouillon' $sf_di_bare", [$periode_val]);
-$di_approuv = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE TO_CHAR(updated_at,'$date_fmt')=? AND statut IN ('approuve','approuve_traitement') $sf_di_bare", [$periode_val]);
+$di_mois    = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE DATE_FORMAT(created_at,'$date_fmt')=? AND statut != 'brouillon' $sf_di_bare", [$periode_val]);
+$di_approuv = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE DATE_FORMAT(updated_at,'$date_fmt')=? AND statut IN ('approuve','approuve_traitement') $sf_di_bare", [$periode_val]);
 $di_tx      = $di_mois > 0 ? round($di_approuv / $di_mois * 100) : 0;
 // L'étape qui retient la demande est plus utile que son auteur : elle dit
 // chez qui elle attend. etape_actuelle indexe la liste des étapes triées par
@@ -290,12 +290,12 @@ unset($_dr);
 
 // ── ÉVOLUTION 6 MOIS
 $evol = db_fetch_all(
-    "SELECT TO_CHAR(date_point,'YYYY-MM') AS mois,
+    "SELECT DATE_FORMAT(date_point,'%Y-%m') AS mois,
             SUM(total_engins) AS engins,
             SUM(total_plaques) AS plaques
      FROM op_points_journaliers
-     WHERE date_point >= (CURRENT_DATE - INTERVAL '6 MONTH') AND statut != 'brouillon' $sf
-     GROUP BY TO_CHAR(date_point,'YYYY-MM') ORDER BY mois ASC"
+     WHERE date_point >= (CURRENT_DATE - INTERVAL 6 MONTH) AND statut != 'brouillon' $sf
+     GROUP BY DATE_FORMAT(date_point,'%Y-%m') ORDER BY mois ASC"
 );
 
 // ── POINTS EN ATTENTE
@@ -344,17 +344,17 @@ $SC = ['#1B75BC','#3B4FBE','#7c3aed','#0891b2','#16a34a','#d97706','#e11d48'];
 // ── DONNÉES MENSUELLES PAR SITE (widget performance)
 $site_monthly_raw = db_fetch_all(
     "SELECT s.nom AS site_nom,
-            TO_CHAR(p.date_point,'YYYY-MM') AS mois,
+            DATE_FORMAT(p.date_point,'%Y-%m') AS mois,
             COALESCE(SUM(fu.films_utilises),0) AS films,
             COALESCE(SUM(p.total_engins),0) AS engins,
             COALESCE(ROUND(AVG(NULLIF(p.moyenne_prod,0)),1),0) AS moy_vh
      FROM sites s
      JOIN op_points_journaliers p ON p.site_id=s.id
-          AND TO_CHAR(p.date_point,'YYYY')=?
+          AND DATE_FORMAT(p.date_point,'%Y')=?
           AND p.statut != 'brouillon'
      LEFT JOIN op_films_utilises fu ON fu.point_id=p.id
      WHERE s.actif=1 $sf_s
-     GROUP BY s.id, s.nom, TO_CHAR(p.date_point,'YYYY-MM')
+     GROUP BY s.id, s.nom, DATE_FORMAT(p.date_point,'%Y-%m')
      ORDER BY s.id, mois",
     [$annee]
 );
@@ -397,8 +397,8 @@ $pfw_quarter_def = $periode === 'annuel' ? 1 : max(1, (int)ceil((int)substr($moi
 //  KPI BUSINESS — service, gâche matière, écart de consommation,
 //  couverture de stock, fiabilité, productivité, mix produit
 // ══════════════════════════════════════════════════════════
-$df   = "TO_CHAR(date_point,'$date_fmt')=?";     // filtre période sur la table des points
-$df_p = "TO_CHAR(p.date_point,'$date_fmt')=?";   // idem quand la table est aliasée p
+$df   = "DATE_FORMAT(date_point,'$date_fmt')=?";     // filtre période sur la table des points
+$df_p = "DATE_FORMAT(p.date_point,'$date_fmt')=?";   // idem quand la table est aliasée p
 
 // Affichage en nombre entier. Une valeur non nulle qui tomberait à zéro
 // par arrondi s'affiche « < 1 » : un faux zéro se lirait comme l'absence
@@ -498,8 +498,8 @@ $bareme_riv = ['A'=>4,'B'=>4,'C'=>4,'D'=>2];
 try {
     foreach (db_fetch_all(
         "SELECT serie_bobine,
-                ROUND(AVG(nb_plaques))::int AS nb_plaques,
-                ROUND(AVG(nb_rivets))::int  AS nb_rivets
+                ROUND(AVG(nb_plaques)) AS nb_plaques,
+                ROUND(AVG(nb_rivets))  AS nb_rivets
          FROM op_types_vehicule GROUP BY serie_bobine") as $t) {
         $s = strtoupper(trim((string)$t['serie_bobine']));
         if (isset($bareme_plq[$s])) {
@@ -611,7 +611,7 @@ try {
                 COALESCE(SUM(CASE WHEN statut_ecart = 'majeur' THEN 1 ELSE 0 END),0)                AS majeurs,
                 COALESCE(SUM(CASE WHEN statut_ecart = 'majeur' AND ajuste = 0 THEN 1 ELSE 0 END),0) AS majeurs_ouverts
          FROM comparaisons_stock
-         WHERE TO_CHAR(date_comparaison,'$date_fmt')=? $sf",
+         WHERE DATE_FORMAT(date_comparaison,'$date_fmt')=? $sf",
         [$periode_val]
     );
     $rec_total   = (int)($recon['total'] ?? 0);
