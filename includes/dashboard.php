@@ -1471,7 +1471,7 @@ function dash_registre(): array {
         'titre'     => 'Consommation par site',
         'soustitre' => 'Douze derniers mois, en FCFA',
         'module'    => 'consommables',
-        'lien'      => ['/pages/consommables.php', 'Les consommables'],
+        'lien'      => ['/pages/articles.php', 'Les consommables'],
         'donnees'   => function (array $p) {
             [$w, $args] = dash_filtre_site($p, 'lc.site_id');
             return db_fetch_all(
