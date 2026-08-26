@@ -81,7 +81,7 @@ if ($type==='equipements') {
 // ── CONSOMMABLES ─────────────────────────────────────────────
 elseif ($type==='consommables') {
     require_permission('consommables','can_export');
-    $rows=db_fetch_all("SELECT c.code,c.libelle,c.unite,c.stock_global,c.seuil_alerte,STRING_AGG(DISTINCT s.nom, ', ' ORDER BY s.nom) AS sites FROM consommables c LEFT JOIN stock_consommables_site sc ON sc.consommable_id=c.id LEFT JOIN sites s ON s.id=sc.site_id GROUP BY c.id ORDER BY c.libelle");
+    $rows=db_fetch_all("SELECT a.code,a.libelle,a.unite,a.stock_global,a.seuil_alerte,STRING_AGG(DISTINCT s.nom, ', ' ORDER BY s.nom) AS sites FROM articles a LEFT JOIN stock_site ss ON ss.article_id=a.id LEFT JOIN sites s ON s.id=ss.site_id GROUP BY a.id ORDER BY a.libelle");
     $sheet->setTitle('Consommables');
     $sheet->fromArray(['Code','Libellé','Unité','Stock Global','Seuil Alerte','Sites'],null,'A1');
     apply_header($sp,'A1:F1');
@@ -99,7 +99,7 @@ elseif ($type==='consommables') {
 // ── LIVRAISONS ───────────────────────────────────────────────
 elseif ($type==='livraisons') {
     require_permission('consommables','can_export');
-    $rows=db_fetch_all("SELECT lc.date_livraison,c.libelle AS consommable,c.unite,lc.quantite,s.nom AS site,lc.bon_livraison,lc.notes,CONCAT(u.prenom,' ',u.nom) AS agent FROM livraisons_consommables lc JOIN consommables c ON c.id=lc.consommable_id JOIN sites s ON s.id=lc.site_id LEFT JOIN users u ON u.id=lc.created_by ORDER BY lc.date_livraison DESC");
+    $rows=db_fetch_all("SELECT lc.date_livraison,a.libelle AS consommable,a.unite,lc.quantite,s.nom AS site,lc.bon_livraison,lc.notes,CONCAT(u.prenom,' ',u.nom) AS agent FROM livraisons_consommables lc JOIN articles a ON a.id=lc.consommable_id JOIN sites s ON s.id=lc.site_id LEFT JOIN users u ON u.id=lc.created_by ORDER BY lc.date_livraison DESC");
     $sheet->setTitle('Livraisons');
     $sheet->fromArray(['Date','Consommable','Unité','Quantité','Site','Bon livraison','Notes','Agent'],null,'A1');
     apply_header($sp,'A1:H1');
@@ -174,16 +174,16 @@ elseif ($type==='couts_sites') {
     } else {
         // Détail : ligne par article × site
         $rows = db_fetch_all(
-            "SELECT s.nom AS site, c.code, c.libelle AS article, c.unite,
+            "SELECT s.nom AS site, a.code, a.libelle AS article, a.unite,
                     COALESCE(SUM(lc.quantite),0)         AS qte,
                     COALESCE(AVG(lc.prix_unitaire),0)    AS prix_unit_moy,
                     COALESCE(SUM(lc.prix_total),0)       AS cout_total
              FROM livraisons_consommables lc
              JOIN sites s ON s.id=lc.site_id
-             JOIN consommables c ON c.id=lc.consommable_id
+             JOIN articles a ON a.id=lc.consommable_id
              WHERE lc.date_livraison BETWEEN ? AND ? $where_site
                AND lc.prix_total > 0
-             GROUP BY s.id, c.id ORDER BY s.nom, cout_total DESC",
+             GROUP BY s.id, a.id ORDER BY s.nom, cout_total DESC",
             [$date_debut, $date_fin]
         );
         $sheet->setTitle('Détail coûts');
@@ -228,16 +228,16 @@ elseif ($type==='bilan_mensuel') {
     $mois_label = ($mois_fr[$mois] ?? $mois) . ' ' . $annee;
 
     $rows = db_fetch_all(
-        "SELECT s.nom AS site, c.code, c.libelle AS article, c.unite,
+        "SELECT s.nom AS site, a.code, a.libelle AS article, a.unite,
                 COALESCE(SUM(lc.quantite),0)         AS qte,
                 COALESCE(AVG(lc.prix_unitaire),0)    AS prix_unit_moy,
                 COALESCE(SUM(lc.prix_total),0)       AS cout_total
          FROM livraisons_consommables lc
          JOIN sites s ON s.id=lc.site_id
-         JOIN consommables c ON c.id=lc.consommable_id
+         JOIN articles a ON a.id=lc.consommable_id
          WHERE EXTRACT(YEAR FROM lc.date_livraison)=? AND EXTRACT(MONTH FROM lc.date_livraison)=?
            AND lc.prix_total > 0
-         GROUP BY s.id, c.id ORDER BY s.nom, cout_total DESC",
+         GROUP BY s.id, a.id ORDER BY s.nom, cout_total DESC",
         [$annee, $mois]
     );
 
