@@ -441,6 +441,8 @@ include __DIR__ . '/../templates/header.php';
 .pmma-tab-panel.active{display:block}
 .pmma-matrix td,.pmma-matrix th{text-align:center}
 .pmma-matrix td:first-child,.pmma-matrix th:first-child{text-align:left}
+#pmmaKpis[data-active="stock"] .kpi[data-kpi-group="conso"]{display:none}
+#pmmaKpis[data-active="conso"] .kpi[data-kpi-group="stock"]{display:none}
 </style>
 
 <!-- TOOLBAR -->
@@ -515,42 +517,42 @@ include __DIR__ . '/../templates/header.php';
 </div>
 
 <!-- KPI -->
-<div class="kpi-bar" id="pmmaKpis">
+<div class="kpi-bar" id="pmmaKpis" data-active="stock">
   <?php
   $total_stock = array_sum(array_column($stock_par_site, 'quantite'));
   ?>
-  <div class="kpi">
+  <div class="kpi" data-kpi-group="stock">
     <div class="kpi-val" style="color:var(--blue)"><?= fmt_number($total_stock) ?></div>
     <div class="kpi-lbl">Total PMMA en stock</div>
   </div>
   <?php foreach ($pmma_types as $typ): ?>
-  <div class="kpi">
+  <div class="kpi" data-kpi-group="stock">
     <div class="kpi-val" style="color:var(--blue);font-size:22px"><?= fmt_number($stock_type_map[$typ] ?? 0) ?></div>
     <div class="kpi-lbl">Total <?= h($typ) ?> en stock</div>
   </div>
   <?php endforeach; ?>
   <?php if ($nb_stock_bas > 0): ?>
-  <div class="kpi" style="border-color:#fca5a5;background:#fff5f5">
+  <div class="kpi" data-kpi-group="stock" style="border-color:#fca5a5;background:#fff5f5">
     <div class="kpi-val" style="color:var(--danger-d)"><?= $nb_stock_bas ?></div>
     <div class="kpi-lbl">Type(s) en stock bas</div>
   </div>
   <?php endif; ?>
-  <div class="kpi">
+  <div class="kpi" data-kpi-group="conso">
     <div class="kpi-val" style="color:var(--navy)"><?= fmt_number($grand_total['total']) ?></div>
     <div class="kpi-lbl">Consommés sur la période</div>
   </div>
+  <?php foreach ($pmma_types as $typ): ?>
+  <div class="kpi" data-kpi-group="conso">
+    <div class="kpi-val" style="color:var(--blue);font-size:22px"><?= fmt_number($totaux_type[$typ]['total'] ?? 0) ?></div>
+    <div class="kpi-lbl"><?= h($typ) ?> Consommés</div>
+  </div>
+  <?php endforeach; ?>
   <?php if ($grand_total['endommages'] > 0): ?>
-  <div class="kpi" style="border-color:#fca5a5">
+  <div class="kpi" data-kpi-group="conso" style="border-color:#fca5a5">
     <div class="kpi-val" style="color:var(--danger-d)"><?= fmt_number($grand_total['endommages']) ?></div>
     <div class="kpi-lbl">Endommagés sur la période</div>
   </div>
   <?php endif; ?>
-  <?php foreach ($totaux_type as $typ => $tot): ?>
-  <div class="kpi">
-    <div class="kpi-val" style="color:var(--blue);font-size:22px"><?= fmt_number($tot['total']) ?></div>
-    <div class="kpi-lbl">Consommés — <?= h($typ) ?></div>
-  </div>
-  <?php endforeach; ?>
 </div>
 
 <!-- ONGLETS -->
@@ -804,6 +806,8 @@ function pmmaCharger(url){
         if(!neuf || !ancien) throw new Error('structure');
         ancien.replaceWith(neuf);
       });
+      const ongletActif = document.getElementById('tabPanelConso').classList.contains('active') ? 'conso' : 'stock';
+      document.getElementById('pmmaKpis').dataset.active = ongletActif;
       history.pushState({pmma:1}, '', url);
       pmmaEnVol = null;
     })
@@ -818,6 +822,7 @@ function pmmaTab(name){
     document.querySelectorAll('.pmma-tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
     document.getElementById('tabPanelStock').classList.toggle('active', name==='stock');
     document.getElementById('tabPanelConso').classList.toggle('active', name==='conso');
+    document.getElementById('pmmaKpis').dataset.active = name;
 }
 function appliquerFiltres(){
     const p=new URLSearchParams();
