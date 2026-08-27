@@ -75,19 +75,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
 // ── FILTRES
 $f_site = $site_force ?: (int)($_GET['site'] ?? 0);
+$f_type = trim($_GET['type'] ?? '');
 $f_from = $_GET['from'] ?? date('Y-m-01');
 $f_to   = $_GET['to']   ?? date('Y-m-d');
+
+// Formats PMMA disponibles (liste globale, indépendante des filtres actifs)
+$types_list = db_fetch_all(
+    "SELECT DISTINCT type_pmma FROM stock_pmma_site WHERE type_pmma <> '' ORDER BY type_pmma"
+);
 
 // ── STOCK ACTUEL
 $stock_par_site = db_fetch_all(
     "SELECT sp.*, s.nom AS site_nom
      FROM stock_pmma_site sp
      JOIN sites s ON s.id = sp.site_id
-     WHERE (? = 0 OR sp.site_id = ?)
+     WHERE (? = 0 OR sp.site_id = ?) AND (? = '' OR sp.type_pmma = ?)
      ORDER BY s.nom, sp.type_pmma",
-    [$f_site ?: 0, $f_site ?: 0]
+    [$f_site ?: 0, $f_site ?: 0, $f_type, $f_type]
 );
-if (empty($stock_par_site) && !$f_site) {
+if (empty($stock_par_site) && !$f_site && $f_type === '') {
     $stock_par_site = db_fetch_all(
         "SELECT s.id AS site_id, s.nom AS site_nom, '' AS type_pmma, 0 AS quantite, 10 AS seuil_alerte
          FROM sites s WHERE s.actif=1 ORDER BY s.nom"
@@ -110,6 +116,12 @@ sort($pmma_types);
 
 // ── CONSOMMATION (depuis les points journaliers)
 $ws_site = $f_site ? "AND p.site_id = $f_site" : '';
+$ws_type = '';
+$conso_params = [$f_from, $f_to];
+if ($f_type !== '') {
+    $ws_type = 'AND pu.type_pmma = ?';
+    $conso_params[] = $f_type;
+}
 $conso = db_fetch_all(
     "SELECT p.date_point, p.site_id, s.nom AS site_nom, pu.type_pmma,
             SUM(pu.utilises) AS utilises,
@@ -118,10 +130,10 @@ $conso = db_fetch_all(
      FROM op_pmma_utilises pu
      JOIN op_points_journaliers p ON p.id = pu.point_id
      JOIN sites s ON s.id = p.site_id
-     WHERE p.date_point BETWEEN ? AND ? $ws_site
+     WHERE p.date_point BETWEEN ? AND ? $ws_site $ws_type
      GROUP BY p.date_point, p.site_id, s.nom, pu.type_pmma
      ORDER BY p.date_point DESC",
-    [$f_from, $f_to]
+    $conso_params
 );
 
 // Lookup stock actuel : site_id_type → quantite
@@ -173,6 +185,7 @@ if (isset($_GET['export'])) {
     $site_label = $f_site
         ? (db_fetch_value("SELECT nom FROM sites WHERE id=?", [$f_site]) ?: 'Site inconnu')
         : 'Tous les sites';
+    $type_label = $f_type !== '' ? $f_type : 'Tous les formats';
 
     if ($export === 'xlsx') {
         $spreadsheet = new Spreadsheet();
@@ -285,7 +298,7 @@ if (isset($_GET['export'])) {
             <div style="font-size:9px;color:#64748b;margin-top:2px">Express Multiservices CI</div>
           </td>
         </tr></table>
-        <div class="sub">Période : ' . h($f_from) . ' → ' . h($f_to) . ' &nbsp;|&nbsp; Site : ' . h($site_label) . ' &nbsp;|&nbsp; Généré le ' . date('d/m/Y H:i') . '</div>
+        <div class="sub">Période : ' . h($f_from) . ' → ' . h($f_to) . ' &nbsp;|&nbsp; Site : ' . h($site_label) . ' &nbsp;|&nbsp; Format : ' . h($type_label) . ' &nbsp;|&nbsp; Généré le ' . date('d/m/Y H:i') . '</div>
         <table><thead><tr>
             <th>Date</th><th>Site</th><th>Type PMMA</th><th>Utilisés</th><th>Endommagés</th><th>Total sorti</th><th>Stock restant</th>
         </tr></thead><tbody>
@@ -370,7 +383,7 @@ if (isset($_GET['export'])) {
             <div style="font-size:9px;color:#64748b;margin-top:2px">Express Multiservices CI</div>
           </td>
         </tr></table>
-        <div class="sub">Période : ' . h($f_from) . ' → ' . h($f_to) . ' &nbsp;|&nbsp; Site : ' . h($site_label) . ' &nbsp;|&nbsp; Généré le ' . date('d/m/Y H:i') . '</div>
+        <div class="sub">Période : ' . h($f_from) . ' → ' . h($f_to) . ' &nbsp;|&nbsp; Site : ' . h($site_label) . ' &nbsp;|&nbsp; Format : ' . h($type_label) . ' &nbsp;|&nbsp; Généré le ' . date('d/m/Y H:i') . '</div>
         <table><thead><tr>
             <th style="text-align:left">Mois</th><th>Type PMMA</th><th>Utilisés</th><th>Endommagés</th><th>Total sorti</th><th>Stock restant</th>
         </tr></thead><tbody>
@@ -480,6 +493,17 @@ include __DIR__ . '/../templates/header.php';
       <option value="0">Tous les sites</option>
       <?php foreach ($sites_list as $s): ?>
       <option value="<?= $s['id'] ?>" <?= $f_site == $s['id'] ? 'selected' : '' ?>><?= h($s['nom']) ?></option>
+      <?php endforeach; ?>
+    </select>
+  </div>
+  <?php endif; ?>
+  <?php if (!empty($types_list)): ?>
+  <div>
+    <label for="fType">Format PMMA</label>
+    <select id="fType">
+      <option value="">Tous les formats</option>
+      <?php foreach ($types_list as $t): ?>
+      <option value="<?= h($t['type_pmma']) ?>" <?= $f_type === $t['type_pmma'] ? 'selected' : '' ?>><?= h($t['type_pmma']) ?></option>
       <?php endforeach; ?>
     </select>
   </div>
@@ -797,6 +821,8 @@ function appliquerFiltres(){
     const site=document.getElementById('fSite').value;
     if(site!=='0') p.set('site',site);
     <?php endif; ?>
+    const fType=document.getElementById('fType');
+    if(fType && fType.value!=='') p.set('type',fType.value);
     pmmaCharger(location.pathname+'?'+p.toString());
 }
 function resetFiltres(){
