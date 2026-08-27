@@ -94,6 +94,20 @@ if (empty($stock_par_site) && !$f_site) {
     );
 }
 
+// ── Matrice site × type (vue "tous les sites")
+$pmma_types        = [];
+$pmma_matrix       = [];
+$site_names_order  = [];
+foreach ($stock_par_site as $sp_item) {
+    $sid = $sp_item['site_id'];
+    if (!isset($site_names_order[$sid])) $site_names_order[$sid] = $sp_item['site_nom'];
+    if ($sp_item['type_pmma'] === '') continue;
+    $t = $sp_item['type_pmma'];
+    if (!in_array($t, $pmma_types, true)) $pmma_types[] = $t;
+    $pmma_matrix[$sid][$t] = ['quantite' => (int)$sp_item['quantite'], 'seuil' => (int)($sp_item['seuil_alerte'] ?? 10)];
+}
+sort($pmma_types);
+
 // ── CONSOMMATION (depuis les points journaliers)
 $ws_site = $f_site ? "AND p.site_id = $f_site" : '';
 $conso = db_fetch_all(
@@ -407,6 +421,13 @@ include __DIR__ . '/../templates/header.php';
 .mclose{width:30px;height:30px;border-radius:7px;border:1px solid var(--border);background:none;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center}
 .mbody{padding:22px}
 .mfoot{padding:12px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;background:white}
+.pmma-tabs{display:flex;gap:6px;border-bottom:2px solid var(--border);margin-bottom:18px}
+.pmma-tab-btn{background:none;border:none;padding:10px 16px;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;display:flex;align-items:center;gap:6px}
+.pmma-tab-btn.active{color:var(--navy);border-bottom-color:var(--blue)}
+.pmma-tab-panel{display:none}
+.pmma-tab-panel.active{display:block}
+.pmma-matrix td,.pmma-matrix th{text-align:center}
+.pmma-matrix td:first-child,.pmma-matrix th:first-child{text-align:left}
 </style>
 
 <!-- TOOLBAR -->
@@ -502,11 +523,23 @@ include __DIR__ . '/../templates/header.php';
   <?php endforeach; ?>
 </div>
 
+<!-- ONGLETS -->
+<div class="pmma-tabs">
+  <button type="button" class="pmma-tab-btn active" data-tab="stock" onclick="pmmaTab('stock')">
+    <i class="ph-duotone ph-package"></i> Stock actuel
+  </button>
+  <button type="button" class="pmma-tab-btn" data-tab="conso" onclick="pmmaTab('conso')">
+    <i class="ph-duotone ph-clipboard-text"></i> Historique consommation
+  </button>
+</div>
+
 <!-- STOCK PAR SITE -->
+<div class="pmma-tab-panel active" id="tabPanelStock">
 <div id="pmmaStock">
 <div style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:var(--navy);margin-bottom:10px">
   <i class="ph-duotone ph-package" style="vertical-align:middle"></i> Stock actuel par site
 </div>
+<?php if ($f_site): ?>
 <div class="pmma-grid">
   <?php
   $sites_grouped = [];
@@ -540,9 +573,44 @@ include __DIR__ . '/../templates/header.php';
   </div>
   <?php endforeach; ?>
 </div>
+<?php else: ?>
+<div class="card">
+  <?php if (empty($pmma_types)): ?>
+  <div style="text-align:center;padding:30px;color:var(--muted)">Aucune donnée de stock disponible.</div>
+  <?php else: ?>
+  <div class="table-wrap">
+    <table class="pmma-matrix">
+      <thead><tr>
+        <th>Site</th>
+        <?php foreach ($pmma_types as $t): ?><th><?= h($t) ?></th><?php endforeach; ?>
+        <th>Total</th>
+      </tr></thead>
+      <tbody>
+      <?php foreach ($site_names_order as $sid => $site_nom): $site_total = 0; ?>
+        <tr>
+          <td style="font-weight:600;color:var(--navy)"><?= h($site_nom) ?></td>
+          <?php foreach ($pmma_types as $t): $cell = $pmma_matrix[$sid][$t] ?? null; if ($cell) $site_total += $cell['quantite']; ?>
+          <td>
+            <?php if ($cell): $bas = $cell['quantite'] < $cell['seuil']; ?>
+            <span style="font-weight:700;color:<?= $bas ? 'var(--danger-d)' : 'var(--navy)' ?>"><?= $cell['quantite'] ?></span>
+            <?php if ($bas): ?><i class="ph-duotone ph-warning" style="color:var(--danger-d);margin-left:3px" title="Stock bas"></i><?php endif; ?>
+            <?php else: ?><span style="color:var(--muted)">—</span><?php endif; ?>
+          </td>
+          <?php endforeach; ?>
+          <td style="font-family:'Montserrat',sans-serif;font-weight:800;color:var(--blue)"><?= $site_total ?></td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+</div>
 </div>
 
 <!-- TABLEAU CONSOMMATION -->
+<div class="pmma-tab-panel" id="tabPanelConso">
 <div class="card" id="pmmaResultCard">
   <div class="card-header">
     <h3><i class="ph-duotone ph-clipboard-text" style="vertical-align:middle"></i>
@@ -598,6 +666,7 @@ include __DIR__ . '/../templates/header.php';
       </tbody>
     </table>
   </div>
+</div>
 </div>
 
 <?php if ($can_saisie): ?>
@@ -715,6 +784,11 @@ function pmmaCharger(url){
     });
 }
 window.addEventListener('popstate', function(ev){ if(ev.state && ev.state.pmma) location.reload(); });
+function pmmaTab(name){
+    document.querySelectorAll('.pmma-tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
+    document.getElementById('tabPanelStock').classList.toggle('active', name==='stock');
+    document.getElementById('tabPanelConso').classList.toggle('active', name==='conso');
+}
 function appliquerFiltres(){
     const p=new URLSearchParams();
     p.set('from',document.getElementById('fFrom').value);
