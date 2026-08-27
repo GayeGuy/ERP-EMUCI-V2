@@ -1,18 +1,17 @@
 -- ============================================================
---  Migration : permissions module ecarts_bobines (variante MySQL)
+--  Migration : permissions module ecarts_bobines
 --  2026-07-31 — Accès historique des écarts pour GSB, superviseur, PDG
---  Repose sur la clé unique permissions_uq_role_module (role_id, module).
 -- ============================================================
-START TRANSACTION;
+BEGIN;
 
 INSERT INTO permissions (role_id, module, can_read, can_create, can_update, can_delete, can_export)
 SELECT r.id, 'ecarts_bobines', 1, 0, 0, 0, 1
 FROM roles r
 WHERE r.slug IN ('gestionnaire_stock_bobines', 'superviseur_operation', 'lecteur',
                  'gestionnaire_stock', 'controleur_production')
-ON DUPLICATE KEY UPDATE
-    can_read   = GREATEST(can_read,   VALUES(can_read)),
-    can_export = GREATEST(can_export, VALUES(can_export));
+ON CONFLICT (role_id, module) DO UPDATE SET
+    can_read   = GREATEST(permissions.can_read,   EXCLUDED.can_read),
+    can_export = GREATEST(permissions.can_export, EXCLUDED.can_export);
 
 COMMIT;
 

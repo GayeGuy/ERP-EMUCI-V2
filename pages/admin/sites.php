@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $adresse = trim($_POST['adresse']         ?? '');
         $ville   = trim($_POST['ville']           ?? '');
         $resp_id = (int)($_POST['responsable_id'] ?? 0) ?: null;
-        $opt_caisse = in_array($type, ['entrepot','siege']) ? 0 : (int)($_POST['option_caisse'] ?? 0);
+        $opt_caisse = in_array($type, ['entrepot','siege','magasin']) ? 0 : (int)($_POST['option_caisse'] ?? 0);
         if (!$code || !$nom || !$type) json_response(false, 'Code, nom et type sont obligatoires.');
         if (db_fetch_value("SELECT COUNT(*) FROM sites WHERE code=?", [$code]) > 0)
             json_response(false, "Le code site $code existe déjà.");
@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $ville      = trim($_POST['ville']           ?? '');
         $actif      = (int)($_POST['actif']          ?? 1);
         $resp_id    = (int)($_POST['responsable_id'] ?? 0) ?: null;
-        $opt_caisse = in_array($type, ['entrepot','siege']) ? 0 : (int)($_POST['option_caisse'] ?? 0);
+        $opt_caisse = in_array($type, ['entrepot','siege','magasin']) ? 0 : (int)($_POST['option_caisse'] ?? 0);
         if (!$nom || !$type) json_response(false, 'Nom et type obligatoires.');
         $old = db_fetch_one("SELECT * FROM sites WHERE id=?", [$id]);
         db_query("UPDATE sites SET nom=?,type=?,option_caisse=?,adresse=?,ville=?,responsable_id=?,actif=? WHERE id=?",
@@ -133,13 +133,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             json_response(true,'Ignoré.');
         }
         if ($decision === 'lier') {
-            if (!$site_id) json_response(false,'Site DigiStock obligatoire.');
+            if (!$site_id) json_response(false,'Site ERP EMUCI obligatoire.');
             $nom_emuci = $inconnu['nom_emuci'];
             db_query("UPDATE sites SET nom_emuci=?, nom=? WHERE id=?", [$nom_emuci, $nom_emuci, $site_id]);
             db_query("UPDATE emuci_sites_inconnus SET statut='lie',site_id_lie=?,traite_par=?,traite_at=NOW() WHERE nom_emuci=?", [$site_id,$user['id'],$nom_emuci]);
             db_query("UPDATE import_optoplate SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$site_id,$nom_emuci]);
             db_query("UPDATE import_optotrace  SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$site_id,$nom_emuci]);
-            db_query("UPDATE op_bobines SET site_id=? FROM import_optotrace ot WHERE ot.keyname=op_bobines.numero AND ot.site_nom_emuci=? AND op_bobines.site_id IS NULL", [$site_id,$nom_emuci]);
+            db_query("UPDATE op_bobines JOIN import_optotrace ot ON ot.keyname=op_bobines.numero SET op_bobines.site_id=? WHERE ot.site_nom_emuci=? AND op_bobines.site_id IS NULL", [$site_id,$nom_emuci]);
             $nom = db_fetch_value("SELECT nom FROM sites WHERE id=?",[$site_id]);
             audit_log($user['id'],'UPDATE','sites',$site_id,"Mapping EMUCI '$nom_emuci' → '$nom'");
             json_response(true,"Site lié. Tous les imports mis à jour.");
@@ -157,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             db_query("UPDATE emuci_sites_inconnus SET statut='cree',site_id_lie=?,traite_par=?,traite_at=NOW() WHERE nom_emuci=?", [$new_id,$user['id'],$nom_emuci]);
             db_query("UPDATE import_optoplate SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$new_id,$nom_emuci]);
             db_query("UPDATE import_optotrace  SET site_id=? WHERE site_nom_emuci=? AND site_id IS NULL", [$new_id,$nom_emuci]);
-            db_query("UPDATE op_bobines SET site_id=? FROM import_optotrace ot WHERE ot.keyname=op_bobines.numero AND ot.site_nom_emuci=? AND op_bobines.site_id IS NULL", [$new_id,$nom_emuci]);
+            db_query("UPDATE op_bobines JOIN import_optotrace ot ON ot.keyname=op_bobines.numero SET op_bobines.site_id=? WHERE ot.site_nom_emuci=? AND op_bobines.site_id IS NULL", [$new_id,$nom_emuci]);
             audit_log($user['id'],'CREATE','sites',$new_id,"Création depuis EMUCI '$nom_emuci'");
             json_response(true,"Site '$nom_nouveau' créé.");
         }
@@ -173,9 +173,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         );
         if (!$row) json_response(false, 'Introuvable.');
         $row['equip_par_type'] = db_fetch_all(
-            "SELECT n.code, n.libelle, COUNT(e.id) AS total, n.id AS nom_id
-             FROM equipements e JOIN nomenclatures n ON n.id=e.nomenclature_id
-             WHERE e.site_id=? AND e.actif=1 GROUP BY n.id ORDER BY n.libelle", [$id]
+            "SELECT n.code, COALESCE(n.libelle,'Sans type') AS libelle, COUNT(e.id) AS total, n.id AS nom_id
+             FROM equipements e LEFT JOIN nomenclatures n ON n.id=e.nomenclature_id
+             WHERE e.site_id=? AND e.actif=1 GROUP BY n.id ORDER BY libelle", [$id]
         );
         $row['utilisateurs'] = db_fetch_all(
             "SELECT u.id, CONCAT(u.prenom,' ',u.nom) AS nom, u.email, r.nom AS role
@@ -193,7 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     COUNT(e.id) AS stock_disponible
              FROM configurations_site cs JOIN nomenclatures n ON n.id=cs.nomenclature_id
              LEFT JOIN equipements e ON e.nomenclature_id=cs.nomenclature_id AND e.actif=1 AND e.site_id IS NULL AND e.etat IN ('neuf','bon')
-             WHERE cs.type_site=? GROUP BY cs.nomenclature_id", [$type_site]
+             WHERE cs.type_site=? GROUP BY cs.nomenclature_id, cs.quantite, cs.optionnel, n.code, n.libelle", [$type_site]
         );
         if (empty($besoins)) json_response(false, "Aucune configuration définie pour «$type_site».");
         $nb_sites = PHP_INT_MAX;
@@ -267,7 +267,7 @@ $sites = db_fetch_all(
 // Stats globales (indépendantes des filtres)
 $stats_type = db_fetch_all(
     "SELECT type, COUNT(*) AS total, SUM(actif) AS actifs
-     FROM sites GROUP BY type ORDER BY FIELD(type, 'saisie','pose','mixte','entrepot','siege')"
+     FROM sites GROUP BY type ORDER BY FIELD(type, 'saisie','pose','mixte','entrepot','siege','magasin')"
 );
 $stats_ville = db_fetch_all(
     "SELECT ville, COUNT(*) AS n FROM sites WHERE actif=1 AND ville IS NOT NULL AND ville != ''
@@ -277,7 +277,7 @@ $total_actifs = (int)db_fetch_value("SELECT COUNT(*) FROM sites WHERE actif=1");
 $total_all    = (int)db_fetch_value("SELECT COUNT(*) FROM sites");
 
 $villes_list = db_fetch_all("SELECT DISTINCT ville FROM sites WHERE ville IS NOT NULL AND ville != '' ORDER BY ville");
-$types_labels = ['saisie'=>'Saisie','pose'=>'Pose','mixte'=>'Mixte','entrepot'=>'Entrepôt','siege'=>'Siège'];
+$types_labels = ['saisie'=>'Saisie','pose'=>'Pose','mixte'=>'Mixte','entrepot'=>'Entrepôt','siege'=>'Siège','magasin'=>'Magasin'];
 
 // Pour modals
 $users_list    = db_fetch_all("SELECT id,prenom,nom FROM users WHERE actif=1 ORDER BY prenom");
@@ -391,17 +391,18 @@ $type_colors = [
     'mixte'   => ['bg'=>'#fff3e8','color'=>'#9a3412','icon'=>'ph-arrows-left-right'],
     'entrepot'=> ['bg'=>'#e6f9f7','color'=>'#134e4a','icon'=>'ph-warehouse'],
     'siege'   => ['bg'=>'#fdeaea','color'=>'#991b1b','icon'=>'ph-buildings'],
+    'magasin' => ['bg'=>'#f3e8ff','color'=>'#6b21a8','icon'=>'ph-package'],
 ];
 ?>
 <style>
 .filter-bar{background:white;border:1px solid var(--border);border-radius:12px;padding:12px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:18px}
-.filter-bar label{font-size:11px;font-weight:700;color:var(--navy);display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.4px}
+.filter-bar label{font-size:12px;font-weight:700;color:var(--navy);display:block;margin-bottom:3px;text-transform:uppercase;letter-spacing:.4px}
 .filter-bar input,.filter-bar select{padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;background:white;outline:none;min-width:140px}
 .filter-bar input:focus,.filter-bar select:focus{border-color:var(--blue)}
 .stats-dash{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:18px}
 .stat-tile{position:relative;overflow:hidden;background:white;border:1px solid var(--border);border-radius:12px;padding:11px 14px 11px 18px;cursor:default}
 .stat-tile::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent,var(--muted))}
-.stat-tile-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.stat-tile-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
 .stat-tile-value{font-family:'Plus Jakarta Sans',sans-serif;font-size:22px;font-weight:700;color:var(--navy)}
 .stat-tile-empty{opacity:.5}
 .stat-tile-total{background:var(--navy);border-color:var(--navy)}
@@ -416,7 +417,7 @@ $type_colors = [
 .sites-table thead th{position:sticky;top:0;z-index:1}
 .sites-table tr:hover td{background:#f8fafc}
 .sites-table tr.inactive td{opacity:.55}
-.type-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.type-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
 /* Compteurs Équip./Util. : nombre nu, lisible d'un coup d'œil.
    Les pastilles bleu pâle précédentes plafonnaient à 4.25:1 (sous le seuil AA). */
 .count-cell{font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700;color:var(--navy);padding:6px 8px;background:white;border-radius:6px;display:inline-flex;align-items:center;justify-content:center;min-width:40px}
@@ -427,7 +428,7 @@ $type_colors = [
 .resp-avatar{width:38px;height:38px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:white;font-size:12px;font-weight:700;flex-shrink:0;letter-spacing:.3px}
 /* #15568B et non #1B75BC : sur le fond #EFF6FF ce dernier ne donnait que
    4,47:1, sous le seuil AA de 4,5. Le nouveau donne 7,05:1. */
-.action-btn{width:32px;height:32px;border-radius:8px;border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;transition:all .15s;background:#EFF6FF;color:#15568B}
+.action-btn{width:32px;height:32px;border-radius:8px;border:none;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-size:15px;transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;background:#EFF6FF;color:#15568B}
 .action-btn:hover{background:#15568B;color:white;transform:scale(1.08)}
 .action-btn.edit-btn{background:#F0FDF4;color:#166534}
 .action-btn.edit-btn:hover{background:#166534;color:white}
@@ -456,7 +457,7 @@ $type_colors = [
 .capa-fill{height:100%;border-radius:3px}
 /* Config */
 .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:18px}
-.tab-btn{padding:10px 18px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition:all .15s;font-family:'Manrope',sans-serif}
+.tab-btn{padding:10px 18px;font-size:13px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;font-family:'Manrope',sans-serif}
 .tab-btn.active{color:var(--blue);border-bottom-color:var(--blue)}
 .tab-pane{display:none}
 .tab-pane.active{display:block}
@@ -584,7 +585,7 @@ $type_colors = [
               </div>
               <div>
                 <div style="font-weight:700;color:var(--navy);font-size:13.5px"><?= h($s['nom']) ?></div>
-                <div style="font-size:11px;color:var(--muted);font-family:monospace"><?= h($s['code']) ?></div>
+                <div style="font-size:12px;color:var(--muted);font-family:monospace"><?= h($s['code']) ?></div>
               </div>
             </div>
           </td>
@@ -592,7 +593,7 @@ $type_colors = [
             <span class="type-badge" style="background:<?= $tc['bg'] ?>;color:<?= $tc['color'] ?>">
               <?= $types_labels[$s['type']] ?? $s['type'] ?>
               <?php if (!empty($s['option_caisse'])): ?>
-              <span style="font-size:10px;background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:8px;margin-left:3px">💰</span>
+              <span style="font-size:12px;background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:8px;margin-left:3px"><i class="ph ph-currency-circle-dollar" aria-hidden="true"></i></span>
               <?php endif; ?>
             </span>
           </td>
@@ -662,12 +663,12 @@ $type_colors = [
 <!-- ===== MODAL CRÉER / MODIFIER ===== -->
 <div class="modal-overlay" id="mS">
   <div class="modal" style="width:560px">
-    <div class="mhdr"><h3 id="mST">Nouveau site</h3><button class="mclose" onclick="closeMX('mS')">✕</button></div>
+    <div class="mhdr"><h3 id="mST">Nouveau site</h3><button class="mclose" onclick="closeMX('mS')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody">
       <div id="mSAlert"></div>
       <input type="hidden" id="sId">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
-        <div class="form-group"><label>Code * <span style="font-size:11px;color:var(--muted)">(ex: ABJ-01)</span></label>
+        <div class="form-group"><label>Code * <span style="font-size:12px;color:var(--muted)">(ex: ABJ-01)</span></label>
           <input type="text" class="form-control" id="sCode" placeholder="ABJ-01" oninput="this.value=this.value.toUpperCase()">
         </div>
         <div class="form-group"><label>Type *</label>
@@ -700,8 +701,8 @@ $type_colors = [
       <div id="sCaisseWrap" style="display:none;margin-bottom:14px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;padding:10px 14px;background:var(--lighter);border-radius:8px;border:1px solid var(--border)">
           <input type="checkbox" id="sCaisse">
-          <div><div style="font-weight:600;font-size:13px">💰 Option Caisse</div>
-          <div style="font-size:11px;color:var(--muted)">Ce site encaisse directement</div></div>
+          <div><div style="font-weight:600;font-size:13px"><i class="ph ph-currency-circle-dollar" aria-hidden="true"></i> Option Caisse</div>
+          <div style="font-size:12px;color:var(--muted)">Ce site encaisse directement</div></div>
         </label>
       </div>
       <div id="sActifWrap" style="display:none">
@@ -720,7 +721,7 @@ $type_colors = [
 <!-- ===== MODAL DÉTAIL ===== -->
 <div class="modal-overlay" id="mSD">
   <div class="modal" style="width:660px">
-    <div class="mhdr"><h3 id="sdT">Détail site</h3><button class="mclose" onclick="closeMX('mSD')">✕</button></div>
+    <div class="mhdr"><h3 id="sdT">Détail site</h3><button class="mclose" onclick="closeMX('mSD')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody" id="sdB"></div>
   </div>
 </div>
@@ -728,11 +729,16 @@ $type_colors = [
 <!-- ===== MODAL CALCULATEUR ===== -->
 <div class="modal-overlay" id="mCapa">
   <div class="modal" style="width:620px">
-    <div class="mhdr"><h3>Calculateur de capacité</h3><button class="mclose" onclick="closeMX('mCapa')">✕</button></div>
+    <div class="mhdr"><h3>Calculateur de capacité</h3><button class="mclose" onclick="closeMX('mCapa')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody">
       <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Combien de sites de ce type puis-je créer avec le stock disponible ?</p>
       <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap">
-        <?php foreach ($types_labels as $k => $l): ?>
+        <?php
+        // Entrepôt, Siège et Magasin n'ont pas de kit d'équipements type à
+        // respecter : le calculateur ne s'applique qu'aux types de site
+        // opérationnels.
+        $types_calculables = array_diff_key($types_labels, ['entrepot'=>1,'siege'=>1,'magasin'=>1]);
+        foreach ($types_calculables as $k => $l): ?>
         <button class="btn btn-secondary" onclick="calcCapa('<?= $k ?>')" id="cb-<?= $k ?>"><?= $l ?></button>
         <?php endforeach; ?>
       </div>
@@ -744,14 +750,14 @@ $type_colors = [
 <!-- ===== MODAL CONFIG TYPES ===== -->
 <div class="modal-overlay" id="mCfg">
   <div class="modal" style="width:680px">
-    <div class="mhdr"><h3>Configuration des besoins par type</h3><button class="mclose" onclick="closeMX('mCfg')">✕</button></div>
+    <div class="mhdr"><h3>Configuration des besoins par type</h3><button class="mclose" onclick="closeMX('mCfg')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody">
       <div class="tabs" id="cfgTabs">
-        <?php foreach ($types_labels as $k => $l): ?>
+        <?php foreach ($types_calculables as $k => $l): ?>
         <button class="tab-btn <?= $k==='saisie'?'active':'' ?>" onclick="showCfgTab('<?= $k ?>',this)"><?= $l ?></button>
         <?php endforeach; ?>
       </div>
-      <?php foreach ($types_labels as $k => $l): ?>
+      <?php foreach ($types_calculables as $k => $l): ?>
       <div class="tab-pane <?= $k==='saisie'?'active':'' ?>" id="cfg-<?= $k ?>">
         <div id="cfg-rows-<?= $k ?>"></div>
         <div style="display:flex;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">
@@ -780,7 +786,7 @@ $type_colors = [
 const NOMS = <?= json_encode(array_map(fn($n)=>['id'=>$n['id'],'code'=>$n['code'],'libelle'=>$n['libelle']],$nomenclatures)) ?>;
 const STOCK_DISPO = <?= json_encode(array_column($stock_dispo,'dispo','id')) ?>;
 const cfgData = {};
-<?php foreach ($types_labels as $k => $l):
+<?php foreach ($types_calculables as $k => $l):
   $cfg = db_fetch_all("SELECT cs.*,n.code,n.libelle FROM configurations_site cs JOIN nomenclatures n ON n.id=cs.nomenclature_id WHERE cs.type_site=?",[$k]);
 ?>
 cfgData['<?= $k ?>'] = <?= json_encode($cfg) ?>;
@@ -789,7 +795,9 @@ cfgData['<?= $k ?>'] = <?= json_encode($cfg) ?>;
 function ap(data){
   const fd=new FormData();
   for(const[k,v]of Object.entries(data))if(v!==undefined)fd.append(k,v);
-  return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
+  return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd})
+    .then(r=>r.json())
+    .catch(err=>({success:false,message:'Erreur réseau : '+err.message}));
 }
 function closeMX(id){document.getElementById(id).classList.remove('open');}
 function applyFilters(){
@@ -803,7 +811,7 @@ function applyFilters(){
 
 // ── SITE FORM
 function toggleCaisse(type){
-  const nonC=['entrepot','siege'];
+  const nonC=['entrepot','siege','magasin'];
   const w=document.getElementById('sCaisseWrap');
   w.style.display=nonC.includes(type)?'none':'block';
   if(nonC.includes(type))document.getElementById('sCaisse').checked=false;
@@ -886,18 +894,18 @@ function viewS(id){
     document.getElementById('sdT').textContent=r.code+' — '+r.nom;
     const equips=r.equip_par_type.map(e=>`
       <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
-        <span style="font-size:10px;font-weight:700;background:var(--lighter);border:1px solid var(--border);border-radius:5px;padding:2px 6px">${e.code}</span>
+        <span style="font-size:12px;font-weight:700;background:var(--lighter);border:1px solid var(--border);border-radius:5px;padding:2px 6px">${e.code}</span>
         <span style="flex:1;font-size:13px">${e.libelle}</span>
         <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">${e.total}</span>
       </div>`).join('')||'<p style="color:var(--muted);font-size:13px">Aucun équipement.</p>';
     const users=r.utilisateurs.map(u=>`
       <div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">
         <div class="resp-avatar">${u.nom.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase()}</div>
-        <div><div style="font-size:13px;font-weight:500">${u.nom}</div><div style="font-size:11px;color:var(--muted)">${u.email} · ${u.role}</div></div>
+        <div><div style="font-size:13px;font-weight:500">${u.nom}</div><div style="font-size:12px;color:var(--muted)">${u.email} · ${u.role}</div></div>
       </div>`).join('')||'<p style="color:var(--muted);font-size:13px">Aucun utilisateur.</p>';
     document.getElementById('sdB').innerHTML=`
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 18px;margin-bottom:18px">
-        ${[['Code',r.code],['Type',r.type],['Ville',r.ville||'—'],['Responsable',r.responsable_nom||'—'],['Adresse',r.adresse||'—'],['Statut',r.actif==1?'✅ Actif':'❌ Inactif']].map(([l,v])=>`<div style="padding:6px 0;border-bottom:1px solid var(--border)"><div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">${l}</div><div style="font-size:13px">${v}</div></div>`).join('')}
+        ${[['Code',r.code],['Type',r.type],['Ville',r.ville||'—'],['Responsable',r.responsable_nom||'—'],['Adresse',r.adresse||'—'],['Statut',r.actif==1?'<i class="ph ph-check-circle" aria-hidden="true"></i> Actif':'<i class="ph ph-x-circle" aria-hidden="true"></i> Inactif']].map(([l,v])=>`<div style="padding:6px 0;border-bottom:1px solid var(--border)"><div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">${l}</div><div style="font-size:13px">${v}</div></div>`).join('')}
       </div>
       <h4 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;margin-bottom:8px">Équipements (${r.equip_par_type.reduce((s,e)=>s+parseInt(e.total),0)})</h4>
       ${equips}
@@ -919,9 +927,9 @@ function calcCapa(type){
     const rows=details.map(r=>{
       const pct=r.requis>0?Math.min(100,r.disponible/r.requis*100):100;
       return `<div class="capa-row">
-        <span style="width:55px;font-size:10px;font-weight:700;color:var(--muted)">${r.code}</span>
-        <span style="flex:1;font-size:12px">${r.libelle}${r.optionnel?' <em style="font-size:10px;color:var(--muted)">(opt.)</em>':''}</span>
-        <span style="font-size:11px;color:var(--muted);margin:0 8px">${r.disponible}/${r.requis}</span>
+        <span style="width:55px;font-size:12px;font-weight:700;color:var(--muted)">${r.code}</span>
+        <span style="flex:1;font-size:12px">${r.libelle}${r.optionnel?' <em style="font-size:12px;color:var(--muted)">(opt.)</em>':''}</span>
+        <span style="font-size:12px;color:var(--muted);margin:0 8px">${r.disponible}/${r.requis}</span>
         <div class="capa-bar"><div class="capa-fill" style="width:${Math.min(pct,100)}%;background:${r.ok?'var(--success)':'var(--danger)'}"></div></div>
         <span style="margin-left:8px;font-size:16px;width:18px">${r.ok?'✓':'✗'}</span>
         <span style="font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;font-weight:800;width:30px;text-align:right;color:var(--navy)">${r.couvre}</span>
@@ -950,13 +958,13 @@ function renderCfg(type){
   c.innerHTML=rows.map((r,i)=>{
     const d=STOCK_DISPO[r.nomenclature_id]||0;
     return `<div class="cfg-row">
-      <span style="width:55px;font-size:10px;font-weight:700;color:var(--muted)">${r.code}</span>
+      <span style="width:55px;font-size:12px;font-weight:700;color:var(--muted)">${r.code}</span>
       <span style="flex:1;font-size:12.5px">${r.libelle}</span>
       <input type="number" class="form-control" style="width:68px" value="${r.quantite}" min="1" onchange="cfgData['${type}'][${i}].quantite=this.value">
-      <label style="font-size:11px;display:flex;align-items:center;gap:4px;white-space:nowrap">
+      <label style="font-size:12px;display:flex;align-items:center;gap:4px;white-space:nowrap">
         <input type="checkbox" ${r.optionnel?'checked':''} onchange="cfgData['${type}'][${i}].optionnel=this.checked"> Opt.
       </label>
-      <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;background:${d>=r.quantite?'#d5f5e3':'#fdf0ef'};color:${d>=r.quantite?'#1e8449':'#922b21'}">${d} dispo</span>
+      <span style="font-size:12px;font-weight:700;padding:2px 8px;border-radius:10px;background:${d>=r.quantite?'#d5f5e3':'#fdf0ef'};color:${d>=r.quantite?'#1e8449':'#922b21'}">${d} dispo</span>
       <button class="btn btn-danger btn-sm" onclick="rmCfgRow('${type}',${i})">✕</button>
     </div>`;}).join('');
 }
@@ -989,7 +997,7 @@ function saveCfg(type){
       Sites EMUCI non reconnus
       <span style="background:#F59E0B;color:white;padding:2px 10px;border-radius:20px;font-size:12px;margin-left:8px"><?= $nb_inconnus ?></span>
     </h3>
-    <span style="font-size:12px;color:#92400E">Ces sites apparaissent dans vos imports mais ne sont pas encore dans DigiStock.</span>
+    <span style="font-size:12px;color:#92400E">Ces sites apparaissent dans vos imports mais ne sont pas encore dans ERP EMUCI.</span>
   </div>
   <div class="table-wrap sites-table-wrap">
     <table>
@@ -998,13 +1006,13 @@ function saveCfg(type){
       <?php foreach ($sites_inconnus_emuci as $si): ?>
       <tr>
         <td style="font-weight:700;color:var(--navy)"><?= h($si['nom_emuci']) ?></td>
-        <td><span style="background:<?= $si['type_import']==='optoplate'?'#DBEAFE':'#D1FAE5' ?>;color:<?= $si['type_import']==='optoplate'?'#1D4ED8':'#065F46' ?>;padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700"><?= strtoupper($si['type_import']) ?></span></td>
+        <td><span style="background:<?= $si['type_import']==='optoplate'?'#DBEAFE':'#D1FAE5' ?>;color:<?= $si['type_import']==='optoplate'?'#1D4ED8':'#065F46' ?>;padding:2px 9px;border-radius:12px;font-size:12px;font-weight:700"><?= strtoupper($si['type_import']) ?></span></td>
         <td style="text-align:center;font-weight:700"><?= $si['nb_occurrences'] ?>×</td>
         <td style="font-size:12px;color:var(--muted)"><?= fmt_datetime($si['derniere_apparition']) ?></td>
         <td style="text-align:center">
           <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
-            <button class="btn btn-primary btn-sm" onclick="ouvrirLierSite(<?= $si['id'] ?>,'<?= h($si['nom_emuci']) ?>')">🔗 Lier</button>
-            <button class="btn btn-secondary btn-sm" onclick="ouvrirCreerDepuisEmuci(<?= $si['id'] ?>,'<?= h($si['nom_emuci']) ?>')">➕ Créer</button>
+            <button class="btn btn-primary btn-sm" onclick="ouvrirLierSite(<?= $si['id'] ?>,'<?= h($si['nom_emuci']) ?>')"><i class="ph ph-link" aria-hidden="true"></i> Lier</button>
+            <button class="btn btn-secondary btn-sm" onclick="ouvrirCreerDepuisEmuci(<?= $si['id'] ?>,'<?= h($si['nom_emuci']) ?>')"><i class="ph ph-plus" aria-hidden="true"></i> Créer</button>
             <button class="btn btn-sm" style="background:#F1F5F9;color:#64748B;border:1.5px solid #E2E8F0" onclick="ignorerSiteEmuci(<?= $si['id'] ?>,'<?= h($si['nom_emuci']) ?>')">Ignorer</button>
           </div>
         </td>
@@ -1018,11 +1026,11 @@ function saveCfg(type){
 <!-- Modal Lier EMUCI -->
 <div id="modalLierEmuci" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.55);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:26px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:14px">🔗 Lier site EMUCI</h3>
+    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:14px"><i class="ph ph-link" aria-hidden="true"></i> Lier site EMUCI</h3>
     <div id="alertLierEmuci"></div>
     <input type="hidden" id="lierId">
     <div style="background:#EFF6FF;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#1D4ED8">Nom EMUCI : <strong id="lierNomEmuci"></strong></div>
-    <div class="form-group" style="margin-bottom:18px"><label>Site DigiStock *</label>
+    <div class="form-group" style="margin-bottom:18px"><label>Site ERP EMUCI *</label>
       <select class="form-control" id="lierSiteId">
         <option value="">— Sélectionner —</option>
         <?php foreach ($all_sites_list as $s): ?><option value="<?= $s['id'] ?>"><?= h($s['nom']) ?></option><?php endforeach; ?>
@@ -1030,7 +1038,7 @@ function saveCfg(type){
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px">
       <button class="btn btn-secondary" onclick="document.getElementById('modalLierEmuci').style.display='none'">Annuler</button>
-      <button class="btn btn-primary" onclick="confirmerLier()">🔗 Lier</button>
+      <button class="btn btn-primary" onclick="confirmerLier()"><i class="ph ph-link" aria-hidden="true"></i> Lier</button>
     </div>
   </div>
 </div>
@@ -1038,11 +1046,11 @@ function saveCfg(type){
 <!-- Modal Créer depuis EMUCI -->
 <div id="modalCreerEmuci" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.55);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:26px;width:460px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
-    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:14px">➕ Créer site depuis EMUCI</h3>
+    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700;color:var(--navy);margin-bottom:14px"><i class="ph ph-plus" aria-hidden="true"></i> Créer site depuis EMUCI</h3>
     <div id="alertCreerEmuci"></div>
     <input type="hidden" id="creerId">
     <div style="background:#EFF6FF;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#1D4ED8">Nom EMUCI : <strong id="creerNomEmuci"></strong></div>
-    <div class="form-group" style="margin-bottom:12px"><label>Nom DigiStock *</label><input type="text" class="form-control" id="creerNom"></div>
+    <div class="form-group" style="margin-bottom:12px"><label>Nom ERP EMUCI *</label><input type="text" class="form-control" id="creerNom"></div>
     <div class="form-group" style="margin-bottom:18px"><label>Type *</label>
       <select class="form-control" id="creerType">
         <option value="pose">Pose</option><option value="saisie">Saisie</option><option value="entrepot">Entrepôt</option><option value="siege">Siège</option><option value="mixte">Mixte</option>
@@ -1050,13 +1058,15 @@ function saveCfg(type){
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px">
       <button class="btn btn-secondary" onclick="document.getElementById('modalCreerEmuci').style.display='none'">Annuler</button>
-      <button class="btn btn-primary" onclick="confirmerCreerEmuci()">➕ Créer</button>
+      <button class="btn btn-primary" onclick="confirmerCreerEmuci()"><i class="ph ph-plus" aria-hidden="true"></i> Créer</button>
     </div>
   </div>
 </div>
 
 <script>
-function apSite(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
+function apSite(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)})
+  .then(r=>r.json())
+  .catch(err=>({success:false,message:'Erreur réseau : '+err.message}));}
 function ouvrirLierSite(id,nom){document.getElementById('lierId').value=id;document.getElementById('lierNomEmuci').textContent=nom;document.getElementById('lierSiteId').value='';document.getElementById('alertLierEmuci').innerHTML='';document.getElementById('modalLierEmuci').style.display='flex';}
 async function confirmerLier(){
   const sid=document.getElementById('lierSiteId').value;

@@ -50,13 +50,18 @@ define('DB_PASS',    env('DB_PASS',    ''));
 define('DB_CHARSET', 'utf8mb4');
 
 // --- Configuration application -----------------------------------------
-define('APP_NAME',    'DigiStock');
+define('APP_NAME',    'ERP EMUCI');
 define('APP_VERSION', '2.0.0');
 define('APP_URL',     env('APP_URL', 'http://localhost:8080'));
 define('APP_TIMEZONE', env('APP_TIMEZONE', 'Africa/Abidjan'));
 
 date_default_timezone_set(APP_TIMEZONE);
 define('SESSION_LIFETIME', 28800);
+// Filet de securite cote serveur pour la deconnexion pour inactivite : le
+// minuteur JS (templates/footer.php) ne suffit pas seul, un onglet mis en
+// arriere-plan peut etre decharge par le navigateur — ce garde-fou tranche
+// sur la derniere requete recue, independamment du JS.
+define('INACTIVITY_TIMEOUT', 900);   // 15 min — meme delai cote JS dans templates/footer.php
 
 function get_db(): PDO {
     static $pdo = null;

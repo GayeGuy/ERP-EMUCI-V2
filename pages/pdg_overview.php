@@ -6,6 +6,7 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
+require_once __DIR__ . '/../includes/achats.php';
 
 require_auth();
 $user = current_user();
@@ -14,15 +15,43 @@ $page_title  = 'Vue PDG';
 $active_page = 'pdg_overview';
 
 $mois    = trim($_GET['mois'] ?? date('Y-m'));
+if (!preg_match('/^\d{4}-\d{2}$/', $mois)) $mois = date('Y-m');
 $site_id = (int)($_GET['site_id'] ?? 0);
-$annee   = substr($mois, 0, 4);
 $mc = ['01'=>'Jan','02'=>'Fév','03'=>'Mar','04'=>'Avr','05'=>'Mai','06'=>'Juin',
        '07'=>'Juil','08'=>'Aoû','09'=>'Sep','10'=>'Oct','11'=>'Nov','12'=>'Déc'];
 $ml = ['01'=>'Janvier','02'=>'Février','03'=>'Mars','04'=>'Avril','05'=>'Mai','06'=>'Juin',
        '07'=>'Juillet','08'=>'Août','09'=>'Septembre','10'=>'Octobre','11'=>'Novembre','12'=>'Décembre'];
-$mois_display = ($ml[substr($mois,5,2)] ?? '') . ' ' . $annee;
-$mois_prec    = date('Y-m', strtotime($mois.'-01 -1 month'));
-$mois_prec_lbl= ($mc[substr($mois_prec,5,2)] ?? '') . ' ' . substr($mois_prec,0,4);
+
+// ── PÉRIODE — mensuel (comportement d'origine) ou annuel (n° du rapport
+// réunion ERP : point d'une année complète). $date_fmt/$periode_val
+// pilotent tous les DATE_FORMAT(...)='?' de la page ; $periode_val_prec sert
+// aux comparaisons vs période précédente.
+$periode = ($_GET['periode'] ?? '') === 'annuel' ? 'annuel' : 'mensuel';
+$annee_max = (int)date('Y');
+$annee_min = (int)(db_fetch_value("SELECT MIN(YEAR(date_point)) FROM op_points_journaliers") ?? $annee_max);
+if ($annee_min > $annee_max) $annee_min = $annee_max;
+
+if ($periode === 'annuel') {
+    $annee_filtre = (int)($_GET['annee'] ?? $annee_max);
+    if ($annee_filtre < 2000 || $annee_filtre > 2100) $annee_filtre = $annee_max;
+    $annee            = (string)$annee_filtre;
+    $date_fmt         = '%Y';
+    $periode_val      = $annee;
+    $periode_val_prec = (string)($annee_filtre - 1);
+    $mois_display     = 'Année ' . $annee;
+    $mois_prec_lbl    = 'Année ' . $periode_val_prec;
+    $periode_mot      = 'cette année';
+} else {
+    $annee_filtre     = (int)substr($mois, 0, 4);
+    $annee            = substr($mois, 0, 4);
+    $date_fmt         = '%Y-%m';
+    $periode_val      = $mois;
+    $mois_prec        = date('Y-m', strtotime($mois.'-01 -1 month'));
+    $periode_val_prec = $mois_prec;
+    $mois_display     = ($ml[substr($mois,5,2)] ?? '') . ' ' . $annee;
+    $mois_prec_lbl    = ($mc[substr($mois_prec,5,2)] ?? '') . ' ' . substr($mois_prec,0,4);
+    $periode_mot      = 'ce mois';
+}
 
 // ── LISTE DES SITES pour le filtre
 $sites_list = db_fetch_all("SELECT id, nom FROM sites WHERE actif=1 ORDER BY nom");
@@ -46,17 +75,17 @@ $ops = db_fetch_one(
             COALESCE(SUM(rivets_utilises),0) AS rivets_utilises,
             COALESCE(ROUND(AVG(NULLIF(moyenne_prod,0)),1),0) AS moy_prod
      FROM op_points_journaliers
-     WHERE DATE_FORMAT(date_point,'%Y-%m')=? AND statut != 'brouillon' $sf",
-    [$mois]
+     WHERE DATE_FORMAT(date_point,'$date_fmt')=? AND statut != 'brouillon' $sf",
+    [$periode_val]
 );
 
-// ── OPÉRATIONS mois précédent (tendance)
+// ── OPÉRATIONS période précédente (tendance)
 $ops_prec = db_fetch_one(
     "SELECT COALESCE(SUM(total_engins),0) AS total_engins,
             COALESCE(SUM(total_plaques),0) AS total_plaques
      FROM op_points_journaliers
-     WHERE DATE_FORMAT(date_point,'%Y-%m')=? AND statut != 'brouillon' $sf",
-    [$mois_prec]
+     WHERE DATE_FORMAT(date_point,'$date_fmt')=? AND statut != 'brouillon' $sf",
+    [$periode_val_prec]
 );
 $engins_curr = (int)($ops['total_engins'] ?? 0);
 $engins_prev = (int)($ops_prec['total_engins'] ?? 0);
@@ -73,10 +102,10 @@ $prod_par_site = db_fetch_all(
             SUM(CASE WHEN p.statut='en_attente_validation' THEN 1 ELSE 0 END) AS en_attente
      FROM sites s
      LEFT JOIN op_points_journaliers p ON p.site_id=s.id
-                AND DATE_FORMAT(p.date_point,'%Y-%m')=? AND p.statut != 'brouillon'
+                AND DATE_FORMAT(p.date_point,'$date_fmt')=? AND p.statut != 'brouillon'
      WHERE s.actif=1 $sf_s
      GROUP BY s.id, s.nom, s.type ORDER BY engins DESC",
-    [$mois]
+    [$periode_val]
 );
 $max_engins = empty($prod_par_site) ? 1 : max(1, ...array_column($prod_par_site, 'engins'));
 $best_site  = !empty($prod_par_site) ? $prod_par_site[0] : null;
@@ -99,34 +128,34 @@ $films_mois = (int)db_fetch_value(
     "SELECT COALESCE(SUM(fu.films_utilises),0)
      FROM op_films_utilises fu
      JOIN op_points_journaliers p ON p.id=fu.point_id
-     WHERE DATE_FORMAT(p.date_point,'%Y-%m')=? $sf_p",
-    [$mois]
+     WHERE DATE_FORMAT(p.date_point,'$date_fmt')=? $sf_p",
+    [$periode_val]
 );
 $films_mois_prec = (int)db_fetch_value(
     "SELECT COALESCE(SUM(fu.films_utilises),0)
      FROM op_films_utilises fu
      JOIN op_points_journaliers p ON p.id=fu.point_id
-     WHERE DATE_FORMAT(p.date_point,'%Y-%m')=? $sf_p",
-    [$mois_prec]
+     WHERE DATE_FORMAT(p.date_point,'$date_fmt')=? $sf_p",
+    [$periode_val_prec]
 );
 $films_par_site = db_fetch_all(
     "SELECT s.nom, COALESCE(SUM(fu.films_utilises),0) AS films
      FROM sites s
-     LEFT JOIN op_points_journaliers p ON p.site_id=s.id AND DATE_FORMAT(p.date_point,'%Y-%m')=?
+     LEFT JOIN op_points_journaliers p ON p.site_id=s.id AND DATE_FORMAT(p.date_point,'$date_fmt')=?
      LEFT JOIN op_films_utilises fu ON fu.point_id=p.id
      WHERE s.actif=1 $sf_s
      GROUP BY s.id, s.nom ORDER BY films DESC",
-    [$mois]
+    [$periode_val]
 );
 $films_detail_raw = db_fetch_all(
     "SELECT s.nom AS site, b.type_code, COALESCE(SUM(fu.films_utilises),0) AS films
      FROM sites s
-     JOIN op_points_journaliers p ON p.site_id=s.id AND DATE_FORMAT(p.date_point,'%Y-%m')=?
+     JOIN op_points_journaliers p ON p.site_id=s.id AND DATE_FORMAT(p.date_point,'$date_fmt')=?
      JOIN op_films_utilises fu ON fu.point_id=p.id
      JOIN op_bobines b ON b.id=fu.bobine_id
      WHERE s.actif=1 $sf_s
      GROUP BY s.id, s.nom, b.type_code ORDER BY s.nom, b.type_code",
-    [$mois]
+    [$periode_val]
 );
 $films_par_type = [];
 $films_by_type  = [];
@@ -142,9 +171,9 @@ $cmd_stats = db_fetch_one(
     "SELECT SUM(CASE WHEN statut='en_attente' THEN 1 ELSE 0 END) AS en_attente,
             SUM(CASE WHEN statut='en_attente_livraison' THEN 1 ELSE 0 END) AS a_livrer,
             SUM(CASE WHEN statut='en_cours_livraison' THEN 1 ELSE 0 END) AS en_route,
-            SUM(CASE WHEN statut='livre' AND DATE_FORMAT(created_at,'%Y-%m')=? THEN 1 ELSE 0 END) AS livrees_mois
+            SUM(CASE WHEN statut='livre' AND DATE_FORMAT(created_at,'$date_fmt')=? THEN 1 ELSE 0 END) AS livrees_mois
      FROM commandes WHERE 1=1 $sf",
-    [$mois]
+    [$periode_val]
 );
 
 // ── RIVETS
@@ -191,8 +220,8 @@ $total_alertes  = $points_attente + $cmd_en_attente + $alertes_stock + $rivets_b
 $sf_di      = $site_id ? "AND d.demandeur_id IN (SELECT id FROM users WHERE site_id = $site_id)" : "";
 $sf_di_bare = $site_id ? "AND demandeur_id IN (SELECT id FROM users WHERE site_id = $site_id)"   : "";
 $di_pending = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE statut IN ('en_attente','en_cours') $sf_di_bare");
-$di_mois    = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE DATE_FORMAT(created_at,'%Y-%m')=? AND statut != 'brouillon' $sf_di_bare", [$mois]);
-$di_approuv = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE DATE_FORMAT(updated_at,'%Y-%m')=? AND statut IN ('approuve','approuve_traitement') $sf_di_bare", [$mois]);
+$di_mois    = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE DATE_FORMAT(created_at,'$date_fmt')=? AND statut != 'brouillon' $sf_di_bare", [$periode_val]);
+$di_approuv = (int)db_fetch_value("SELECT COUNT(*) FROM di_demandes WHERE DATE_FORMAT(updated_at,'$date_fmt')=? AND statut IN ('approuve','approuve_traitement') $sf_di_bare", [$periode_val]);
 $di_tx      = $di_mois > 0 ? round($di_approuv / $di_mois * 100) : 0;
 // L'étape qui retient la demande est plus utile que son auteur : elle dit
 // chez qui elle attend. etape_actuelle indexe la liste des étapes triées par
@@ -362,14 +391,14 @@ foreach ($prod_par_site as $i => $s) {
     ];
 }
 $js_pfw_sites    = json_encode($pfw_sites_json);
-$pfw_quarter_def = max(1, (int)ceil((int)substr($mois, 5, 2) / 3));
+$pfw_quarter_def = $periode === 'annuel' ? 1 : max(1, (int)ceil((int)substr($mois, 5, 2) / 3));
 
 // ══════════════════════════════════════════════════════════
 //  KPI BUSINESS — service, gâche matière, écart de consommation,
 //  couverture de stock, fiabilité, productivité, mix produit
 // ══════════════════════════════════════════════════════════
-$df   = "DATE_FORMAT(date_point,'%Y-%m')=?";     // filtre mois sur la table des points
-$df_p = "DATE_FORMAT(p.date_point,'%Y-%m')=?";   // idem quand la table est aliasée p
+$df   = "DATE_FORMAT(date_point,'$date_fmt')=?";     // filtre période sur la table des points
+$df_p = "DATE_FORMAT(p.date_point,'$date_fmt')=?";   // idem quand la table est aliasée p
 
 // Affichage en nombre entier. Une valeur non nulle qui tomberait à zéro
 // par arrondi s'affiche « < 1 » : un faux zéro se lirait comme l'absence
@@ -429,7 +458,7 @@ $biz = db_fetch_one(
             COALESCE(SUM(nb_heures_travail),0)          AS heures
      FROM op_points_journaliers
      WHERE $df AND statut <> 'brouillon' $sf",
-    [$mois]
+    [$periode_val]
 );
 } catch (Throwable $e) {}
 
@@ -450,7 +479,7 @@ $gache = db_fetch_one(
      FROM op_films_utilises fu
      JOIN op_points_journaliers p ON p.id = fu.point_id
      WHERE $df_p AND p.statut <> 'brouillon' $sf_p",
-    [$mois]
+    [$periode_val]
 );
 } catch (Throwable $e) {}
 $f_ok = (int)($gache['ok'] ?? 0);
@@ -469,8 +498,8 @@ $bareme_riv = ['A'=>4,'B'=>4,'C'=>4,'D'=>2];
 try {
     foreach (db_fetch_all(
         "SELECT serie_bobine,
-                CAST(ROUND(AVG(nb_plaques)) AS SIGNED) AS nb_plaques,
-                CAST(ROUND(AVG(nb_rivets)) AS SIGNED)  AS nb_rivets
+                ROUND(AVG(nb_plaques)) AS nb_plaques,
+                ROUND(AVG(nb_rivets))  AS nb_rivets
          FROM op_types_vehicule GROUP BY serie_bobine") as $t) {
         $s = strtoupper(trim((string)$t['serie_bobine']));
         if (isset($bareme_plq[$s])) {
@@ -507,7 +536,7 @@ $couv_raw = db_fetch_all(
      ) st ON st.site_id = s.id
      WHERE s.actif = 1 $sf_s
      ORDER BY s.nom",
-    [$mois]
+    [$periode_val]
 );
 } catch (Throwable $e) {}
 $couverture = [];
@@ -582,8 +611,8 @@ try {
                 COALESCE(SUM(CASE WHEN statut_ecart = 'majeur' THEN 1 ELSE 0 END),0)                AS majeurs,
                 COALESCE(SUM(CASE WHEN statut_ecart = 'majeur' AND ajuste = 0 THEN 1 ELSE 0 END),0) AS majeurs_ouverts
          FROM comparaisons_stock
-         WHERE DATE_FORMAT(date_comparaison,'%Y-%m')=? $sf",
-        [$mois]
+         WHERE DATE_FORMAT(date_comparaison,'$date_fmt')=? $sf",
+        [$periode_val]
     );
     $rec_total   = (int)($recon['total'] ?? 0);
     $rec_majeurs = (int)($recon['majeurs'] ?? 0);
@@ -684,6 +713,40 @@ try {
 $eq_type_nom = '';
 foreach ($eq_types as $t) if ((int)$t['id'] === $eq_type) $eq_type_nom = $t['libelle'];
 
+// ══════════════════════════════════════════════════════════
+//  ACHATS — VUE DIRECTION (fusionnée depuis dashboard_direction.php,
+//  pour n'avoir qu'un seul dashboard PDG). Réutilise le filtre de
+//  période déjà présent en haut de page (mois/année) plutôt que
+//  d'ajouter une seconde barre de filtres — l'achat n'a pas de notion
+//  de site, donc $site_id ne s'y applique pas.
+// ══════════════════════════════════════════════════════════
+$ach_visible = can('achats_dashboard', 'can_read');
+$ach_perimetre_vide = false;
+$ach_depense_totale = 0;
+$ach_budget_dept = [];
+$ach_kpis = null;
+if ($ach_visible) {
+    $ach_perimetre = ach_perimetre_departements($user);
+    $ach_perimetre_vide = is_array($ach_perimetre) && empty($ach_perimetre);
+    if ($periode === 'annuel') {
+        $ach_du = $annee . '-01-01';
+        $ach_au = $annee . '-12-31';
+    } else {
+        $ach_du = $mois . '-01';
+        $ach_au = date('Y-m-t', strtotime($ach_du));
+    }
+    if (!$ach_perimetre_vide) {
+        [$ach_clause, $ach_pd] = ach_clause_departement($ach_perimetre, 'f');
+        $ach_depense_totale = (int) db_fetch_value(
+            "SELECT COALESCE(SUM(fl.montant_ttc),0) FROM feb_lignes fl JOIN feb f ON f.id=fl.feb_id
+              WHERE fl.arbitrage='achat' AND f.date_soumission BETWEEN ? AND ?$ach_clause",
+            array_merge([$ach_du, $ach_au], $ach_pd)
+        );
+        $ach_budget_dept = ach_budget_departements($ach_perimetre, $annee_filtre);
+        $ach_kpis = ach_dashboard_kpis($user, $ach_perimetre, $ach_du, $ach_au);
+    }
+}
+
 include __DIR__ . '/../templates/header.php';
 ?>
 <?php include __DIR__ . '/../templates/dash_style.php'; ?>
@@ -694,7 +757,7 @@ include __DIR__ . '/../templates/header.php';
 <div class="pdg-topbar">
   <div>
     <div class="pdg-title">Vue Exécutive</div>
-    <div class="pdg-sub">Express Multiservices CI · DigiStock<?= $site_nom_sel ? ' · <strong style="color:var(--navy,#06033A)">'.h($site_nom_sel).'</strong>' : '' ?></div>
+    <div class="pdg-sub">Express Multiservices CI · ERP EMUCI<?= $site_nom_sel ? ' · <strong style="color:var(--navy,#06033A)">'.h($site_nom_sel).'</strong>' : '' ?></div>
   </div>
   <div class="pdg-controls">
     <form method="get" id="pdg-filter-form" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
@@ -707,7 +770,19 @@ include __DIR__ . '/../templates/header.php';
         </option>
         <?php endforeach; ?>
       </select>
-      <input type="month" name="mois" value="<?= h($mois) ?>" class="month-inp" onchange="this.form.submit()">
+      <select name="periode" class="month-inp" onchange="this.form.submit()" title="Type de période" style="min-width:104px">
+        <option value="mensuel"<?= $periode==='mensuel' ? ' selected' : '' ?>>Mensuel</option>
+        <option value="annuel"<?= $periode==='annuel' ? ' selected' : '' ?>>Annuel</option>
+      </select>
+      <?php if ($periode === 'annuel'): ?>
+      <select name="annee" class="month-inp" onchange="this.form.submit()" title="Choisir l'année">
+        <?php for ($_y = $annee_max; $_y >= $annee_min; $_y--): ?>
+        <option value="<?= $_y ?>"<?= $annee_filtre===$_y ? ' selected' : '' ?>><?= $_y ?></option>
+        <?php endfor; ?>
+      </select>
+      <?php else: ?>
+      <input type="month" name="mois" value="<?= h($mois) ?>" class="month-inp" onchange="this.form.submit()" aria-label="Choisir le mois">
+      <?php endif; ?>
     </form>
   </div>
 </div>
@@ -950,7 +1025,7 @@ include __DIR__ . '/../templates/header.php';
           <div class="biz-risk-i"><i class="ph-duotone ph-arrows-left-right"></i></div>
           <div class="biz-risk-b">
             <div class="biz-risk-t">Écarts EMUCI majeurs non ajustés</div>
-            <div class="biz-risk-s">Comparaisons EMUCI / DigiStock au-delà du seuil, sans ajustement</div>
+            <div class="biz-risk-s">Comparaisons EMUCI / ERP EMUCI au-delà du seuil, sans ajustement</div>
           </div>
           <div class="biz-risk-n" data-k="rec-ouverts" data-v="<?= (int)$rec_ouverts ?>" data-d="0"><?= $rec_ouverts ?></div>
         </div>
@@ -969,7 +1044,7 @@ include __DIR__ . '/../templates/header.php';
         <?php if ($taux_recon !== null): ?>
         <div class="biz-risk-ft">
           <div class="biz-risk-b">
-            <div class="biz-risk-t">Concordance EMUCI ↔ DigiStock</div>
+            <div class="biz-risk-t">Concordance EMUCI ↔ ERP EMUCI</div>
             <div class="biz-risk-s"><?= number_format($rec_total - $rec_majeurs, 0, ',', ' ') ?> comparaisons alignées sur <?= number_format($rec_total, 0, ',', ' ') ?></div>
           </div>
           <div class="biz-risk-n" data-k="recon" data-v="<?= $taux_recon ?>" data-d="0"><?= ent($taux_recon) ?> %</div>
@@ -990,7 +1065,7 @@ include __DIR__ . '/../templates/header.php';
     <div>
       <div class="pfw-site-lbl">Performance mensuelle par site</div>
       <div class="pfw-site-sel">
-        <select id="pfwSiteSelect" onchange="pfwChangeSite(+this.value)">
+        <select id="pfwSiteSelect" onchange="pfwChangeSite(+this.value)" aria-label="Choisir le site à afficher">
           <?php foreach ($pfw_sites_json ? json_decode($js_pfw_sites, true) : [] as $i => $sj): ?>
           <option value="<?= $i ?>"><?= h($sj['name']) ?></option>
           <?php endforeach; ?>
@@ -1003,7 +1078,7 @@ include __DIR__ . '/../templates/header.php';
       <button class="pfw-q<?= $q===$pfw_quarter_def?' active':'' ?>" data-q="<?= $q ?>" onclick="pfwChangeQ(this)"><?= $ql ?></button>
       <?php endforeach; ?>
       <button onclick="document.getElementById('modal-ops').style.display='flex'"
-        style="padding:4px 11px;border:1.5px solid #e2e8f0;border-radius:16px;background:#f8fafc;font-size:11px;font-weight:700;color:#06033A;cursor:pointer;font-family:inherit;white-space:nowrap;margin-left:4px">
+        style="padding:4px 11px;border:1.5px solid #e2e8f0;border-radius:16px;background:#f8fafc;font-size:12px;font-weight:700;color:#06033A;cursor:pointer;font-family:inherit;white-space:nowrap;margin-left:4px">
         <i class="ph-duotone ph-arrows-out"></i> Détails
       </button>
     </div>
@@ -1182,6 +1257,98 @@ include __DIR__ . '/../templates/header.php';
   <?php endif; ?>
 </div>
 
+<?php if ($ach_visible): ?>
+<!-- ══════════ ACHATS — VUE DIRECTION ══════════ -->
+<style>
+.ach-hero{background:linear-gradient(135deg,#B45309 0%,#F59E0B 100%);border-radius:16px;padding:22px 26px;color:white;margin-bottom:20px}
+.ach-hero-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:34px;font-weight:900}
+.ach-hero-lbl{font-size:13px;opacity:.9;margin-top:4px}
+.ach-kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:20px}
+.ach-kpi-tile{background:white;border:1px solid var(--border,#e2e8f0);border-radius:14px;padding:16px 18px}
+.ach-kpi-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:24px;font-weight:900;color:var(--navy,#06033A);line-height:1}
+.ach-kpi-lbl{font-size:12px;color:var(--muted,#94a3b8);margin-top:6px}
+.ach-section-ttl{font-family:'Plus Jakarta Sans',sans-serif;font-size:15px;font-weight:800;color:var(--navy,#06033A);margin:0 0 12px}
+.ach-panel{background:white;border:1px solid var(--border,#e2e8f0);border-radius:16px;padding:18px 20px;margin-bottom:20px}
+.ach-dept-row{display:grid;grid-template-columns:160px 1fr 90px;gap:12px;align-items:center;padding:9px 0;border-bottom:1px solid var(--border,#e2e8f0);font-size:13px}
+.ach-dept-row:last-child{border-bottom:none}
+.ach-dept-bar-track{height:10px;background:#e1e0d9;border-radius:5px;overflow:hidden}
+.ach-dept-bar-fill{height:100%;border-radius:5px}
+.ach-empty{padding:20px;text-align:center;color:var(--muted,#94a3b8);font-size:13px}
+</style>
+<div class="biz-card eq" style="margin-bottom:20px;padding:20px 22px">
+  <div class="eq-hd" style="margin-bottom:16px">
+    <div>
+      <div class="eq-t">Achats — Vue direction</div>
+      <div class="eq-s">Dépenses, délais et budget par département · <?= h($mois_display) ?></div>
+    </div>
+  </div>
+
+  <?php if ($ach_perimetre_vide): ?>
+    <div class="ach-empty">Aucun département dans votre périmètre.</div>
+  <?php else: ?>
+
+  <div class="ach-hero">
+    <div class="ach-hero-val"><?= fmt_number((float)$ach_depense_totale) ?> XOF</div>
+    <div class="ach-hero-lbl">Dépenses totales sur la période (<?= fmt_date($ach_du) ?> — <?= fmt_date($ach_au) ?>)</div>
+  </div>
+
+  <div class="ach-kpi-grid">
+    <div class="ach-kpi-tile">
+      <div class="ach-kpi-val">—</div>
+      <div class="ach-kpi-lbl">Économies réalisées</div>
+      <div style="font-size:11px;color:var(--muted,#94a3b8);margin-top:4px">Champ posé, calculé nul tant que les négociations ne sont pas historisées (V2).</div>
+    </div>
+    <div class="ach-kpi-tile">
+      <div class="ach-kpi-val"><?= $ach_kpis['taux_livraison_temps'] !== null ? $ach_kpis['taux_livraison_temps'] . '%' : '—' ?></div>
+      <div class="ach-kpi-lbl">Livraisons à temps et complètes</div>
+    </div>
+    <div class="ach-kpi-tile">
+      <div class="ach-kpi-val"><?= $ach_kpis['taux_service_stock'] !== null ? $ach_kpis['taux_service_stock'] . '%' : '—' ?></div>
+      <div class="ach-kpi-lbl">Taux de service sur stock</div>
+    </div>
+  </div>
+
+  <div class="ach-section-ttl">Performance des délais (moyenne / médiane, jours)</div>
+  <div class="ach-kpi-grid">
+    <div class="ach-kpi-tile">
+      <div class="ach-kpi-val"><?= $ach_kpis['delai_prise_charge']['moyenne'] ?? '—' ?> / <?= $ach_kpis['delai_prise_charge']['mediane'] ?? '—' ?></div>
+      <div class="ach-kpi-lbl">Prise en charge</div>
+    </div>
+    <div class="ach-kpi-tile">
+      <div class="ach-kpi-val"><?= $ach_kpis['delai_validation']['moyenne'] ?? '—' ?> / <?= $ach_kpis['delai_validation']['mediane'] ?? '—' ?></div>
+      <div class="ach-kpi-lbl">Validation</div>
+    </div>
+    <div class="ach-kpi-tile">
+      <div class="ach-kpi-val"><?= $ach_kpis['delai_livraison']['moyenne'] ?? '—' ?> / <?= $ach_kpis['delai_livraison']['mediane'] ?? '—' ?></div>
+      <div class="ach-kpi-lbl">Livraison</div>
+    </div>
+  </div>
+
+  <div class="ach-section-ttl">Budget consommé par département (exercice <?= $annee_filtre ?>)</div>
+  <div class="ach-panel" style="margin-bottom:0">
+    <?php if (empty($ach_budget_dept)): ?>
+      <div class="ach-empty">Aucun département actif.</div>
+    <?php else: foreach ($ach_budget_dept as $d):
+      $ach_pct = $d['taux'] !== null ? min(100, $d['taux']) : 0;
+      $ach_color = $d['taux'] === null ? '#94a3b8' : ($d['taux'] >= 100 ? '#dc2626' : ($d['taux'] >= 80 ? '#d97706' : '#16a34a'));
+    ?>
+      <div class="ach-dept-row">
+        <div style="font-weight:700;color:var(--navy,#06033A)"><?= h($d['label']) ?></div>
+        <div>
+          <div class="ach-dept-bar-track"><div class="ach-dept-bar-fill" style="width:<?= $ach_pct ?>%;background:<?= $ach_color ?>"></div></div>
+          <div style="font-size:11.5px;color:var(--muted,#94a3b8);margin-top:3px">
+            <?= fmt_number((float)$d['engage']) ?> XOF engagés <?= $d['enveloppe'] > 0 ? '/ ' . fmt_number((float)$d['enveloppe']) . ' XOF' : '(non plafonné)' ?>
+          </div>
+        </div>
+        <div style="text-align:right;font-weight:700;color:<?= $ach_color ?>"><?= $d['taux'] !== null ? $d['taux'] . '%' : '—' ?></div>
+      </div>
+    <?php endforeach; endif; ?>
+  </div>
+
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <!-- ══════════ CHARTS ROW ══════════ -->
 <div class="charts-row">
   <!-- Bobines donut -->
@@ -1194,7 +1361,7 @@ include __DIR__ . '/../templates/header.php';
         <div class="leg-item"><div class="leg-dot" style="background:#7c3aed"></div>En cours<span class="leg-val"><?= $bobines_stats['en_cours']??0 ?></span></div>
         <div class="leg-item"><div class="leg-dot" style="background:#1B75BC"></div>En stock<span class="leg-val"><?= $bobines_stats['en_stock']??0 ?></span></div>
         <div class="leg-item"><div class="leg-dot" style="background:#e2e8f0"></div>Épuisées<span class="leg-val"><?= $bobines_stats['epuisees']??0 ?></span></div>
-        <div style="margin-top:6px;padding-top:6px;border-top:1px solid #f1f5f9;font-size:11px;color:#5a6678">
+        <div style="margin-top:6px;padding-top:6px;border-top:1px solid #f1f5f9;font-size:12px;color:#5a6678">
           Films restants : <strong style="color:#06033A"><?= number_format((int)($bobines_stats['films_restants']??0),0,',',' ') ?></strong>
         </div>
       </div>
@@ -1210,8 +1377,8 @@ include __DIR__ . '/../templates/header.php';
       <div class="leg-list">
         <div class="leg-item"><div class="leg-dot" style="background:#d97706"></div>En attente<span class="leg-val"><?= $cmd_stats['en_attente']??0 ?></span></div>
         <div class="leg-item"><div class="leg-dot" style="background:#1B75BC"></div>En livraison<span class="leg-val"><?= ($cmd_stats['a_livrer']??0)+($cmd_stats['en_route']??0) ?></span></div>
-        <div class="leg-item"><div class="leg-dot" style="background:#16a34a"></div>Livrées ce mois<span class="leg-val"><?= $cmd_stats['livrees_mois']??0 ?></span></div>
-        <div style="margin-top:6px;padding-top:6px;border-top:1px solid #f1f5f9;font-size:11px;color:#5a6678">
+        <div class="leg-item"><div class="leg-dot" style="background:#16a34a"></div>Livrées <?= $periode_mot ?><span class="leg-val"><?= $cmd_stats['livrees_mois']??0 ?></span></div>
+        <div style="margin-top:6px;padding-top:6px;border-top:1px solid #f1f5f9;font-size:12px;color:#5a6678">
           Rivets posés : <strong style="color:#06033A"><?= number_format((int)($ops['rivets_utilises']??0),0,',',' ') ?></strong>
         </div>
       </div>
@@ -1233,7 +1400,7 @@ include __DIR__ . '/../templates/header.php';
       </div>
       <div class="kpi-m">
         <div class="kpi-m-val" style="color:#1B75BC"><?= $di_mois ?></div>
-        <div class="kpi-m-lbl">Soumises ce mois</div>
+        <div class="kpi-m-lbl">Soumises <?= $periode_mot ?></div>
       </div>
       <div class="kpi-m">
         <div class="kpi-m-val" style="color:#15803d"><?= $di_approuv ?></div>
@@ -1302,7 +1469,7 @@ include __DIR__ . '/../templates/header.php';
 
     <!-- Stock résumé rapide -->
     <div style="margin-top:<?= empty($pts_attente)?'0':'18px' ?>">
-      <div style="font-size:11px;font-weight:700;color:#5a6678;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Résumé stock</div>
+      <div style="font-size:12px;font-weight:700;color:#5a6678;text-transform:uppercase;letter-spacing:.4px;margin-bottom:10px">Résumé stock</div>
       <div class="stock-stat-row">
         <span style="color:#06033A">Bobines actives</span>
         <span class="stock-val" style="color:#7c3aed"><?= $bobines_stats['en_cours']??0 ?></span>
@@ -1412,7 +1579,7 @@ include __DIR__ . '/../templates/header.php';
               <div style="width:8px;height:8px;border-radius:50%;background:<?= $col ?>;flex-shrink:0"></div>
               <div>
                 <div style="font-weight:700;color:#06033A"><?= h($s['nom']) ?></div>
-                <div style="font-size:11px;color:#5a6678"><?= h($s['type']??'') ?></div>
+                <div style="font-size:12px;color:#5a6678"><?= h($s['type']??'') ?></div>
               </div>
             </div>
           </td>
@@ -1421,7 +1588,7 @@ include __DIR__ . '/../templates/header.php';
               <div style="flex:1;background:#e2e8f0;border-radius:3px;height:5px;overflow:hidden">
                 <div style="height:100%;width:<?= $pct ?>%;background:<?= $col ?>;border-radius:3px"></div>
               </div>
-              <span style="font-size:11px;color:#5a6678;min-width:30px"><?= $pct ?>%</span>
+              <span style="font-size:12px;color:#5a6678;min-width:30px"><?= $pct ?>%</span>
             </div>
           </td>
           <td style="font-weight:800;font-family:'Montserrat',sans-serif;color:#06033A"><?= number_format((int)$s['engins'],0,',',' ') ?></td>
@@ -1908,7 +2075,7 @@ function openPmmaModal() {
                         html+=`<div style="display:flex;justify-content:space-between;gap:14px;color:${low?'#dc2626':'#374151'}">
                             <span>${s.site||'—'}</span><span style="font-weight:700">${fmtN(s.qty)}</span></div>`;
                     });
-                    if(pmmaBas[idx]>0) html+=`<div style="margin-top:5px;color:#dc2626;font-size:11px;font-weight:600">⚠ ${pmmaBas[idx]} site(s) stock bas</div>`;
+                    if(pmmaBas[idx]>0) html+=`<div style="margin-top:5px;color:#dc2626;font-size:12px;font-weight:600">⚠ ${pmmaBas[idx]} site(s) stock bas</div>`;
                     showTip(e, html);
                 } else hideTip();
             });

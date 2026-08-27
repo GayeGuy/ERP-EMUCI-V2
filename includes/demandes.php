@@ -18,14 +18,32 @@ function di_statut_label(string $s): array {
         'en_attente'          => ['En attente','#e67e22','#fef9e7'],
         'en_cours'            => ['En cours','#1B75BC','#eaf3fb'],
         'approuve'            => ['Approuvée','#27ae60','#eafaf1'],
-        'approuve_traitement' => ['Approuvée — traitement IT','#16a085','#e8f8f5'],
+        // Orange comme « En attente » : le traitement IT reste à faire, la demande n'est pas close.
+        'approuve_traitement' => ['En attente de traitement IT','#e67e22','#fef9e7'],
+        // Statut d'affichage seulement (cf. di_statut_effectif) : le traitement
+        // est fait, la demande est close.
+        'traite'              => ['Traitée','#16a085','#e8f8f5'],
         'rejete'              => ['Rejetée','#e74c3c','#fdf0ef'],
         'a_revoir'            => ['À revoir','#8e44ad','#f5eefa'],
     ][$s] ?? [$s,'#7f8c8d','#f0f4f8'];
 }
+/**
+ * Statut à afficher pour une demande.
+ *
+ * Le traitement IT ne change pas le statut en base — il pose traite_it=1 sur
+ * un statut qui reste 'approuve_traitement'. Sans cette distinction, une
+ * demande déjà traitée continuerait d'afficher « En attente de traitement IT ».
+ */
+function di_statut_effectif(array $demande): string {
+    if (($demande['statut'] ?? '') === 'approuve_traitement' && !empty($demande['traite_it'])) {
+        return 'traite';
+    }
+    return $demande['statut'] ?? '';
+}
+
 function di_badge(string $s): string {
     [$lbl,$c,$bg] = di_statut_label($s);
-    return '<span style="font-size:11px;font-weight:700;padding:3px 10px;border-radius:10px;color:'.$c.';background:'.$bg.'">'.h($lbl).'</span>';
+    return '<span style="font-size:12px;font-weight:700;padding:3px 10px;border-radius:10px;color:'.$c.';background:'.$bg.'">'.h($lbl).'</span>';
 }
 
 // ── Charge le circuit (étapes ordonnées) d'un type de demande
@@ -61,7 +79,10 @@ function di_user_roles(int $userId): array {
     static $map = [
         'raf'               => ['raf'],
         'daf'               => ['daf'],
-        'gestionnaire'      => ['gestionnaire'],
+        // Le rôle ERP 'gestionnaire' a été supprimé (lot 3). Le code d'étape
+        // « gestionnaire » (Visa Administration) existe toujours dans les
+        // circuits : il est porté par les affectations explicites de
+        // di_user_roles et par le département lié dans di_roles.
         'support_it'        => ['it'],
         'superviseur_it'    => ['it'],
         'maintenance_info'  => ['it'],
@@ -117,6 +138,105 @@ function di_a_valider(array $user, ?string $from = null, ?string $to = null): ar
             $d['_demandeur']   = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$d['demandeur_id']]);
             $out[] = $d;
         }
+    }
+    return $out;
+}
+
+// ── L'utilisateur peut-il effectuer le traitement IT post-approbation (rôle 'it' ou membre
+//    d'un département lié à ce rôle) ?
+function di_user_can_traiter_it(int $userId, array $roles): bool {
+    if (in_array('it', $roles, true)) return true;
+    $dept_id = db_fetch_value("SELECT departement_id FROM di_roles WHERE code='it'");
+    if ($dept_id) {
+        return (bool)db_fetch_value(
+            "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND departement_id=?",
+            [$userId, (int)$dept_id]
+        );
+    }
+    return false;
+}
+
+// ── Demandes approuvées en attente de traitement IT (statut approuve_traitement, non traitées)
+function di_a_traiter(array $user, ?string $from = null, ?string $to = null): array {
+    $roles = di_user_roles((int)$user['id']);
+    if (!di_user_can_traiter_it((int)$user['id'], $roles)) return [];
+
+    $dateWhere = ''; $dateParams = [];
+    if ($from) { $dateWhere .= " AND submitted_at >= ?"; $dateParams[] = $from . ' 00:00:00'; }
+    if ($to)   { $dateWhere .= " AND submitted_at <= ?"; $dateParams[] = $to   . ' 23:59:59'; }
+
+    $rows = db_fetch_all(
+        "SELECT id FROM di_demandes WHERE statut='approuve_traitement' AND traite_it=0 $dateWhere ORDER BY updated_at ASC",
+        $dateParams
+    );
+    $out = [];
+    foreach ($rows as $r) {
+        $d = di_get((int)$r['id']);
+        if (!$d) continue;
+        $d['_demandeur'] = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$d['demandeur_id']]);
+        $out[] = $d;
+    }
+    return $out;
+}
+
+// ── Marquer le traitement IT d'une demande approuvée comme effectué.
+//    Le n° de ticket GLPI est saisi ici : c'est le seul moment où l'IT sait
+//    quel ticket a porté le traitement, et c'est ce numéro que le demandeur
+//    doit retrouver dans son retour.
+function di_traiter_it(array $demande, array $user, string $commentaire = '', string $ticketGlpi = ''): void {
+    $roles = di_user_roles((int)$user['id']);
+    if (!di_user_can_traiter_it((int)$user['id'], $roles)) {
+        throw new Exception("Vous ne pouvez pas traiter cette demande.");
+    }
+    if ($demande['statut'] !== 'approuve_traitement') {
+        throw new Exception("Cette demande n'est pas en attente de traitement IT.");
+    }
+    if (!empty($demande['traite_it'])) {
+        throw new Exception("Cette demande a déjà été traitée.");
+    }
+    $ticketGlpi = trim($ticketGlpi);
+    if ($ticketGlpi === '') {
+        throw new Exception("Le numéro du ticket GLPI est obligatoire pour clôturer le traitement.");
+    }
+    if (mb_strlen($ticketGlpi) > 50) {
+        throw new Exception("Numéro de ticket trop long (50 caractères maximum).");
+    }
+
+    $type = di_type($demande['type_code']);
+    $now  = date('Y-m-d H:i:s');
+    $nom  = trim(($user['prenom'] ?? '') . ' ' . ($user['nom'] ?? ''));
+
+    $historique = $demande['historique'];
+    $historique[] = ['action' => 'traite_it', 'par' => $user['id'], 'nom' => $nom,
+        'commentaire' => $commentaire, 'ticket_glpi' => $ticketGlpi, 'date' => $now];
+
+    db_query(
+        "UPDATE di_demandes SET traite_it=1, traite_par=?, traite_date=?, ticket_glpi=?, historique=?, updated_at=? WHERE id=?",
+        [$user['id'], $now, $ticketGlpi, json_encode($historique, JSON_UNESCAPED_UNICODE), $now, $demande['id']]
+    );
+
+    di_notify((int)$demande['demandeur_id'],
+        "Le traitement IT de votre demande « {$type['label']} » est terminé — ticket GLPI n° $ticketGlpi.",
+        (int)$demande['id']);
+}
+
+// ── Historique des demandes traitées par le service IT (file partagée, pas propre à un utilisateur)
+function di_it_traitees(?string $from = null, ?string $to = null, int $limit = 100): array {
+    $dateWhere = ''; $dateParams = [];
+    if ($from) { $dateWhere .= " AND submitted_at >= ?"; $dateParams[] = $from . ' 00:00:00'; }
+    if ($to)   { $dateWhere .= " AND submitted_at <= ?"; $dateParams[] = $to   . ' 23:59:59'; }
+    $limit = max(1, min($limit, 200));
+    $rows = db_fetch_all(
+        "SELECT id FROM di_demandes WHERE traite_it=1 $dateWhere ORDER BY traite_date DESC LIMIT $limit",
+        $dateParams
+    );
+    $out = [];
+    foreach ($rows as $r) {
+        $d = di_get((int)$r['id']);
+        if (!$d) continue;
+        $d['_demandeur']  = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$d['demandeur_id']]);
+        $d['_traite_par'] = $d['traite_par'] ? db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [$d['traite_par']]) : '';
+        $out[] = $d;
     }
     return $out;
 }

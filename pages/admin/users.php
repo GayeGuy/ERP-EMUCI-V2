@@ -166,9 +166,9 @@ include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
 .user-avatar-sm{width:38px;height:38px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:white;font-size:13px;font-weight:700;flex-shrink:0}
-.role-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.5px}
-.role-badge.superadmin{background:#fdf0ef;color:var(--danger)}
-.role-badge.admin{background:#fef9e7;color:var(--warning)}
+.role-badge{font-size:12px;font-weight:700;padding:2px 8px;border-radius:10px;text-transform:uppercase;letter-spacing:.5px}
+.role-badge.superadmin{background:#fdf0ef;color:var(--danger-d)}
+.role-badge.admin{background:#fef9e7;color:var(--warning-d)}
 .role-badge.gestionnaire{background:#d6eaf8;color:#1a5276}
 .role-badge.lecteur{background:#eaecee;color:#424949}
 .status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
@@ -187,7 +187,7 @@ include __DIR__ . '/../../templates/header.php';
 .fsel:focus{border-color:var(--blue-mid, #1a56a0)}
 /* Tabs */
 .tabs{display:flex;border-bottom:1px solid var(--border);margin-bottom:20px}
-.tab-btn{padding:12px 20px;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition:all .15s;font-family:'Manrope',sans-serif}
+.tab-btn{padding:12px 20px;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;background:none;border-top:none;border-left:none;border-right:none;transition: background-color .15s, border-color .15s, color .15s, box-shadow .15s, transform .15s, opacity .15s;font-family:'Manrope',sans-serif}
 .tab-btn.active{color:var(--blue-mid, #1a56a0);border-bottom-color:var(--blue-mid, #1a56a0)}
 .tab-pane{display:none}
 .tab-pane.active{display:block}
@@ -195,7 +195,7 @@ include __DIR__ . '/../../templates/header.php';
 .stats-dash{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px;margin-bottom:18px}
 .stat-tile{position:relative;overflow:hidden;background:white;border:1px solid var(--border);border-radius:12px;padding:11px 14px 11px 16px}
 .stat-tile::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent,var(--muted))}
-.stat-tile-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.stat-tile-label{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
 .stat-tile-value{font-family:'Plus Jakarta Sans',sans-serif;font-size:21px;font-weight:700;color:var(--navy)}
 .stat-tile-empty{opacity:.5}
 .stat-tile-total{background:var(--navy);border-color:var(--navy)}
@@ -209,23 +209,23 @@ include __DIR__ . '/../../templates/header.php';
 <div style="display:flex;gap:10px;margin-bottom:18px;flex-wrap:wrap;align-items:center">
   <form method="GET" id="usersFilterForm" style="display:flex;gap:8px;flex:1;flex-wrap:wrap">
     <div style="position:relative;flex:1;min-width:200px">
-      <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none">🔍</span>
-      <input type="text" name="q" value="<?= h($search) ?>" placeholder="Nom, prénom, email…" autocomplete="off"
+      <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none"><i class="ph ph-magnifying-glass" aria-hidden="true"></i></span>
+      <input type="text" name="q" value="<?= h($search) ?>" placeholder="Nom, prénom, email…" aria-label="Rechercher un utilisateur" autocomplete="off"
              style="width:100%;padding:10px 14px 10px 38px;border:1.5px solid var(--border);border-radius:9px;font-size:13.5px;outline:none;font-family:'Manrope',sans-serif">
     </div>
-    <select name="role" class="fsel">
+    <select name="role" class="fsel" aria-label="Filtrer par rôle">
       <option value="0">Tous les rôles</option>
       <?php foreach($roles_list as $r): ?>
       <option value="<?= $r['id'] ?>" <?= $f_role===$r['id']?'selected':'' ?>><?= h($r['nom']) ?></option>
       <?php endforeach; ?>
     </select>
-    <select name="actif" class="fsel">
+    <select name="actif" class="fsel" aria-label="Filtrer par statut actif">
       <option value="">Tous statuts</option>
       <option value="1" <?= $f_actif==='1'?'selected':'' ?>>Actifs</option>
       <option value="0" <?= $f_actif==='0'?'selected':'' ?>>Inactifs</option>
     </select>
     <span id="clearFiltersWrap"><?php if($search||$f_role||$f_actif!==''): ?>
-    <a href="users.php" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;text-decoration:none;color:var(--text)">✕</a>
+    <a href="users.php" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;text-decoration:none;color:var(--text)"><i class="ph ph-x" aria-hidden="true"></i></a>
     <?php endif; ?></span>
   </form>
   <?php if(can('users','can_create')): ?>
@@ -256,7 +256,7 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
 <!-- TABLE -->
 <div class="card" id="usersTableWrap">
   <div class="card-header">
-    <h3>👥 Utilisateurs <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= fmt_number($total) ?>)</span></h3>
+    <h3><i class="ph ph-users" aria-hidden="true"></i> Utilisateurs <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= fmt_number($total) ?>)</span></h3>
   </div>
   <div class="table-wrap">
     <table>
@@ -297,15 +297,15 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
           </td>
           <td style="font-size:12px;color:var(--muted)"><?= fmt_datetime($r['last_login']) ?></td>
           <td style="white-space:nowrap;display:flex;gap:4px">
-            <button class="btn btn-secondary btn-sm" onclick="viewU(<?= $r['id'] ?>)" title="Voir">👁</button>
+            <button class="btn btn-secondary btn-sm" onclick="viewU(<?= $r['id'] ?>)" title="Voir"><i class="ph ph-eye" aria-hidden="true"></i></button>
             <?php if(can('users','can_update') && ($user['role_slug']==='superadmin' || $r['role_slug']!=='superadmin')): ?>
-            <button class="btn btn-secondary btn-sm" onclick="editU(<?= $r['id'] ?>)" title="Modifier">✏️</button>
-            <button class="btn btn-secondary btn-sm" onclick="resetPwd(<?= $r['id'] ?>,'<?= h($r['prenom'].' '.$r['nom']) ?>')" title="Reset MDP">🔑</button>
+            <button class="btn btn-secondary btn-sm" onclick="editU(<?= $r['id'] ?>)" title="Modifier"><i class="ph ph-pencil-simple" aria-hidden="true"></i></button>
+            <button class="btn btn-secondary btn-sm" onclick="resetPwd(<?= $r['id'] ?>,'<?= h($r['prenom'].' '.$r['nom']) ?>')" title="Reset MDP"><i class="ph ph-key" aria-hidden="true"></i></button>
             <?php if($r['id']!==$user['id']): ?>
             <button class="btn <?= $r['actif']?'btn-danger':'btn-success' ?> btn-sm"
                     onclick="toggleActif(<?= $r['id'] ?>,<?= $r['actif']?0:1 ?>,'<?= h($r['prenom'].' '.$r['nom']) ?>')"
                     title="<?= $r['actif']?'Désactiver':'Activer' ?>">
-              <?= $r['actif']?'🚫':'✅' ?>
+              <?= $r['actif']?'<i class="ph ph-prohibit" aria-hidden="true"></i>':'<i class="ph ph-check-circle" aria-hidden="true"></i>' ?>
             </button>
             <?php endif; ?>
             <?php endif; ?>
@@ -321,7 +321,7 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
 <!-- MODAL CRÉER / MODIFIER -->
 <div class="modal-overlay" id="mU">
   <div class="modal" style="width:600px">
-    <div class="mhdr"><h3 id="mUT">Nouvel utilisateur</h3><button class="mclose" onclick="closeMU()">✕</button></div>
+    <div class="mhdr"><h3 id="mUT">Nouvel utilisateur</h3><button class="mclose" onclick="closeMU()"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody">
       <div id="mUAlert"></div>
       <input type="hidden" id="uId">
@@ -360,7 +360,7 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
                oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)" onblur="uCheckTel(this)" onfocus="this.classList.remove('field-invalid')">
       </div>
       <div id="uPwdWrap">
-        <div class="form-group"><label>Mot de passe * <span style="font-size:11px;color:var(--muted)">(min. 8 car., 1 majuscule, 1 chiffre, 1 caractère spécial)</span></label>
+        <div class="form-group"><label>Mot de passe * <span style="font-size:12px;color:var(--muted)">(min. 8 car., 1 majuscule, 1 chiffre, 1 caractère spécial)</span></label>
           <input type="password" class="form-control" id="uPwd" placeholder="••••••••">
         </div>
       </div>
@@ -372,7 +372,7 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
     </div>
     <div class="mfoot">
       <button class="btn btn-secondary" onclick="closeMU()">Annuler</button>
-      <button class="btn btn-primary" id="bSU" onclick="saveU()">💾 Enregistrer</button>
+      <button class="btn btn-primary" id="bSU" onclick="saveU()"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Enregistrer</button>
     </div>
   </div>
 </div>
@@ -380,7 +380,7 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
 <!-- MODAL DÉTAIL -->
 <div class="modal-overlay" id="mUD">
   <div class="modal" style="width:560px">
-    <div class="mhdr"><h3 id="udT">Détail</h3><button class="mclose" onclick="document.getElementById('mUD').classList.remove('open')">✕</button></div>
+    <div class="mhdr"><h3 id="udT">Détail</h3><button class="mclose" onclick="document.getElementById('mUD').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody" id="udB"></div>
   </div>
 </div>
@@ -388,12 +388,12 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
 <!-- MODAL RESET MDP -->
 <div class="modal-overlay" id="mPwd">
   <div class="modal" style="width:420px">
-    <div class="mhdr"><h3>🔑 Réinitialiser le mot de passe</h3><button class="mclose" onclick="document.getElementById('mPwd').classList.remove('open')">✕</button></div>
+    <div class="mhdr"><h3><i class="ph ph-key" aria-hidden="true"></i> Réinitialiser le mot de passe</h3><button class="mclose" onclick="document.getElementById('mPwd').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button></div>
     <div class="mbody">
       <input type="hidden" id="pwdUId">
       <div class="alert alert-warning" style="margin-bottom:16px">Vous allez réinitialiser le mot de passe de <strong id="pwdUNom"></strong>.</div>
       <div id="pwdAlert"></div>
-      <div class="form-group"><label>Nouveau mot de passe * <span style="font-size:11px;color:var(--muted)">(min. 8 car., 1 majuscule, 1 chiffre, 1 caractère spécial)</span></label>
+      <div class="form-group"><label>Nouveau mot de passe * <span style="font-size:12px;color:var(--muted)">(min. 8 car., 1 majuscule, 1 chiffre, 1 caractère spécial)</span></label>
         <input type="password" class="form-control" id="pwdNew" placeholder="••••••••">
       </div>
       <div class="form-group"><label>Confirmer</label>
@@ -402,7 +402,7 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
     </div>
     <div class="mfoot">
       <button class="btn btn-secondary" onclick="document.getElementById('mPwd').classList.remove('open')">Annuler</button>
-      <button class="btn btn-primary" onclick="savePwd()">🔑 Réinitialiser</button>
+      <button class="btn btn-primary" onclick="savePwd()"><i class="ph ph-key" aria-hidden="true"></i> Réinitialiser</button>
     </div>
   </div>
 </div>
@@ -482,13 +482,13 @@ function viewU(id){
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 20px">
         ${[['Email',r.email],['Téléphone',r.telephone||'—'],['Site',r.site_nom||'—'],
-           ['Statut',r.actif==1?'✅ Actif':'❌ Inactif'],
+           ['Statut',r.actif==1?'<i class="ph ph-check-circle" aria-hidden="true"></i> Actif':'<i class="ph ph-x-circle" aria-hidden="true"></i> Inactif'],
            ['Dernière connexion',r.last_login||'Jamais'],
            ['Actions réalisées',r.nb_actions+' actions'],
            ['Équipements assignés',r.nb_equips+' équipement(s)'],
            ['Créé le',r.created_at]
           ].map(([l,v])=>`<div style="padding:7px 0;border-bottom:1px solid var(--border)">
-            <div style="font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${l}</div>
+            <div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px">${l}</div>
             <div style="font-size:13.5px">${v}</div></div>`).join('')}
       </div>`;
   });

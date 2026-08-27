@@ -24,6 +24,8 @@ $f_site      = $site_force ?: (int)($_GET['site'] ?? 0);
 $f_etat      = trim($_GET['etat'] ?? '');
 $f_type      = (int)($_GET['type'] ?? 0);
 $f_search    = trim($_GET['q'] ?? '');
+$f_statut_stock = trim($_GET['statut_stock'] ?? '');
+$f_fin_cycle    = !empty($_GET['fin_cycle']);
 
 $sites_list  = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom");
 $nomenclatures     = db_fetch_all("SELECT id,libelle,categorie,duree_vie_mois FROM nomenclatures WHERE categorie=? ORDER BY libelle", [$f_categorie]);
@@ -106,9 +108,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 // ── DONNÉES
 $where = ["e.categorie=?","e.actif=1"]; $params = [$f_categorie];
 if ($f_site)   { $where[] = "e.site_id=?";          $params[] = $f_site; }
-if ($f_etat)   { $where[] = "e.etat=?";              $params[] = $f_etat; }
+if ($f_etat === 'ok') { $where[] = "e.etat IN ('neuf','bon')"; }
+elseif ($f_etat)      { $where[] = "e.etat=?";       $params[] = $f_etat; }
 if ($f_type)   { $where[] = "e.nomenclature_id=?";   $params[] = $f_type; }
 if ($f_search) { $where[] = "(e.numero_serie_interne LIKE ? OR e.marque LIKE ? OR e.modele LIKE ?)"; $params[] = "%$f_search%"; $params[] = "%$f_search%"; $params[] = "%$f_search%"; }
+if ($f_statut_stock) { $where[] = "e.statut_stock=?"; $params[] = $f_statut_stock; }
+if ($f_fin_cycle)    { $where[] = "e.date_fin_cycle IS NOT NULL AND e.date_fin_cycle < (CURRENT_DATE + INTERVAL 30 DAY)"; }
 
 $equipements = db_fetch_all(
     "SELECT e.*, s.nom AS site_nom, n.libelle AS type_nom,
@@ -147,10 +152,52 @@ $blocs_type = db_fetch_all(
 
 // ── KPIs
 $nb_total  = count($equipements);
-$nb_ok     = count(array_filter($equipements, fn($e)=>in_array($e['etat'],['neuf','bon'])));
-$nb_hs     = count(array_filter($equipements, fn($e)=>$e['etat']==='hs'));
-$nb_stock  = count(array_filter($equipements, fn($e)=>($e['statut_stock']??'')==='en_stock'));
-$nb_fin_cycle = count(array_filter($equipements, fn($e)=>$e['date_fin_cycle'] && strtotime($e['date_fin_cycle']??'') < strtotime('+30 days')));
+
+// Compteurs des tuiles KPI : perimetre identique (categorie/site/type/recherche)
+// mais jamais filtres par etat/statut_stock/fin_cycle eux-memes, pour que
+// chaque tuile reste exacte quel que soit le statut actuellement affiche
+// et reste cliquable pour y sauter directement (cf. equip-kpis plus bas).
+$where_kpi = ["e.categorie=?","e.actif=1"]; $params_kpi = [$f_categorie];
+if ($f_site)   { $where_kpi[] = "e.site_id=?";          $params_kpi[] = $f_site; }
+if ($f_type)   { $where_kpi[] = "e.nomenclature_id=?";  $params_kpi[] = $f_type; }
+if ($f_search) { $where_kpi[] = "(e.numero_serie_interne LIKE ? OR e.marque LIKE ? OR e.modele LIKE ?)"; $params_kpi[] = "%$f_search%"; $params_kpi[] = "%$f_search%"; $params_kpi[] = "%$f_search%"; }
+$kpi = db_fetch_one(
+    "SELECT COUNT(*) AS total,
+            SUM(CASE WHEN e.etat IN ('neuf','bon') THEN 1 ELSE 0 END) AS ok,
+            SUM(CASE WHEN e.etat='hs' THEN 1 ELSE 0 END) AS hs,
+            SUM(CASE WHEN e.statut_stock='en_stock' THEN 1 ELSE 0 END) AS stock,
+            SUM(CASE WHEN e.date_fin_cycle IS NOT NULL AND e.date_fin_cycle < (CURRENT_DATE + INTERVAL 30 DAY) THEN 1 ELSE 0 END) AS fin_cycle
+     FROM equipements e
+     WHERE ".implode(' AND ',$where_kpi),
+    $params_kpi
+);
+$kpi_total     = (int)($kpi['total'] ?? 0);
+$kpi_ok        = (int)($kpi['ok'] ?? 0);
+$kpi_hs        = (int)($kpi['hs'] ?? 0);
+$kpi_stock     = (int)($kpi['stock'] ?? 0);
+$kpi_fin_cycle = (int)($kpi['fin_cycle'] ?? 0);
+
+// URL de chaque tuile : conserve le perimetre (site/type/recherche), un seul
+// filtre de statut actif a la fois.
+$kpi_link = function(array $statut) use ($f_categorie, $f_site, $f_type, $f_search): string {
+    $params = array_filter(array_merge([
+        'categorie' => $f_categorie,
+        'site'      => $f_site ?: null,
+        'type'      => $f_type ?: null,
+        'q'         => $f_search !== '' ? $f_search : null,
+    ], $statut), fn($v) => $v !== null && $v !== '');
+    return '?' . http_build_query($params);
+};
+$kpi_url_total    = $kpi_link([]);
+$kpi_url_ok       = $kpi_link(['etat' => 'ok']);
+$kpi_url_hs       = $kpi_link(['etat' => 'hs']);
+$kpi_url_stock    = $kpi_link(['statut_stock' => 'en_stock']);
+$kpi_url_fincycle = $kpi_link(['fin_cycle' => '1']);
+$kpi_active_ok    = $f_etat === 'ok';
+$kpi_active_hs    = $f_etat === 'hs';
+$kpi_active_stock = $f_statut_stock === 'en_stock';
+$kpi_active_fin   = $f_fin_cycle;
+$kpi_active_total = !$kpi_active_ok && !$kpi_active_hs && !$kpi_active_stock && !$kpi_active_fin;
 
 // ── EXPORT EXCEL
 if (isset($_GET['export'])) {
@@ -207,17 +254,19 @@ include __DIR__ . '/../templates/header.php';
 ?>
 <style>
 .equip-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}
-.ek{background:white;border-radius:13px;border:1px solid var(--border);padding:14px 16px;border-left:4px solid var(--blue)}
+.ek{background:white;border-radius:13px;border:1px solid var(--border);padding:14px 16px;border-left:4px solid var(--blue);display:block;text-decoration:none;color:inherit;cursor:pointer;transition:box-shadow .15s,border-color .15s}
+.ek:hover{box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.ek-active{border-color:var(--navy);box-shadow:0 0 0 2px var(--navy) inset}
 .ek.green{border-left-color:var(--success)} .ek.red{border-left-color:var(--danger)} .ek.orange{border-left-color:#f39c12} .ek.purple{border-left-color:#8e44ad}
 .ek-val{font-family:'Plus Jakarta Sans',sans-serif;font-size:24px;font-weight:900;color:var(--navy)}
-.ek-lbl{font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
+.ek-lbl{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-top:3px}
 
 
-.etat-badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:11px;font-weight:700}
+.etat-badge{display:inline-block;padding:2px 9px;border-radius:12px;font-size:12px;font-weight:700}
 .etat-neuf{background:#d1fae5;color:#065f46} .etat-bon{background:#dbeafe;color:#1d4ed8}
 .etat-usage{background:#fef3c7;color:#92400e} .etat-endomage,.etat-endommage{background:#fee2e2;color:#991b1b}
 .etat-hs{background:#1a1a1a;color:white}
-.taux-ok{color:var(--success);font-weight:700} .taux-warn{color:#f39c12;font-weight:700} .taux-danger{color:var(--danger);font-weight:700}
+.taux-ok{color:var(--success-d);font-weight:700} .taux-warn{color:#f39c12;font-weight:700} .taux-danger{color:var(--danger-d);font-weight:700}
 </style>
 
 <!-- ── LIGNE 1 : Onglets catégorie + bouton Ajouter ── -->
@@ -237,20 +286,22 @@ include __DIR__ . '/../templates/header.php';
 </div>
 
 <!-- ── KPIs ── -->
-<div class="equip-kpis">
-  <div class="ek">          <div class="ek-val"><?= $nb_total ?></div>                                          <div class="ek-lbl">Total</div></div>
-  <div class="ek green">    <div class="ek-val" style="color:var(--success)"><?= $nb_ok ?></div>                <div class="ek-lbl">✅ Opérationnels</div></div>
-  <div class="ek red">      <div class="ek-val" style="color:var(--danger)"><?= $nb_hs ?></div>                 <div class="ek-lbl">❌ Hors service</div></div>
-  <div class="ek purple">   <div class="ek-val" style="color:#8e44ad"><?= $nb_stock ?></div>                    <div class="ek-lbl">📦 En stock</div></div>
-  <div class="ek orange">   <div class="ek-val" style="color:#f39c12"><?= $nb_fin_cycle ?></div>               <div class="ek-lbl">⚠️ Fin cycle &lt;30j</div></div>
+<div class="equip-kpis" id="equipKpis">
+  <a href="<?= h($kpi_url_total) ?>" class="ek<?= $kpi_active_total?' ek-active':'' ?>" title="Voir tous les équipements">          <div class="ek-val"><?= $kpi_total ?></div>                                          <div class="ek-lbl">Total</div></a>
+  <a href="<?= h($kpi_url_ok) ?>" class="ek green<?= $kpi_active_ok?' ek-active':'' ?>" title="Filtrer sur les équipements opérationnels">    <div class="ek-val" style="color:var(--success-d)"><?= $kpi_ok ?></div>                <div class="ek-lbl"><i class="ph ph-check-circle" aria-hidden="true"></i> Opérationnels</div></a>
+  <a href="<?= h($kpi_url_hs) ?>" class="ek red<?= $kpi_active_hs?' ek-active':'' ?>" title="Filtrer sur les équipements hors service">      <div class="ek-val" style="color:var(--danger-d)"><?= $kpi_hs ?></div>                 <div class="ek-lbl"><i class="ph ph-x-circle" aria-hidden="true"></i> Hors service</div></a>
+  <a href="<?= h($kpi_url_stock) ?>" class="ek purple<?= $kpi_active_stock?' ek-active':'' ?>" title="Filtrer sur les équipements en stock">   <div class="ek-val" style="color:#8e44ad"><?= $kpi_stock ?></div>                    <div class="ek-lbl"><i class="ph ph-package" aria-hidden="true"></i> En stock</div></a>
+  <a href="<?= h($kpi_url_fincycle) ?>" class="ek orange<?= $kpi_active_fin?' ek-active':'' ?>" title="Filtrer sur les équipements en fin de cycle sous 30 jours">   <div class="ek-val" style="color:#f39c12"><?= $kpi_fin_cycle ?></div>               <div class="ek-lbl"><i class="ph ph-warning" aria-hidden="true"></i> Fin cycle &lt;30j</div></a>
 </div>
 
 <!-- ── LIGNE 2 : Filtres (remplace les blocs résumé) ── -->
-<form method="GET" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:18px">
+<form method="GET" id="equipFiltreForm" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:18px">
   <input type="hidden" name="categorie" value="<?= h($f_categorie) ?>">
+  <input type="hidden" name="statut_stock" value="<?= h($f_statut_stock) ?>">
+  <input type="hidden" name="fin_cycle" value="<?= $f_fin_cycle?'1':'' ?>">
 
   <?php if($role_slug !== 'coordinateur_site'): ?>
-  <select name="site" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
+  <select name="site" onchange="equipFiltrer(this.form)" aria-label="Filtrer par site" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
     <option value="">Tous les sites</option>
     <?php foreach($sites_list as $s): ?>
     <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
@@ -258,8 +309,9 @@ include __DIR__ . '/../templates/header.php';
   </select>
   <?php endif; ?>
 
-  <select name="etat" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
+  <select name="etat" onchange="equipFiltrer(this.form)" aria-label="Filtrer par état" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
     <option value="">Tous états</option>
+    <option value="ok"        <?= $f_etat==='ok'?'selected':''        ?>>Opérationnel (neuf/bon)</option>
     <option value="neuf"      <?= $f_etat==='neuf'?'selected':''      ?>>Neuf</option>
     <option value="bon"       <?= $f_etat==='bon'?'selected':''       ?>>Bon état</option>
     <option value="usage"     <?= $f_etat==='usage'?'selected':''     ?>>Usagé</option>
@@ -267,7 +319,7 @@ include __DIR__ . '/../templates/header.php';
     <option value="hs"        <?= $f_etat==='hs'?'selected':''        ?>>H.S.</option>
   </select>
 
-  <select name="type" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
+  <select name="type" onchange="equipFiltrer(this.form)" aria-label="Filtrer par type d'équipement" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
     <option value="">Tous les types</option>
     <?php foreach($nomenclatures as $n): ?>
     <option value="<?= $n['id'] ?>" <?= $f_type===$n['id']?'selected':'' ?>><?= h($n['libelle']) ?></option>
@@ -276,31 +328,30 @@ include __DIR__ . '/../templates/header.php';
 
   <div style="position:relative;flex:1;min-width:180px">
     <i class="ph-duotone ph-magnifying-glass" style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px;pointer-events:none"></i>
-    <input type="text" name="q" value="<?= h($f_search) ?>" placeholder="Rechercher..."
-           onchange="this.form.submit()"
+    <input type="text" name="q" value="<?= h($f_search) ?>" placeholder="Rechercher..." aria-label="Rechercher un équipement"
+           onchange="equipFiltrer(this.form)"
            style="width:100%;padding:9px 12px 9px 34px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none">
   </div>
 
-  <?php if($f_site||$f_etat||$f_type||$f_search): ?>
-  <a href="?categorie=<?= h($f_categorie) ?>" class="btn btn-secondary btn-sm" title="Réinitialiser les filtres">✕ Effacer</a>
-  <?php endif; ?>
+  <a href="?categorie=<?= h($f_categorie) ?>" id="equipEffacerBtn" onclick="return equipEffacer(event)" class="btn btn-secondary btn-sm" title="Réinitialiser les filtres"
+     style="<?= ($f_site||$f_etat||$f_type||$f_search||$f_statut_stock||$f_fin_cycle) ? '' : 'display:none' ?>"><i class="ph ph-x" aria-hidden="true"></i> Effacer</a>
 
-  <a href="?categorie=<?= h($f_categorie) ?>&site=<?= $f_site ?>&etat=<?= h($f_etat) ?>&type=<?= $f_type ?>&q=<?= urlencode($f_search) ?>&export=1"
-     class="btn btn-secondary btn-sm">
+  <a href="?categorie=<?= h($f_categorie) ?>&site=<?= $f_site ?>&etat=<?= h($f_etat) ?>&type=<?= $f_type ?>&q=<?= urlencode($f_search) ?>&statut_stock=<?= h($f_statut_stock) ?>&fin_cycle=<?= $f_fin_cycle?'1':'' ?>&export=1"
+     id="equipExportLink" class="btn btn-secondary btn-sm">
     <i class="ph-duotone ph-file-xls"></i> Excel
   </a>
 </form>
 
 <!-- LISTE ÉQUIPEMENTS -->
-<div class="card">
+<div class="card" id="equipResultCard">
   <div class="card-header">
     <h3>
       <?= $f_categorie==='informatique'
-        ? '<i class="ph-duotone ph-monitor" style="color:var(--primary)"></i> Équipements Informatique'
-        : '<i class="ph-duotone ph-wrench" style="color:var(--primary)"></i> Équipements Opérationnel' ?>
+        ? '<i class="ph-duotone ph-monitor" style="color:var(--primary-d)"></i> Équipements Informatique'
+        : '<i class="ph-duotone ph-wrench" style="color:var(--primary-d)"></i> Équipements Opérationnel' ?>
       <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= $nb_total ?>)</span>
       <?php if($f_type): ?>
-        <span style="font-size:12px;font-weight:600;color:var(--primary);background:var(--primary-l);padding:2px 10px;border-radius:20px;margin-left:8px">
+        <span style="font-size:12px;font-weight:600;color:var(--primary-d);background:var(--primary-l);padding:2px 10px;border-radius:20px;margin-left:8px">
           <?= h(current(array_filter($nomenclatures, fn($n)=>$n['id']===$f_type))['libelle'] ?? '') ?>
         </span>
       <?php endif; ?>
@@ -336,30 +387,30 @@ include __DIR__ . '/../templates/header.php';
           <td style="text-align:center">
             <?php if($nb_int > 0): ?>
             <span class="<?= $taux_cls ?>"><?= $taux ?>%</span>
-            <div style="font-size:10px;color:var(--muted)"><?= $nb_cur ?>/<?= $nb_int ?> int.</div>
+            <div style="font-size:12px;color:var(--muted)"><?= $nb_cur ?>/<?= $nb_int ?> int.</div>
             <?php else: ?><span style="color:var(--muted)">—</span><?php endif; ?>
           </td>
           <td style="text-align:center;font-size:12px;font-weight:600">
             <?php if($e['valeur_residuelle'] !== null): ?>
             <?= fmt_number($e['valeur_residuelle']) ?> FCFA
-            <div style="font-size:10px;color:var(--muted)"><?= $e['pct_amorti'] ?>% amorti</div>
+            <div style="font-size:12px;color:var(--muted)"><?= $e['pct_amorti'] ?>% amorti</div>
             <?php else: ?><span style="color:var(--muted)">—</span><?php endif; ?>
           </td>
           <td style="text-align:center;font-size:12px">
             <?php if($days_left !== null): ?>
-            <span style="color:<?= $days_left<0?'var(--danger)':($days_left<30?'#f39c12':'var(--success)') ?>;font-weight:700">
+            <span style="color:<?= $days_left<0?'var(--danger-d)':($days_left<30?'#f39c12':'var(--success-d)') ?>;font-weight:700">
               <?= $days_left < 0 ? 'Dépassé' : "$days_left j" ?>
             </span>
             <?php else: ?><span style="color:var(--muted)">—</span><?php endif; ?>
           </td>
           <td style="text-align:center">
-            <span style="padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;background:<?= ($e['statut_stock']??'')==='en_stock'?'#e8f4f9':'#f0f0f0' ?>;color:<?= ($e['statut_stock']??'')==='en_stock'?'var(--blue)':'#666' ?>">
-              <?= ($e['statut_stock']??'affecte')==='en_stock'?'📦 Stock':'✅ Affecté' ?>
+            <span style="padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700;background:<?= ($e['statut_stock']??'')==='en_stock'?'#e8f4f9':'#f0f0f0' ?>;color:<?= ($e['statut_stock']??'')==='en_stock'?'var(--blue)':'#666' ?>">
+              <?= ($e['statut_stock']??'affecte')==='en_stock'?'<i class="ph ph-package" aria-hidden="true"></i> Stock':'<i class="ph ph-check-circle" aria-hidden="true"></i> Affecté' ?>
             </span>
           </td>
           <?php if($can_update): ?>
           <td style="text-align:center">
-            <button class="btn btn-secondary btn-sm" onclick="modifierEquip(<?= htmlspecialchars(json_encode($e),ENT_QUOTES) ?>)">✏️</button>
+            <button class="btn btn-secondary btn-sm" onclick="modifierEquip(<?= htmlspecialchars(json_encode($e),ENT_QUOTES) ?>)"><i class="ph ph-pencil-simple" aria-hidden="true"></i></button>
           </td>
           <?php endif; ?>
         </tr>
@@ -375,7 +426,7 @@ include __DIR__ . '/../templates/header.php';
   <div style="background:white;border-radius:20px;padding:28px;width:580px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
       <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)" id="titleModal">Nouvel équipement</h3>
-      <button onclick="fermerModal()" style="background:none;border:none;font-size:22px;cursor:pointer">✕</button>
+      <button onclick="fermerModal()" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <input type="hidden" id="eId">
     <input type="hidden" id="eAction" value="creer">
@@ -442,11 +493,11 @@ include __DIR__ . '/../templates/header.php';
       </div>
     </div>
     <div style="background:var(--lighter);border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:var(--muted)">
-      💡 <strong>Amortissement OHADA :</strong> <?= $f_categorie==='informatique'?'Matériel informatique — 3 ans (36 mois)':'Matériel opérationnel — 5 ans (60 mois)' ?>. La date de fin de cycle et la valeur résiduelle sont calculées automatiquement.
+      <i class="ph ph-lightbulb" aria-hidden="true"></i> <strong>Amortissement OHADA :</strong> <?= $f_categorie==='informatique'?'Matériel informatique — 3 ans (36 mois)':'Matériel opérationnel — 5 ans (60 mois)' ?>. La date de fin de cycle et la valeur résiduelle sont calculées automatiquement.
     </div>
     <div style="display:flex;justify-content:flex-end;gap:10px">
       <button class="btn btn-secondary" onclick="fermerModal()">Annuler</button>
-      <button class="btn btn-primary" id="btnSave" onclick="sauvegarder()">✅ Enregistrer</button>
+      <button class="btn btn-primary" id="btnSave" onclick="sauvegarder()"><i class="ph ph-check-circle" aria-hidden="true"></i> Enregistrer</button>
     </div>
   </div>
 </div>
@@ -454,7 +505,57 @@ include __DIR__ . '/../templates/header.php';
 
 <script>
 function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
-function toast(m,t='success'){const el=document.createElement('div');el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white`;el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),3500);}
+
+// ── Filtres sans rechargement de page : remplace les KPI et le tableau par
+// le fragment equivalent de la page fraichement chargee (memes id), evite
+// le flash de rechargement complet (cf. pages/operations/bobines.php).
+let equipEnVol = null;
+function equipCharger(url){
+  if(!window.fetch || !window.DOMParser){ location.href = url; return; }
+  if(equipEnVol) try{ equipEnVol.abort(); }catch(e){}
+  const ctrl = window.AbortController ? new AbortController() : null;
+  equipEnVol = ctrl;
+  fetch(url, {credentials:'same-origin', signal: ctrl?ctrl.signal:undefined, headers:{'X-Requested-With':'fetch'}})
+    .then(r => { if(!r.ok) throw new Error(r.status); return r.text(); })
+    .then(html => {
+      if(equipEnVol !== ctrl) return;
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      ['equipKpis','equipResultCard'].forEach(id => {
+        const neuf = doc.getElementById(id);
+        const ancien = document.getElementById(id);
+        if(!neuf || !ancien) throw new Error('structure');
+        ancien.replaceWith(neuf);
+      });
+      history.pushState({equip:1}, '', url);
+      equipEnVol = null;
+    })
+    .catch(e => {
+      if(e && e.name==='AbortError') return;
+      equipEnVol = null;
+      location.href = url;
+    });
+}
+function equipMajLiens(form){
+  const actif = ['site','etat','type','q','statut_stock','fin_cycle'].some(n => form.elements[n] && form.elements[n].value);
+  const btn = document.getElementById('equipEffacerBtn');
+  if(btn) btn.style.display = actif ? '' : 'none';
+  const exp = document.getElementById('equipExportLink');
+  if(exp){ const p = new URLSearchParams(new FormData(form)); p.set('export','1'); exp.href = location.pathname + '?' + p.toString(); }
+}
+function equipFiltrer(form){
+  equipMajLiens(form);
+  equipCharger(location.pathname + '?' + new URLSearchParams(new FormData(form)).toString());
+}
+function equipEffacer(ev){
+  ev.preventDefault();
+  const form = document.getElementById('equipFiltreForm');
+  ['site','etat','type','q','statut_stock','fin_cycle'].forEach(n => { if(form.elements[n]) form.elements[n].value = ''; });
+  equipMajLiens(form);
+  equipCharger(location.pathname + '?' + new URLSearchParams(new FormData(form)).toString());
+  return false;
+}
+window.addEventListener('popstate', function(ev){ if(ev.state && ev.state.equip) location.reload(); });
+function toast(m,t='success'){let el=document.getElementById('toast-live');if(!el){el=document.createElement('div');el.id='toast-live';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.setAttribute('aria-atomic','true');document.body.appendChild(el);}clearTimeout(el._hideTimer);el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white`;el.textContent=m;el._hideTimer=setTimeout(()=>{el.style.display='none';},3500);}
 
 function ouvrirCreation(){
   document.getElementById('titleModal').textContent='Nouvel équipement';

@@ -162,10 +162,10 @@ include __DIR__ . '/../templates/header.php';
 .kpi-val{font-family:'Montserrat',sans-serif;font-size:28px;font-weight:800;color:var(--navy);line-height:1}
 .kpi-lbl{font-size:12px;color:var(--muted);margin-top:5px}
 .fsel{padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none;font-family:'DM Sans',sans-serif;cursor:pointer;color:var(--text)}
-.rbadge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700}
+.rbadge{display:inline-block;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:700}
 .rbadge.valide{background:#d5f5e3;color:#1e7e40}
 .rbadge.brouillon{background:#fef9e7;color:#9a6c00}
-.statut-pill{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
+.statut-pill{display:inline-block;padding:2px 8px;border-radius:4px;font-size:12px;font-weight:600}
 .statut-pill.resolu{background:#d5f5e3;color:#1e7e40}
 .statut-pill.partiel{background:#fef9e7;color:#9a6c00}
 .statut-pill.en_attente{background:#fdedec;color:#c0392b}
@@ -178,7 +178,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="kpi-lbl">Équipements informatiques</div>
   </div>
   <div class="kpi ok">
-    <div class="kpi-val" style="color:var(--success)"><?= $kpi_total - $kpi_hs - $kpi_maint ?></div>
+    <div class="kpi-val" style="color:var(--success-d)"><?= $kpi_total - $kpi_hs - $kpi_maint ?></div>
     <div class="kpi-lbl">Opérationnels</div>
   </div>
   <div class="kpi warn">
@@ -195,7 +195,7 @@ include __DIR__ . '/../templates/header.php';
 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
   <form method="GET" style="display:flex;gap:8px;align-items:center">
     <?php if(!$site_force): ?>
-    <select name="site" class="fsel" onchange="this.form.submit()">
+    <select name="site" class="fsel" aria-label="Filtrer par site" onchange="this.form.submit()">
       <option value="0">Tous les sites</option>
       <?php foreach($sites_list as $s): ?>
       <option value="<?= $s['id'] ?>" <?= $f_site===$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
@@ -203,10 +203,10 @@ include __DIR__ . '/../templates/header.php';
     </select>
     <?php else: ?>
     <span style="padding:9px 14px;background:var(--lighter);border-radius:9px;font-size:13px;font-weight:600;color:var(--navy)">
-      📍 <?= h(db_fetch_value("SELECT nom FROM sites WHERE id=?",[$site_force]) ?? '') ?>
+      <i class="ph ph-map-pin" aria-hidden="true"></i> <?= h(db_fetch_value("SELECT nom FROM sites WHERE id=?",[$site_force]) ?? '') ?>
     </span>
     <?php endif; ?>
-    <input type="month" name="mois" value="<?= h($f_mois) ?>" onchange="this.form.submit()"
+    <input type="month" name="mois" value="<?= h($f_mois) ?>" onchange="this.form.submit()" aria-label="Choisir le mois"
            style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;outline:none">
   </form>
   <?php if(in_array($role_slug,['maintenance_info','admin','superadmin'])): ?>
@@ -217,7 +217,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- LISTE -->
 <div class="card">
   <div class="card-header">
-    <h3>📋 Rapports journaliers <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= count($rapports) ?>)</span></h3>
+    <h3><i class="ph ph-clipboard-text" aria-hidden="true"></i> Rapports journaliers <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= count($rapports) ?>)</span></h3>
   </div>
   <div class="table-wrap">
     <table>
@@ -241,18 +241,18 @@ include __DIR__ . '/../templates/header.php';
         <tr>
           <td style="font-weight:700;white-space:nowrap"><?= fmt_date($r['date_rapport'],'d/m/Y') ?></td>
           <td><?= h($r['site_nom']) ?></td>
-          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;color:var(--success)"><?= $r['nb_equip_ok'] ?></td>
+          <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;color:var(--success-d)"><?= $r['nb_equip_ok'] ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;color:<?= $r['nb_equip_hs']>0?'#e74c3c':'var(--muted)' ?>"><?= $r['nb_equip_hs'] ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;color:<?= $r['nb_equip_maintenance']>0?'#f39c12':'var(--muted)' ?>"><?= $r['nb_equip_maintenance'] ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:700;color:var(--blue)"><?= $r['nb_interventions'] ?></td>
           <td style="font-size:12.5px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?= h($r['observations']) ?>"><?= h($r['observations']??'—') ?></td>
           <td style="font-size:12.5px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="<?= h($r['actions_preventives']) ?>"><?= h($r['actions_preventives']??'—') ?></td>
-          <td><span class="rbadge <?= $r['statut']??'brouillon' ?>"><?= ($r['statut']??'brouillon')==='valide'?'✅ Validé':'⏳ Brouillon' ?></span></td>
+          <td><span class="rbadge <?= $r['statut']??'brouillon' ?>"><?= ($r['statut']??'brouillon')==='valide'?'<i class="ph ph-check-circle" aria-hidden="true"></i> Validé':'⏳ Brouillon' ?></span></td>
           <td style="font-size:12px;color:var(--muted)"><?= h($r['technicien_nom']??'—') ?></td>
           <td style="text-align:center;white-space:nowrap;display:flex;gap:4px;justify-content:center">
-            <button class="btn btn-secondary btn-sm" onclick="editer(<?= $r['id'] ?>,<?= $r['site_id'] ?>,'<?= $r['date_rapport'] ?>')" title="Modifier">✏️</button>
+            <button class="btn btn-secondary btn-sm" onclick="editer(<?= $r['id'] ?>,<?= $r['site_id'] ?>,'<?= $r['date_rapport'] ?>')" title="Modifier"><i class="ph ph-pencil-simple" aria-hidden="true"></i></button>
             <?php if(($r['statut']??'brouillon')==='brouillon' && in_array($role_slug,['admin','superadmin'])): ?>
-            <button class="btn btn-success btn-sm" onclick="valider(<?= $r['id'] ?>)" title="Valider">✅</button>
+            <button class="btn btn-success btn-sm" onclick="valider(<?= $r['id'] ?>)" title="Valider"><i class="ph ph-check-circle" aria-hidden="true"></i></button>
             <?php endif; ?>
           </td>
         </tr>
@@ -266,18 +266,18 @@ include __DIR__ . '/../templates/header.php';
 <div id="modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:flex-start;justify-content:center;padding:30px;overflow-y:auto">
   <div style="background:white;border-radius:16px;padding:28px;width:620px;max-width:95vw;margin:auto;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
-      <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy)">📋 Rapport journalier informatique</h3>
-      <button onclick="fermer()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted)">✕</button>
+      <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy)"><i class="ph ph-clipboard-text" aria-hidden="true"></i> Rapport journalier informatique</h3>
+      <button onclick="fermer()" style="background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted)"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
 
     <div id="mAlert"></div>
 
     <!-- Stats temps réel -->
     <div id="statsBox" style="display:none;background:var(--lighter);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;border-left:3px solid var(--blue-light)">
-      <div style="font-weight:700;color:var(--navy);margin-bottom:6px">📊 État actuel des équipements informatiques</div>
+      <div style="font-weight:700;color:var(--navy);margin-bottom:6px"><i class="ph ph-chart-bar" aria-hidden="true"></i> État actuel des équipements informatiques</div>
       <div style="display:flex;gap:20px;flex-wrap:wrap">
         <span>Total : <strong id="sTotal" style="color:var(--navy)">—</strong></span>
-        <span style="color:var(--success)">OK : <strong id="sOk">—</strong></span>
+        <span style="color:var(--success-d)">OK : <strong id="sOk">—</strong></span>
         <span style="color:#e74c3c">H.S : <strong id="sHs">—</strong></span>
         <span style="color:#f39c12">Maintenance : <strong id="sMaint">—</strong></span>
       </div>
@@ -285,7 +285,7 @@ include __DIR__ . '/../templates/header.php';
 
     <!-- Interventions du jour -->
     <div id="intervBox" style="display:none;margin-bottom:16px">
-      <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px">🛠️ Interventions enregistrées ce jour</div>
+      <div style="font-size:13px;font-weight:700;color:var(--navy);margin-bottom:6px"><i class="ph ph-wrench" aria-hidden="true"></i> Interventions enregistrées ce jour</div>
       <div id="intervList" style="font-size:12.5px;color:var(--muted)"></div>
     </div>
 
@@ -348,14 +348,14 @@ include __DIR__ . '/../templates/header.php';
 
     <div style="display:flex;justify-content:flex-end;gap:10px">
       <button class="btn btn-secondary" onclick="fermer()">Annuler</button>
-      <button class="btn btn-primary" id="btnSave" onclick="sauver()">💾 Enregistrer</button>
+      <button class="btn btn-primary" id="btnSave" onclick="sauver()"><i class="ph ph-floppy-disk" aria-hidden="true"></i> Enregistrer</button>
     </div>
   </div>
 </div>
 
 <script>
 function ap(data){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(data)}).then(r=>r.json());}
-function toast(msg,type='success'){const t=document.createElement('div');t.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.15);background:${type==='success'?'#27ae60':'#e74c3c'};color:white;max-width:380px`;t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),3500);}
+function toast(msg,type='success'){let t=document.getElementById('toast-live');if(!t){t=document.createElement('div');t.id='toast-live';t.setAttribute('role','status');t.setAttribute('aria-live','polite');t.setAttribute('aria-atomic','true');document.body.appendChild(t);}clearTimeout(t._hideTimer);t.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:10px;font-size:13px;font-weight:600;box-shadow:0 4px 16px rgba(0,0,0,.15);background:${type==='success'?'#27ae60':'#e74c3c'};color:white;max-width:380px`;t.textContent=msg;t._hideTimer=setTimeout(()=>{t.style.display='none';},3500);}
 
 function getSite(){const el=document.getElementById('fSite');return el.tagName==='SELECT'?el.value:(el.value||el.getAttribute('value'));}
 

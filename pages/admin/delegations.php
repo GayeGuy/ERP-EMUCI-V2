@@ -11,6 +11,7 @@ require_auth();
 
 $user      = current_user();
 $role_slug = $user['role_slug'] ?? '';
+$is_admin_role = in_array($role_slug, ['admin', 'superadmin'], true);
 $page_title  = 'Délégations';
 $active_page = 'delegations';
 
@@ -55,6 +56,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             json_response(true, "Délégation retirée.");
         }
     }
+
+    // ── Responsables des sessions d'inventaire (n° 19 réunion ERP) —
+    //    module réservé à l'admin/superadmin, délégable à n'importe quel
+    //    utilisateur actif (pas seulement Gestionnaire Opération). Table
+    //    delegations réutilisée, sans le filtre de rôle du bloc ci-dessus ;
+    //    une action séparée pour ne pas fragiliser la délégation existante.
+    if ($action === 'ajouter_responsable_session') {
+        if (!$is_admin_role) json_response(false, 'Accès réservé aux administrateurs.');
+        $cible_id = (int)($_POST['user_id'] ?? 0);
+        $cible = db_fetch_one("SELECT id, CONCAT(prenom,' ',nom) AS nom FROM users WHERE id=? AND actif=1", [$cible_id]);
+        if (!$cible) json_response(false, 'Utilisateur introuvable.');
+        db_query("INSERT INTO delegations (superviseur_id, gestionnaire_id, module, libelle, actif) VALUES (?,?,?,?,1)
+                  ON DUPLICATE KEY UPDATE actif=1",
+            [$user['id'], $cible_id, 'inventaire_sessions', 'Responsable sessions inventaire']);
+        json_response(true, "{$cible['nom']} peut maintenant ouvrir et clôturer des sessions d'inventaire.");
+    }
+
+    if ($action === 'retirer_responsable_session') {
+        if (!$is_admin_role) json_response(false, 'Accès réservé aux administrateurs.');
+        $cible_id = (int)($_POST['user_id'] ?? 0);
+        // Pas de filtre sur superviseur_id : la liste des responsables est
+        // partagée entre admins, n'importe lequel peut retirer un accès
+        // qu'un autre a accordé.
+        db_query("UPDATE delegations SET actif=0 WHERE gestionnaire_id=? AND module='inventaire_sessions'", [$cible_id]);
+        json_response(true, 'Accès retiré.');
+    }
+
     json_response(false, 'Action inconnue.');
 }
 
@@ -77,6 +105,29 @@ foreach ($delegations_actives as $d) {
     $deleg_map[$d['gestionnaire_id']][$d['module']] = true;
 }
 
+// Responsables des sessions d'inventaire — visible seulement des admins
+$responsables_session = [];
+$utilisateurs_delegables = [];
+if ($is_admin_role) {
+    $responsables_session = db_fetch_all(
+        "SELECT u.id, u.prenom, u.nom, r.nom AS role_nom
+         FROM delegations d
+         JOIN users u ON u.id = d.gestionnaire_id
+         JOIN roles r ON r.id = u.role_id
+         WHERE d.module = 'inventaire_sessions' AND d.actif = 1 AND u.actif = 1
+         ORDER BY u.nom"
+    );
+    $deja_delegue = array_column($responsables_session, 'id');
+    $utilisateurs_delegables = db_fetch_all(
+        "SELECT u.id, u.prenom, u.nom, r.nom AS role_nom
+         FROM users u JOIN roles r ON r.id = u.role_id
+         WHERE u.actif = 1 AND u.id != ?
+         " . (!empty($deja_delegue) ? "AND u.id NOT IN (" . implode(',', array_map('intval', $deja_delegue)) . ")" : "") . "
+         ORDER BY u.nom",
+        [$user['id']]
+    );
+}
+
 include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
@@ -89,7 +140,7 @@ include __DIR__ . '/../../templates/header.php';
    restaient invisibles. */
 .deleg-avatar{width:40px;height:40px;border-radius:50%;background:var(--navy,#1E2B4A);display:flex;align-items:center;justify-content:center;font-weight:800;color:white;font-size:15px}
 .deleg-name{color:white;font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700}
-.deleg-site{color:#94c2d4;font-size:11px;margin-top:2px}
+.deleg-site{color:#94c2d4;font-size:12px;margin-top:2px}
 .deleg-body{padding:16px 20px}
 .task-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)}
 .task-row:last-child{border-bottom:none}
@@ -103,13 +154,13 @@ include __DIR__ . '/../../templates/header.php';
 </style>
 
 <div style="margin-bottom:20px">
-  <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">🔗 Gestion des Délégations</h2>
+  <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)"><i class="ph ph-link" aria-hidden="true"></i> Gestion des Délégations</h2>
   <p style="font-size:13px;color:var(--muted);margin-top:4px">Attribuez des tâches à votre Gestionnaire Opération. Les modifications prennent effet immédiatement.</p>
 </div>
 
 <?php if(empty($gestionnaires)): ?>
 <div class="card"><div class="card-body" style="text-align:center;padding:60px;color:var(--muted)">
-  <div style="font-size:48px;margin-bottom:16px">👤</div>
+  <div style="font-size:48px;margin-bottom:16px"><i class="ph ph-user" aria-hidden="true"></i></div>
   <div style="font-size:15px;font-weight:600;margin-bottom:8px">Aucun Gestionnaire Opération actif</div>
   <div style="font-size:13px">Créez un compte avec le profil "Gestionnaire Opération" depuis l'administration.</div>
 </div></div>
@@ -147,14 +198,79 @@ include __DIR__ . '/../../templates/header.php';
 </div>
 <?php endif; ?>
 
+<?php if ($is_admin_role): ?>
+<div style="margin-top:36px">
+  <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)"><i class="ph ph-clipboard-text" aria-hidden="true"></i> Responsables des sessions d'inventaire</h2>
+  <p style="font-size:13px;color:var(--muted);margin-top:4px">
+    Par défaut, seul un administrateur peut ouvrir et clôturer une session d'inventaire mensuel.
+    Déléguez ce droit à la personne de votre choix, quel que soit son profil.
+  </p>
+</div>
+<div class="card" style="margin-top:14px">
+  <div class="card-body">
+    <div style="display:flex;gap:10px;align-items:flex-end;margin-bottom:18px;flex-wrap:wrap">
+      <div class="form-group" style="flex:1;min-width:220px;margin-bottom:0">
+        <label for="selResponsable">Ajouter un responsable</label>
+        <select class="form-control" id="selResponsable">
+          <option value="">— Choisir un utilisateur —</option>
+          <?php foreach ($utilisateurs_delegables as $u): ?>
+          <option value="<?= $u['id'] ?>"><?= h($u['prenom'].' '.$u['nom']) ?> — <?= h($u['role_nom']) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="ajouterResponsable()">+ Déléguer</button>
+    </div>
+
+    <?php if (empty($responsables_session)): ?>
+    <p style="font-size:13px;color:var(--muted);text-align:center;padding:20px 0">Aucune délégation active — seuls les administrateurs peuvent gérer les sessions.</p>
+    <?php else: ?>
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="border-bottom:1.5px solid var(--border)">
+        <th style="text-align:left;padding:8px 10px;font-size:12px;color:var(--muted);text-transform:uppercase">Utilisateur</th>
+        <th style="text-align:left;padding:8px 10px;font-size:12px;color:var(--muted);text-transform:uppercase">Profil</th>
+        <th style="width:80px"></th>
+      </tr></thead>
+      <tbody id="tblResponsables">
+        <?php foreach ($responsables_session as $r): ?>
+        <tr id="resp-row-<?= $r['id'] ?>" style="border-bottom:1px solid var(--border)">
+          <td style="padding:9px 10px;font-weight:600"><?= h($r['prenom'].' '.$r['nom']) ?></td>
+          <td style="padding:9px 10px;font-size:13px;color:var(--muted)"><?= h($r['role_nom']) ?></td>
+          <td style="padding:9px 10px;text-align:right">
+            <button class="btn btn-secondary btn-sm" onclick="retirerResponsable(<?= $r['id'] ?>)">Retirer</button>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+    <?php endif; ?>
+  </div>
+</div>
+<?php endif; ?>
+
 <script>
 function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
-function toast(m,t='success'){const el=document.createElement('div');el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white;box-shadow:0 4px 20px rgba(0,0,0,.15)`;el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),3000);}
+function toast(m,t='success'){let el=document.getElementById('toast-live');if(!el){el=document.createElement('div');el.id='toast-live';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.setAttribute('aria-atomic','true');document.body.appendChild(el);}clearTimeout(el._hideTimer);el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white;box-shadow:0 4px 20px rgba(0,0,0,.15)`;el.textContent=m;el._hideTimer=setTimeout(()=>{el.style.display='none';},3000);}
 
 function toggle(gestId, module, actif) {
   ap({action:'toggle', gestionnaire_id:gestId, module, actif:actif?1:0}).then(d=>{
     if(d.success) toast(d.message);
     else { toast(d.message,'error'); location.reload(); }
+  });
+}
+
+function ajouterResponsable(){
+  const sel = document.getElementById('selResponsable');
+  if(!sel.value){toast('Choisissez un utilisateur.','error');return;}
+  ap({action:'ajouter_responsable_session', user_id:sel.value}).then(d=>{
+    toast(d.message, d.success?'success':'error');
+    if(d.success) setTimeout(()=>location.reload(), 600);
+  });
+}
+function retirerResponsable(userId){
+  if(!confirm('Retirer ce responsable des sessions d\'inventaire ?')) return;
+  ap({action:'retirer_responsable_session', user_id:userId}).then(d=>{
+    toast(d.message, d.success?'success':'error');
+    if(d.success){ const row=document.getElementById('resp-row-'+userId); if(row) row.remove(); }
   });
 }
 </script>

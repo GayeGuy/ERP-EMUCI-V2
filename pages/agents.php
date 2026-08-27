@@ -254,8 +254,6 @@ $f_statut = trim($_GET['statut'] ?? '');
 $where  = [];
 $params = [];
 if ($f_q !== '') {
-    // MySQL : LIKE est insensible à la casse avec la collation par défaut
-    // utf8mb4_unicode_ci — équivalent du ILIKE PostgreSQL.
     $where[]  = "(nom LIKE ? OR prenom LIKE ? OR COALESCE(matricule,'') LIKE ? OR COALESCE(email,'') LIKE ?)";
     $like     = "%$f_q%";
     array_push($params, $like, $like, $like, $like);
@@ -291,7 +289,7 @@ include __DIR__ . '/../templates/header.php';
 .ag-page  { padding: 24px; max-width: 1400px; margin: 0 auto; }
 .ag-head  { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; justify-content: space-between; }
 .ag-head-l{ display: flex; align-items: center; gap: 12px; }
-.ag-head h1{ font-size: 22px; font-weight: 800; color: var(--navy); margin: 0; }
+.ag-head h2{ font-size: 22px; font-weight: 800; color: var(--navy); margin: 0; }
 .ag-head p { margin: 0; font-size: 13px; color: var(--muted); }
 
 /* KPIs */
@@ -306,7 +304,7 @@ include __DIR__ . '/../templates/header.php';
 /* Filtres */
 .ag-filters { background: white; border: 1px solid var(--border); border-radius: 12px;
               padding: 14px 18px; margin-bottom: 18px; display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; }
-.ag-filters label { font-size: 11px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 4px;
+.ag-filters label { font-size: 12px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 4px;
                     text-transform: uppercase; letter-spacing: .5px; }
 .ag-filters input, .ag-filters select { border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
                                         font-size: 13px; background: #f8fafc; font-family: inherit; }
@@ -325,12 +323,12 @@ include __DIR__ . '/../templates/header.php';
 .ag-scroll { overflow-x: auto; max-height: 268px; overflow-y: auto; }
 .ag-table  { width: 100%; border-collapse: collapse; font-size: 13px; }
 .ag-table thead th { background: var(--navy); color: white; padding: 9px 12px; text-align: left;
-                     font-size: 11px; font-weight: 700; white-space: nowrap;
+                     font-size: 12px; font-weight: 700; white-space: nowrap;
                      position: sticky; top: 0; z-index: 1; }
 .ag-table tbody tr:nth-child(even) td { background: #f8fafc; }
 .ag-table tbody tr:hover td { background: #EFF6FF; }
 .ag-table td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
-.ag-badge    { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.ag-badge    { display: inline-block; padding: 3px 9px; border-radius: 20px; font-size: 12px; font-weight: 700; }
 .ag-actif    { background: #D1FAE5; color: #065F46; }
 .ag-inactif  { background: #FEE2E2; color: #991B1B; }
 .ag-empty    { text-align: center; padding: 48px 20px; color: var(--muted); }
@@ -404,7 +402,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="ag-head-l">
       <i class="ph ph-users" style="font-size:28px;color:#1B75BC"></i>
       <div>
-        <h1>Annuaire des agents</h1>
+        <h2>Annuaire des agents</h2>
         <p>Référentiel NSIIV — utilisé pour l'autofill des demandes internes</p>
       </div>
     </div>
@@ -612,45 +610,45 @@ include __DIR__ . '/../templates/header.php';
       <input type="hidden" name="agent_id" id="ed-id">
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;margin-bottom:14px">
         <div>
-          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Matricule</label>
+          <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Matricule</label>
           <input type="text" name="matricule" id="ed-matricule" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
         </div>
         <div>
-          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Statut</label>
+          <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Statut</label>
           <select name="statut" id="ed-statut" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
             <option value="actif">Actif</option>
             <option value="inactif">Inactif</option>
           </select>
         </div>
         <div>
-          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Nom *</label>
+          <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Nom *</label>
           <input type="text" name="nom" id="ed-nom" required
                  style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;text-transform:uppercase"
                  oninput="this.value=this.value.toUpperCase()">
         </div>
         <div>
-          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Prénom *</label>
+          <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Prénom *</label>
           <input type="text" name="prenom" id="ed-prenom" required
                  style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;text-transform:uppercase"
                  oninput="this.value=this.value.toUpperCase()">
         </div>
         <div>
-          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Email *</label>
+          <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Email *</label>
           <input type="email" name="email" id="ed-email" required style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
         </div>
         <div>
-          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Téléphone</label>
+          <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Téléphone</label>
           <input type="tel" name="telephone" id="ed-telephone" inputmode="numeric" pattern="[0-9]{10}" maxlength="10"
                  placeholder="10 chiffres" title="10 chiffres, sans espace ni lettre"
                  style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit"
                  oninput="this.value=this.value.replace(/\D/g,'').slice(0,10)">
         </div>
         <div>
-          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Fonction</label>
+          <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Fonction</label>
           <input type="text" name="fonction" id="ed-fonction" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
         </div>
         <div>
-          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Département</label>
+          <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Département</label>
           <input type="text" name="departement" id="ed-departement" list="dl-departement" autocomplete="off"
                  style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
           <datalist id="dl-departement">
@@ -658,7 +656,7 @@ include __DIR__ . '/../templates/header.php';
           </datalist>
         </div>
         <div>
-          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Direction</label>
+          <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Direction</label>
           <input type="text" name="direction" id="ed-direction" list="dl-direction" autocomplete="off"
                  style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
           <datalist id="dl-direction">
@@ -666,7 +664,7 @@ include __DIR__ . '/../templates/header.php';
           </datalist>
         </div>
         <div>
-          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Site</label>
+          <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Site</label>
           <input type="text" name="site" id="ed-site" list="dl-site" autocomplete="off"
                  style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
           <datalist id="dl-site">
@@ -674,7 +672,7 @@ include __DIR__ . '/../templates/header.php';
           </datalist>
         </div>
         <div>
-          <label style="font-size:11px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Grade</label>
+          <label style="font-size:12px;font-weight:600;color:var(--muted);display:block;margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px">Grade</label>
           <select name="grade" id="ed-grade" style="width:100%;border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit">
             <option value="">— Choisir —</option>
             <option value="CDI">CDI</option>

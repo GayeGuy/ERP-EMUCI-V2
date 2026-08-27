@@ -97,11 +97,11 @@ include __DIR__ . '/../templates/header.php';
   .dt-card.off{opacity:.6}
   .dt-card .head{display:flex;justify-content:space-between;align-items:start;gap:12px}
   .dt-card h4{margin:0 0 3px;font-size:15px}
-  .dt-code{font-size:11px;color:var(--muted,#7f8c8d);font-family:monospace}
+  .dt-code{font-size:12px;color:var(--muted,#7f8c8d);font-family:monospace}
   .dt-chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;align-items:center}
   .dt-chip{font-size:12px;font-weight:600;padding:4px 10px;border-radius:9px;background:#eef1fc;color:#3B4FBE}
   .dt-arrow{color:#cbd5e1;font-weight:700}
-  .dt-tag{font-size:10px;font-weight:700;padding:2px 8px;border-radius:8px}
+  .dt-tag{font-size:12px;font-weight:700;padding:2px 8px;border-radius:8px}
   .dt-tag.it{background:#e8f8f5;color:#16a085}
   .dt-tag.gen{background:#fef9e7;color:#e67e22}
   .dt-acts{display:flex;gap:8px;align-items:center;flex-shrink:0}
@@ -155,7 +155,7 @@ include __DIR__ . '/../templates/header.php';
               <?php if ($i): ?><span class="dt-arrow">→</span><?php endif; ?>
               <span class="dt-chip"><?= h($s['label']) ?></span>
             <?php endforeach; ?>
-            <?php if (!$steps): ?><span style="color:#e74c3c;font-size:12px">⚠ aucun circuit défini</span><?php endif; ?>
+            <?php if (!$steps): ?><span style="color:#e74c3c;font-size:12px"><i class="ph ph-warning" aria-hidden="true"></i> aucun circuit défini</span><?php endif; ?>
           </div>
         </div>
         <div class="dt-acts">
@@ -182,7 +182,7 @@ include __DIR__ . '/../templates/header.php';
     <div class="dt-field">
       <label>Code (identifiant unique)</label>
       <input id="dt-code" placeholder="ex: demande_materiel">
-      <div id="dt-code-hint" style="font-size:11px;color:#7f8c8d;margin-top:3px;display:none">Le code ne peut pas être modifié.</div>
+      <div id="dt-code-hint" style="font-size:12px;color:#7f8c8d;margin-top:3px;display:none">Le code ne peut pas être modifié.</div>
     </div>
     <div class="dt-field"><label>Libellé affiché</label><input id="dt-label" placeholder="ex: Demande de matériel"></div>
     <div class="dt-field"><label>Description</label><textarea id="dt-desc" rows="2"></textarea></div>

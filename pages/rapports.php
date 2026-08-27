@@ -33,7 +33,7 @@ $kpi = [
     'equip_neuf'     => (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND etat='neuf'"),
     'fin_cycle_30j'  => (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle BETWEEN CURRENT_DATE AND (CURRENT_DATE + INTERVAL 30 DAY)"),
     'fin_cycle_exp'  => (int)db_fetch_value("SELECT COUNT(*) FROM equipements WHERE actif=1 AND date_fin_cycle < CURRENT_DATE"),
-    'conso_alertes'  => (int)db_fetch_value("SELECT COUNT(*) FROM consommables WHERE stock_global<=seuil_alerte"),
+    'conso_alertes'  => (int)db_fetch_value("SELECT COUNT(*) FROM articles WHERE stock_global<=seuil_alerte"),
 ];
 
 // ── CONSOMMATION PAR PÉRIODE & SITE
@@ -42,7 +42,7 @@ $conso_global = db_fetch_all(
     "SELECT c.code, c.libelle, c.unite,
             COALESCE(SUM(lc.quantite),0) AS total_periode,
             COALESCE(SUM(CASE WHEN MONTH(lc.date_livraison)=MONTH(CURRENT_DATE) AND YEAR(lc.date_livraison)=YEAR(CURRENT_DATE) THEN lc.quantite ELSE 0 END),0) AS total_mois
-     FROM consommables c
+     FROM articles c
      LEFT JOIN livraisons_consommables lc ON lc.consommable_id=c.id
          AND lc.date_livraison BETWEEN ? AND ? $conso_where
      GROUP BY c.id ORDER BY total_periode DESC",
@@ -69,17 +69,6 @@ $conso_par_site = db_fetch_all(
     [$date_debut, $date_fin]
 );
 
-// ── CONSOMMATION PAR CONSOMMABLE PAR SITE (matrice)
-$matrice_consos = db_fetch_all(
-    "SELECT c.libelle AS conso, s.nom AS site, SUM(lc.quantite) AS total
-     FROM livraisons_consommables lc
-     JOIN consommables c ON c.id=lc.consommable_id
-     JOIN sites s ON s.id=lc.site_id
-     WHERE lc.date_livraison BETWEEN ? AND ?
-     GROUP BY c.id, s.id ORDER BY c.libelle, total DESC",
-    [$date_debut, $date_fin]
-);
-
 // ── ÉQUIPEMENTS : état par site
 $equip_etat_site = db_fetch_all(
     "SELECT s.nom AS site,
@@ -103,11 +92,11 @@ $mouvements_mois = db_fetch_all(
 
 // ── TOP ÉQUIPEMENTS PROCHES FIN DE CYCLE
 $fin_cycle_soon = db_fetch_all(
-    "SELECT e.numero_serie_interne, n.libelle AS type, s.nom AS site,
+    "SELECT e.numero_serie_interne, COALESCE(n.libelle,'—') AS type, s.nom AS site,
             e.date_fin_cycle,
             DATEDIFF(e.date_fin_cycle, CURRENT_DATE) AS jours
      FROM equipements e
-     JOIN nomenclatures n ON n.id=e.nomenclature_id
+     LEFT JOIN nomenclatures n ON n.id=e.nomenclature_id
      LEFT JOIN sites s ON s.id=e.site_id
      WHERE e.actif=1 AND e.date_fin_cycle IS NOT NULL
        AND e.date_fin_cycle <= (CURRENT_DATE + INTERVAL 90 DAY)
@@ -197,7 +186,7 @@ $detail_article_site = db_fetch_all(
             COALESCE(AVG(lc.prix_unitaire),0) AS prix_unit_moy,
             COALESCE(SUM(lc.prix_total),0) AS cout_total
      FROM livraisons_consommables lc
-     JOIN consommables c ON c.id=lc.consommable_id
+     JOIN articles c ON c.id=lc.consommable_id
      JOIN sites s ON s.id=lc.site_id
      WHERE lc.date_livraison BETWEEN ? AND ?
        AND lc.prix_total > 0 $csite_where
@@ -229,7 +218,7 @@ $bilan_mois_cur = db_fetch_all(
             COALESCE(SUM(lc.prix_total),0)    AS cout_total
      FROM livraisons_consommables lc
      JOIN sites s ON s.id=lc.site_id
-     JOIN consommables c ON c.id=lc.consommable_id
+     JOIN articles c ON c.id=lc.consommable_id
      WHERE YEAR(lc.date_livraison)=YEAR(CURRENT_DATE)
        AND MONTH(lc.date_livraison)=MONTH(CURRENT_DATE)
        AND lc.prix_total > 0
@@ -302,9 +291,9 @@ include __DIR__ . '/../templates/header.php';
 .rkpi{background:white;border:1px solid var(--border);border-radius:12px;padding:16px 18px;text-align:center}
 .rkpi .rv{font-family:'Montserrat',sans-serif;font-size:28px;font-weight:800;color:var(--navy)}
 .rkpi .rl{font-size:11.5px;color:var(--muted);margin-top:4px}
-.rkpi.danger .rv{color:var(--danger)}
-.rkpi.warning .rv{color:var(--warning)}
-.rkpi.success .rv{color:var(--success)}
+.rkpi.danger .rv{color:var(--danger-d)}
+.rkpi.warning .rv{color:var(--warning-d)}
+.rkpi.success .rv{color:var(--success-d)}
 
 .rapport-grid{display:grid;gap:20px;margin-bottom:20px}
 .rapport-grid.c2{grid-template-columns:1fr 1fr}
@@ -318,7 +307,7 @@ include __DIR__ . '/../templates/header.php';
 
 /* TABLE MATRICE */
 .matrice-table{font-size:12px}
-.matrice-table th{background:var(--navy);color:white;padding:7px 10px;font-size:10px;white-space:nowrap}
+.matrice-table th{background:var(--navy);color:white;padding:7px 10px;font-size:12px;white-space:nowrap}
 .matrice-table td{padding:6px 10px;border:1px solid var(--border);text-align:right}
 .matrice-table td.site-name{text-align:left;font-weight:500;background:var(--lighter)}
 
@@ -326,10 +315,10 @@ include __DIR__ . '/../templates/header.php';
 .fc-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:12.5px}
 .fc-row:last-child{border-bottom:none}
 .fc-row-wide{padding:12px 0;font-size:13.5px}
-.fc-badge{font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;flex-shrink:0}
-.fc-badge.exp{background:#fdf0ef;color:var(--danger)}
-.fc-badge.soon{background:#fef9e7;color:var(--warning)}
-.fc-badge.ok{background:#eafaf1;color:var(--success)}
+.fc-badge{font-size:12px;font-weight:700;padding:2px 7px;border-radius:5px;flex-shrink:0}
+.fc-badge.exp{background:#fdf0ef;color:var(--danger-d)}
+.fc-badge.soon{background:#fef9e7;color:var(--warning-d)}
+.fc-badge.ok{background:#eafaf1;color:var(--success-d)}
 
 /* ── COÛTS FCFA ── */
 .cout-kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
@@ -338,9 +327,9 @@ include __DIR__ . '/../templates/header.php';
 .cout-kpi.green::before{background:var(--success,#27ae60)}
 .cout-kpi.orange::before{background:var(--warning,#f39c12)}
 .cout-kpi.red::before{background:var(--danger,#e74c3c)}
-.cout-kpi .ck-label{font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:500;text-transform:uppercase;letter-spacing:.4px}
+.cout-kpi .ck-label{font-size:12px;color:var(--muted);margin-bottom:4px;font-weight:500;text-transform:uppercase;letter-spacing:.4px}
 .cout-kpi .ck-val{font-family:'Montserrat',sans-serif;font-size:20px;font-weight:800;color:var(--navy);line-height:1.1}
-.cout-kpi .ck-sub{font-size:11px;color:var(--muted);margin-top:4px}
+.cout-kpi .ck-sub{font-size:12px;color:var(--muted);margin-top:4px}
 
 .site-cout-bar{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);font-size:13px}
 .site-cout-bar:last-child{border-bottom:none}
@@ -348,7 +337,7 @@ include __DIR__ . '/../templates/header.php';
 .site-cout-bar .scb-bar{flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden}
 .site-cout-bar .scb-fill{height:100%;border-radius:4px;background:var(--blue-mid,#1a56a0)}
 .site-cout-bar .scb-val{min-width:110px;text-align:right;font-family:'Montserrat',sans-serif;font-weight:700;font-size:13px;color:var(--navy)}
-.site-cout-bar .scb-pct{min-width:40px;text-align:right;font-size:11px;color:var(--muted)}
+.site-cout-bar .scb-pct{min-width:40px;text-align:right;font-size:12px;color:var(--muted)}
 
 .bilan-section{margin-bottom:16px}
 .bilan-site-hdr{display:flex;justify-content:space-between;align-items:center;background:var(--navy);color:white;padding:9px 14px;border-radius:8px 8px 0 0;font-size:13px;font-weight:700;cursor:pointer}
@@ -356,7 +345,7 @@ include __DIR__ . '/../templates/header.php';
 .bilan-site-body{border:1px solid var(--border);border-top:none;border-radius:0 0 8px 8px;overflow:hidden}
 .bilan-site-body table{width:100%;border-collapse:collapse;font-size:12.5px}
 .bilan-site-body thead tr{background:var(--lighter,#f8fafc)}
-.bilan-site-body th{padding:7px 12px;text-align:left;font-size:11px;font-weight:700;color:var(--muted);border-bottom:1px solid var(--border)}
+.bilan-site-body th{padding:7px 12px;text-align:left;font-size:12px;font-weight:700;color:var(--muted);border-bottom:1px solid var(--border)}
 .bilan-site-body td{padding:7px 12px;border-bottom:1px solid var(--border)}
 .bilan-site-body tr:last-child td{border-bottom:none}
 .bilan-site-body tr:hover{background:var(--lighter,#f8fafc)}
@@ -370,26 +359,26 @@ include __DIR__ . '/../templates/header.php';
 
 @media(max-width:1000px){
   .rapport-kpi{grid-template-columns:repeat(2,1fr)}
-  .rapport-grid.c2,.rapport-grid.c32,.rapport-grid.c23{grid-template-columns:1fr}
+  .rapport-grid.c2,.rapport-grid.c32,.rapport-grid.c23{grid-template-columns:minmax(0,1fr)}
 }
 </style>
 
 <!-- FILTRES -->
 <form method="GET" class="filter-bar">
   <label>Période :</label>
-  <select name="annee" class="fsel" onchange="this.form.submit()">
+  <select name="annee" class="fsel" aria-label="Filtrer par année" onchange="this.form.submit()">
     <?php foreach(array_merge([['a'=>date('Y')],['a'=>date('Y')-1],['a'=>date('Y')-2]],$annees_dispo) as $a):
       $av=(int)$a['a']; if($av<2020)continue; ?>
     <option value="<?= $av ?>" <?= $annee===$av?'selected':'' ?>><?= $av ?></option>
     <?php endforeach; ?>
   </select>
-  <select name="mois" class="fsel" onchange="this.form.submit()">
+  <select name="mois" class="fsel" aria-label="Filtrer par mois" onchange="this.form.submit()">
     <option value="0" <?= !$mois?'selected':'' ?>>Toute l'année</option>
     <?php foreach(['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre'] as $i=>$m): ?>
     <option value="<?= $i+1 ?>" <?= $mois===$i+1?'selected':'' ?>><?= $m ?></option>
     <?php endforeach; ?>
   </select>
-  <select name="site" class="fsel" onchange="this.form.submit()">
+  <select name="site" class="fsel" aria-label="Filtrer par site" onchange="this.form.submit()">
     <option value="0">Tous les sites</option>
     <?php foreach($sites_list as $s): ?>
     <option value="<?= $s['id'] ?>" <?= $f_site===$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
@@ -400,12 +389,12 @@ include __DIR__ . '/../templates/header.php';
   </span>
   <?php if(can('rapports','can_export')): ?>
   <div style="display:flex;gap:6px">
-    <a href="<?= APP_URL ?>/api/export.php?type=equipements" class="btn btn-secondary btn-sm">📥 Équipements</a>
-    <a href="<?= APP_URL ?>/api/export.php?type=livraisons"  class="btn btn-secondary btn-sm">📥 Livraisons</a>
-    <a href="<?= APP_URL ?>/api/export.php?type=consommables" class="btn btn-secondary btn-sm">📥 Consommables</a>
-    <a href="<?= APP_URL ?>/api/export.php?type=couts_sites&annee=<?= $annee ?>&mois=<?= $mois ?>&site=<?= $f_site ?>" class="btn btn-secondary btn-sm">💰 Coûts sites</a>
+    <a href="<?= APP_URL ?>/api/export.php?type=equipements" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Équipements</a>
+    <a href="<?= APP_URL ?>/api/export.php?type=livraisons"  class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Livraisons</a>
+    <a href="<?= APP_URL ?>/api/export.php?type=consommables" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Consommables</a>
+    <a href="<?= APP_URL ?>/api/export.php?type=couts_sites&annee=<?= $annee ?>&mois=<?= $mois ?>&site=<?= $f_site ?>" class="btn btn-secondary btn-sm"><i class="ph ph-currency-circle-dollar" aria-hidden="true"></i> Coûts sites</a>
     <?php if(can('audit','can_export')): ?>
-    <a href="<?= APP_URL ?>/api/export.php?type=audit" class="btn btn-secondary btn-sm">📥 Audit</a>
+    <a href="<?= APP_URL ?>/api/export.php?type=audit" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Audit</a>
     <?php endif; ?>
   </div>
   <?php endif; ?>
@@ -434,11 +423,11 @@ include __DIR__ . '/../templates/header.php';
 <!-- CHARTS ROW 1 -->
 <div class="rapport-grid c32" style="margin-bottom:20px">
   <div class="r-card">
-    <div class="r-card-hdr"><h3>📈 Consommation mensuelle — 12 mois glissants</h3></div>
+    <div class="r-card-hdr"><h3><i class="ph ph-chart-line-up" aria-hidden="true"></i> Consommation mensuelle — 12 mois glissants</h3></div>
     <div class="r-card-body"><canvas id="chartM12" height="180"></canvas></div>
   </div>
   <div class="r-card">
-    <div class="r-card-hdr"><h3>🏢 Consommation par site (période)</h3></div>
+    <div class="r-card-hdr"><h3><i class="ph ph-buildings" aria-hidden="true"></i> Consommation par site (période)</h3></div>
     <div class="r-card-body">
       <?php if(empty($conso_par_site)||!array_sum(array_column($conso_par_site,'total'))): ?>
       <div style="text-align:center;color:var(--muted);padding:40px 0;font-size:13px">Aucune donnée pour la période.</div>
@@ -452,9 +441,9 @@ include __DIR__ . '/../templates/header.php';
 <!-- CONSOMMATION PAR CONSOMMABLE -->
 <div class="r-card" style="margin-bottom:20px">
   <div class="r-card-hdr">
-    <h3>🧴 Consommation par produit (période : <?= fmt_date($date_debut) ?> → <?= fmt_date($date_fin) ?>)</h3>
+    <h3><i class="ph ph-flask" aria-hidden="true"></i> Consommation par produit (période : <?= fmt_date($date_debut) ?> → <?= fmt_date($date_fin) ?>)</h3>
     <?php if(can('rapports','can_export')): ?>
-    <a href="<?= APP_URL ?>/api/export.php?type=livraisons" class="btn btn-secondary btn-sm">📥 Excel</a>
+    <a href="<?= APP_URL ?>/api/export.php?type=livraisons" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Excel</a>
     <?php endif; ?>
   </div>
   <div class="table-wrap">
@@ -489,15 +478,15 @@ include __DIR__ . '/../templates/header.php';
 
 <!-- ÉTAT ÉQUIPEMENTS PAR SITE -->
 <div class="r-card" style="margin-bottom:20px;overflow:hidden">
-  <div class="r-card-hdr"><h3>💻 État des équipements par site</h3></div>
+  <div class="r-card-hdr"><h3><i class="ph ph-desktop" aria-hidden="true"></i> État des équipements par site</h3></div>
   <div class="table-wrap" style="overflow-x:auto">
     <table>
       <thead><tr>
         <th>Site</th>
-        <th style="text-align:center">🟢 Neuf</th>
-        <th style="text-align:center">🔵 Bon</th>
-        <th style="text-align:center">🟡 Usagé</th>
-        <th style="text-align:center">🔴 H.S.</th>
+        <th style="text-align:center"><i class="ph ph-circle" aria-hidden="true"></i> Neuf</th>
+        <th style="text-align:center"><i class="ph ph-circle" aria-hidden="true"></i> Bon</th>
+        <th style="text-align:center"><i class="ph ph-circle" aria-hidden="true"></i> Usagé</th>
+        <th style="text-align:center"><i class="ph ph-circle" aria-hidden="true"></i> H.S.</th>
         <th style="text-align:center">Total</th>
         <th>Répartition</th>
       </tr></thead>
@@ -511,10 +500,10 @@ include __DIR__ . '/../templates/header.php';
       ?>
         <tr>
           <td style="font-size:13px;font-weight:500"><?= h($s['site']) ?></td>
-          <td style="text-align:center;color:var(--success);font-weight:700"><?= $s['neuf'] ?></td>
-          <td style="text-align:center;color:var(--info);font-weight:700"><?= $s['bon'] ?></td>
-          <td style="text-align:center;color:var(--warning);font-weight:700"><?= $s['usage_count'] ?></td>
-          <td style="text-align:center;color:var(--danger);font-weight:700"><?= $s['hs'] ?></td>
+          <td style="text-align:center;color:var(--success-d);font-weight:700"><?= $s['neuf'] ?></td>
+          <td style="text-align:center;color:var(--primary-d);font-weight:700"><?= $s['bon'] ?></td>
+          <td style="text-align:center;color:var(--warning-d);font-weight:700"><?= $s['usage_count'] ?></td>
+          <td style="text-align:center;color:var(--danger-d);font-weight:700"><?= $s['hs'] ?></td>
           <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:16px"><?= $s['total'] ?></td>
           <td style="width:150px">
             <div style="display:flex;height:8px;border-radius:4px;overflow:hidden">
@@ -537,12 +526,12 @@ include __DIR__ . '/../templates/header.php';
   <!-- FIN DE CYCLE -->
   <div class="r-card">
     <div class="r-card-hdr">
-      <h3>⚠️ Équipements — Fin de cycle (90j)</h3>
+      <h3><i class="ph ph-warning" aria-hidden="true"></i> Équipements — Fin de cycle (90j)</h3>
       <span style="font-size:12px;color:var(--muted)"><?= count($fin_cycle_soon) ?> équipement(s)</span>
     </div>
     <div class="r-card-body" style="padding:10px 18px">
       <?php if(empty($fin_cycle_soon)): ?>
-      <div style="text-align:center;padding:30px;color:var(--success)">✅ Aucun équipement en fin de cycle dans les 90 prochains jours.</div>
+      <div style="text-align:center;padding:30px;color:var(--success-d)"><i class="ph ph-check-circle" aria-hidden="true"></i> Aucun équipement en fin de cycle dans les 90 prochains jours.</div>
       <?php else: foreach($fin_cycle_soon as $f):
         $j=(int)$f['jours'];
         $cls=$j<0?'exp':($j<=30?'soon':'ok');
@@ -564,7 +553,7 @@ include __DIR__ . '/../templates/header.php';
   <?php if($show_activite): ?>
   <div class="r-card">
     <div class="r-card-hdr">
-      <h3>👥 Activité des utilisateurs (période)</h3>
+      <h3><i class="ph ph-users" aria-hidden="true"></i> Activité des utilisateurs (période)</h3>
     </div>
     <div class="r-card-body" style="padding:10px 18px">
       <?php if(empty($activite_users)): ?>
@@ -578,14 +567,14 @@ include __DIR__ . '/../templates/header.php';
         <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;margin-bottom:4px">
           <div>
             <strong><?= h($u['nom']) ?></strong>
-            <span style="font-size:11px;color:var(--muted);margin-left:6px"><?= h($u['role']) ?></span>
+            <span style="font-size:12px;color:var(--muted);margin-left:6px"><?= h($u['role']) ?></span>
           </div>
           <div style="font-family:'Montserrat',sans-serif;font-weight:800;color:var(--navy)"><?= $u['nb_actions'] ?></div>
         </div>
         <div style="height:5px;background:var(--border);border-radius:3px">
           <div style="width:<?= $pct ?>%;height:100%;background:var(--blue-mid, #1a56a0);border-radius:3px"></div>
         </div>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">Dernière action : <?= fmt_datetime($u['derniere_action']) ?></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px">Dernière action : <?= fmt_datetime($u['derniere_action']) ?></div>
       </div>
       <?php endforeach; endif; ?>
     </div>
@@ -599,7 +588,7 @@ include __DIR__ . '/../templates/header.php';
 <div style="margin:28px 0 10px;display:flex;align-items:center;gap:10px">
   <div style="flex:1;height:2px;background:linear-gradient(90deg,var(--navy),transparent)"></div>
   <h2 style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:var(--navy);white-space:nowrap;padding:0 10px">
-    💰 Coûts Consommables en FCFA
+    <i class="ph ph-currency-circle-dollar" aria-hidden="true"></i> Coûts Consommables en FCFA
   </h2>
   <div style="flex:1;height:2px;background:linear-gradient(270deg,var(--navy),transparent)"></div>
 </div>
@@ -635,16 +624,16 @@ include __DIR__ . '/../templates/header.php';
 <div class="rapport-grid c32" style="margin-bottom:20px">
   <div class="r-card">
     <div class="r-card-hdr">
-      <h3>📈 Évolution des coûts par site — 12 mois glissants (FCFA)</h3>
+      <h3><i class="ph ph-chart-line-up" aria-hidden="true"></i> Évolution des coûts par site — 12 mois glissants (FCFA)</h3>
     </div>
     <div class="r-card-body"><canvas id="chartCoutEvol" height="200"></canvas></div>
   </div>
 
   <div class="r-card">
     <div class="r-card-hdr">
-      <h3>🏢 Coût par site — période (FCFA)</h3>
+      <h3><i class="ph ph-buildings" aria-hidden="true"></i> Coût par site — période (FCFA)</h3>
       <?php if(can('rapports','can_export')): ?>
-      <a href="<?= APP_URL ?>/api/export.php?type=couts_sites&annee=<?= $annee ?>&mois=<?= $mois ?>&site=<?= $f_site ?>" class="btn btn-secondary btn-sm">📥 Excel</a>
+      <a href="<?= APP_URL ?>/api/export.php?type=couts_sites&annee=<?= $annee ?>&mois=<?= $mois ?>&site=<?= $f_site ?>" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Excel</a>
       <?php endif; ?>
     </div>
     <div class="r-card-body" style="padding:10px 18px">
@@ -674,7 +663,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- POINT HEBDOMADAIRE -->
 <div class="r-card" style="margin-bottom:20px">
   <div class="r-card-hdr">
-    <h3>📅 Point hebdomadaire — Semaine du <?= date('d/m',strtotime($debut_semaine_courante)) ?> au <?= date('d/m',strtotime($fin_semaine_courante)) ?></h3>
+    <h3><i class="ph ph-calendar" aria-hidden="true"></i> Point hebdomadaire — Semaine du <?= date('d/m',strtotime($debut_semaine_courante)) ?> au <?= date('d/m',strtotime($fin_semaine_courante)) ?></h3>
     <span style="font-size:12px;color:var(--muted);font-weight:600">
       Total : <?= number_format($kpi_cout_semaine,0,',',' ') ?> FCFA
     </span>
@@ -704,7 +693,7 @@ include __DIR__ . '/../templates/header.php';
               <div style="flex:1;height:6px;background:var(--border);border-radius:3px">
                 <div style="width:<?= $ph ?>%;height:100%;background:var(--blue-mid,#1a56a0);border-radius:3px"></div>
               </div>
-              <span style="font-size:11px;color:var(--muted);min-width:30px"><?= $ph ?>%</span>
+              <span style="font-size:12px;color:var(--muted);min-width:30px"><?= $ph ?>%</span>
             </div>
           </td>
         </tr>
@@ -726,9 +715,9 @@ include __DIR__ . '/../templates/header.php';
 <?php if(!empty($detail_article_site)): ?>
 <div class="r-card" style="margin-bottom:20px">
   <div class="r-card-hdr">
-    <h3>🧴 Détail coûts par article × site (période) — Top 60</h3>
+    <h3><i class="ph ph-flask" aria-hidden="true"></i> Détail coûts par article × site (période) — Top 60</h3>
     <?php if(can('rapports','can_export')): ?>
-    <a href="<?= APP_URL ?>/api/export.php?type=couts_sites&annee=<?= $annee ?>&mois=<?= $mois ?>&site=<?= $f_site ?>&detail=1" class="btn btn-secondary btn-sm">📥 Excel détail</a>
+    <a href="<?= APP_URL ?>/api/export.php?type=couts_sites&annee=<?= $annee ?>&mois=<?= $mois ?>&site=<?= $f_site ?>&detail=1" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Excel détail</a>
     <?php endif; ?>
   </div>
   <div class="table-wrap">
@@ -766,13 +755,13 @@ include __DIR__ . '/../templates/header.php';
 <!-- BILAN FIN DE MOIS PAR SITE -->
 <div class="r-card" style="margin-bottom:20px">
   <div class="r-card-hdr" style="justify-content:space-between">
-    <h3>📊 Bilan mensuel — <?= date('F Y') ?> (coût par site et par article)</h3>
+    <h3><i class="ph ph-chart-bar" aria-hidden="true"></i> Bilan mensuel — <?= date('F Y') ?> (coût par site et par article)</h3>
     <div style="display:flex;align-items:center;gap:10px">
       <span style="font-size:12px;font-weight:700;color:var(--navy)">
         Total mois : <?= number_format($kpi_cout_mois_cur,0,',',' ') ?> FCFA
       </span>
       <?php if(can('rapports','can_export')): ?>
-      <a href="<?= APP_URL ?>/api/export.php?type=bilan_mensuel&annee=<?= date('Y') ?>&mois=<?= date('n') ?>" class="btn btn-secondary btn-sm">📥 Excel bilan</a>
+      <a href="<?= APP_URL ?>/api/export.php?type=bilan_mensuel&annee=<?= date('Y') ?>&mois=<?= date('n') ?>" class="btn btn-secondary btn-sm"><i class="ph ph-download-simple" aria-hidden="true"></i> Excel bilan</a>
       <?php endif; ?>
     </div>
   </div>
@@ -784,7 +773,7 @@ include __DIR__ . '/../templates/header.php';
     <?php else: foreach($bilan_par_site as $site_nom => $data): ?>
     <div class="bilan-section">
       <div class="bilan-site-hdr" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-        <span>🏢 <?= h($site_nom) ?></span>
+        <span><i class="ph ph-buildings" aria-hidden="true"></i> <?= h($site_nom) ?></span>
         <span class="bsh-total"><?= number_format($data['total'],0,',',' ') ?> FCFA</span>
       </div>
       <div class="bilan-site-body">
@@ -801,7 +790,7 @@ include __DIR__ . '/../templates/header.php';
             $part = $data['total']>0?round($a['cout_total']/$data['total']*100,1):0;
           ?>
             <tr>
-              <td style="font-family:monospace;font-size:11px;color:var(--muted)"><?= h($a['code']) ?></td>
+              <td style="font-family:monospace;font-size:12px;color:var(--muted)"><?= h($a['code']) ?></td>
               <td style="font-weight:500"><?= h($a['article']) ?></td>
               <td style="color:var(--muted);font-size:12px"><?= $a['unite'] ?></td>
               <td style="text-align:right"><?= fmt_number($a['qte'],1) ?></td>

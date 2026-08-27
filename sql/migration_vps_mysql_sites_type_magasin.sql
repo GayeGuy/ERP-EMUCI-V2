@@ -1,0 +1,23 @@
+-- ============================================================
+--  sql/migration_vps_mysql_sites_type_magasin.sql
+-- ============================================================
+--
+--  Sur PostgreSQL (main), sites.type est un simple TEXT sans contrainte,
+--  valeurs en usage : 'magasin','mixte','pose','saisie','siege'. Le schema
+--  MySQL de ce fork le porte en ENUM('saisie','pose','mixte','caissier',
+--  'entrepot','siege') — sans 'magasin', qui est pourtant la valeur pivot
+--  de tout l'arbitrage stock/achat du module Achats (ach_stock_magasin(),
+--  includes/achats.php) : aucun site ne peut jamais valoir 'magasin' tant
+--  que ce n'est pas corrige, donc ach_stock_magasin() renvoie toujours 0.
+--
+--  Trouve en testant includes/achats.php contre un vrai MySQL (Phase 3 du
+--  rattrapage main -> vps-mysql) — pas une simple erreur de syntaxe SQL,
+--  un ecart de contrainte de schema entre les deux forks.
+--
+--  Choix : repasser en VARCHAR plutot qu'elargir l'ENUM, pour matcher le
+--  TEXT libre de PostgreSQL et eviter que ce meme probleme ne revienne a
+--  chaque nouvelle valeur de type de site ajoutee cote main sans migration
+--  MySQL correspondante.
+-- ============================================================
+
+ALTER TABLE sites MODIFY COLUMN type VARCHAR(20) NOT NULL DEFAULT 'saisie';

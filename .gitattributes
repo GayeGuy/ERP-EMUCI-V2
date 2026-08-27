@@ -1,2 +1,6 @@
-# Scripts shell : toujours en LF (exécutés sur le VPS Linux)
 *.sh text eol=lf
+
+# Documents bureautiques : binaires, jamais normalises
+*.docx binary
+*.pdf   binary
+*.xlsx  binary

@@ -17,9 +17,9 @@ $active_page = 'support_it_gestion';
 require_permission('affectations_it', 'can_read');
 
 $sous_roles_dispo = [
-    'maintenance'           => ['icon'=>'🔧','label'=>'Maintenance','desc'=>'Interventions équipements, rapport journalier'],
-    'controleur_production' => ['icon'=>'📋','label'=>'Contrôleur Production','desc'=>'Import OptoPlate & OptoTrace, Point EMUCI'],
-    'gestionnaire_bobines'  => ['icon'=>'🎞️','label'=>'Gestionnaire Bobines','desc'=>'Validation stock matin, suivi bobines coordinateurs'],
+    'maintenance'           => ['icon'=>'<i class="ph ph-wrench" aria-hidden="true"></i>','label'=>'Maintenance','desc'=>'Interventions équipements, rapport journalier'],
+    'controleur_production' => ['icon'=>'<i class="ph ph-clipboard-text" aria-hidden="true"></i>','label'=>'Contrôleur Production','desc'=>'Import OptoPlate & OptoTrace, Point EMUCI'],
+    'gestionnaire_bobines'  => ['icon'=>'<i class="ph ph-film-strip" aria-hidden="true"></i>','label'=>'Gestionnaire Bobines','desc'=>'Validation stock matin, suivi bobines coordinateurs'],
 ];
 
 // ── AJAX
@@ -94,27 +94,27 @@ include __DIR__ . '/../templates/header.php';
 .sit-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(400px,1fr));gap:20px}
 .sit-card{background:white;border-radius:16px;border:1px solid var(--border);overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.06)}
 .sit-head{background:var(--navy);padding:16px 20px;display:flex;align-items:center;gap:12px}
-.sit-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#1b75bc,#00aeef);display:flex;align-items:center;justify-content:center;font-weight:800;color:white;font-size:15px;flex-shrink:0}
+.sit-avatar{width:40px;height:40px;border-radius:50%;background:var(--primary-d);display:flex;align-items:center;justify-content:center;font-weight:800;color:white;font-size:15px;flex-shrink:0}
 .sit-name{color:white;font-family:'Plus Jakarta Sans',sans-serif;font-size:14px;font-weight:700}
-.sit-sub{color:#94c2d4;font-size:11px;margin-top:2px}
+.sit-sub{color:#94c2d4;font-size:12px;margin-top:2px}
 .sit-body{padding:16px 20px}
 .sr-row{display:grid;grid-template-columns:32px 1fr auto;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
 .sr-row:last-child{border-bottom:none}
 .sr-icon{font-size:20px;text-align:center}
 .sr-label{font-size:13px;font-weight:600;color:var(--navy)}
-.sr-desc{font-size:11px;color:var(--muted);margin-top:2px}
+.sr-desc{font-size:12px;color:var(--muted);margin-top:2px}
 .toggle-wrap{position:relative;width:44px;height:24px;cursor:pointer;flex-shrink:0}
 .toggle-wrap input{opacity:0;width:0;height:0;position:absolute}
 .toggle-track{position:absolute;inset:0;background:#ccc;border-radius:12px;transition:.2s}
 .toggle-thumb{position:absolute;top:3px;left:3px;width:18px;height:18px;background:white;border-radius:50%;transition:.2s;box-shadow:0 1px 4px rgba(0,0,0,.2)}
 .toggle-wrap input:checked ~ .toggle-track{background:var(--blue)}
 .toggle-wrap input:checked ~ .toggle-thumb{transform:translateX(20px)}
-.badge-sr{display:inline-block;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;background:var(--primary-l);color:var(--primary)}
+.badge-sr{display:inline-block;padding:2px 8px;border-radius:10px;font-size:12px;font-weight:700;background:var(--primary-l);color:var(--primary-d)}
 </style>
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;flex-wrap:wrap;gap:10px">
   <div>
-    <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">💻 Gestion des Support IT</h2>
+    <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)"><i class="ph ph-desktop" aria-hidden="true"></i> Gestion des Support IT</h2>
     <p style="font-size:13px;color:var(--muted);margin-top:4px">Affectez un ou plusieurs sous-rôles à chaque compte Support IT. Les droits sont mis à jour immédiatement.</p>
   </div>
   <button class="btn btn-primary" onclick="document.getElementById('mPromouvoir').style.display='flex'">
@@ -124,7 +124,7 @@ include __DIR__ . '/../templates/header.php';
 
 <?php if(empty($supports)): ?>
 <div class="card"><div class="card-body" style="text-align:center;padding:60px;color:var(--muted)">
-  <div style="font-size:48px;margin-bottom:16px">💻</div>
+  <div style="font-size:48px;margin-bottom:16px"><i class="ph ph-desktop" aria-hidden="true"></i></div>
   <div style="font-size:15px;font-weight:600;margin-bottom:8px">Aucun compte Support IT actif</div>
   <div style="font-size:13px">Créez des comptes avec le profil "Support IT" depuis l'administration.</div>
 </div></div>
@@ -178,8 +178,8 @@ include __DIR__ . '/../templates/header.php';
 <div id="mPromouvoir" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.5);z-index:500;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <div style="padding:18px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700;color:var(--navy)">💻 Promouvoir en Support IT</h3>
-      <button onclick="document.getElementById('mPromouvoir').style.display='none'" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--muted)">✕</button>
+      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:700;color:var(--navy)"><i class="ph ph-desktop" aria-hidden="true"></i> Promouvoir en Support IT</h3>
+      <button onclick="document.getElementById('mPromouvoir').style.display='none'" style="background:none;border:none;font-size:18px;cursor:pointer;color:var(--muted)"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div style="padding:22px">
       <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Sélectionnez un compte existant à transformer en Support IT. Son rôle sera changé et vous pourrez ensuite lui affecter des sous-rôles.</p>
@@ -203,7 +203,7 @@ include __DIR__ . '/../templates/header.php';
 
 <script>
 function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
-function toast(m,t='success'){const el=document.createElement('div');el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white;box-shadow:0 4px 20px rgba(0,0,0,.15)`;el.textContent=m;document.body.appendChild(el);setTimeout(()=>el.remove(),3000);}
+function toast(m,t='success'){let el=document.getElementById('toast-live');if(!el){el=document.createElement('div');el.id='toast-live';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.setAttribute('aria-atomic','true');document.body.appendChild(el);}clearTimeout(el._hideTimer);el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white;box-shadow:0 4px 20px rgba(0,0,0,.15)`;el.textContent=m;el._hideTimer=setTimeout(()=>{el.style.display='none';},3000);}
 
 function toggle(userId, sousRole, actif){
   ap({action:'toggle',user_id:userId,sous_role:sousRole,actif:actif?1:0}).then(d=>{

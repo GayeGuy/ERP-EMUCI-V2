@@ -1,11 +1,12 @@
-# DigiStock — Contexte projet pour Claude Code
+# ERP EMUCI — Contexte projet pour Claude Code
 
 ## Présentation
 
-Application web de gestion de stock industriel (bobines, équipements, EMUCI, opérations terrain).
-**Nom interne :** DigiStock / StockApp
+Application web de gestion de stock industriel (bobines, équipements, opérations terrain) pour EMU-CI dans le cadre du projet NSIIV (Nouveau Système d'Immatriculation des Véhicules).
+
+**Nom interne :** ERP EMUCI / StockApp
 **GitHub :** RUTHAXELLE/stockapp, branche `main`
-**Production :** https://stockapp-production-e306.up.railway.app (auto-déployé depuis GitHub via Railway + Docker)
+**Production :** https://stockapp-p8us.onrender.com (auto-déployé depuis GitHub `main` via Render + Docker, région Frankfurt)
 
 ---
 
@@ -14,9 +15,9 @@ Application web de gestion de stock industriel (bobines, équipements, EMUCI, op
 | Couche | Technologie |
 |---|---|
 | Langage | PHP 8.2 (pas de framework) |
-| Base de données | MySQL (PDO, `utf8mb4`) |
-| Hébergement | Railway (Docker, `php -S 0.0.0.0:8080`) |
-| Dev local | XAMPP (localhost, DB `stockapp`) |
+| Base de données | PostgreSQL (Neon, PDO `pdo_pgsql`, `sslmode=require`) — migré depuis MySQL le 2026-07-21 |
+| Hébergement | Render (Docker, `php -S 0.0.0.0:$PORT`) |
+| Dev local | Variables d'environnement (`includes/db.php` → `env()`), valeurs par défaut PostgreSQL local si absentes |
 | Export Excel | `phpoffice/phpspreadsheet ^1.29` |
 | Export PDF | `dompdf/dompdf ^3.1` |
 | Export PPTX | ZipArchive natif PHP (Open XML manuel) |
@@ -28,40 +29,41 @@ Application web de gestion de stock industriel (bobines, équipements, EMUCI, op
 
 ```
 stockapp/
-├── index.php                   # Entrée principale (routeur simple)
+├── index.php                         # Entrée principale (routeur simple)
 ├── login.php / logout.php
-├── Dockerfile                  # php:8.2-cli + php -S (Railway)
+├── Dockerfile                        # php:8.2-cli + pdo_pgsql + php -S (Render)
+├── render.yaml                       # Render Blueprint
 ├── composer.json
 ├── includes/
-│   ├── db.php                  # PDO, constantes DB, helpers SQL
-│   ├── session.php             # Auth, permissions, current_user()
-│   ├── helpers.php             # h(), fmt_date(), pagination(), etc.
-│   └── groupes_config.php      # Groupes de menus par rôle
+│   ├── db.php                        # PDO, constantes DB, helpers SQL
+│   ├── session.php                   # Auth, permissions, current_user()
+│   ├── helpers.php                   # h(), fmt_date(), pagination(), etc.
+│   └── groupes_config.php            # Groupes de menus par rôle
 ├── pages/
 │   ├── admin/
-│   │   ├── users.php           # Gestion utilisateurs
-│   │   ├── permissions.php     # Matrice droits rôle × module
-│   │   └── audit.php           # Journal d'audit
+│   │   ├── users.php                 # Gestion utilisateurs
+│   │   ├── permissions.php           # Matrice droits rôle × module
+│   │   └── audit.php                 # Journal d'audit
 │   ├── operations/
-│   │   ├── point_journalier.php  # Points journaliers coordinateur + réponse corrections GSB
-│   │   └── ...
-│   ├── stock_bobines_vue.php   # Vue stock bobines par site (+ export XLSX/PPTX)
+│   │   └── point_journalier.php      # Points journaliers coordinateur + corrections GSB
+│   ├── stock_bobines_vue.php         # Vue stock bobines par site (+ export XLSX/PPTX)
+│   ├── bobines.php                   # Liste bobines avec filtres AJAX (sans rechargement)
 │   ├── inventaire_bobines.php
-│   ├── validation_stock_matin.php  # Validation stock matin GSB + demande corrections bobines
-│   ├── rapports_gsb.php        # Rapports & exports GSB (Excel 3 feuilles + PDF)
+│   ├── validation_stock_matin.php    # Validation stock matin GSB + demande corrections
+│   ├── rapports_gsb.php              # Rapports & exports GSB (Excel 3 feuilles + PDF)
 │   ├── commandes_bobines.php
-│   ├── import_emuci.php
-│   ├── point_emuci.php
 │   ├── dashboard.php
+│   ├── pdg_overview.php              # Vue PDG / supervision globale
 │   ├── equipements.php
 │   ├── interventions.php
 │   └── ...
 ├── templates/
-│   ├── header.php              # Nav principale avec groupes de menus
+│   ├── header.php                    # Nav principale avec groupes de menus + CSS variables
 │   ├── footer.php
 │   └── 403.php
 └── sql/
-    └── stockapp.sql            # Schéma + données initiales
+    ├── stockapp_pg.sql               # Schéma + données initiales PostgreSQL
+    └── migration_fix_permissions_regressions.sql  # Migration permissions (2026-07-30)
 ```
 
 ---
@@ -69,7 +71,7 @@ stockapp/
 ## Fonctions clés — includes/db.php
 
 ```php
-get_db(): PDO              // singleton PDO
+get_db(): PDO                        // singleton PDO
 db_query(sql, params): PDOStatement
 db_fetch_all(sql, params): array
 db_fetch_one(sql, params): ?array
@@ -78,195 +80,45 @@ db_last_id(): string
 db_begin() / db_commit() / db_rollback()
 ```
 
-**Constantes disponibles partout :** `DB_HOST`, `DB_PORT`, `DB_NAME`, `APP_URL`, `APP_NAME`, `APP_TIMEZONE`
-
 ---
 
-## Fonctions clés — includes/session.php
-
-```php
-current_user(): ?array       // charge user + role_slug + site_nom + délégations depuis DB (cache statique)
-is_logged_in(): bool
-require_auth(): void         // redirige vers login.php si non connecté
-can(module, droit): bool     // vérifie un droit (admin/superadmin = tout)
-require_permission(module, droit): void  // 403 si refusé
-json_response(success, message, data): never
-is_ajax(): bool
-logout(): void
-```
-
-**Droits possibles :** `can_read`, `can_create`, `can_update`, `can_delete`, `can_export`
-
----
-
-## Fonctions clés — includes/helpers.php
-
-```php
-h(str): string               // htmlspecialchars sécurisé pour output HTML
-fmt_date(date, format): string
-fmt_datetime(dt): string
-fmt_number(n, decimals): string
-validate_input(fields, source): array  // ['data'=>..., 'errors'=>..., 'valid'=>bool]
-pagination(total, per_page, current, base_url): string
-calc_fin_cycle(date_mise_en_service, duree_vie_mois): ?string
-fin_cycle_class(date_fin): string  // classe CSS 'text-danger', 'text-warning', 'text-success'
-```
-
----
-
-## Système de rôles et permissions
-
-### Rôles (role_slug dans la table `roles`)
+## Rôles utilisateurs
 
 | Slug | Description |
 |---|---|
-| `superadmin` | Tous les droits sans restriction |
-| `admin` | Tous les droits |
-| `gestionnaire_stock_bobines` (GSB) | Stock + bobines + opérations |
-| `gestionnaire_stock` | Stock + bobines + opérations |
-| `superviseur_operation` | Dashboard + stock + opérations + bobines + rapports |
-| `coordinateur_site` | Dashboard + stock + bobines + opérations (terrain) |
-| `gestionnaire_operation` | Dashboard + opérations (+ délégations éventuelles) |
-| `controleur_production` | Dashboard + bobines + opérations |
-| `lecteur` | Lecture seule (DG/PDG) |
-| `maintenance_info` / `superviseur_it` | Dashboard + stock + informatique |
-| `support_it` | Sous-rôles configurables (maintenance, bobines, production) |
-
-### Logique de permissions
-
-- `admin` et `superadmin` → `can()` retourne toujours `true`
-- Les autres rôles → vérification en BDD dans la table `permissions` (role_id × module)
-- `support_it` → sous-rôles dans `support_it_roles` → modules autorisés définis dans `_support_it_can()`
-- `gestionnaire_operation` → peut recevoir des délégations (table `delegations`) qui étendent ses droits sur des modules spécifiques
-- `_check_permission_db()` utilise un **cache statique** par requête (clé `role_id:module:droit`)
+| `admin` / `superadmin` | Accès total |
+| `gsb` | Gestionnaire stock bobines — validation matin, rapports, corrections |
+| `coordinateur_site` | Coordinateur terrain — points journaliers, réponse corrections |
+| `superviseur_operation` | Supervision opérations |
+| `pdg` | Vue globale lecture seule (pdg_overview.php) |
 
 ---
 
-## Groupes de menus
+## Système de permissions
 
-Définis dans `includes/groupes_config.php`. 7 groupes : `DASHBOARD`, `STOCK`, `BOBINES`, `OPERATIONS`, `INFORMATIQUE`, `RAPPORTS`, `ADMINISTRATION`.
+Les droits sont stockés en base dans une table `permissions` (rôle × module × can_create/can_read/can_update/can_delete).
 
-Chaque groupe a une `first_page` et des `nav` items avec filtres optionnels `perm`, `roles_include`, `roles_exclude`.
+**Point critique :** Toute modification de permissions peut créer des régressions silencieuses (403 ou blocs dashboard disparus). Toujours auditer l'impact sur tous les rôles concernés avant de pousser.
 
-Fonctions utiles :
-```php
-get_groupes_utilisateur(): array      // groupes visibles pour l'utilisateur connecté
-get_groupe_nav_items(slug): array     // items nav filtrés par permissions
-```
+La migration `sql/migration_fix_permissions_regressions.sql` (2026-07-30) corrige :
+- 403 sur `validation_stock_matin.php` pour 3 rôles
+- Blocs dashboard disparus pour 4 rôles
 
 ---
 
-## Configuration Railway / environnement
+## Conventions de code
 
-**`includes/db.php`** détecte l'environnement :
-- Railway : `file_exists('/.dockerenv')` → utilise les constantes hardcodées Railway
-- Local : connexion `localhost` / `stockapp` / `root` / pas de mot de passe
-
-> **⚠️ Problème connu :** Les credentials Railway sont en clair dans le code committé sur GitHub.
-> Pour un VPS : migrer vers `getenv('DB_HOST')` etc. et stocker les secrets en variables d'environnement.
-
-`APP_URL` est hardcodé sur l'URL Railway même en local. Cela peut causer des redirections login vers le domaine Railway depuis XAMPP — normal, c'est intentionnel pour la démo.
-
----
-
-## Flux de correction bobines (GSB → Coordinateur)
-
-Table `corrections_bobines` (créée via `create_missing_tables.php?secret=emuci2026import`).
-
-**Workflow :**
-1. GSB voit un écart dans `validation_stock_matin.php` → clique "Demander modif" sur une bobine
-2. Mini-modal : comparaison Films PJ vs EMUCI, champ "Films proposés" + motif
-3. AJAX `demander_correction_bobine` → INSERT dans `corrections_bobines` (statut `en_attente`) + notification `info` au coordinateur
-4. Coordinateur voit le panneau jaune dans `point_journalier.php` (chargé au rendu PHP)
-5. Clic "Répondre" → modal avec 3 options :
-   - **Confirmer** → `op_films_utilises` ajusté, `op_bobines.films_restants` corrigé, `validations_stock_matin.statut='reajuste'`
-   - **Contre-proposer** → même ajustement stock, notification GSB avec la valeur alternative
-   - **Refuser** → aucun ajustement stock, notification GSB avec motif
-6. AJAX `repondre_correction` gère la transaction + audit_log + notification GSB
-
-**Champs table `corrections_bobines` :** `id`, `point_id`, `bobine_id`, `site_id`, `date_point`, `films_original`, `films_proposes`, `motif_gsb`, `gsb_id`, `statut` enum(`en_attente`,`approuvee`,`contreproposee`,`refusee`), `coord_id`, `reponse_coord`, `films_final`, `traite_at`, `created_at`
-
----
-
-## Permissions GSB — règle importante
-
-**Ne jamais utiliser `require_permission()` pour les pages spécifiques GSB.** Le rôle `gestionnaire_stock_bobines` n'a pas toujours de permissions explicites en BDD pour tous les modules. Utiliser à la place un contrôle par liste de rôles :
-
-```php
-$gsb_roles = ['admin','superadmin','gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation'];
-if (!in_array($user['role_slug'] ?? '', $gsb_roles)) {
-    http_response_code(403); include __DIR__.'/../templates/403.php'; exit;
-}
-```
-
----
-
-## Rapports & Exports GSB (`pages/rapports_gsb.php`)
-
-Accessible via menu **Bobines → Rapports & Exports** pour GSB, gestionnaire_stock, superviseur_operation, admin.
-
-Exports disponibles (filtres : date_from, date_to, site) :
-- **xlsx_journalier** → 3 feuilles : Consommations détail / Stock actuel / Historique validations
-- **pdf_journalier** → Tableau conso + totaux + état stock par bobine (paysage A4)
-- **xlsx_mensuel** → Synthèse groupée par mois × site
-- **pdf_mensuel** → Tableau mensuel avec totaux (paysage A4)
-- **pdf_validations** → Historique des validations avec statuts colorés
-
-Les `use PhpOffice\...` sont obligatoirement **en tête de fichier** (avant tout code exécutable).
-
----
-
-## Notifications — contrainte enum
-
-`notifications.type` n'accepte que : `'fin_cycle'`, `'stock_bas'`, `'alerte_conso'`, `'info'`.
-Toutes les notifications applicatives (corrections, validations, blocages) utilisent `'info'`.
-
----
-
-## validation_stock_matin.php — fonctionnalités
-
-- **Vue GSB** : 2 onglets (Validation en cours / Historique 30 jours), bandeau info, filtres, légende statuts
-- **Colonne Action / bouton "Demander modif"** : visible uniquement pour GSB (`$can_valider`), masqué pour coordinateur (PHP injecte `true`/`false` dans le JS au rendu)
-- **Statuts affichés** : `Conforme` (vert) / `Avec écart` (orange) / `Réajusté` (bleu) / `Bloqué` (rouge)
-
----
-
-## point_journalier.php — corrections en attente
-
-- Panneau jaune en haut : corrections `en_attente` pour le site du coordinateur, chargées au rendu PHP
-- AJAX `get_corrections_coord` : liste (non utilisé côté HTML, réservé usage futur)
-- AJAX `repondre_correction` : accessible coordinateur_site + admin/superadmin uniquement (vérif `$user['role_slug']`)
-- Bugs corrigés :
-  - **Brouillon reset à zéro** : `editPoint` JS restaure tous les champs (véhicules, bobines, rivets)
-  - **Double déduction stock** : le chemin UPDATE restaure `films_restants` avant DELETE + re-INSERT
-  - **Point vide soumis** : `soumettre_point` et `valider_point_coord` vérifient `COUNT(*) FROM op_films_utilises`
-
----
-
-## Export PPTX — notes importantes
-
-Le fichier `pages/stock_bobines_vue.php` génère un PPTX via `ZipArchive::addFromString()` (pas de répertoire temporaire).
-
-Règles Open XML à respecter si tu modifies ce code :
-- **Ne jamais mettre `<p:ph type="body"/>` dans un slide** si le layout référencé est "blank" (pas de placeholder body → PowerPoint rejette le fichier)
-- Les text boxes utilisent `<p:cNvSpPr txBox="1"/>` sans `<p:ph>`
-- Le fond de slide se définit via `<p:bg><p:bgPr>` et non via une forme rectangle
-- Toujours utiliser `tempnam(sys_get_temp_dir(), 'pptx_')` pour le fichier temp, puis `unlink()` après `readfile()`
-
----
-
-## Export XLSX — notes importantes
-
-Les `use PhpOffice\PhpSpreadsheet\...` **doivent être au niveau fichier** (pas dans un bloc `if`).
-PHP interdit les alias `use` à l'intérieur de fonctions ou conditions.
-
-Dans `stock_bobines_vue.php`, l'alias est `XlsxWriter` (pas `Xlsx`) pour éviter le conflit avec la variable string `$export === 'xlsx'`.
+- Toujours utiliser les helpers `db_*` de `includes/db.php`, jamais PDO directement
+- Échapper les sorties HTML avec `h()` (défini dans `helpers.php`)
+- Les `use PhpOffice\...` doivent être **en tête de fichier** (avant tout code exécutable) — PHP interdit les alias `use` dans des blocs `if` ou des fonctions
+- Les notifications applicatives utilisent le type `'info'` (contrainte enum sur `notifications.type` : `'fin_cycle'`, `'stock_bas'`, `'alerte_conso'`, `'info'`)
 
 ---
 
 ## CSS — conventions visuelles
 
 Variables CSS globales (définies dans `templates/header.php`) :
+
 ```css
 --navy: #06033A
 --blue: #1B75BC
@@ -274,40 +126,82 @@ Variables CSS globales (définies dans `templates/header.php`) :
 --muted: #94a3b8
 ```
 
-**Piège CSS connu :** `.vue-table tbody tr:nth-child(even) td` a une spécificité plus haute que `.vue-table tr.total-row td` (à cause de `tbody`). Pour forcer le style sur la ligne total, utiliser `!important` sur les règles total-row.
+**Piège CSS connu :** `.vue-table tbody tr:nth-child(even) td` a une spécificité plus haute que `.vue-table tr.total-row td`. Pour forcer le style sur la ligne total, utiliser `!important`.
 
 ---
 
-## Pages à ne pas oublier
+## Notes techniques importantes
 
-- `fix_columns.php` à la racine — script de migration one-shot, **à supprimer** une fois les migrations Railway confirmées
-- `pages/admin/permissions.php` — vérifier que `coordinateur_site` a `can_create` + `can_update` sur `inventaire_bobines`
+### Export PPTX
+- Génération via `ZipArchive::addFromString()` (pas de répertoire temporaire)
+- Ne jamais mettre `<p:ph type="body"/>` dans un slide avec layout "blank"
+- Les text boxes utilisent `<p:cNvSpPr txBox="1"/>` sans `<p:ph>`
+- Fond de slide via `<p:bg><p:bgPr>`, pas via une forme rectangle
+- Toujours `tempnam(sys_get_temp_dir(), 'pptx_')` pour le fichier temp + `unlink()` après `readfile()`
+
+### Export XLSX
+- Alias `XlsxWriter` (pas `Xlsx`) pour éviter le conflit avec la variable `$export === 'xlsx'`
+
+### bobines.php — filtres AJAX
+- Les filtres ne rechargent pas la page : échange AJAX du tableau uniquement
+- Suppression du flash de rechargement (ancien `@view-transition` CSS remplacé par AJAX pur)
+
+### point_journalier.php — bugs corrigés
+- Brouillon reset à zéro : `editPoint` JS restaure tous les champs (véhicules, bobines, rivets)
+- Double déduction stock : le chemin UPDATE restaure `films_restants` avant DELETE + re-INSERT
+- Point vide soumis : `soumettre_point` et `valider_point_coord` vérifient `COUNT(*) FROM op_films_utilises`
+
+### validation_stock_matin.php
+- Vue GSB : 2 onglets (Validation en cours / Historique 30 jours)
+- Bouton "Demander modif" visible uniquement pour GSB (`$can_valider`), masqué pour coordinateur
+- Statuts : `Conforme` (vert) / `Avec écart` (orange) / `Réajusté` (bleu) / `Bloqué` (rouge)
+
+### pdg_overview.php
+- Fix département N+1 appliqué (eager loading des départements)
+
+### users.php (admin)
+- Validation stricte nom/email/téléphone/mot de passe à la création
+- Surbrillance rouge au blur sur les champs invalides
 
 ---
 
-## Tâches en cours / backlog
+## État du projet (2026-07-30)
 
-- [ ] Migrer `includes/db.php` pour utiliser des variables d'environnement (`getenv()`) au lieu des credentials hardcodés
-- [ ] Supprimer `fix_columns.php` (migration one-shot terminée)
-- [ ] Déploiement VPS : Nginx + PHP-FPM 8.2 + MySQL + Certbot (guide préparé, VPS non encore provisionné)
+**Code :** À jour, tout est poussé sur `main`. Render redéploie automatiquement.
+
+### Terminé ✅
+- Migration MySQL → PostgreSQL/Neon + déploiement Render (2026-07-21)
+- Flux correction bobines GSB → Coordinateur (table `corrections_bobines`)
+- Page Rapports & Exports GSB (`pages/rapports_gsb.php`)
+- validation_stock_matin.php : onglets, filtres, légende, masquage bouton coordinateur
+- point_journalier.php : restauration brouillon, double déduction stock, point vide bloqué
+- Recherche + filtres réactifs sur la page Utilisateurs (`pages/admin/users.php`)
+- Scroll après N lignes sur les tableaux (sites, EMUCI inconnus, bobines)
+- Fix département N+1 dans pdg_overview.php
+- Validation stricte + surbrillance rouge sur création utilisateur
+- Redesign boutons Retour/PDF sur fiche de demande
+- Colonne Consommé avant Restants + scroll sur bobines.php
+- Fix flash rechargement : filtres bobines.php passés en AJAX pur
+- Audit permissions + correction 3 régressions (403 + blocs dashboard disparus) → `sql/migration_fix_permissions_regressions.sql`
+
+### Backlog ⏳
+- [ ] Supprimer `fix_columns.php` à la racine (migration one-shot terminée)
 - [ ] Vérifier permissions `coordinateur_site` sur `inventaire_bobines` dans Admin → Permissions
-- [x] Flux correction bobines GSB → Coordinateur (table `corrections_bobines` + UI des deux côtés)
-- [x] Page Rapports & Exports GSB (`pages/rapports_gsb.php`)
-- [x] validation_stock_matin.php : onglets, filtres, légende, masquage bouton coordinateur
-- [x] point_journalier.php : restauration brouillon, double déduction stock, point vide bloqué
-- ⚠️ Exécuter `create_missing_tables.php?secret=emuci2026import` en production pour créer `corrections_bobines`
+- [ ] Déploiement VPS : Nginx/Apache + PHP-FPM + MySQL + Certbot (branche `vps-mysql`, guide `DEPLOY-VPS-MYSQL.md`)
+- [ ] Révoquer l'ancien mot de passe MySQL Railway exposé dans l'historique Git
+- [ ] Changer le mot de passe admin par défaut `Admin@2024`
 
 ---
 
 ## Commandes utiles
 
 ```bash
-# Dev local XAMPP
-# Ouvrir http://localhost/stockapp/
-
-# Déployer (push suffit — Railway auto-déploie depuis GitHub main)
+# Déployer (push suffit — Render auto-déploie depuis GitHub main)
 git push origin main
 
-# Voir les logs Railway
-# Dashboard Railway → service stockapp → Deployments → logs
+# Voir les logs Render
+# Dashboard Render → service stockapp → Logs
+
+# Charger le schéma PostgreSQL sur Neon
+psql "<connection string Neon>" < sql/stockapp_pg.sql
 ```

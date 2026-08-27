@@ -681,7 +681,7 @@ include __DIR__ . '/../templates/header.php';
 /* ── En-têtes sous-labels (Qté / Films) ── */
 .vue-table thead tr.row-sub th{
   background:#0f2144;color:rgba(255,255,255,.6);
-  font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
+  font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;
   padding:5px 18px 8px;text-align:center;
   position:sticky;top:52px;z-index:2;
   border-bottom:2px solid rgba(255,255,255,.08);
@@ -749,10 +749,10 @@ include __DIR__ . '/../templates/header.php';
 
 /* ── Contenu cellule ── */
 .cell-nb{font-size:20px;font-weight:900;color:#06033A;line-height:1}
-.cell-films{font-size:11px;color:#9ca3af;margin-top:4px;letter-spacing:.2px}
+.cell-films{font-size:12px;color:#9ca3af;margin-top:4px;letter-spacing:.2px}
 .cell-empty{color:#d1d5db;font-size:16px}
 .tag-cours{display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:20px;
-  padding:2px 7px;font-size:10px;font-weight:700;margin-top:5px}
+  padding:2px 7px;font-size:12px;font-weight:700;margin-top:5px}
 .total-row .cell-nb{color:#fff;font-size:22px}
 .total-row .cell-films{color:rgba(255,255,255,.45)}
 .td-total .cell-nb{color:#1B75BC;font-size:22px}
@@ -767,7 +767,7 @@ include __DIR__ . '/../templates/header.php';
   box-shadow:0 1px 6px rgba(6,3,58,.06)}
 .kpi::before{content:'';position:absolute;top:0;left:0;width:4px;height:100%;background:var(--kpi-c,#1B75BC);border-radius:4px 0 0 4px}
 .kpi-v{font-size:30px;font-weight:900;color:var(--kpi-c,#06033A);line-height:1;margin-bottom:4px}
-.kpi-l{font-size:11px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.kpi-l{font-size:12px;color:#9ca3af;text-transform:uppercase;letter-spacing:.5px;font-weight:600}
 .kpi-icon{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:28px;opacity:.12}
 /* Section titre */
 .page-banner{
@@ -775,7 +775,7 @@ include __DIR__ . '/../templates/header.php';
   border-radius:16px;padding:24px 28px;margin-bottom:24px;
   display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px;
   box-shadow:0 4px 20px rgba(6,3,58,.2)}
-.page-banner h1{color:#fff;font-size:22px;font-weight:800;margin:0;display:flex;align-items:center;gap:10px}
+.page-banner h2{color:#fff;font-size:22px;font-weight:800;margin:0;display:flex;align-items:center;gap:10px}
 .page-banner p{color:rgba(255,255,255,.75);font-size:13px;margin:4px 0 0}
 .export-btn{
   display:inline-flex;align-items:center;gap:7px;padding:10px 18px;
@@ -799,39 +799,39 @@ include __DIR__ . '/../templates/header.php';
 <!-- BANNIÈRE TITRE -->
 <div class="page-banner">
   <div>
-    <h1>🎞️ Vue Stock Bobines</h1>
+    <h2><i class="ph ph-film-strip" aria-hidden="true"></i> Vue Stock Bobines</h2>
     <p>Synthèse par site et par type — <?= date('d/m/Y') ?> · <?= $total_bobines ?> bobines · <?= number_format($total_films) ?> films</p>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap">
-    <a href="?<?= http_build_query(array_merge($_GET,['export'=>'csv']))  ?>" class="export-btn btn-csv">📄 CSV</a>
-    <a href="?<?= http_build_query(array_merge($_GET,['export'=>'xlsx'])) ?>" class="export-btn btn-xlsx">📊 Excel</a>
-    <a href="?<?= http_build_query(array_merge($_GET,['export'=>'pdf']))  ?>" class="export-btn btn-pdf">🗒️ PDF</a>
-    <a href="?<?= http_build_query(array_merge($_GET,['export'=>'pptx'])) ?>" class="export-btn btn-pptx">📑 PowerPoint</a>
+    <a href="?<?= http_build_query(array_merge($_GET,['export'=>'csv']))  ?>" class="export-btn btn-csv"><i class="ph ph-file-text" aria-hidden="true"></i> CSV</a>
+    <a href="?<?= http_build_query(array_merge($_GET,['export'=>'xlsx'])) ?>" class="export-btn btn-xlsx"><i class="ph ph-chart-bar" aria-hidden="true"></i> Excel</a>
+    <a href="?<?= http_build_query(array_merge($_GET,['export'=>'pdf']))  ?>" class="export-btn btn-pdf"><i class="ph ph-note" aria-hidden="true"></i> PDF</a>
+    <a href="?<?= http_build_query(array_merge($_GET,['export'=>'pptx'])) ?>" class="export-btn btn-pptx"><i class="ph ph-files" aria-hidden="true"></i> PowerPoint</a>
   </div>
 </div>
 
 <!-- FILTRES -->
 <div class="filter-bar">
   <form method="GET" style="display:contents">
-    <select name="site" class="fsel" onchange="this.form.submit()">
+    <select name="site" class="fsel" aria-label="Filtrer par site" onchange="this.form.submit()">
       <option value="">🏢 Tous les sites</option>
       <?php foreach ($sites_list as $s): ?>
       <option value="<?= $s['id'] ?>" <?= $f_site==$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
       <?php endforeach; ?>
     </select>
-    <select name="type" class="fsel" onchange="this.form.submit()">
+    <select name="type" class="fsel" aria-label="Filtrer par type" onchange="this.form.submit()">
       <option value="">🎞️ Tous les types</option>
       <?php foreach ($types_list as $t): ?>
       <option value="<?= h($t['type_code']) ?>" <?= $f_type===$t['type_code']?'selected':'' ?>><?= h($t['type_code']) ?></option>
       <?php endforeach; ?>
     </select>
-    <select name="statut" class="fsel" onchange="this.form.submit()">
+    <select name="statut" class="fsel" aria-label="Filtrer par statut" onchange="this.form.submit()">
       <option value="">⚡ Tous statuts</option>
       <option value="en_cours" <?= $f_statut==='en_cours'?'selected':'' ?>>En cours</option>
       <option value="en_stock" <?= $f_statut==='en_stock'?'selected':'' ?>>En stock</option>
     </select>
     <?php if ($f_site || $f_type || $f_statut): ?>
-    <a href="stock_bobines_vue.php" style="font-size:13px;color:#9ca3af;text-decoration:none;padding:8px 12px;border-radius:8px;border:1.5px solid #e0e4ef">✕ Réinitialiser</a>
+    <a href="stock_bobines_vue.php" style="font-size:13px;color:#9ca3af;text-decoration:none;padding:8px 12px;border-radius:8px;border:1.5px solid #e0e4ef"><i class="ph ph-x" aria-hidden="true"></i> Réinitialiser</a>
     <?php endif; ?>
   </form>
 </div>
@@ -839,7 +839,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- KPI -->
 <div class="kpi-bar">
   <div class="kpi" style="--kpi-c:#1B75BC">
-    <div class="kpi-icon">🎞️</div>
+    <div class="kpi-icon"><i class="ph ph-film-strip" aria-hidden="true"></i></div>
     <div class="kpi-v"><?= $total_bobines ?></div>
     <div class="kpi-l">Bobines actives</div>
   </div>
@@ -849,12 +849,12 @@ include __DIR__ . '/../templates/header.php';
     <div class="kpi-l">Films restants</div>
   </div>
   <div class="kpi" style="--kpi-c:#1565c0">
-    <div class="kpi-icon">🏢</div>
+    <div class="kpi-icon"><i class="ph ph-buildings" aria-hidden="true"></i></div>
     <div class="kpi-v"><?= count($par_site) ?></div>
     <div class="kpi-l">Sites actifs</div>
   </div>
   <div class="kpi" style="--kpi-c:#7b1fa2">
-    <div class="kpi-icon">🏷️</div>
+    <div class="kpi-icon"><i class="ph ph-tag" aria-hidden="true"></i></div>
     <div class="kpi-v"><?= count($types) ?></div>
     <div class="kpi-l">Types de bobine</div>
   </div>
@@ -863,7 +863,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- TABLEAU -->
 <?php if (empty($par_site) && empty($sans_site)): ?>
 <div style="text-align:center;padding:60px;color:#9ca3af;background:#fff;border-radius:14px;border:1px solid #e8edf8">
-  <div style="font-size:48px;margin-bottom:12px">🎞️</div>
+  <div style="font-size:48px;margin-bottom:12px"><i class="ph ph-film-strip" aria-hidden="true"></i></div>
   <div style="font-size:16px;font-weight:600">Aucune bobine active pour les filtres sélectionnés.</div>
 </div>
 <?php else: ?>
@@ -910,7 +910,7 @@ include __DIR__ . '/../templates/header.php';
 
     <?php if (!empty($sans_site)): ?>
     <tr class="sans-site-row">
-      <td class="site-name">📦 En dépôt</td>
+      <td class="site-name"><i class="ph ph-package" aria-hidden="true"></i> En dépôt</td>
       <?php $idx_ss = array_column($sans_site, null, 'type_code');
             foreach ($types as $t): $found = $idx_ss[$t] ?? null; ?>
       <td>

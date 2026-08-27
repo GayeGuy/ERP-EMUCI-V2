@@ -35,6 +35,15 @@ if (($_GET['export'] ?? '') === 'pdf' && !empty($_GET['id'])) {
             }
         }
     }
+    // Traitement IT : certains types (ex. transfert_agent) n'ont pas d'étape
+    // "it" dans leur circuit de validation alors qu'ils exigent un traitement
+    // IT après approbation — l'IT doit pouvoir ouvrir la fiche pour la traiter.
+    if (!$isValidator) {
+        $dType = di_type($d['type_code']);
+        if (!empty($dType['traitement_it']) && di_user_can_traiter_it((int)$user['id'], $my_roles)) {
+            $isValidator = true;
+        }
+    }
     if (!$owner && !$isValidator && !$is_admin) { http_response_code(403); exit('Accès refusé.'); }
 
     $autoload = __DIR__ . '/../vendor/autoload.php';
@@ -66,6 +75,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         } elseif ($action === 'rejeter') {
             di_rejeter($d, $user, trim($_POST['motif'] ?? ''));
             json_response(true, 'Demande rejetée.');
+        } elseif ($action === 'traiter_it') {
+            di_traiter_it($d, $user, trim($_POST['commentaire'] ?? ''), trim($_POST['ticket_glpi'] ?? ''));
+            json_response(true, 'Demande marquée comme traitée.');
         }
         json_response(false, 'Action inconnue.');
     } catch (Exception $e) {
@@ -81,7 +93,7 @@ function di_pdf_html(array $d): string {
     $wf   = di_workflow_of($d);
     $champs = $d['champs'];
     $fields = di_champs_of($d['type_code']);
-    [$slbl, $sc] = di_statut_label($d['statut']);
+    [$slbl, $sc] = di_statut_label(di_statut_effectif($d));
     $cur = (int)$d['etape_actuelle'];
     $enCours = in_array($d['statut'], ['en_attente','en_cours'], true);
 
@@ -180,6 +192,19 @@ CELL;
     $created = date('d/m/Y', strtotime($d['created_at']));
     $genat   = date('d/m/Y H:i');
 
+    // Traitement IT : le n° de ticket GLPI figure sur le document imprimé,
+    // c'est lui qui relie la demande à l'intervention réellement menée.
+    $ticketLigne = '';
+    if (!empty($d['ticket_glpi'])) {
+        $tk = h($d['ticket_glpi']);
+        $tdate = !empty($d['traite_date']) ? date('d/m/Y', strtotime($d['traite_date'])) : '—';
+        $ticketLigne = '<div class="sec">Traitement IT</div>'
+          . '<div class="card"><table class="info">'
+          . '<tr><td class="k">N° de ticket GLPI</td><td class="v">' . $tk . '</td></tr>'
+          . '<tr><td class="k">Traité le</td><td class="v">' . $tdate . '</td></tr>'
+          . '</table></div>';
+    }
+
     return <<<HTML
 <!DOCTYPE html><html><head><meta charset="utf-8"><style>
   @page{margin:0}
@@ -214,6 +239,7 @@ CELL;
     </table></div>
     <div class="sec">Détails de la demande</div>
     <div class="card"><table class="info">{$rows}</table></div>
+    {$ticketLigne}
     <div class="sec">Chaîne de visas</div>
     <table style="width:100%;border-collapse:collapse;table-layout:fixed"><tr>{$visaCells}</tr></table>
     <div class="ft">Document généré automatiquement par EMU-CI le {$genat} — Réf. {$numero}</div>
@@ -242,6 +268,15 @@ if (!empty($_GET['id'])) {
                 if ($dept_id && db_fetch_value("SELECT COUNT(*) FROM user_departements WHERE user_id=? AND departement_id=?", [(int)$user['id'], (int)$dept_id])) {
                     $isValidator = true; break;
                 }
+            }
+        }
+        // Traitement IT : certains types (ex. transfert_agent) n'ont pas d'étape
+        // "it" dans leur circuit de validation alors qu'ils exigent un traitement
+        // IT après approbation — l'IT doit pouvoir ouvrir la fiche pour la traiter.
+        if (!$isValidator) {
+            $dType = di_type($detail['type_code']);
+            if (!empty($dType['traitement_it']) && di_user_can_traiter_it((int)$user['id'], $my_roles)) {
+                $isValidator = true;
             }
         }
         if (!$owner && !$isValidator && !$is_admin) { $detail = null; }
@@ -346,6 +381,8 @@ include __DIR__ . '/../templates/header.php';
     $n1Id = isset($detail['n1_user_id']) && $detail['n1_user_id'] ? (int)$detail['n1_user_id'] : null;
     $canV = di_can_validate($my_roles, (int)$user['id'], $wf, $cur, (int)$detail['demandeur_id'], $n1Id)
             && in_array($detail['statut'], ['en_attente','en_cours'], true);
+    $canTraiterIt = $detail['statut'] === 'approuve_traitement' && empty($detail['traite_it'])
+            && di_user_can_traiter_it((int)$user['id'], $my_roles);
     $fields = di_champs_of($detail['type_code']);
     $demandeur = db_fetch_one("SELECT prenom, nom FROM users WHERE id=?", [$detail['demandeur_id']]);
 ?>
@@ -363,7 +400,21 @@ include __DIR__ . '/../templates/header.php';
           · <?= date('d/m/Y', strtotime($detail['created_at'])) ?>
         </div>
       </div>
-      <?= di_badge($detail['statut']) ?>
+      <div style="text-align:right">
+        <?= di_badge(di_statut_effectif($detail)) ?>
+        <?php if (!empty($detail['traite_it'])):
+          $traiteur = db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [(int)$detail['traite_par']]);
+        ?>
+        <div style="font-size:12px;color:#16a085;margin-top:6px">
+          <i class="ph-duotone ph-check-circle"></i> Traité par <?= h($traiteur) ?><?= $detail['traite_date'] ? ' le '.date('d/m/Y', strtotime($detail['traite_date'])) : '' ?>
+        </div>
+        <?php if (!empty($detail['ticket_glpi'])): ?>
+        <div style="font-size:12px;font-weight:700;color:var(--navy,#06033A);margin-top:3px">
+          Ticket GLPI n° <?= h($detail['ticket_glpi']) ?>
+        </div>
+        <?php endif; ?>
+        <?php endif; ?>
+      </div>
     </div>
 
     <h4 style="margin:20px 0 6px;font-size:13px;color:var(--muted,#7f8c8d)">CIRCUIT DE VALIDATION</h4>
@@ -404,6 +455,12 @@ include __DIR__ . '/../templates/header.php';
         } elseif ($action === 'soumis') {
             $ic_bg = '#eef1fc'; $ic_cl = '#3B4FBE'; $ic = '→';
             $label = 'Demande soumise';
+        } elseif ($action === 'traite_it') {
+            $ic_bg = '#e8f8f5'; $ic_cl = '#16a085'; $ic = '✓';
+            $label = 'Traitement IT effectué';
+            if (!empty($h_entry['ticket_glpi'])) {
+                $label .= ' — ticket GLPI n° ' . $h_entry['ticket_glpi'];
+            }
         } else {
             $ic_bg = '#f1f3f8'; $ic_cl = '#98a1b3'; $ic = '→';
             $label = 'Brouillon sauvegardé';
@@ -447,6 +504,34 @@ include __DIR__ . '/../templates/header.php';
   </div>
   <?php endif; ?>
 
+  <?php if ($canTraiterIt): ?>
+  <div class="di-card">
+    <div class="di-alert" id="di-err"></div>
+    <h4 style="margin:0 0 8px">Traitement IT</h4>
+    <p style="margin:0 0 14px;font-size:13px;color:var(--muted,#7f8c8d)">
+      Demande approuvée, en attente d'exécution IT (création/modification d'accès, compte…).
+      Marquez-la comme traitée une fois l'action réalisée.
+    </p>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:14px">
+      <div style="flex:0 0 200px">
+        <label for="di-ticket" style="display:block;font-size:12px;font-weight:700;margin-bottom:5px">
+          N° de ticket GLPI <span style="color:var(--danger,#e74c3c)">*</span>
+        </label>
+        <input type="text" id="di-ticket" maxlength="50" placeholder="ex. 4521"
+               style="width:100%;padding:9px 12px;border:1.5px solid var(--border,#e2e8f0);border-radius:8px;font-size:13px;font-family:inherit;outline:none">
+      </div>
+      <div style="flex:1;min-width:220px">
+        <label for="di-comm-it" style="display:block;font-size:12px;font-weight:700;margin-bottom:5px">
+          Commentaire <span style="font-weight:400;color:var(--muted,#7f8c8d)">(optionnel)</span>
+        </label>
+        <input type="text" id="di-comm-it" maxlength="255" placeholder="Action réalisée, précisions…"
+               style="width:100%;padding:9px 12px;border:1.5px solid var(--border,#e2e8f0);border-radius:8px;font-size:13px;font-family:inherit;outline:none">
+      </div>
+    </div>
+    <button class="di-btn di-btn-primary" onclick="diTraiterIt()"><i class="ph-duotone ph-check-circle"></i> Marquer comme traité</button>
+  </div>
+  <?php endif; ?>
+
 <?php else: ?>
   <div class="di-topbar">
     <h2 style="margin:0">Mes demandes</h2>
@@ -472,7 +557,7 @@ include __DIR__ . '/../templates/header.php';
     padding:0;margin-bottom:18px;display:grid;grid-template-columns:1fr 1px 1fr 1px 1fr;align-items:stretch;overflow:hidden">
     <!-- Rechercher -->
     <div style="padding:14px 18px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted,#7f8c8d);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Rechercher</div>
+      <div style="font-size:12px;font-weight:700;color:var(--muted,#7f8c8d);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Rechercher</div>
       <input type="text" name="q" value="<?= h($fil_search) ?>" placeholder="Nom, type, référence…"
         style="width:100%;border:none;outline:none;font-size:13px;font-family:inherit;background:transparent;color:var(--text,#2c3e50);padding:0"
         oninput="clearTimeout(this._t);this._t=setTimeout(()=>document.getElementById('fmes').submit(),500)">
@@ -480,7 +565,7 @@ include __DIR__ . '/../templates/header.php';
     <div style="background:var(--border,#e2e8f0)"></div>
     <!-- Type -->
     <div style="padding:14px 18px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted,#7f8c8d);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Type</div>
+      <div style="font-size:12px;font-weight:700;color:var(--muted,#7f8c8d);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Type</div>
       <select name="type" style="border:none;outline:none;font-size:13px;font-family:inherit;background:transparent;color:var(--text,#2c3e50);width:100%;cursor:pointer;padding:0"
         onchange="document.getElementById('fmes').submit()">
         <option value="">Tous les types</option>
@@ -492,7 +577,7 @@ include __DIR__ . '/../templates/header.php';
     <div style="background:var(--border,#e2e8f0)"></div>
     <!-- Statut -->
     <div style="padding:14px 18px">
-      <div style="font-size:11px;font-weight:700;color:var(--muted,#7f8c8d);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Statut</div>
+      <div style="font-size:12px;font-weight:700;color:var(--muted,#7f8c8d);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px">Statut</div>
       <select name="statut" style="border:none;outline:none;font-size:13px;font-family:inherit;background:transparent;color:var(--text,#2c3e50);width:100%;cursor:pointer;padding:0"
         onchange="document.getElementById('fmes').submit()">
         <option value="">Tous les statuts</option>
@@ -505,7 +590,7 @@ include __DIR__ . '/../templates/header.php';
   </form>
   <?php if ($has_filter): ?>
   <div style="margin:-10px 0 14px;font-size:12px">
-    <a href="?" style="color:#e74c3c;text-decoration:none;font-weight:700">✕ Effacer les filtres</a>
+    <a href="?" style="color:#e74c3c;text-decoration:none;font-weight:700"><i class="ph ph-x" aria-hidden="true"></i> Effacer les filtres</a>
   </div>
   <?php endif; ?>
 
@@ -528,23 +613,25 @@ include __DIR__ . '/../templates/header.php';
   <?php else: ?>
     <table class="di-tbl">
       <thead><tr>
-        <th>Réf.</th><th>Type</th><th>Demandeur</th><th>Statut</th><th>Étape</th><th>Date</th><th></th>
+        <th style="width:42px">N°</th><th>Réf.</th><th>Type</th><th>Demandeur</th><th>Statut</th><th>Étape</th><th>Date</th><th></th>
       </tr></thead>
       <tbody>
-      <?php foreach ($mes as $m):
+      <?php $rang = 0; foreach ($mes as $m): $rang++;
         $url = APP_URL.'/pages/demandes.php?id='.(int)$m['id'];
         $wf  = $wf_cache[$m['type_code']] ?? [];
         $idx = (int)($m['etape_actuelle'] ?? 0);
-        if (in_array($m['statut'], ['approuve','approuve_traitement'], true))   $etape_lbl = 'Approuvée';
+        if ($m['statut'] === 'approuve')            $etape_lbl = 'Approuvée';
+        elseif ($m['statut'] === 'approuve_traitement') $etape_lbl = 'Traitement IT';
         elseif ($m['statut'] === 'rejete')   $etape_lbl = 'Rejetée';
         elseif ($m['statut'] === 'brouillon') $etape_lbl = 'Brouillon';
         else $etape_lbl = $wf[$idx]['label'] ?? '—';
       ?>
         <tr style="cursor:pointer" onclick="location.href='<?= $url ?>'">
+          <td style="color:var(--muted,#7f8c8d);font-size:12px;font-weight:700"><?= $rang ?></td>
           <td style="font-weight:700;white-space:nowrap"><?= h($m['numero']) ?></td>
           <td><?= h($type_labels[$m['type_code']] ?? $m['type_code']) ?></td>
           <td style="font-size:13px"><?= h($m['demandeur_nom'] ?? '') ?></td>
-          <td><?= di_badge($m['statut']) ?></td>
+          <td><?= di_badge(di_statut_effectif($m)) ?></td>
           <td><span style="font-size:12px;font-weight:600;padding:3px 9px;border-radius:8px;
             background:var(--input,#eef1fc);color:var(--navy,#06033A)"><?= h($etape_lbl) ?></span></td>
           <td style="color:var(--muted,#7f8c8d);font-size:13px;white-space:nowrap"><?= date('d M. Y', strtotime($m['created_at'])) ?></td>
@@ -587,6 +674,18 @@ function diValider(){ const fd=new FormData(); fd.append('action','valider'); fd
 function diRejeter(){ const m=document.getElementById('di-motif').value.trim();
   if(!m){ alert('Le motif est obligatoire.'); return; }
   const fd=new FormData(); fd.append('action','rejeter'); fd.append('id',DI_ID); fd.append('motif',m); diPost(fd); }
+function diTraiterIt(){
+  const t=document.getElementById('di-ticket');
+  const ticket=(t.value||'').trim();
+  if(!ticket){ t.focus(); const e=document.getElementById('di-err');
+    if(e){e.classList.add('err');e.textContent='⚠️ Renseignez le numéro du ticket GLPI.';}
+    return; }
+  const fd=new FormData();
+  fd.append('action','traiter_it'); fd.append('id',DI_ID);
+  fd.append('ticket_glpi',ticket);
+  fd.append('commentaire',(document.getElementById('di-comm-it').value||'').trim());
+  diPost(fd);
+}
 </script>
 
 <?php include __DIR__ . '/../templates/footer.php'; ?>
