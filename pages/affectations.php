@@ -15,6 +15,9 @@ require_permission('affectations', 'can_read');
 $user        = current_user();
 $page_title  = 'Affectations';
 $active_page = 'affectations';
+$can_create  = can('affectations', 'can_create');
+$active_tab  = $can_create ? ($_GET['tab'] ?? 'nouvelle') : 'historique';
+if (!in_array($active_tab, ['nouvelle', 'historique'], true)) $active_tab = $can_create ? 'nouvelle' : 'historique';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     header('Content-Type: application/json');
@@ -183,7 +186,13 @@ $users_list = db_fetch_all("SELECT id,prenom,nom FROM users WHERE actif=1 ORDER 
 include __DIR__ . '/../templates/header.php';
 ?>
 <style>
-.aff-layout{display:grid;grid-template-columns:1fr 1.8fr;gap:20px;align-items:start}
+.aff-tabs{display:flex;gap:6px;border-bottom:2px solid var(--border);margin-bottom:20px}
+.aff-tab-btn{background:none;border:none;padding:10px 18px;font-size:13.5px;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;display:flex;align-items:center;gap:7px}
+.aff-tab-btn.active{color:var(--navy);border-bottom-color:var(--blue-mid, #1a56a0)}
+.aff-tab-panel{display:none}
+.aff-tab-panel.active{display:block}
+.aff-form-layout{display:grid;grid-template-columns:1fr 360px;gap:20px;align-items:start}
+@media(max-width:900px){.aff-form-layout{grid-template-columns:minmax(0,1fr)}}
 .mouv-type{font-size:12px;font-weight:700;padding:3px 8px;border-radius:5px;text-transform:uppercase;letter-spacing:.5px}
 .mouv-type.entree    {background:#d5f5e3;color:#1e8449}
 .mouv-type.sortie    {background:#fef9e7;color:#9a7d0a}
@@ -196,7 +205,7 @@ include __DIR__ . '/../templates/header.php';
 .mouv-equip{font-family:monospace;font-weight:700;font-size:13px;color:var(--navy)}
 .mouv-detail{font-size:12px;color:var(--muted);margin-top:2px}
 .mouv-date{font-size:12px;color:var(--muted);white-space:nowrap}
-.mouv-scroll{max-height:450px;overflow-y:auto}
+.mouv-scroll{max-height:600px;overflow-y:auto}
 
 .affecte-group{margin-bottom:16px}
 .affecte-site-title{font-family:'Montserrat',sans-serif;font-size:13px;font-weight:700;color:var(--navy);padding:8px 12px;background:var(--lighter);border-radius:8px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
@@ -221,12 +230,24 @@ include __DIR__ . '/../templates/header.php';
 .mbody{padding:24px}
 .mfoot{padding:14px 24px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;position:sticky;bottom:0;background:white}
 
-@media(max-width:1000px){.aff-layout{grid-template-columns:minmax(0,1fr)}}
 </style>
 
-<div class="aff-layout">
+<?php if ($can_create): ?>
+<div class="aff-tabs">
+  <button type="button" class="aff-tab-btn <?= $active_tab==='nouvelle'?'active':'' ?>" data-tab="nouvelle" onclick="affTab('nouvelle')">
+    <i class="ph ph-link" aria-hidden="true"></i> Nouvelle affectation
+  </button>
+  <button type="button" class="aff-tab-btn <?= $active_tab==='historique'?'active':'' ?>" data-tab="historique" onclick="affTab('historique')">
+    <i class="ph ph-clipboard-text" aria-hidden="true"></i> Historique des mouvements <span style="font-weight:400;color:var(--muted)">(<?= fmt_number($total) ?>)</span>
+  </button>
+</div>
+<?php endif; ?>
 
-  <!-- COLONNE GAUCHE : FORMULAIRE + AFFECTÉS -->
+<?php if ($can_create): ?>
+<div class="aff-tab-panel <?= $active_tab==='nouvelle'?'active':'' ?>" id="affTabNouvelle">
+  <div class="aff-form-layout">
+
+  <!-- COLONNE GAUCHE : FORMULAIRE -->
   <div>
     <!-- FORMULAIRE AFFECTATION -->
     <div class="card" style="margin-bottom:20px">
@@ -297,8 +318,10 @@ include __DIR__ . '/../templates/header.php';
         </div>
       </div>
     </div>
+  </div>
 
-    <!-- STATS RAPIDES -->
+  <!-- COLONNE DROITE : RÉSUMÉ -->
+  <div>
     <div class="card">
       <div class="card-header"><h3><i class="ph ph-chart-bar" aria-hidden="true"></i> Résumé des affectations</h3></div>
       <div class="card-body" style="padding:16px">
@@ -326,11 +349,15 @@ include __DIR__ . '/../templates/header.php';
     </div>
   </div>
 
-  <!-- COLONNE DROITE : MOUVEMENTS + AFFECTÉS -->
-  <div>
+  </div>
+</div>
+<?php endif; ?>
+
+<div class="aff-tab-panel <?= $active_tab==='historique'?'active':'' ?>" id="affTabHistorique">
     <!-- FILTRES MOUVEMENTS -->
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
       <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;flex:1;min-width:0">
+        <input type="hidden" name="tab" value="historique">
         <select name="site" class="fsel" aria-label="Filtrer par site" onchange="this.form.submit()" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;cursor:pointer;outline:none;font-family:'DM Sans',sans-serif;max-width:100%">
           <option value="">Tous les sites</option>
           <?php foreach($sites_list as $s): ?>
@@ -346,7 +373,7 @@ include __DIR__ . '/../templates/header.php';
           <option value="maintenance" <?= $f_type==='maintenance'?'selected':'' ?>>Maintenance</option>
         </select>
         <?php if($f_site||$f_type): ?>
-        <a href="affectations.php" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;text-decoration:none;color:var(--text)"><i class="ph ph-x" aria-hidden="true"></i> Reset</a>
+        <a href="affectations.php?tab=historique" style="padding:9px 14px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;text-decoration:none;color:var(--text)"><i class="ph ph-x" aria-hidden="true"></i> Reset</a>
         <?php endif; ?>
       </form>
       <?php if(can('affectations','can_export')): ?>
@@ -385,9 +412,8 @@ include __DIR__ . '/../templates/header.php';
         </div>
         <?php endforeach; endif; ?>
       </div>
-      <?= pagination($total,$per_page,$page,'affectations.php?'.http_build_query(['site'=>$f_site,'type_mouv'=>$f_type])) ?>
+      <?= pagination($total,$per_page,$page,'affectations.php?'.http_build_query(['site'=>$f_site,'type_mouv'=>$f_type,'tab'=>'historique'])) ?>
     </div>
-  </div>
 </div>
 
 <!-- MODAL RETOUR STOCK -->
@@ -409,6 +435,15 @@ include __DIR__ . '/../templates/header.php';
 </div>
 
 <script>
+function affTab(name){
+  document.querySelectorAll('.aff-tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.tab===name));
+  const panelN = document.getElementById('affTabNouvelle');
+  if(panelN) panelN.classList.toggle('active', name==='nouvelle');
+  document.getElementById('affTabHistorique').classList.toggle('active', name==='historique');
+  const url = new URL(location.href);
+  url.searchParams.set('tab', name);
+  history.replaceState(null, '', url);
+}
 let searchTimer;
 function escHtml(s){
   return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -438,7 +473,7 @@ function searchEquip(q){
     });
   },300);
 }
-document.getElementById('affResults').addEventListener('click',e=>{
+document.getElementById('affResults')?.addEventListener('click',e=>{
   const item=e.target.closest('.ac-item');
   if(!item)return;
   selectEquip(item.dataset.id,item.dataset.num,item.dataset.type,item.dataset.site,item.dataset.user,item.dataset.etat);
@@ -473,10 +508,10 @@ function toggleBLField(){
   const wrap = document.getElementById('affBLWrap');
   wrap.style.display = (site && (type==='transfert'||type==='sortie')) ? 'block' : 'none';
 }
-document.getElementById('affTypeMouv').addEventListener('change', toggleBLField);
-document.getElementById('affSite').addEventListener('change', toggleBLField);
+document.getElementById('affTypeMouv')?.addEventListener('change', toggleBLField);
+document.getElementById('affSite')?.addEventListener('change', toggleBLField);
 
-document.getElementById('affFichierBL').addEventListener('change',function(){
+document.getElementById('affFichierBL')?.addEventListener('change',function(){
   const prev=document.getElementById('affBLPreview');
   if(this.files.length){
     prev.style.display='block';
