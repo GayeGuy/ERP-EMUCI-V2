@@ -111,9 +111,9 @@ if ($f_site)   { $where[] = "e.site_id=?";          $params[] = $f_site; }
 if ($f_etat === 'ok') { $where[] = "e.etat IN ('neuf','bon')"; }
 elseif ($f_etat)      { $where[] = "e.etat=?";       $params[] = $f_etat; }
 if ($f_type)   { $where[] = "e.nomenclature_id=?";   $params[] = $f_type; }
-if ($f_search) { $where[] = "(e.numero_serie_interne ILIKE ? OR e.marque ILIKE ? OR e.modele ILIKE ?)"; $params[] = "%$f_search%"; $params[] = "%$f_search%"; $params[] = "%$f_search%"; }
+if ($f_search) { $where[] = "(e.numero_serie_interne LIKE ? OR e.marque LIKE ? OR e.modele LIKE ?)"; $params[] = "%$f_search%"; $params[] = "%$f_search%"; $params[] = "%$f_search%"; }
 if ($f_statut_stock) { $where[] = "e.statut_stock=?"; $params[] = $f_statut_stock; }
-if ($f_fin_cycle)    { $where[] = "e.date_fin_cycle IS NOT NULL AND e.date_fin_cycle < (CURRENT_DATE + INTERVAL '30 days')"; }
+if ($f_fin_cycle)    { $where[] = "e.date_fin_cycle IS NOT NULL AND e.date_fin_cycle < (CURRENT_DATE + INTERVAL 30 DAY)"; }
 
 $equipements = db_fetch_all(
     "SELECT e.*, s.nom AS site_nom, n.libelle AS type_nom,
@@ -160,13 +160,13 @@ $nb_total  = count($equipements);
 $where_kpi = ["e.categorie=?","e.actif=1"]; $params_kpi = [$f_categorie];
 if ($f_site)   { $where_kpi[] = "e.site_id=?";          $params_kpi[] = $f_site; }
 if ($f_type)   { $where_kpi[] = "e.nomenclature_id=?";  $params_kpi[] = $f_type; }
-if ($f_search) { $where_kpi[] = "(e.numero_serie_interne ILIKE ? OR e.marque ILIKE ? OR e.modele ILIKE ?)"; $params_kpi[] = "%$f_search%"; $params_kpi[] = "%$f_search%"; $params_kpi[] = "%$f_search%"; }
+if ($f_search) { $where_kpi[] = "(e.numero_serie_interne LIKE ? OR e.marque LIKE ? OR e.modele LIKE ?)"; $params_kpi[] = "%$f_search%"; $params_kpi[] = "%$f_search%"; $params_kpi[] = "%$f_search%"; }
 $kpi = db_fetch_one(
     "SELECT COUNT(*) AS total,
             SUM(CASE WHEN e.etat IN ('neuf','bon') THEN 1 ELSE 0 END) AS ok,
             SUM(CASE WHEN e.etat='hs' THEN 1 ELSE 0 END) AS hs,
             SUM(CASE WHEN e.statut_stock='en_stock' THEN 1 ELSE 0 END) AS stock,
-            SUM(CASE WHEN e.date_fin_cycle IS NOT NULL AND e.date_fin_cycle < (CURRENT_DATE + INTERVAL '30 days') THEN 1 ELSE 0 END) AS fin_cycle
+            SUM(CASE WHEN e.date_fin_cycle IS NOT NULL AND e.date_fin_cycle < (CURRENT_DATE + INTERVAL 30 DAY) THEN 1 ELSE 0 END) AS fin_cycle
      FROM equipements e
      WHERE ".implode(' AND ',$where_kpi),
     $params_kpi
