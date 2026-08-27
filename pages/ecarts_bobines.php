@@ -56,9 +56,9 @@ $ecarts = db_fetch_all(
 // ── KPIs
 $kpis = db_fetch_one(
     "SELECT
-        COUNT(*) FILTER (WHERE eb.statut='ouvert')  AS nb_ouvert,
-        COUNT(*) FILTER (WHERE eb.statut='resolu')  AS nb_resolu,
-        COUNT(*) FILTER (WHERE eb.statut='ignore')  AS nb_ignore,
+        SUM(CASE WHEN eb.statut='ouvert' THEN 1 ELSE 0 END)  AS nb_ouvert,
+        SUM(CASE WHEN eb.statut='resolu' THEN 1 ELSE 0 END)  AS nb_resolu,
+        SUM(CASE WHEN eb.statut='ignore' THEN 1 ELSE 0 END)  AS nb_ignore,
         COUNT(*)                                     AS nb_total
      FROM ecarts_bobines eb
      JOIN op_bobines ob ON ob.id = eb.bobine_id

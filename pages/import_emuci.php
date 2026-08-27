@@ -50,8 +50,8 @@ function logger_site_inconnu(string $nom_emuci, string $type_import): void {
     db_query(
         "INSERT INTO emuci_sites_inconnus (nom_emuci, type_import, nb_occurrences, derniere_apparition)
          VALUES (?, ?, 1, NOW())
-         ON CONFLICT (nom_emuci,type_import) DO UPDATE SET
-           nb_occurrences = emuci_sites_inconnus.nb_occurrences + 1,
+         ON DUPLICATE KEY UPDATE
+           nb_occurrences = nb_occurrences + 1,
            derniere_apparition = NOW()",
         [$nom_emuci, $type_import]
     );
@@ -165,8 +165,11 @@ function _auto_valider_stock(string $date_import, int $user_id): array {
             db_query(
                 "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,gsb_user_id,gsb_at)
                  VALUES (?,?,'valide_auto',0,?,NOW())
-                 ON CONFLICT (site_id,date_validation) DO UPDATE SET statut='valide_auto',nb_ecarts=0,gsb_user_id=EXCLUDED.gsb_user_id,gsb_at=NOW()
-                 WHERE validations_stock_matin.gsb_user_id IS NULL",
+                 ON DUPLICATE KEY UPDATE
+                   statut      = IF(gsb_user_id IS NULL, 'valide_auto', statut),
+                   nb_ecarts   = IF(gsb_user_id IS NULL, 0, nb_ecarts),
+                   gsb_at      = IF(gsb_user_id IS NULL, NOW(), gsb_at),
+                   gsb_user_id = IF(gsb_user_id IS NULL, VALUES(gsb_user_id), gsb_user_id)",
                 [$site_id, $date_import, $user_id]
             );
             $coords = db_fetch_all(
@@ -539,7 +542,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         [$nb_ok, $nb_err, $session_id]);
                     $nb_crees = (int)db_fetch_value(
                         "SELECT COUNT(*) FROM op_bobines
-                         WHERE created_at >= (NOW() - INTERVAL '5 MINUTE')"
+                         WHERE created_at >= (NOW() - INTERVAL 5 MINUTE)"
                     );
                     audit_log($user['id'], 'CREATE', 'import_emuci', 0,
                         "Import OptoTrace $date_import — $nb_ok lignes, $nb_stock_maj bobines MAJ/créées");
