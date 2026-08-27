@@ -178,7 +178,7 @@ if ($detail_id) {
 $sessions = db_fetch_all(
     "SELECT se.*, CONCAT(u.prenom,' ',u.nom) AS ouverte_par_nom,
             COUNT(iss.site_id) AS nb_sites,
-            COUNT(*) FILTER (WHERE ib.statut = 'valide') AS nb_clotures
+            SUM(CASE WHEN ib.statut = 'valide' THEN 1 ELSE 0 END) AS nb_clotures
      FROM inventaire_sessions se
      LEFT JOIN users u ON u.id = se.ouverte_par
      LEFT JOIN inventaire_session_sites iss ON iss.session_id = se.id

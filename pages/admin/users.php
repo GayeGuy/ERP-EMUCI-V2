@@ -134,7 +134,7 @@ $f_actif  = $_GET['actif'] ?? '';
 $where  = ['1=1'];
 $params = [];
 if ($search) {
-    $where[]  = '(u.nom ILIKE ? OR u.prenom ILIKE ? OR u.email ILIKE ?)';
+    $where[]  = '(u.nom LIKE ? OR u.prenom LIKE ? OR u.email LIKE ?)';
     $s = "%$search%"; $params = [$s, $s, $s];
 }
 if ($f_role)        { $where[] = 'u.role_id=?';  $params[] = $f_role; }

@@ -290,7 +290,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             "SELECT b.id, b.numero, b.type_code, b.films_restants,
                     COALESCE(s.nom,'Entrepôt') AS site_actuel
              FROM op_bobines b LEFT JOIN sites s ON s.id=b.site_id
-             WHERE b.numero ILIKE ? LIMIT 1",
+             WHERE b.numero LIKE ? LIMIT 1",
             ["%$numero%"]
         );
         if (!$bob) json_response(false,"Bobine '$numero' introuvable.");

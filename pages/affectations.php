@@ -113,7 +113,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
              LEFT JOIN nomenclatures n ON n.id=e.nomenclature_id
              LEFT JOIN sites s ON s.id=e.site_id
              LEFT JOIN users u ON u.id=e.utilisateur_id
-             WHERE e.actif=1 AND (e.numero_serie_interne ILIKE ? OR e.numero_serie_origine ILIKE ?)
+             WHERE e.actif=1 AND (e.numero_serie_interne LIKE ? OR e.numero_serie_origine LIKE ?)
              LIMIT 10",
             ["%$q%", "%$q%"]
         );

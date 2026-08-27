@@ -78,7 +78,7 @@ function inv_creer_mensuel(int $site_id, string $date, ?int $session_id, int $us
 
     foreach ($bobines as $b) {
         $conso_moy = (float)db_fetch_value(
-            "SELECT COALESCE(SUM(quantite)/GREATEST(((NOW())::date - (MIN(date_conso)::date)),1),0) FROM consommations_bobines WHERE bobine_id=? AND date_conso>=(CURRENT_DATE - INTERVAL '30 DAY')",
+            "SELECT COALESCE(SUM(quantite)/GREATEST(DATEDIFF(NOW(), MIN(date_conso)),1),0) FROM consommations_bobines WHERE bobine_id=? AND date_conso>=(CURRENT_DATE - INTERVAL 30 DAY)",
             [$b['id']]
         );
         $ecart_connu = (int)db_fetch_value("SELECT COALESCE(SUM(ecart),0) FROM ecarts_bobines WHERE bobine_id=? AND statut='ouvert'", [$b['id']]);
