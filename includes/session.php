@@ -254,6 +254,15 @@ function _check_permission_db(int $role_id, string $module, string $droit): bool
 }
 
 function _support_it_can(array $user, string $module, string $droit): bool {
+    // Demandes internes est transversal ("tous les employés", cf.
+    // groupes_config.php) : ne pas le filtrer par sous-rôle IT, sinon
+    // aucun support_it ne peut jamais y accéder quel que soit son
+    // sous-rôle actif, quoi que porte la table permissions. Trouvé en
+    // testant l'activation du droit 'demandes' (2026-08-27).
+    if ($module === 'demandes') {
+        return _check_permission_db($user['role_id'], $module, $droit);
+    }
+
     $sous_roles = $user['support_it_sous_roles'] ?? [];
 
     $acces = [
