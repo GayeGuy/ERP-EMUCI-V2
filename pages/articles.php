@@ -112,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             $rec_id  = null;
 
             // Enregistrer la réception globale si table receptions_fournisseur existe
-            $has_rf = (bool)db_fetch_value("SELECT to_regclass('public.receptions_fournisseur') IS NOT NULL");
+            $has_rf = (bool)db_fetch_value("SELECT (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='receptions_fournisseur') > 0");
             if ($has_rf) {
                 db_query(
                     "INSERT INTO receptions_fournisseur (numero_reception,fournisseur,date_reception,statut,notes,created_by)
@@ -128,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             }
 
             // Compat legacy : enregistrer aussi dans receptions_consommables si elle existe
-            $has_old = (bool)db_fetch_value("SELECT to_regclass('public.receptions_consommables') IS NOT NULL");
+            $has_old = (bool)db_fetch_value("SELECT (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='receptions_consommables') > 0");
             if ($has_old) {
                 db_query(
                     "INSERT INTO receptions_consommables (consommable_id,quantite,prix_unitaire,prix_total,date_reception,fournisseur,numero_bon,notes,created_by)
@@ -143,7 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
             // Enregistrer mouvement
             $new_stock = (int)db_fetch_value("SELECT stock_global FROM articles WHERE id=?", [$article_id]);
-            if ((bool)db_fetch_value("SELECT to_regclass('public.mouvements_stock') IS NOT NULL")) {
+            if ((bool)db_fetch_value("SELECT (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='mouvements_stock') > 0")) {
                 db_query(
                     "INSERT INTO mouvements_stock (article_id,type_mouvement,quantite,solde_apres,reference,notes,created_by)
                      VALUES (?,?,?,?,?,?,?)",
@@ -188,7 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             $num_dist = 'DS-'.date('Ymd').'-'.str_pad(rand(1,999),3,'0',STR_PAD_LEFT);
 
             // compat legacy livraisons_consommables
-            $has_lc = (bool)db_fetch_value("SELECT to_regclass('public.livraisons_consommables') IS NOT NULL");
+            $has_lc = (bool)db_fetch_value("SELECT (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='livraisons_consommables') > 0");
             if ($has_lc) {
                 db_query(
                     "INSERT INTO livraisons_consommables (consommable_id,site_id,type_mouvement,quantite,prix_unitaire,prix_total,date_livraison,bon_livraison,fichier_bl,notes,created_by)
@@ -199,7 +199,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             }
 
             // Nouvelle table distributions_site
-            $has_ds = (bool)db_fetch_value("SELECT to_regclass('public.distributions_site') IS NOT NULL");
+            $has_ds = (bool)db_fetch_value("SELECT (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='distributions_site') > 0");
             $dist_id = null;
             if ($has_ds) {
                 db_query(
@@ -218,8 +218,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             // Stock global -
             db_query("UPDATE articles SET stock_global = stock_global - ? WHERE id=?", [$qte, $article_id]);
             // Stock site +
-            db_query("INSERT INTO stock_site (article_id,site_id,quantite) VALUES (?,?,?) ON CONFLICT (article_id,site_id) DO UPDATE SET quantite = stock_site.quantite + ?",
-                [$article_id,$site_id,$qte,$qte]);
+            db_query("INSERT INTO stock_site (article_id,site_id,quantite) VALUES (?,?,?) ON DUPLICATE KEY UPDATE quantite = quantite + VALUES(quantite)",
+                [$article_id,$site_id,$qte]);
 
             // Réception site en_attente
             db_query(
@@ -230,7 +230,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
             // Mouvement stock
             $new_stock = (int)db_fetch_value("SELECT stock_global FROM articles WHERE id=?", [$article_id]);
-            if ((bool)db_fetch_value("SELECT to_regclass('public.mouvements_stock') IS NOT NULL")) {
+            if ((bool)db_fetch_value("SELECT (SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='mouvements_stock') > 0")) {
                 db_query(
                     "INSERT INTO mouvements_stock (article_id,site_id,type_mouvement,quantite,solde_apres,reference,notes,created_by)
                      VALUES (?,?,?,?,?,?,?,?)",
@@ -297,8 +297,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $diff = $new_qte - $old_qte;
         db_begin();
         try {
-            db_query("INSERT INTO stock_site (article_id,site_id,quantite) VALUES (?,?,?) ON CONFLICT (article_id,site_id) DO UPDATE SET quantite=?",
-                [$article_id,$site_id,$new_qte,$new_qte]);
+            db_query("INSERT INTO stock_site (article_id,site_id,quantite) VALUES (?,?,?) ON DUPLICATE KEY UPDATE quantite=VALUES(quantite)",
+                [$article_id,$site_id,$new_qte]);
             db_query("UPDATE articles SET stock_global = stock_global + ? WHERE id=?", [$diff, $article_id]);
             audit_log($user['id'],'UPDATE','articles',$article_id,
                 "Ajustement site:$site_id : $old_qte → $new_qte ($motif)");
@@ -326,7 +326,7 @@ $f_type   = trim($_GET['type']    ?? '');
 // que le stock central agrégé.
 $f_site      = $site_force ?: (int)($_GET['site'] ?? 0);
 $where = ['1=1']; $params = [];
-if ($search)   { $where[] = '(a.code ILIKE ? OR a.libelle ILIKE ?)'; $s="%$search%"; $params=[$s,$s]; }
+if ($search)   { $where[] = '(a.code LIKE ? OR a.libelle LIKE ?)'; $s="%$search%"; $params=[$s,$s]; }
 if ($f_alerte) { $where[] = 'a.stock_global <= a.seuil_alerte'; }
 if ($f_type)   { $where[] = 'a.type_article=?'; $params[] = $f_type; }
 if ($f_site) {
@@ -341,10 +341,10 @@ $articles_list = db_fetch_all(
             COALESCE(ss_f.quantite, 0) AS stock_site_filtre,
             COALESCE((SELECT SUM(quantite) FROM receptions_consommables r
                       WHERE r.consommable_id=a.id
-                        AND r.date_reception >= (CURRENT_DATE - INTERVAL '30 DAY')),0) AS receptions_30j,
+                        AND r.date_reception >= (CURRENT_DATE - INTERVAL 30 DAY)),0) AS receptions_30j,
             COALESCE((SELECT SUM(quantite) FROM livraisons_consommables l
                       WHERE l.consommable_id=a.id AND l.type_mouvement='distribution'
-                        AND l.date_livraison >= (CURRENT_DATE - INTERVAL '30 DAY')),0) AS distributions_30j
+                        AND l.date_livraison >= (CURRENT_DATE - INTERVAL 30 DAY)),0) AS distributions_30j
      FROM articles a
      LEFT JOIN stock_site ss ON ss.article_id=a.id
      LEFT JOIN stock_site ss_f ON ss_f.article_id=a.id AND ss_f.site_id=?
@@ -360,10 +360,10 @@ $familles_achat = db_fetch_all("SELECT id, code, libelle FROM familles_achat WHE
 // « Stock magasin », visible seulement pour qui suit les achats.
 $lignes_libres = [];
 if (can('achats_suivi', 'can_read')) {
-    $where_libre  = ["fl.article_id IS NULL", "fl.type_achat IS DISTINCT FROM 'DAI'", "(fs.quantite_recue - fs.quantite_expediee) > 0", "s.type = 'magasin'"];
+    $where_libre  = ["fl.article_id IS NULL", "NOT (fl.type_achat <=> 'DAI')", "(fs.quantite_recue - fs.quantite_expediee) > 0", "s.type = 'magasin'"];
     $params_libre = [];
     if ($f_site)  { $where_libre[] = 'fs.site_id = ?'; $params_libre[] = $f_site; }
-    if ($search)  { $where_libre[] = 'fl.designation ILIKE ?'; $params_libre[] = '%' . $search . '%'; }
+    if ($search)  { $where_libre[] = 'fl.designation LIKE ?'; $params_libre[] = '%' . $search . '%'; }
     $lignes_libres = db_fetch_all(
         "SELECT f.numero AS feb_numero, fl.designation, fl.unite, s.nom AS site_nom,
                 (fs.quantite_recue - fs.quantite_expediee) AS quantite_magasin
@@ -379,8 +379,8 @@ if (can('achats_suivi', 'can_read')) {
 
 $kpi_total   = count($articles_list);
 $kpi_alertes = count(array_filter($articles_list, fn($a) => $a['stock_global'] <= $a['seuil_alerte']));
-$kpi_receptions_mois = (int)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM receptions_consommables WHERE date_reception >= date_trunc('month',CURRENT_DATE)::date");
-$kpi_distrib_mois    = (int)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM livraisons_consommables WHERE type_mouvement='distribution' AND date_livraison >= date_trunc('month',CURRENT_DATE)::date");
+$kpi_receptions_mois = (int)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM receptions_consommables WHERE date_reception >= DATE_FORMAT(CURRENT_DATE,'%Y-%m-01')");
+$kpi_distrib_mois    = (int)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM livraisons_consommables WHERE type_mouvement='distribution' AND date_livraison >= DATE_FORMAT(CURRENT_DATE,'%Y-%m-01')");
 
 include __DIR__ . '/../templates/header.php';
 ?>

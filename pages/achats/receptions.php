@@ -212,14 +212,14 @@ $lignes_expedition = $can_magasin ? db_fetch_all(
      JOIN feb_lignes fl  ON fl.id = fs.feb_ligne_id
      LEFT JOIN sites s        ON s.id = fs.site_id
      LEFT JOIN departements d ON d.id = f.departement_id
-     WHERE fl.type_achat IS DISTINCT FROM 'DAI' AND fs.quantite_recue > fs.quantite_expediee
+     WHERE NOT (fl.type_achat <=> 'DAI') AND fs.quantite_recue > fs.quantite_expediee
      ORDER BY fs.id ASC",
     []
 ) : [];
 
 // Étape 3 — Réception département : ce qui a été expédié et pas encore
 // confirmé reçu par le département.
-$where3  = ["fl.type_achat IS DISTINCT FROM 'DAI'", "fs.quantite_expediee > fs.quantite_receptionnee_departement"];
+$where3  = ["NOT (fl.type_achat <=> 'DAI')", "fs.quantite_expediee > fs.quantite_receptionnee_departement"];
 $params3 = [];
 if ($departements_n1_force) {
     $placeholders = implode(',', array_fill(0, count($departements_n1_force), '?'));
