@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
         if ($actif) {
             db_query("INSERT INTO delegations (superviseur_id, gestionnaire_id, module, libelle, actif) VALUES (?,?,?,?,1)
-                      ON CONFLICT (superviseur_id,gestionnaire_id,module) DO UPDATE SET actif=1",
+                      ON DUPLICATE KEY UPDATE actif=1",
                 [$user['id'], $gest_id, $module, $modules_disponibles[$module]]);
             json_response(true, "Tâche '{$modules_disponibles[$module]}' déléguée à {$gest['nom']}.");
         } else {
@@ -68,7 +68,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $cible = db_fetch_one("SELECT id, CONCAT(prenom,' ',nom) AS nom FROM users WHERE id=? AND actif=1", [$cible_id]);
         if (!$cible) json_response(false, 'Utilisateur introuvable.');
         db_query("INSERT INTO delegations (superviseur_id, gestionnaire_id, module, libelle, actif) VALUES (?,?,?,?,1)
-                  ON CONFLICT (superviseur_id,gestionnaire_id,module) DO UPDATE SET actif=1",
+                  ON DUPLICATE KEY UPDATE actif=1",
             [$user['id'], $cible_id, 'inventaire_sessions', 'Responsable sessions inventaire']);
         json_response(true, "{$cible['nom']} peut maintenant ouvrir et clôturer des sessions d'inventaire.");
     }

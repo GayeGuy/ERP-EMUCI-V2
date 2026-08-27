@@ -242,7 +242,7 @@ $f_actif  = $_GET['actif']      ?? '1';
 $where  = ['1=1'];
 $params = [];
 if ($f_search) {
-    $where[]  = '(s.nom ILIKE ? OR s.code ILIKE ? OR s.ville ILIKE ?)';
+    $where[]  = '(s.nom LIKE ? OR s.code LIKE ? OR s.ville LIKE ?)';
     $params[] = "%$f_search%"; $params[] = "%$f_search%"; $params[] = "%$f_search%";
 }
 if ($f_type)  { $where[] = 's.type=?';  $params[] = $f_type; }
@@ -267,7 +267,7 @@ $sites = db_fetch_all(
 // Stats globales (indépendantes des filtres)
 $stats_type = db_fetch_all(
     "SELECT type, COUNT(*) AS total, SUM(actif) AS actifs
-     FROM sites GROUP BY type ORDER BY array_position(ARRAY['saisie','pose','mixte','entrepot','siege','magasin']::text[], (type)::text)"
+     FROM sites GROUP BY type ORDER BY FIELD(type, 'saisie','pose','mixte','entrepot','siege','magasin')"
 );
 $stats_ville = db_fetch_all(
     "SELECT ville, COUNT(*) AS n FROM sites WHERE actif=1 AND ville IS NOT NULL AND ville != ''
