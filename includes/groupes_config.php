@@ -184,7 +184,7 @@ function _groupes_def(): array {
                 // figurent pas, contrairement à leur accès normal à RAPPORTS.
                 ['label'=>'Résumé superviseur','icon'=>'ph-chart-line-up',
                  'url'=>'pages/resume_superviseur.php','active_keys'=>['resume_superviseur'],
-                 'roles_exclude'=>['raf','daf']],
+                 'roles_exclude'=>['raf','daf','directeur_general']],
                 ['label'=>'Rapports généraux','icon'=>'ph-chart-bar',
                  'url'=>'pages/rapports.php','active_keys'=>['rapports']],
                 ['label'=>'Exports',          'icon'=>'ph-export',
@@ -380,6 +380,10 @@ function get_groupes_pour_role(string $role_slug): array {
         // RAF / DAF — validation administrative et financière
         'raf'                        => ['DASHBOARD','RAPPORTS'],
         'daf'                        => ['DASHBOARD','RAPPORTS'],
+        // Directeur général — porte rapports.can_read/can_export en base
+        // (audit permissions du 2026-08-27) mais n'avait aucun groupe pour
+        // s'y rendre ; ajouté ici plutôt que laissé en accès fantôme.
+        'directeur_general'          => ['DASHBOARD','RAPPORTS'],
         // Admin
         'admin'                      => $all,
         'superadmin'                 => $all,
