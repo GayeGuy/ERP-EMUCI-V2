@@ -386,9 +386,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         db_begin();
         try {
             db_query("UPDATE commandes SET statut='recu',recu_par=?,recu_at=NOW() WHERE id=?",[$user['id'],$cmd_id]);
-            db_query("UPDATE distribution_lignes dl SET statut='livre'
-                      FROM distributions_site ds
-                      WHERE ds.id=dl.distribution_id AND ds.commande_id=?",[$cmd_id]);
+            db_query("UPDATE distribution_lignes dl
+                      JOIN distributions_site ds ON ds.id=dl.distribution_id
+                      SET dl.statut='livre'
+                      WHERE ds.commande_id=?",[$cmd_id]);
             db_query("UPDATE distributions_site SET statut='livre',recu_at=NOW(),recu_par=?
                       WHERE commande_id=?",[$user['id'],$cmd_id]);
             // Mettre à jour stock site — articles classiques (+)
