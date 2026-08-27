@@ -254,7 +254,7 @@ $f_statut = trim($_GET['statut'] ?? '');
 $where  = [];
 $params = [];
 if ($f_q !== '') {
-    $where[]  = "(nom ILIKE ? OR prenom ILIKE ? OR COALESCE(matricule,'') ILIKE ? OR COALESCE(email,'') ILIKE ?)";
+    $where[]  = "(nom LIKE ? OR prenom LIKE ? OR COALESCE(matricule,'') LIKE ? OR COALESCE(email,'') LIKE ?)";
     $like     = "%$f_q%";
     array_push($params, $like, $like, $like, $like);
 }
@@ -277,9 +277,9 @@ $departements_ref = db_fetch_all("SELECT label FROM departements WHERE actif=1 O
 $sites_ref        = db_fetch_all("SELECT nom FROM sites WHERE actif=1 ORDER BY nom");
 $kpis   = db_fetch_one(
     "SELECT COUNT(*) AS total,
-            COUNT(*) FILTER (WHERE statut='actif') AS actifs,
-            COUNT(DISTINCT departement) FILTER (WHERE departement IS NOT NULL AND departement <> '') AS nb_depts,
-            COUNT(DISTINCT site) FILTER (WHERE site IS NOT NULL AND site <> '') AS nb_sites
+            SUM(CASE WHEN statut='actif' THEN 1 ELSE 0 END) AS actifs,
+            COUNT(DISTINCT CASE WHEN departement IS NOT NULL AND departement <> '' THEN departement END) AS nb_depts,
+            COUNT(DISTINCT CASE WHEN site IS NOT NULL AND site <> '' THEN site END) AS nb_sites
      FROM agents"
 );
 
