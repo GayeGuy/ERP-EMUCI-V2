@@ -403,8 +403,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 if ($lr['article_id'] && $lr['qte'] > 0) {
                     db_query(
                         "INSERT INTO stock_site (article_id,site_id,quantite) VALUES (?,?,?)
-                         ON CONFLICT (article_id,site_id) DO UPDATE SET quantite = stock_site.quantite + ?",
-                        [$lr['article_id'],$cmd['site_id'],$lr['qte'],$lr['qte']]
+                         ON DUPLICATE KEY UPDATE quantite = quantite + VALUES(quantite)",
+                        [$lr['article_id'],$cmd['site_id'],$lr['qte']]
                     );
                 }
             }
@@ -426,8 +426,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 $type_rivet = (strpos($lib_norm, 'eclat') !== false) ? 'eclate' : 'gonflable';
                 db_query(
                     "INSERT INTO op_stock_rivets (site_id, type_rivet, quantite) VALUES (?,?,?)
-                     ON CONFLICT (site_id,type_rivet) DO UPDATE SET quantite = op_stock_rivets.quantite + ?",
-                    [$cmd['site_id'], $type_rivet, (int)$lr['qte'], (int)$lr['qte']]
+                     ON DUPLICATE KEY UPDATE quantite = quantite + VALUES(quantite)",
+                    [$cmd['site_id'], $type_rivet, (int)$lr['qte']]
                 );
             }
 
@@ -444,8 +444,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 if ($type_pmma) {
                     db_query(
                         "INSERT INTO stock_pmma_site (site_id, type_pmma, quantite) VALUES (?,?,?)
-                         ON CONFLICT (site_id,type_pmma) DO UPDATE SET quantite = stock_pmma_site.quantite + ?",
-                        [$cmd['site_id'], $type_pmma, (int)$lr['qte'], (int)$lr['qte']]
+                         ON DUPLICATE KEY UPDATE quantite = quantite + VALUES(quantite)",
+                        [$cmd['site_id'], $type_pmma, (int)$lr['qte']]
                     );
                 }
             }
@@ -566,14 +566,14 @@ if (isset($_GET['export'], $_GET['id'])) {
                     "SELECT COALESCE(ROUND(SUM(COALESCE(cl.quantite_livree,cl.quantite))/4),0)
                      FROM commande_lignes cl JOIN commandes c ON c.id=cl.commande_id
                      WHERE cl.article_id=? AND c.site_id=? AND c.statut IN ('recu','livre')
-                       AND c.recu_at >= (CURRENT_DATE - INTERVAL '4 WEEK')", [$aid,$sid]) ?? 0);
+                       AND c.recu_at >= (CURRENT_DATE - INTERVAL 4 WEEK)", [$aid,$sid]) ?? 0);
             }
             return (int)(db_fetch_value(
                 "SELECT COALESCE(ROUND(SUM(COALESCE(cl.quantite_livree,cl.quantite))/4),0)
                  FROM commande_lignes cl JOIN commandes c ON c.id=cl.commande_id
                  WHERE cl.type_article=? AND cl.libelle=? AND c.site_id=?
                    AND c.statut IN ('recu','livre')
-                   AND c.recu_at >= (CURRENT_DATE - INTERVAL '4 WEEK')", [$type,$lib,$sid]) ?? 0);
+                   AND c.recu_at >= (CURRENT_DATE - INTERVAL 4 WEEK)", [$type,$lib,$sid]) ?? 0);
         };
 
         switch ($type) {
@@ -700,7 +700,7 @@ $articles_dispo = db_fetch_all(
                 WHERE cl3.article_id = a.id
                   AND (? = 0 OR c3.site_id = ?)
                   AND c3.statut IN ('recu','livre')
-                  AND c3.recu_at >= (CURRENT_DATE - INTERVAL '4 WEEK')
+                  AND c3.recu_at >= (CURRENT_DATE - INTERVAL 4 WEEK)
             ), 0) AS conso
      FROM articles a
      LEFT JOIN stock_site ss ON ss.article_id = a.id AND ss.site_id = ?
@@ -728,7 +728,7 @@ foreach (db_fetch_all("SELECT DISTINCT type_pmma FROM stock_pmma_site WHERE quan
             "SELECT COALESCE(ROUND(SUM(COALESCE(cl.quantite_livree,cl.quantite))/4),0)
              FROM commande_lignes cl JOIN commandes c ON c.id=cl.commande_id
              WHERE cl.type_article='pmma' AND cl.libelle=? AND c.site_id=? AND c.statut IN ('recu','livre')
-               AND c.recu_at >= (CURRENT_DATE - INTERVAL '4 WEEK')", [$lib,$_sid]) ?? 0) : 0,
+               AND c.recu_at >= (CURRENT_DATE - INTERVAL 4 WEEK)", [$lib,$_sid]) ?? 0) : 0,
     ];
 }
 
@@ -780,7 +780,7 @@ foreach ($rivet_types as $rt) {
             "SELECT COALESCE(ROUND(SUM(COALESCE(cl.quantite_livree,cl.quantite))/4),0)
              FROM commande_lignes cl JOIN commandes c ON c.id=cl.commande_id
              WHERE cl.type_article='rivet' AND cl.libelle=? AND c.site_id=? AND c.statut IN ('recu','livre')
-               AND c.recu_at >= (CURRENT_DATE - INTERVAL '4 WEEK')", [$rt['libelle'], $_sid]) ?? 0) : 0,
+               AND c.recu_at >= (CURRENT_DATE - INTERVAL 4 WEEK)", [$rt['libelle'], $_sid]) ?? 0) : 0,
     ];
 }
 
