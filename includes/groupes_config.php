@@ -268,9 +268,13 @@ function _groupes_def(): array {
                 ['label'=>'Suivi Achats (DA/BC)',  'icon'=>'ph-truck',
                  'url'=>'pages/achats/suivi_achats.php','active_keys'=>['achats_suivi'],
                  'perm'=>['achats_suivi','can_read']],
+                // can_read, pas can_create : la garde reelle de la page est
+                // can('achats_suivi','can_read') || N+1 (cf. $peut_voir_etape3
+                // dans pages/achats/receptions.php) - un profil can_read seul
+                // (raf/daf/lecteur) voit l'ecran meme sans pouvoir confirmer.
                 ['label'=>'Réceptions',            'icon'=>'ph-package',
                  'url'=>'pages/achats/receptions.php','active_keys'=>['achats_receptions'],
-                 'perm'=>['achats_suivi','can_create'], 'ou_n1'=>true],
+                 'perm'=>['achats_suivi','can_read'], 'ou_n1'=>true],
                 ['label'=>'Stock par département', 'icon'=>'ph-buildings',
                  'url'=>'pages/achats/stock_departements.php','active_keys'=>['achats_stock_departements'],
                  'perm'=>['achats_suivi','can_read'], 'ou_n1'=>true],
