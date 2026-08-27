@@ -489,7 +489,7 @@ include __DIR__ . '/../templates/header.php';
   <?php if (!$site_force): ?>
   <div>
     <label for="fSite">Site</label>
-    <select id="fSite">
+    <select id="fSite" onchange="appliquerFiltres()">
       <option value="0">Tous les sites</option>
       <?php foreach ($sites_list as $s): ?>
       <option value="<?= $s['id'] ?>" <?= $f_site == $s['id'] ? 'selected' : '' ?>><?= h($s['nom']) ?></option>
@@ -500,7 +500,7 @@ include __DIR__ . '/../templates/header.php';
   <?php if (!empty($types_list)): ?>
   <div>
     <label for="fType">Format PMMA</label>
-    <select id="fType">
+    <select id="fType" onchange="appliquerFiltres()">
       <option value="">Tous les formats</option>
       <?php foreach ($types_list as $t): ?>
       <option value="<?= h($t['type_pmma']) ?>" <?= $f_type === $t['type_pmma'] ? 'selected' : '' ?>><?= h($t['type_pmma']) ?></option>
