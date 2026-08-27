@@ -523,6 +523,12 @@ include __DIR__ . '/../templates/header.php';
     <div class="kpi-val" style="color:var(--blue)"><?= fmt_number($total_stock) ?></div>
     <div class="kpi-lbl">Total PMMA en stock</div>
   </div>
+  <?php foreach ($pmma_types as $typ): ?>
+  <div class="kpi">
+    <div class="kpi-val" style="color:var(--blue);font-size:22px"><?= fmt_number($stock_type_map[$typ] ?? 0) ?></div>
+    <div class="kpi-lbl">Total <?= h($typ) ?> en stock</div>
+  </div>
+  <?php endforeach; ?>
   <?php if ($nb_stock_bas > 0): ?>
   <div class="kpi" style="border-color:#fca5a5;background:#fff5f5">
     <div class="kpi-val" style="color:var(--danger-d)"><?= $nb_stock_bas ?></div>
