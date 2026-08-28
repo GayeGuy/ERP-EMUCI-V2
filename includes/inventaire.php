@@ -133,3 +133,45 @@ function inv_creer_rivets(int $site_id, string $date, ?int $session_id, int $use
 
     return ['id' => $inv_id, 'nb' => count($stocks)];
 }
+
+// ── Crée l'inventaire mensuel des PMMA d'un site (+ ses lignes détail,
+//    une par type_pmma en stock) et le rattache à une session. Même
+//    logique que inv_creer_rivets() — stock agrégé par (site_id,type_pmma)
+//    dans stock_pmma_site, sauf que type_pmma est un texte libre (pas un
+//    format fixe) : la liste des types dépend de ce qui existe en stock.
+function inv_creer_pmma(int $site_id, string $date, ?int $session_id, int $user_id): array {
+    $exist = db_fetch_one(
+        "SELECT id FROM inventaires_pmma WHERE site_id=? AND date_inventaire=? AND type_inventaire='mensuel' AND statut!='annule'",
+        [$site_id, $date]
+    );
+    if ($exist) throw new Exception("Un inventaire mensuel de PMMA existe déjà pour ce site à cette date.");
+
+    $stocks = db_fetch_all(
+        "SELECT type_pmma, quantite FROM stock_pmma_site WHERE site_id=? AND type_pmma <> '' ORDER BY type_pmma",
+        [$site_id]
+    );
+    if (empty($stocks)) throw new Exception('Aucun stock de PMMA sur ce site.');
+
+    $total_systeme = array_sum(array_column($stocks, 'quantite'));
+
+    db_query(
+        "INSERT INTO inventaires_pmma (site_id,date_inventaire,type_inventaire,statut,nb_types,total_quantite_systeme,cree_par,session_id)
+         VALUES (?,?,'mensuel','brouillon',?,?,?,?)",
+        [$site_id, $date, count($stocks), $total_systeme, $user_id, $session_id]
+    );
+    $inv_id = (int)db_last_id();
+
+    foreach ($stocks as $s) {
+        $ecart_connu = (int)db_fetch_value(
+            "SELECT COALESCE(SUM(ecart),0) FROM ecarts_pmma WHERE site_id=? AND type_pmma=? AND statut='ouvert'",
+            [$site_id, $s['type_pmma']]
+        );
+        db_query(
+            "INSERT INTO inventaire_details_pmma (inventaire_id,type_pmma,stock_systeme,stock_physique,ecart,ecart_connu_avant)
+             VALUES (?,?,?,0,0,?)",
+            [$inv_id, $s['type_pmma'], (int)$s['quantite'], $ecart_connu]
+        );
+    }
+
+    return ['id' => $inv_id, 'nb' => count($stocks)];
+}

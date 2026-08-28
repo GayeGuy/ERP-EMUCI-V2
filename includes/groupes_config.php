@@ -61,6 +61,15 @@ function _groupes_def(): array {
                 ['label'=>'PMMA',      'icon'=>'ph-printer',
                  'url'=>'pages/pmma.php','active_keys'=>['pmma'],
                  'perm'=>['pmma','can_read']],
+                // Même mécanisme que "Inventaire rivets"/"Écarts rivets" —
+                // ici les deux entrées sont pilotées par permission (comme
+                // PMMA lui-même), pas par une liste de rôles en dur.
+                ['label'=>'Inventaire PMMA', 'icon'=>'ph-clipboard-text',
+                 'url'=>'pages/inventaire_pmma.php','active_keys'=>['inventaire_pmma'],
+                 'perm'=>['inventaire_pmma','can_read']],
+                ['label'=>'Écarts PMMA', 'icon'=>'ph-warning-diamond',
+                 'url'=>'pages/ecarts_pmma.php','active_keys'=>['ecarts_pmma'],
+                 'perm'=>['ecarts_pmma','can_read']],
                 // roles_include aligné sur $roles_autorises dans
                 // pages/operations/bobines.php (gate en dur, pas de perm DB) —
                 // gestionnaire_stock et superviseur_achat n'y ont pas accès
