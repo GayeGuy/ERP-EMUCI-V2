@@ -271,12 +271,15 @@ include __DIR__ . '/../templates/header.php';
 
 <!-- ── LIGNE 1 : Onglets catégorie + bouton Ajouter ── -->
 <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;flex-wrap:wrap">
-  <a href="?categorie=informatique" class="btn <?= $f_categorie==='informatique'?'btn-primary':'btn-secondary' ?>">
+  <?php if($f_categorie==='informatique'): ?>
+  <span class="btn btn-primary" style="cursor:default">
     <i class="ph-duotone ph-monitor"></i> Informatique
-  </a>
-  <a href="?categorie=operationnel" class="btn <?= $f_categorie==='operationnel'?'btn-primary':'btn-secondary' ?>">
+  </span>
+  <?php else: ?>
+  <span class="btn btn-primary" style="cursor:default">
     <i class="ph-duotone ph-wrench"></i> Opérationnel
-  </a>
+  </span>
+  <?php endif; ?>
   <?php if($can_create): ?>
   <div style="width:1px;height:24px;background:var(--border);margin:0 4px"></div>
   <button type="button" class="btn btn-primary" onclick="ouvrirCreation()">
