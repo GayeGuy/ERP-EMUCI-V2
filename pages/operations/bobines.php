@@ -702,17 +702,16 @@ endif;
     <div class="table-wrap" id="bobinesTableWrap">
       <table>
         <thead><tr>
-          <th>Numéro</th><th>Type</th><th>Format</th><th>Version</th><th>Site</th>
+          <th>Numéro</th><th>Format</th><th>Version</th><th>Site</th>
           <th style="text-align:center">Qté livrée</th>
           <th style="text-align:center">Consommé</th>
           <th style="text-align:center">Restants</th>
-          <th style="width:90px">Niveau</th>
           <th>Statut</th>
           <th style="text-align:center">Actions</th>
         </tr></thead>
         <tbody>
         <?php if(empty($bobines)): ?>
-          <tr><td colspan="11" style="text-align:center;padding:40px;color:var(--muted)">Aucune bobine trouvée.</td></tr>
+          <tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">Aucune bobine trouvée.</td></tr>
         <?php else: foreach($bobines as $b):
           $qte_init  = max(1,(int)($b['qte_livree'] ?? $b['qte_initiale'] ?? 500));
           $restants  = (int)$b['stock_systeme'];
@@ -723,7 +722,6 @@ endif;
         ?>
           <tr>
             <td><span style="font-family:monospace;font-weight:700;font-size:13px;color:var(--navy)"><?= h($b['numero']) ?></span></td>
-            <td><span style="font-size:12px;background:var(--lighter);padding:2px 8px;border-radius:5px;font-weight:600"><?= h($b['type_code']) ?></span></td>
             <td style="font-size:12.5px"><?= h($b['tb_format'] ?? '—') ?></td>
             <td style="font-size:12.5px;color:var(--muted)"><?= h($b['tb_version'] ?? '—') ?></td>
             <td style="font-size:12.5px"><?= h($b['site_nom']??'') ?:('<span style="color:var(--muted)">Non affectée</span>') ?></td>
@@ -733,10 +731,6 @@ endif;
               <div style="font-size:12px;color:var(--muted)"><?= $pct_conso ?>%</div>
             </td>
             <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;color:<?= $bar_color ?>"><?= number_format($restants) ?></td>
-            <td>
-              <div class="stock-bar"><div class="stock-fill" style="width:<?= min(100,$pct) ?>%;background:<?= $bar_color ?>"></div></div>
-              <div style="font-size:12px;color:var(--muted);text-align:right"><?= $pct ?>% restant</div>
-            </td>
             <td><span class="bobine-status <?= $b['statut'] ?>"><?= ['en_stock'=>'<i class="ph ph-package" aria-hidden="true"></i> En stock','en_cours'=>'<i class="ph ph-film-strip" aria-hidden="true"></i> En cours','epuisee'=>'<i class="ph ph-x-circle" aria-hidden="true"></i> Épuisée','retiree'=>'<i class="ph ph-circle" aria-hidden="true"></i> Retirée'][$b['statut']]??$b['statut'] ?></span></td>
             <td style="text-align:center;white-space:nowrap">
               <button class="btn btn-secondary btn-sm" onclick="viewBobine(<?= $b['id'] ?>)" title="Détail"><i class="ph ph-magnifying-glass" aria-hidden="true"></i></button>
