@@ -54,10 +54,6 @@ function _groupes_def(): array {
                 ['label'=>'Articles',      'icon'=>'ph-cube',
                  'url'=>'pages/articles.php','active_keys'=>['consommables'],
                  'perm'=>['consommables','can_read']],
-                ['label'=>'Affectations',  'icon'=>'ph-arrows-left-right',
-                 'url'=>'pages/affectations.php','active_keys'=>['affectations'],
-                 'perm'=>['affectations','can_create'],
-                 'roles_exclude'=>['coordinateur_site']],
                 ['label'=>'Historique des mouvements', 'icon'=>'ph-clipboard-text',
                  'url'=>'pages/mouvements_equipements.php','active_keys'=>['mouvements_equipements'],
                  'perm'=>['affectations','can_read'],
@@ -183,6 +179,12 @@ function _groupes_def(): array {
                 ['label'=>'Affectations IT',  'icon'=>'ph-arrows-left-right',
                  'url'=>'pages/affectations_it.php','active_keys'=>['affectations_it'],
                  'perm'=>['affectations_it','can_read']],
+                // Deplace depuis STOCK et renomme (2026-08-28) — meme page/perm,
+                // juste un nouvel emplacement dans le menu.
+                ['label'=>'Transfert équipement',  'icon'=>'ph-arrows-left-right',
+                 'url'=>'pages/affectations.php','active_keys'=>['affectations'],
+                 'perm'=>['affectations','can_create'],
+                 'roles_exclude'=>['coordinateur_site']],
             ],
         ],
 
