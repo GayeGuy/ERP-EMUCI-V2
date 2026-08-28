@@ -77,10 +77,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             // Auto-provisionne l'inventaire de chaque site dès l'ouverture : le
             // chef de site le trouve déjà prêt à saisir, il n'a plus à créer
             // lui-même un "nouvel inventaire" ni à choisir une période.
-            // Provisionne à la fois Bobines et Rivets — un site sans stock de
-            // l'un des deux ne bloque pas l'ouverture, juste signalé à part.
+            // Provisionne Bobines, Rivets et PMMA — un site sans stock de l'un
+            // des trois ne bloque pas l'ouverture, juste signalé à part.
             $sites_sans_bobine = [];
             $sites_sans_rivet  = [];
+            $sites_sans_pmma   = [];
             foreach ($sites as $site_id) {
                 try {
                     inv_creer_mensuel($site_id, $debut, $session_id, $user['id']);
@@ -91,6 +92,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     inv_creer_rivets($site_id, $debut, $session_id, $user['id']);
                 } catch (Exception $e) {
                     $sites_sans_rivet[] = db_fetch_value("SELECT nom FROM sites WHERE id=?", [$site_id]);
+                }
+                try {
+                    inv_creer_pmma($site_id, $debut, $session_id, $user['id']);
+                } catch (Exception $e) {
+                    $sites_sans_pmma[] = db_fetch_value("SELECT nom FROM sites WHERE id=?", [$site_id]);
                 }
             }
 
@@ -113,11 +119,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             audit_log($user['id'], 'CREATE', 'inventaire_sessions', $session_id,
                 "Ouverture session inventaire ($periode) " . count($sites) . " site(s), du $debut au $fin"
                 . ($sites_sans_bobine ? ' — sans bobine active : ' . implode(', ', $sites_sans_bobine) : '')
-                . ($sites_sans_rivet ? ' — sans stock rivets : ' . implode(', ', $sites_sans_rivet) : ''));
+                . ($sites_sans_rivet ? ' — sans stock rivets : ' . implode(', ', $sites_sans_rivet) : '')
+                . ($sites_sans_pmma ? ' — sans stock PMMA : ' . implode(', ', $sites_sans_pmma) : ''));
             db_commit();
             $manques = [];
             if ($sites_sans_bobine) $manques[] = 'aucune bobine active pour ' . implode(', ', $sites_sans_bobine);
             if ($sites_sans_rivet)  $manques[] = 'aucun stock de rivets pour ' . implode(', ', $sites_sans_rivet);
+            if ($sites_sans_pmma)   $manques[] = 'aucun stock de PMMA pour ' . implode(', ', $sites_sans_pmma);
             $msg = $manques
                 ? 'Session ouverte. Inventaire prêt pour chaque site, sauf : ' . implode(' ; ', $manques) . ' (à créer une fois le stock enregistré).'
                 : 'Session ouverte — l\'inventaire est déjà prêt pour chaque site.';
@@ -137,14 +145,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
              JOIN sites s ON s.id = iss.site_id
              LEFT JOIN inventaires_bobines ib ON ib.session_id = iss.session_id AND ib.site_id = iss.site_id AND ib.statut != 'annule'
              LEFT JOIN inventaires_rivets  ir ON ir.session_id = iss.session_id AND ir.site_id = iss.site_id AND ir.statut != 'annule'
+             LEFT JOIN inventaires_pmma    ip ON ip.session_id = iss.session_id AND ip.site_id = iss.site_id AND ip.statut != 'annule'
              WHERE iss.session_id = ?
-               AND ((ib.id IS NULL OR ib.statut != 'valide') OR (ir.id IS NULL OR ir.statut != 'valide'))
+               AND ((ib.id IS NULL OR ib.statut != 'valide') OR (ir.id IS NULL OR ir.statut != 'valide') OR (ip.id IS NULL OR ip.statut != 'valide'))
              ORDER BY s.nom",
             [$session_id]
         );
         if ($non_clotures) {
             $noms = implode(', ', array_column($non_clotures, 'nom'));
-            json_response(false, "Tous les sites ne sont pas encore clôturés (bobines et rivets) : $noms.");
+            json_response(false, "Tous les sites ne sont pas encore clôturés (bobines, rivets et PMMA) : $noms.");
         }
 
         db_query("UPDATE inventaire_sessions SET statut='cloturee', cloturee_par=?, cloturee_at=NOW() WHERE id=?",
@@ -176,17 +185,19 @@ if ($detail_id) {
         "SELECT s.id, s.nom,
                 ib.id AS inv_id, ib.statut AS inv_statut, ib.date_inventaire,
                 ib.nb_bobines, ib.nb_ecarts, ib.total_films_physique,
-                ir.id AS riv_inv_id, ir.statut AS riv_statut, ir.nb_ecarts AS riv_nb_ecarts
+                ir.id AS riv_inv_id, ir.statut AS riv_statut, ir.nb_ecarts AS riv_nb_ecarts,
+                ip.id AS pmma_inv_id, ip.statut AS pmma_statut, ip.nb_ecarts AS pmma_nb_ecarts
          FROM inventaire_session_sites iss
          JOIN sites s ON s.id = iss.site_id
          LEFT JOIN inventaires_bobines ib ON ib.session_id = iss.session_id AND ib.site_id = iss.site_id AND ib.statut != 'annule'
          LEFT JOIN inventaires_rivets  ir ON ir.session_id = iss.session_id AND ir.site_id = iss.site_id AND ir.statut != 'annule'
+         LEFT JOIN inventaires_pmma    ip ON ip.session_id = iss.session_id AND ip.site_id = iss.site_id AND ip.statut != 'annule'
          WHERE iss.session_id = ?
          ORDER BY s.nom", [$detail_id]
     );
     $nb_total    = count($sites_session);
-    $nb_clotures = count(array_filter($sites_session, fn($s) => $s['inv_statut'] === 'valide' && $s['riv_statut'] === 'valide'));
-    $nb_en_cours = count(array_filter($sites_session, fn($s) => $s['inv_statut'] === 'brouillon' || $s['riv_statut'] === 'brouillon'));
+    $nb_clotures = count(array_filter($sites_session, fn($s) => $s['inv_statut'] === 'valide' && $s['riv_statut'] === 'valide' && $s['pmma_statut'] === 'valide'));
+    $nb_en_cours = count(array_filter($sites_session, fn($s) => $s['inv_statut'] === 'brouillon' || $s['riv_statut'] === 'brouillon' || $s['pmma_statut'] === 'brouillon'));
     $nb_attente  = $nb_total - $nb_clotures - $nb_en_cours;
     $peut_cloturer = $session['statut'] === 'ouverte' && $nb_total > 0 && $nb_clotures === $nb_total;
 }
@@ -262,6 +273,7 @@ include __DIR__ . '/../templates/header.php';
           <th>Site</th>
           <th>Bobines</th><th style="text-align:center">Écarts</th>
           <th>Rivets</th><th style="text-align:center">Écarts</th>
+          <th>PMMA</th><th style="text-align:center">Écarts</th>
           <th style="text-align:center">Actions</th>
         </tr></thead>
         <tbody>
@@ -270,6 +282,8 @@ include __DIR__ . '/../templates/header.php';
           $st_lbl = ['non_commence'=>'⏳ Non commencé','en_cours'=>'<i class="ph ph-note-pencil" aria-hidden="true"></i> En cours','cloture'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Clôturé'][$st];
           $riv_st = $s['riv_statut'] === 'valide' ? 'cloture' : ($s['riv_statut'] === 'brouillon' ? 'en_cours' : 'non_commence');
           $riv_st_lbl = ['non_commence'=>'⏳ Non commencé','en_cours'=>'<i class="ph ph-note-pencil" aria-hidden="true"></i> En cours','cloture'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Clôturé'][$riv_st];
+          $pmma_st = $s['pmma_statut'] === 'valide' ? 'cloture' : ($s['pmma_statut'] === 'brouillon' ? 'en_cours' : 'non_commence');
+          $pmma_st_lbl = ['non_commence'=>'⏳ Non commencé','en_cours'=>'<i class="ph ph-note-pencil" aria-hidden="true"></i> En cours','cloture'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Clôturé'][$pmma_st];
         ?>
           <tr>
             <td style="font-weight:700"><?= h($s['nom']) ?></td>
@@ -285,6 +299,12 @@ include __DIR__ . '/../templates/header.php';
               <span style="font-weight:800;color:#e74c3c"><?= $s['riv_nb_ecarts'] ?></span>
               <?php else: ?><span style="color:var(--muted)">—</span><?php endif; ?>
             </td>
+            <td><span class="site-statut <?= $pmma_st ?>"><?= $pmma_st_lbl ?></span></td>
+            <td style="text-align:center">
+              <?php if (($s['pmma_nb_ecarts'] ?? 0) > 0): ?>
+              <span style="font-weight:800;color:#e74c3c"><?= $s['pmma_nb_ecarts'] ?></span>
+              <?php else: ?><span style="color:var(--muted)">—</span><?php endif; ?>
+            </td>
             <td style="text-align:center;white-space:nowrap;display:flex;gap:4px;justify-content:center">
               <?php if ($s['inv_id']): ?>
               <a href="<?= APP_URL ?>/pages/inventaire_detail.php?id=<?= $s['inv_id'] ?>" class="btn btn-secondary btn-sm"><i class="ph ph-film-strip" aria-hidden="true"></i> Bobines</a>
@@ -292,7 +312,10 @@ include __DIR__ . '/../templates/header.php';
               <?php if ($s['riv_inv_id']): ?>
               <a href="<?= APP_URL ?>/pages/inventaire_detail_rivets.php?id=<?= $s['riv_inv_id'] ?>" class="btn btn-secondary btn-sm"><i class="ph ph-nut" aria-hidden="true"></i> Rivets</a>
               <?php endif; ?>
-              <?php if (!$s['inv_id'] && !$s['riv_inv_id']): ?><span style="color:var(--muted);font-size:12px">—</span><?php endif; ?>
+              <?php if ($s['pmma_inv_id']): ?>
+              <a href="<?= APP_URL ?>/pages/inventaire_detail_pmma.php?id=<?= $s['pmma_inv_id'] ?>" class="btn btn-secondary btn-sm"><i class="ph ph-printer" aria-hidden="true"></i> PMMA</a>
+              <?php endif; ?>
+              <?php if (!$s['inv_id'] && !$s['riv_inv_id'] && !$s['pmma_inv_id']): ?><span style="color:var(--muted);font-size:12px">—</span><?php endif; ?>
             </td>
           </tr>
         <?php endforeach; ?>
