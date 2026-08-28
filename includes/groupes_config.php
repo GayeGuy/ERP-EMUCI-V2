@@ -51,17 +51,6 @@ function _groupes_def(): array {
                  'url'=>'pages/equipements.php?categorie=operationnel',
                  'active_keys'=>['equipements_op'],
                  'perm'=>['equipements','can_read']],
-                // Même mécanisme que "Inventaire rivets"/"Écarts rivets" —
-                // un inventaire de site couvre les deux catégories
-                // (Informatique + Opérationnel) confondues, pas d'entrée
-                // séparée par catégorie. roles_include calqué sur
-                // $roles_autorises_inv de pages/inventaire_equipements.php.
-                ['label'=>'Inventaire équipements', 'icon'=>'ph-clipboard-text',
-                 'url'=>'pages/inventaire_equipements.php','active_keys'=>['inventaire_equipements'],
-                 'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','admin','superadmin']],
-                ['label'=>'Écarts équipements', 'icon'=>'ph-warning-diamond',
-                 'url'=>'pages/ecarts_equipements.php','active_keys'=>['ecarts_equipements'],
-                 'perm'=>['ecarts_equipements','can_read']],
                 ['label'=>'Articles',      'icon'=>'ph-cube',
                  'url'=>'pages/articles.php','active_keys'=>['consommables'],
                  'perm'=>['consommables','can_read']],
@@ -72,15 +61,6 @@ function _groupes_def(): array {
                 ['label'=>'PMMA',      'icon'=>'ph-printer',
                  'url'=>'pages/pmma.php','active_keys'=>['pmma'],
                  'perm'=>['pmma','can_read']],
-                // Même mécanisme que "Inventaire rivets"/"Écarts rivets" —
-                // ici les deux entrées sont pilotées par permission (comme
-                // PMMA lui-même), pas par une liste de rôles en dur.
-                ['label'=>'Inventaire PMMA', 'icon'=>'ph-clipboard-text',
-                 'url'=>'pages/inventaire_pmma.php','active_keys'=>['inventaire_pmma'],
-                 'perm'=>['inventaire_pmma','can_read']],
-                ['label'=>'Écarts PMMA', 'icon'=>'ph-warning-diamond',
-                 'url'=>'pages/ecarts_pmma.php','active_keys'=>['ecarts_pmma'],
-                 'perm'=>['ecarts_pmma','can_read']],
                 // roles_include aligné sur $roles_autorises dans
                 // pages/operations/bobines.php (gate en dur, pas de perm DB) —
                 // gestionnaire_stock et superviseur_achat n'y ont pas accès
@@ -96,15 +76,6 @@ function _groupes_def(): array {
                 ['label'=>'Rivets',    'icon'=>'ph-nut',
                  'url'=>'pages/operations/rivets.php','active_keys'=>['rivets'],
                  'perm'=>['rivets','can_read']],
-                // Même mécanisme que "Inventaire bobines"/"Écarts bobines"
-                // (groupe BOBINES) — roles_include calqué sur
-                // $roles_autorises_inv de pages/inventaire_rivets.php.
-                ['label'=>'Inventaire rivets', 'icon'=>'ph-clipboard-text',
-                 'url'=>'pages/inventaire_rivets.php','active_keys'=>['inventaire_rivets'],
-                 'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','admin','superadmin']],
-                ['label'=>'Écarts rivets', 'icon'=>'ph-warning-diamond',
-                 'url'=>'pages/ecarts_rivets.php','active_keys'=>['ecarts_rivets'],
-                 'perm'=>['ecarts_rivets','can_read']],
                 ['label'=>'Commandes', 'icon'=>'ph-shopping-cart',
                  'url'=>'pages/commandes.php','active_keys'=>['commandes'],
                  'perm'=>['commandes','can_read']],
@@ -148,6 +119,30 @@ function _groupes_def(): array {
                 ['label'=>'Écarts bobines',       'icon'=>'ph-warning-diamond',
                  'url'=>'pages/ecarts_bobines.php','active_keys'=>['ecarts_bobines'],
                  'perm'=>['ecarts_bobines','can_read']],
+                // Rivets/PMMA/Équipements suivent le même mécanisme d'inventaire
+                // qu'"Inventaire bobines"/"Écarts bobines" ci-dessus (sessions
+                // partagées, cf. "Sessions d'inventaire") : regroupées ici avec
+                // les autres écrans d'inventaire plutôt que dispersées dans
+                // STOCK à côté de leurs pages de stock respectives (déplacé le
+                // 2026-08-28, demande utilisateur).
+                ['label'=>'Inventaire rivets', 'icon'=>'ph-clipboard-text',
+                 'url'=>'pages/inventaire_rivets.php','active_keys'=>['inventaire_rivets'],
+                 'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','admin','superadmin']],
+                ['label'=>'Écarts rivets', 'icon'=>'ph-warning-diamond',
+                 'url'=>'pages/ecarts_rivets.php','active_keys'=>['ecarts_rivets'],
+                 'perm'=>['ecarts_rivets','can_read']],
+                ['label'=>'Inventaire PMMA', 'icon'=>'ph-clipboard-text',
+                 'url'=>'pages/inventaire_pmma.php','active_keys'=>['inventaire_pmma'],
+                 'perm'=>['inventaire_pmma','can_read']],
+                ['label'=>'Écarts PMMA', 'icon'=>'ph-warning-diamond',
+                 'url'=>'pages/ecarts_pmma.php','active_keys'=>['ecarts_pmma'],
+                 'perm'=>['ecarts_pmma','can_read']],
+                ['label'=>'Inventaire équipements', 'icon'=>'ph-clipboard-text',
+                 'url'=>'pages/inventaire_equipements.php','active_keys'=>['inventaire_equipements'],
+                 'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','admin','superadmin']],
+                ['label'=>'Écarts équipements', 'icon'=>'ph-warning-diamond',
+                 'url'=>'pages/ecarts_equipements.php','active_keys'=>['ecarts_equipements'],
+                 'perm'=>['ecarts_equipements','can_read']],
             ],
         ],
 
