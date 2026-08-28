@@ -35,7 +35,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             json_response(false, 'Les permissions du Super Administrateur ne peuvent pas être modifiées.');
 
         $modules  = ['equipements','sites','consommables','nomenclatures','affectations','receptions',
-                       'bobines','inventaire_bobines','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
+                       'bobines','inventaire_bobines','inventaire_rivets','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
                        'operations','rivets','pmma','point_emuci','import_emuci',
                        'interventions','rapport_journalier','affectations_it',
                        'commandes','demandes','agents','delegations','departements','users','audit','rapports'];
@@ -118,6 +118,7 @@ $modules = [
     'import_emuci'       => ['<i class="ph ph-download-simple" aria-hidden="true"></i>', 'Import EMUCI'],
     'interventions'      => ['<i class="ph ph-wrench" aria-hidden="true"></i>', 'Interventions maintenance'],
     'inventaire_bobines' => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Inventaire bobines'],
+    'inventaire_rivets'  => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Inventaire rivets'],
     'audit'              => ['<i class="ph ph-clipboard-text" aria-hidden="true"></i>', 'Journal d\'audit'],
     'nomenclatures'      => ['<i class="ph ph-tag" aria-hidden="true"></i>', 'Nomenclatures'],
     'pmma'               => ['<i class="ph ph-printer" aria-hidden="true"></i>', 'PMMA'],

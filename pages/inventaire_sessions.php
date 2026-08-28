@@ -77,12 +77,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             // Auto-provisionne l'inventaire de chaque site dès l'ouverture : le
             // chef de site le trouve déjà prêt à saisir, il n'a plus à créer
             // lui-même un "nouvel inventaire" ni à choisir une période.
+            // Provisionne à la fois Bobines et Rivets — un site sans stock de
+            // l'un des deux ne bloque pas l'ouverture, juste signalé à part.
             $sites_sans_bobine = [];
+            $sites_sans_rivet  = [];
             foreach ($sites as $site_id) {
                 try {
                     inv_creer_mensuel($site_id, $debut, $session_id, $user['id']);
                 } catch (Exception $e) {
                     $sites_sans_bobine[] = db_fetch_value("SELECT nom FROM sites WHERE id=?", [$site_id]);
+                }
+                try {
+                    inv_creer_rivets($site_id, $debut, $session_id, $user['id']);
+                } catch (Exception $e) {
+                    $sites_sans_rivet[] = db_fetch_value("SELECT nom FROM sites WHERE id=?", [$site_id]);
                 }
             }
 
@@ -104,10 +112,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
             audit_log($user['id'], 'CREATE', 'inventaire_sessions', $session_id,
                 "Ouverture session inventaire ($periode) " . count($sites) . " site(s), du $debut au $fin"
-                . ($sites_sans_bobine ? ' — sans bobine active : ' . implode(', ', $sites_sans_bobine) : ''));
+                . ($sites_sans_bobine ? ' — sans bobine active : ' . implode(', ', $sites_sans_bobine) : '')
+                . ($sites_sans_rivet ? ' — sans stock rivets : ' . implode(', ', $sites_sans_rivet) : ''));
             db_commit();
-            $msg = $sites_sans_bobine
-                ? 'Session ouverte. Inventaire prêt pour chaque site, sauf ' . implode(', ', $sites_sans_bobine) . ' (aucune bobine active — à créer une fois les bobines enregistrées).'
+            $manques = [];
+            if ($sites_sans_bobine) $manques[] = 'aucune bobine active pour ' . implode(', ', $sites_sans_bobine);
+            if ($sites_sans_rivet)  $manques[] = 'aucun stock de rivets pour ' . implode(', ', $sites_sans_rivet);
+            $msg = $manques
+                ? 'Session ouverte. Inventaire prêt pour chaque site, sauf : ' . implode(' ; ', $manques) . ' (à créer une fois le stock enregistré).'
                 : 'Session ouverte — l\'inventaire est déjà prêt pour chaque site.';
             json_response(true, $msg, ['id' => $session_id]);
         } catch (Exception $e) { db_rollback(); json_response(false, 'Erreur : ' . $e->getMessage()); }
@@ -120,17 +132,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         if ($session['statut'] !== 'ouverte') json_response(false, 'Cette session est déjà clôturée.');
 
         $non_clotures = db_fetch_all(
-            "SELECT s.nom
+            "SELECT DISTINCT s.nom
              FROM inventaire_session_sites iss
              JOIN sites s ON s.id = iss.site_id
              LEFT JOIN inventaires_bobines ib ON ib.session_id = iss.session_id AND ib.site_id = iss.site_id AND ib.statut != 'annule'
-             WHERE iss.session_id = ? AND (ib.id IS NULL OR ib.statut != 'valide')
+             LEFT JOIN inventaires_rivets  ir ON ir.session_id = iss.session_id AND ir.site_id = iss.site_id AND ir.statut != 'annule'
+             WHERE iss.session_id = ?
+               AND ((ib.id IS NULL OR ib.statut != 'valide') OR (ir.id IS NULL OR ir.statut != 'valide'))
              ORDER BY s.nom",
             [$session_id]
         );
         if ($non_clotures) {
             $noms = implode(', ', array_column($non_clotures, 'nom'));
-            json_response(false, "Tous les sites ne sont pas encore clôturés : $noms.");
+            json_response(false, "Tous les sites ne sont pas encore clôturés (bobines et rivets) : $noms.");
         }
 
         db_query("UPDATE inventaire_sessions SET statut='cloturee', cloturee_par=?, cloturee_at=NOW() WHERE id=?",
@@ -161,16 +175,18 @@ if ($detail_id) {
     $sites_session = db_fetch_all(
         "SELECT s.id, s.nom,
                 ib.id AS inv_id, ib.statut AS inv_statut, ib.date_inventaire,
-                ib.nb_bobines, ib.nb_ecarts, ib.total_films_physique
+                ib.nb_bobines, ib.nb_ecarts, ib.total_films_physique,
+                ir.id AS riv_inv_id, ir.statut AS riv_statut, ir.nb_ecarts AS riv_nb_ecarts
          FROM inventaire_session_sites iss
          JOIN sites s ON s.id = iss.site_id
          LEFT JOIN inventaires_bobines ib ON ib.session_id = iss.session_id AND ib.site_id = iss.site_id AND ib.statut != 'annule'
+         LEFT JOIN inventaires_rivets  ir ON ir.session_id = iss.session_id AND ir.site_id = iss.site_id AND ir.statut != 'annule'
          WHERE iss.session_id = ?
          ORDER BY s.nom", [$detail_id]
     );
     $nb_total    = count($sites_session);
-    $nb_clotures = count(array_filter($sites_session, fn($s) => $s['inv_statut'] === 'valide'));
-    $nb_en_cours = count(array_filter($sites_session, fn($s) => $s['inv_statut'] === 'brouillon'));
+    $nb_clotures = count(array_filter($sites_session, fn($s) => $s['inv_statut'] === 'valide' && $s['riv_statut'] === 'valide'));
+    $nb_en_cours = count(array_filter($sites_session, fn($s) => $s['inv_statut'] === 'brouillon' || $s['riv_statut'] === 'brouillon'));
     $nb_attente  = $nb_total - $nb_clotures - $nb_en_cours;
     $peut_cloturer = $session['statut'] === 'ouverte' && $nb_total > 0 && $nb_clotures === $nb_total;
 }
@@ -243,32 +259,40 @@ include __DIR__ . '/../templates/header.php';
     <div class="table-wrap">
       <table>
         <thead><tr>
-          <th>Site</th><th>Statut</th><th>Date inventaire</th>
-          <th style="text-align:center">Bobines</th>
-          <th style="text-align:center">Écarts</th>
-          <th style="text-align:center">Stock physique</th>
-          <th style="text-align:center">Action</th>
+          <th>Site</th>
+          <th>Bobines</th><th style="text-align:center">Écarts</th>
+          <th>Rivets</th><th style="text-align:center">Écarts</th>
+          <th style="text-align:center">Actions</th>
         </tr></thead>
         <tbody>
         <?php foreach ($sites_session as $s):
           $st = $s['inv_statut'] === 'valide' ? 'cloture' : ($s['inv_statut'] === 'brouillon' ? 'en_cours' : 'non_commence');
           $st_lbl = ['non_commence'=>'⏳ Non commencé','en_cours'=>'<i class="ph ph-note-pencil" aria-hidden="true"></i> En cours','cloture'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Clôturé'][$st];
+          $riv_st = $s['riv_statut'] === 'valide' ? 'cloture' : ($s['riv_statut'] === 'brouillon' ? 'en_cours' : 'non_commence');
+          $riv_st_lbl = ['non_commence'=>'⏳ Non commencé','en_cours'=>'<i class="ph ph-note-pencil" aria-hidden="true"></i> En cours','cloture'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Clôturé'][$riv_st];
         ?>
           <tr>
             <td style="font-weight:700"><?= h($s['nom']) ?></td>
             <td><span class="site-statut <?= $st ?>"><?= $st_lbl ?></span></td>
-            <td style="font-size:13px;color:var(--muted)"><?= $s['date_inventaire'] ? fmt_date($s['date_inventaire']) : '—' ?></td>
-            <td style="text-align:center"><?= $s['nb_bobines'] ?? '—' ?></td>
             <td style="text-align:center">
               <?php if (($s['nb_ecarts'] ?? 0) > 0): ?>
               <span style="font-weight:800;color:#e74c3c"><?= $s['nb_ecarts'] ?></span>
               <?php else: ?><span style="color:var(--muted)">—</span><?php endif; ?>
             </td>
-            <td style="text-align:center"><?= $s['total_films_physique'] ? fmt_number($s['total_films_physique']) : '—' ?></td>
+            <td><span class="site-statut <?= $riv_st ?>"><?= $riv_st_lbl ?></span></td>
             <td style="text-align:center">
+              <?php if (($s['riv_nb_ecarts'] ?? 0) > 0): ?>
+              <span style="font-weight:800;color:#e74c3c"><?= $s['riv_nb_ecarts'] ?></span>
+              <?php else: ?><span style="color:var(--muted)">—</span><?php endif; ?>
+            </td>
+            <td style="text-align:center;white-space:nowrap;display:flex;gap:4px;justify-content:center">
               <?php if ($s['inv_id']): ?>
-              <a href="<?= APP_URL ?>/pages/inventaire_detail.php?id=<?= $s['inv_id'] ?>" class="btn btn-secondary btn-sm"><i class="ph ph-eye" aria-hidden="true"></i> Détail</a>
-              <?php else: ?><span style="color:var(--muted);font-size:12px">—</span><?php endif; ?>
+              <a href="<?= APP_URL ?>/pages/inventaire_detail.php?id=<?= $s['inv_id'] ?>" class="btn btn-secondary btn-sm"><i class="ph ph-film-strip" aria-hidden="true"></i> Bobines</a>
+              <?php endif; ?>
+              <?php if ($s['riv_inv_id']): ?>
+              <a href="<?= APP_URL ?>/pages/inventaire_detail_rivets.php?id=<?= $s['riv_inv_id'] ?>" class="btn btn-secondary btn-sm"><i class="ph ph-nut" aria-hidden="true"></i> Rivets</a>
+              <?php endif; ?>
+              <?php if (!$s['inv_id'] && !$s['riv_inv_id']): ?><span style="color:var(--muted);font-size:12px">—</span><?php endif; ?>
             </td>
           </tr>
         <?php endforeach; ?>
