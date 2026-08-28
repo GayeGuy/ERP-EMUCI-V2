@@ -22,7 +22,12 @@ $unread = count($notifs);
 // ── Sélection d'un groupe → mémorise en session et redirige
 if (!empty($_GET['set_groupe'])) {
     $slug = strtoupper(trim($_GET['set_groupe']));
-    $accessibles = get_groupes_pour_role($user['role_slug'] ?? '');
+    // get_groupes_utilisateur() plutôt que get_groupes_pour_role() : ce
+    // dernier ne connaît que les groupes en dur dans $map, pas ceux ajoutés
+    // par droit DB (ex. INVENTAIRE via can('inventaire','can_read')) —
+    // sinon le clic sur ce groupe ne redirigeait nulle part (trouvé en
+    // rendant INVENTAIRE éditable depuis Admin → Permissions, 2026-08-28).
+    $accessibles = array_keys(get_groupes_utilisateur());
     if (in_array($slug, $accessibles)) {
         $_SESSION['groupe_actif'] = $slug;
         $def = get_groupe_def($slug);
