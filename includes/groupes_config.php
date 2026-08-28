@@ -72,6 +72,11 @@ function _groupes_def(): array {
                 ['label'=>'Bobines',   'icon'=>'ph-film-strip',
                  'url'=>'pages/operations/bobines.php','active_keys'=>['bobines'],
                  'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','superviseur_it','maintenance_info','admin','superadmin']],
+                // Meme page que "Bobines" (?categorie=vignette), memes roles —
+                // Reservoir/Pare-brise plutot que Auto/Carre/Moto/MotoII.
+                ['label'=>'Vignette',  'icon'=>'ph-sticker',
+                 'url'=>'pages/operations/bobines.php?categorie=vignette','active_keys'=>['bobines_vignette'],
+                 'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','superviseur_it','maintenance_info','admin','superadmin']],
                 ['label'=>'Rivets',    'icon'=>'ph-nut',
                  'url'=>'pages/operations/rivets.php','active_keys'=>['rivets'],
                  'perm'=>['rivets','can_read']],
