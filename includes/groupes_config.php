@@ -94,12 +94,6 @@ function _groupes_def(): array {
                 ['label'=>'Commande bobines',     'icon'=>'ph-shopping-cart',
                  'url'=>'pages/commandes_bobines.php','active_keys'=>['commandes_bobines'],
                  'perm'=>['commandes_bobines','can_read']],
-                // roles_include aligné sur $roles_autorises dans
-                // pages/operations/bobines.php (gate en dur, pas de perm DB) —
-                // gestionnaire_stock et controleur_production n'y ont pas accès.
-                ['label'=>'Gestion bobines',      'icon'=>'ph-film-strip',
-                 'url'=>'pages/operations/bobines.php','active_keys'=>['bobines'],
-                 'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','superviseur_it','maintenance_info','admin','superadmin']],
                 // roles_exclude aligné sur validation_stock_matin.php : accès
                 // ouvert au coordinateur (is_coord) ou via can('validation_stock',
                 // 'can_create') — controleur_production n'a ni l'un ni l'autre.
