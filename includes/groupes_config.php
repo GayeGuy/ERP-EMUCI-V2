@@ -65,6 +65,13 @@ function _groupes_def(): array {
                 ['label'=>'PMMA',      'icon'=>'ph-printer',
                  'url'=>'pages/pmma.php','active_keys'=>['pmma'],
                  'perm'=>['pmma','can_read']],
+                // roles_include aligné sur $roles_autorises dans
+                // pages/operations/bobines.php (gate en dur, pas de perm DB) —
+                // gestionnaire_stock et superviseur_achat n'y ont pas accès
+                // (cf. entrée "Gestion bobines" du groupe BOBINES, même page).
+                ['label'=>'Bobines',   'icon'=>'ph-film-strip',
+                 'url'=>'pages/operations/bobines.php','active_keys'=>['bobines'],
+                 'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','superviseur_it','maintenance_info','admin','superadmin']],
                 ['label'=>'Rivets',    'icon'=>'ph-nut',
                  'url'=>'pages/operations/rivets.php','active_keys'=>['rivets'],
                  'perm'=>['rivets','can_read']],
