@@ -404,6 +404,11 @@ function get_groupes_pour_role(string $role_slug): array {
 }
 
 // ── Retourne les groupes accessibles pour l'utilisateur connecté (clé => def)
+//    N'inclut un groupe que s'il reste au moins un item de nav visible pour
+//    ce rôle une fois les permissions appliquées (get_groupe_nav_items) :
+//    sinon la carte "Mes espaces" mène à un groupe entièrement vide, qui
+//    retombe sur 'first_page' et finit en 403 (trouvé avec DEMANDES pour un
+//    rôle dont can_read a été désactivé sur ce module, 2026-08-28).
 function get_groupes_utilisateur(): array {
     $user = current_user();
     if (!$user) return [];
@@ -411,7 +416,9 @@ function get_groupes_utilisateur(): array {
     $def   = _groupes_def();
     $result = [];
     foreach ($slugs as $slug) {
-        if (isset($def[$slug])) $result[$slug] = $def[$slug];
+        if (!isset($def[$slug])) continue;
+        if (empty(get_groupe_nav_items($slug))) continue;
+        $result[$slug] = $def[$slug];
     }
     return $result;
 }
