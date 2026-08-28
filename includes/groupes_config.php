@@ -406,11 +406,11 @@ function get_groupes_pour_role(string $role_slug): array {
     $all = TOUS_LES_GROUPES;
     $map = [
         // Terrain production
-        'coordinateur_site'          => ['DASHBOARD','OPERATIONS','BOBINES','STOCK','INVENTAIRE'],
+        'coordinateur_site'          => ['DASHBOARD','OPERATIONS','BOBINES','STOCK'],
         // Stock & approvisionnement (accès commandes via OPERATIONS)
-        'gestionnaire_stock'         => ['DASHBOARD','OPERATIONS','BOBINES','STOCK','INVENTAIRE'],
+        'gestionnaire_stock'         => ['DASHBOARD','OPERATIONS','BOBINES','STOCK'],
         // Supervision opérationnelle
-        'superviseur_operation'      => ['DASHBOARD','OPERATIONS','BOBINES','STOCK','INVENTAIRE','RAPPORTS'],
+        'superviseur_operation'      => ['DASHBOARD','OPERATIONS','BOBINES','STOCK','RAPPORTS'],
         // IT maintenance
         'maintenance_info'           => ['DASHBOARD','INFORMATIQUE','STOCK'],
         'superviseur_it'             => ['DASHBOARD','INFORMATIQUE','STOCK'],
@@ -418,11 +418,11 @@ function get_groupes_pour_role(string $role_slug): array {
         // Achat & approvisionnement (accès commandes via OPERATIONS)
         'superviseur_achat'          => ['DASHBOARD','OPERATIONS','STOCK','ACHATS'],
         // Production (ex-PRODUCTION → OPERATIONS)
-        'controleur_production'      => ['DASHBOARD','OPERATIONS','BOBINES','INVENTAIRE'],
+        'controleur_production'      => ['DASHBOARD','OPERATIONS','BOBINES'],
         // Opérations
         'gestionnaire_operation'     => ['DASHBOARD','OPERATIONS'],
         // GSB (gestionnaire stock bobines)
-        'gestionnaire_stock_bobines' => ['DASHBOARD','OPERATIONS','BOBINES','STOCK','INVENTAIRE'],
+        'gestionnaire_stock_bobines' => ['DASHBOARD','OPERATIONS','BOBINES','STOCK'],
         // Lecture seule : uniquement la vue PDG et les demandes à valider.
         // Les droits fins page par page (ex. resume_superviseur.php, qui
         // autorise explicitement 'lecteur') ne changent pas — seule la
@@ -460,6 +460,14 @@ function get_groupes_utilisateur(): array {
     $user = current_user();
     if (!$user) return [];
     $slugs = get_groupes_pour_role($user['role_slug'] ?? '');
+    // Le groupe INVENTAIRE (sorti de BOBINES le 2026-08-28) a son propre
+    // droit en base ('inventaire', can_read) plutôt qu'un rôle en dur dans
+    // $map ci-dessus : modifiable depuis Admin → Permissions sans toucher
+    // au code. Les filtres par item de get_groupe_nav_items() continuent
+    // de s'appliquer en plus (ex. Écarts X reste gardé par ecarts_X).
+    if (!in_array('INVENTAIRE', $slugs, true) && can('inventaire', 'can_read')) {
+        $slugs[] = 'INVENTAIRE';
+    }
     $def   = _groupes_def();
     $result = [];
     foreach ($slugs as $slug) {
