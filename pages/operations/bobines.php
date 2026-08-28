@@ -636,9 +636,6 @@ endif;
 
 <!-- TAB LISTE -->
 <div id="tab-liste">
-  <?php
-  $types_bobines_list = db_fetch_all("SELECT DISTINCT type_code FROM op_bobines WHERE type_code IS NOT NULL ORDER BY type_code");
-  ?>
   <form method="GET" class="filter-bar" id="bobFiltreForm">
     <?php if(!$site_force): ?>
     <select name="site" class="fsel" aria-label="Filtrer par site" onchange="bobFiltrer(this.form)">
@@ -656,13 +653,6 @@ endif;
       <option value="epuisee"  <?= $f_statut==='epuisee'?'selected':'' ?>>❌ Épuisées</option>
       <option value="retiree"  <?= $f_statut==='retiree'?'selected':'' ?>>✅ Retirées</option>
       <option value="perdue"   <?= $f_statut==='perdue'?'selected':'' ?>>⚠️ Perdues</option>
-    </select>
-
-    <select name="type" class="fsel" aria-label="Filtrer par type" onchange="bobFiltrer(this.form)">
-      <option value="">Tous les types</option>
-      <?php foreach($types_bobines_list as $t): ?>
-      <option value="<?= h($t['type_code']) ?>" <?= $f_type===$t['type_code']?'selected':'' ?>><?= h($t['type_code']) ?></option>
-      <?php endforeach; ?>
     </select>
 
     <select name="format" class="fsel" aria-label="Filtrer par format" onchange="bobFiltrer(this.form)">
@@ -1218,7 +1208,7 @@ function bobCharger(url){
     });
 }
 function bobMajEffacer(form){
-  const actif = ['site','statut','type','format','version','q'].some(n => form.elements[n] && form.elements[n].value);
+  const actif = ['site','statut','format','version','q'].some(n => form.elements[n] && form.elements[n].value);
   const btn = document.getElementById('bobEffacerBtn');
   if(btn) btn.style.display = actif ? '' : 'none';
 }
@@ -1229,7 +1219,7 @@ function bobFiltrer(form){
 function bobEffacer(ev){
   ev.preventDefault();
   const form = document.getElementById('bobFiltreForm');
-  ['site','statut','type','format','version','q'].forEach(n => { if(form.elements[n]) form.elements[n].value = ''; });
+  ['site','statut','format','version','q'].forEach(n => { if(form.elements[n]) form.elements[n].value = ''; });
   document.getElementById('bobEffacerBtn').style.display = 'none';
   bobCharger(location.pathname);
   return false;
