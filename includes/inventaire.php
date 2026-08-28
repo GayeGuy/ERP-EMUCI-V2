@@ -134,6 +134,48 @@ function inv_creer_rivets(int $site_id, string $date, ?int $session_id, int $use
     return ['id' => $inv_id, 'nb' => count($stocks)];
 }
 
+// ── Crée l'inventaire mensuel des Équipements d'un site (+ ses lignes
+//    détail, une par équipement affecté) et le rattache à une session.
+//    Différent des trois autres : équipements = objets individuels sans
+//    quantité, donc pas de stock_systeme à figer — juste une checklist
+//    de présence à cocher (trouve NULL au départ). Périmètre calqué sur
+//    la liste principale de pages/equipements.php : tous les équipements
+//    actifs affectés au site, toutes catégories confondues.
+function inv_creer_equipements(int $site_id, string $date, ?int $session_id, int $user_id): array {
+    $exist = db_fetch_one(
+        "SELECT id FROM inventaires_equipements WHERE site_id=? AND date_inventaire=? AND type_inventaire='mensuel' AND statut!='annule'",
+        [$site_id, $date]
+    );
+    if ($exist) throw new Exception("Un inventaire mensuel d'équipements existe déjà pour ce site à cette date.");
+
+    $equipements = db_fetch_all(
+        "SELECT id FROM equipements WHERE site_id=? AND actif=1 ORDER BY numero_serie_interne",
+        [$site_id]
+    );
+    if (empty($equipements)) throw new Exception('Aucun équipement actif sur ce site.');
+
+    db_query(
+        "INSERT INTO inventaires_equipements (site_id,date_inventaire,type_inventaire,statut,nb_equipements,cree_par,session_id)
+         VALUES (?,?,'mensuel','brouillon',?,?,?)",
+        [$site_id, $date, count($equipements), $user_id, $session_id]
+    );
+    $inv_id = (int)db_last_id();
+
+    foreach ($equipements as $e) {
+        $ecart_connu = db_fetch_value(
+            "SELECT COUNT(*) FROM ecarts_equipements WHERE equipement_id=? AND statut='ouvert'",
+            [$e['id']]
+        ) ? 1 : 0;
+        db_query(
+            "INSERT INTO inventaire_details_equipements (inventaire_id,equipement_id,ecart_connu_avant)
+             VALUES (?,?,?)",
+            [$inv_id, $e['id'], $ecart_connu]
+        );
+    }
+
+    return ['id' => $inv_id, 'nb' => count($equipements)];
+}
+
 // ── Crée l'inventaire mensuel des PMMA d'un site (+ ses lignes détail,
 //    une par type_pmma en stock) et le rattache à une session. Même
 //    logique que inv_creer_rivets() — stock agrégé par (site_id,type_pmma)

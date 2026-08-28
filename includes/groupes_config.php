@@ -51,6 +51,17 @@ function _groupes_def(): array {
                  'url'=>'pages/equipements.php?categorie=operationnel',
                  'active_keys'=>['equipements_op'],
                  'perm'=>['equipements','can_read']],
+                // Même mécanisme que "Inventaire rivets"/"Écarts rivets" —
+                // un inventaire de site couvre les deux catégories
+                // (Informatique + Opérationnel) confondues, pas d'entrée
+                // séparée par catégorie. roles_include calqué sur
+                // $roles_autorises_inv de pages/inventaire_equipements.php.
+                ['label'=>'Inventaire équipements', 'icon'=>'ph-clipboard-text',
+                 'url'=>'pages/inventaire_equipements.php','active_keys'=>['inventaire_equipements'],
+                 'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','admin','superadmin']],
+                ['label'=>'Écarts équipements', 'icon'=>'ph-warning-diamond',
+                 'url'=>'pages/ecarts_equipements.php','active_keys'=>['ecarts_equipements'],
+                 'perm'=>['ecarts_equipements','can_read']],
                 ['label'=>'Articles',      'icon'=>'ph-cube',
                  'url'=>'pages/articles.php','active_keys'=>['consommables'],
                  'perm'=>['consommables','can_read']],
