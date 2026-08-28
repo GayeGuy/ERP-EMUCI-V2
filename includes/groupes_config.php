@@ -100,31 +100,26 @@ function _groupes_def(): array {
                 ['label'=>'Validation stock jour','icon'=>'ph-seal-check',
                  'url'=>'pages/validation_stock_matin.php','active_keys'=>['validation_stock_matin'],
                  'roles_exclude'=>['controleur_production']],
+                // n° 19 réunion ERP : réservé au responsable des sessions
+                // (admin/superadmin ou délégation, cf. can() et Délégations).
+                // Placée avant les 4 paires Inventaire/Écarts : c'est l'écran
+                // qui pilote (ouverture/clôture) les quatre à la fois.
+                ['label'=>"Sessions d'inventaire", 'icon'=>'ph-calendar-check',
+                 'url'=>'pages/inventaire_sessions.php','active_keys'=>['inventaire_sessions'],
+                 'perm'=>['inventaire_sessions','can_read']],
+                // 4 paires Inventaire/Écarts groupées côte à côte (Bobines,
+                // Rivets, PMMA, Équipements — même mécanisme, cf.
+                // includes/inventaire.php) plutôt que Écarts bobines séparée
+                // du reste par Rapports & Exports/Vue stock (réorganisé le
+                // 2026-08-28, demande utilisateur).
                 // roles_include aligné sur $roles_autorises_inv dans
                 // pages/inventaire_bobines.php.
                 ['label'=>'Inventaire bobines',   'icon'=>'ph-clipboard-text',
                  'url'=>'pages/inventaire_bobines.php','active_keys'=>['inventaire_bobines'],
                  'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','admin','superadmin']],
-                // n° 19 réunion ERP : réservé au responsable des sessions
-                // (admin/superadmin ou délégation, cf. can() et Délégations).
-                ['label'=>"Sessions d'inventaire", 'icon'=>'ph-calendar-check',
-                 'url'=>'pages/inventaire_sessions.php','active_keys'=>['inventaire_sessions'],
-                 'perm'=>['inventaire_sessions','can_read']],
-                ['label'=>'Rapports & Exports',   'icon'=>'ph-file-arrow-down',
-                 'url'=>'pages/rapports_gsb.php','active_keys'=>['rapports_gsb'],
-                 'roles_include'=>['admin','superadmin','gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation']],
-                ['label'=>'Vue stock par site',   'icon'=>'ph-table',
-                 'url'=>'pages/stock_bobines_vue.php','active_keys'=>['stock_bobines_vue'],
-                 'roles_exclude'=>['coordinateur_site']],
                 ['label'=>'Écarts bobines',       'icon'=>'ph-warning-diamond',
                  'url'=>'pages/ecarts_bobines.php','active_keys'=>['ecarts_bobines'],
                  'perm'=>['ecarts_bobines','can_read']],
-                // Rivets/PMMA/Équipements suivent le même mécanisme d'inventaire
-                // qu'"Inventaire bobines"/"Écarts bobines" ci-dessus (sessions
-                // partagées, cf. "Sessions d'inventaire") : regroupées ici avec
-                // les autres écrans d'inventaire plutôt que dispersées dans
-                // STOCK à côté de leurs pages de stock respectives (déplacé le
-                // 2026-08-28, demande utilisateur).
                 ['label'=>'Inventaire rivets', 'icon'=>'ph-clipboard-text',
                  'url'=>'pages/inventaire_rivets.php','active_keys'=>['inventaire_rivets'],
                  'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','admin','superadmin']],
@@ -143,6 +138,14 @@ function _groupes_def(): array {
                 ['label'=>'Écarts équipements', 'icon'=>'ph-warning-diamond',
                  'url'=>'pages/ecarts_equipements.php','active_keys'=>['ecarts_equipements'],
                  'perm'=>['ecarts_equipements','can_read']],
+                // Rapports/vue de synthèse en fin de liste — pas des écrans de
+                // comptage, ne font pas partie du flux "session -> inventaire".
+                ['label'=>'Rapports & Exports',   'icon'=>'ph-file-arrow-down',
+                 'url'=>'pages/rapports_gsb.php','active_keys'=>['rapports_gsb'],
+                 'roles_include'=>['admin','superadmin','gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation']],
+                ['label'=>'Vue stock par site',   'icon'=>'ph-table',
+                 'url'=>'pages/stock_bobines_vue.php','active_keys'=>['stock_bobines_vue'],
+                 'roles_exclude'=>['coordinateur_site']],
             ],
         ],
 
