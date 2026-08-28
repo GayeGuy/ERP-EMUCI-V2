@@ -269,24 +269,14 @@ include __DIR__ . '/../templates/header.php';
 .taux-ok{color:var(--success-d);font-weight:700} .taux-warn{color:#f39c12;font-weight:700} .taux-danger{color:var(--danger-d);font-weight:700}
 </style>
 
-<!-- ── LIGNE 1 : Onglets catégorie + bouton Ajouter ── -->
+<?php if($can_create): ?>
+<!-- ── LIGNE 1 : bouton Ajouter ── -->
 <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;flex-wrap:wrap">
-  <?php if($f_categorie==='informatique'): ?>
-  <span class="btn btn-primary" style="cursor:default">
-    <i class="ph-duotone ph-monitor"></i> Informatique
-  </span>
-  <?php else: ?>
-  <span class="btn btn-primary" style="cursor:default">
-    <i class="ph-duotone ph-wrench"></i> Opérationnel
-  </span>
-  <?php endif; ?>
-  <?php if($can_create): ?>
-  <div style="width:1px;height:24px;background:var(--border);margin:0 4px"></div>
   <button type="button" class="btn btn-primary" onclick="ouvrirCreation()">
     <i class="ph-duotone ph-plus"></i> Ajouter
   </button>
-  <?php endif; ?>
 </div>
+<?php endif; ?>
 
 <!-- ── KPIs ── -->
 <div class="equip-kpis" id="equipKpis">
