@@ -266,7 +266,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
     // ── DÉTAIL BOBINE
     if ($action==='get_detail') {
         $id = (int)($_POST['id'] ?? 0);
-        $bob = db_fetch_one("SELECT b.*,s.nom AS site_nom,tv.libelle AS type_vehicule FROM op_bobines b LEFT JOIN sites s ON s.id=b.site_id LEFT JOIN op_types_vehicule tv ON tv.id=b.type_vehicule_id WHERE b.id=?",[$id]);
+        $bob = db_fetch_one("SELECT b.*,s.nom AS site_nom,tv.libelle AS type_vehicule,t.format AS tb_format,t.version AS tb_version FROM op_bobines b LEFT JOIN sites s ON s.id=b.site_id LEFT JOIN op_types_vehicule tv ON tv.id=b.type_vehicule_id LEFT JOIN op_types_bobines t ON t.code=b.type_code WHERE b.id=?",[$id]);
         if (!$bob) json_response(false,'Introuvable.');
         $conso_moy = (float)db_fetch_value("SELECT COALESCE(SUM(quantite)/GREATEST(((NOW())::date - (MIN(date_conso)::date)),1),0) FROM consommations_bobines WHERE bobine_id=? AND date_conso>=(CURRENT_DATE - INTERVAL '30 DAY')",[$id]);
         $jours_restants = $conso_moy > 0 ? (int)ceil($bob['stock_systeme']/$conso_moy) : null;
@@ -1370,7 +1370,7 @@ async function viewBobine(id){
   const barColor=pct>50?'#27ae60':pct>20?'#f39c12':'#e74c3c';
   let html=`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;font-size:13px">
     <div><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;margin-bottom:3px">Numéro</div><strong style="font-family:monospace;font-size:15px">${b.numero}</strong></div>
-    <div><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;margin-bottom:3px">Type · Format</div><strong>${b.type_code}</strong>${b.format?' · '+b.format:''}</div>
+    <div><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;margin-bottom:3px">Format · Version</div><strong>${b.tb_format||b.type_code}</strong>${b.tb_version?' · '+b.tb_version:''}</div>
     <div><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;margin-bottom:3px">Site</div><strong>${b.site_nom||'Non affectée'}</strong></div>
     <div><div style="font-size:12px;color:#94a3b8;text-transform:uppercase;margin-bottom:3px">Statut</div>${statuts[b.statut]||b.statut}</div>
   </div>
