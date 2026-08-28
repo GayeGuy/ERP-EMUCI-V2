@@ -5,7 +5,7 @@
 // ============================================================
 
 define('TOUS_LES_GROUPES', [
-    'DASHBOARD','OPERATIONS','BOBINES','STOCK',
+    'DASHBOARD','OPERATIONS','BOBINES','STOCK','INVENTAIRE',
     'INFORMATIQUE','RAPPORTS','DEMANDES','ACHATS','ADMINISTRATION'
 ]);
 
@@ -100,6 +100,27 @@ function _groupes_def(): array {
                 ['label'=>'Validation stock jour','icon'=>'ph-seal-check',
                  'url'=>'pages/validation_stock_matin.php','active_keys'=>['validation_stock_matin'],
                  'roles_exclude'=>['controleur_production']],
+                ['label'=>'Rapports & Exports',   'icon'=>'ph-file-arrow-down',
+                 'url'=>'pages/rapports_gsb.php','active_keys'=>['rapports_gsb'],
+                 'roles_include'=>['admin','superadmin','gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation']],
+                ['label'=>'Vue stock par site',   'icon'=>'ph-table',
+                 'url'=>'pages/stock_bobines_vue.php','active_keys'=>['stock_bobines_vue'],
+                 'roles_exclude'=>['coordinateur_site']],
+            ],
+        ],
+
+        // ── 3bis. INVENTAIRE (module dédié — sorti de BOBINES le 2026-08-28,
+        //         demande utilisateur : sessions + inventaire + écarts pour
+        //         les 4 commodités partageant le même mécanisme, cf.
+        //         includes/inventaire.php)
+        'INVENTAIRE' => [
+            'icon'        => 'ph-clipboard-text',
+            'titre'       => 'Inventaire',
+            'description' => 'Sessions et suivi des inventaires physiques — bobines, rivets, PMMA, équipements',
+            'couleur'     => '#7C3AED',
+            'gradient'    => 'linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%)',
+            'first_page'  => 'pages/inventaire_sessions.php',
+            'nav' => [
                 // n° 19 réunion ERP : réservé au responsable des sessions
                 // (admin/superadmin ou délégation, cf. can() et Délégations).
                 // Placée avant les 4 paires Inventaire/Écarts : c'est l'écran
@@ -107,11 +128,6 @@ function _groupes_def(): array {
                 ['label'=>"Sessions d'inventaire", 'icon'=>'ph-calendar-check',
                  'url'=>'pages/inventaire_sessions.php','active_keys'=>['inventaire_sessions'],
                  'perm'=>['inventaire_sessions','can_read']],
-                // 4 paires Inventaire/Écarts groupées côte à côte (Bobines,
-                // Rivets, PMMA, Équipements — même mécanisme, cf.
-                // includes/inventaire.php) plutôt que Écarts bobines séparée
-                // du reste par Rapports & Exports/Vue stock (réorganisé le
-                // 2026-08-28, demande utilisateur).
                 // roles_include aligné sur $roles_autorises_inv dans
                 // pages/inventaire_bobines.php.
                 ['label'=>'Inventaire bobines',   'icon'=>'ph-clipboard-text',
@@ -138,14 +154,6 @@ function _groupes_def(): array {
                 ['label'=>'Écarts équipements', 'icon'=>'ph-warning-diamond',
                  'url'=>'pages/ecarts_equipements.php','active_keys'=>['ecarts_equipements'],
                  'perm'=>['ecarts_equipements','can_read']],
-                // Rapports/vue de synthèse en fin de liste — pas des écrans de
-                // comptage, ne font pas partie du flux "session -> inventaire".
-                ['label'=>'Rapports & Exports',   'icon'=>'ph-file-arrow-down',
-                 'url'=>'pages/rapports_gsb.php','active_keys'=>['rapports_gsb'],
-                 'roles_include'=>['admin','superadmin','gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation']],
-                ['label'=>'Vue stock par site',   'icon'=>'ph-table',
-                 'url'=>'pages/stock_bobines_vue.php','active_keys'=>['stock_bobines_vue'],
-                 'roles_exclude'=>['coordinateur_site']],
             ],
         ],
 
@@ -398,11 +406,11 @@ function get_groupes_pour_role(string $role_slug): array {
     $all = TOUS_LES_GROUPES;
     $map = [
         // Terrain production
-        'coordinateur_site'          => ['DASHBOARD','OPERATIONS','BOBINES','STOCK'],
+        'coordinateur_site'          => ['DASHBOARD','OPERATIONS','BOBINES','STOCK','INVENTAIRE'],
         // Stock & approvisionnement (accès commandes via OPERATIONS)
-        'gestionnaire_stock'         => ['DASHBOARD','OPERATIONS','BOBINES','STOCK'],
+        'gestionnaire_stock'         => ['DASHBOARD','OPERATIONS','BOBINES','STOCK','INVENTAIRE'],
         // Supervision opérationnelle
-        'superviseur_operation'      => ['DASHBOARD','OPERATIONS','BOBINES','STOCK','RAPPORTS'],
+        'superviseur_operation'      => ['DASHBOARD','OPERATIONS','BOBINES','STOCK','INVENTAIRE','RAPPORTS'],
         // IT maintenance
         'maintenance_info'           => ['DASHBOARD','INFORMATIQUE','STOCK'],
         'superviseur_it'             => ['DASHBOARD','INFORMATIQUE','STOCK'],
@@ -410,11 +418,11 @@ function get_groupes_pour_role(string $role_slug): array {
         // Achat & approvisionnement (accès commandes via OPERATIONS)
         'superviseur_achat'          => ['DASHBOARD','OPERATIONS','STOCK','ACHATS'],
         // Production (ex-PRODUCTION → OPERATIONS)
-        'controleur_production'      => ['DASHBOARD','OPERATIONS','BOBINES'],
+        'controleur_production'      => ['DASHBOARD','OPERATIONS','BOBINES','INVENTAIRE'],
         // Opérations
         'gestionnaire_operation'     => ['DASHBOARD','OPERATIONS'],
         // GSB (gestionnaire stock bobines)
-        'gestionnaire_stock_bobines' => ['DASHBOARD','OPERATIONS','BOBINES','STOCK'],
+        'gestionnaire_stock_bobines' => ['DASHBOARD','OPERATIONS','BOBINES','STOCK','INVENTAIRE'],
         // Lecture seule : uniquement la vue PDG et les demandes à valider.
         // Les droits fins page par page (ex. resume_superviseur.php, qui
         // autorise explicitement 'lecteur') ne changent pas — seule la
