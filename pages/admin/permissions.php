@@ -36,7 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
         $modules  = ['equipements','sites','consommables','nomenclatures','affectations','receptions',
                        'bobines','inventaire_bobines','inventaire_rivets','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
-                       'operations','rivets','pmma','inventaire_pmma','point_emuci','import_emuci',
+                       'operations','rivets','pmma','inventaire_pmma','inventaire_equipements','point_emuci','import_emuci',
                        'interventions','rapport_journalier','affectations_it',
                        'commandes','demandes','agents','delegations','departements','users','audit','rapports'];
         $actions  = ['can_create','can_read','can_update','can_delete','can_export'];
@@ -120,6 +120,7 @@ $modules = [
     'inventaire_bobines' => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Inventaire bobines'],
     'inventaire_rivets'  => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Inventaire rivets'],
     'inventaire_pmma'    => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Inventaire PMMA'],
+    'inventaire_equipements' => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Inventaire équipements'],
     'audit'              => ['<i class="ph ph-clipboard-text" aria-hidden="true"></i>', 'Journal d\'audit'],
     'nomenclatures'      => ['<i class="ph ph-tag" aria-hidden="true"></i>', 'Nomenclatures'],
     'pmma'               => ['<i class="ph ph-printer" aria-hidden="true"></i>', 'PMMA'],
