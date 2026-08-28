@@ -222,8 +222,8 @@ function _groupes_def(): array {
             'icon'        => 'ph-chart-bar',
             'titre'       => 'Rapports',
             'description' => 'Résumés superviseur, analyses et exports de données',
-            'couleur'     => '#0D5C8A',
-            'gradient'    => 'linear-gradient(135deg, #0D5C8A 0%, #1B75BC 100%)',
+            'couleur'     => '#047857',
+            'gradient'    => 'linear-gradient(135deg, #047857 0%, #10B981 100%)',
             'first_page'  => 'pages/resume_superviseur.php',
             'nav' => [
                 // roles_exclude aligné sur $roles_autorises dans
@@ -373,8 +373,8 @@ function _groupes_def(): array {
             'icon'        => 'ph-shield-check',
             'titre'       => 'Administration',
             'description' => 'Utilisateurs, rôles, permissions et configuration système',
-            'couleur'     => '#06033A',
-            'gradient'    => 'linear-gradient(135deg, #06033A 0%, #1B75BC 100%)',
+            'couleur'     => '#374151',
+            'gradient'    => 'linear-gradient(135deg, #374151 0%, #6B7280 100%)',
             'first_page'  => 'pages/admin/users.php',
             'nav' => [
                 ['label'=>'Utilisateurs',  'icon'=>'ph-users',
