@@ -350,21 +350,28 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
 // ============================================================
 //  LISTE
 // ============================================================
-$f_site   = $site_force ?: (int)($_GET['site']    ?? 0);
-$f_statut = trim($_GET['statut']  ?? '');
-$f_serie  = trim($_GET['serie']   ?? '');
-$f_type   = trim($_GET['type']    ?? '');
-$f_search = trim($_GET['q']       ?? '');
+$f_site    = $site_force ?: (int)($_GET['site']    ?? 0);
+$f_statut  = trim($_GET['statut']  ?? '');
+$f_serie   = trim($_GET['serie']   ?? '');
+$f_type    = trim($_GET['type']    ?? '');
+$f_format  = trim($_GET['format']  ?? '');
+$f_version = trim($_GET['version'] ?? '');
+$f_search  = trim($_GET['q']       ?? '');
+$formats_bobines  = ['Auto','Carré','Moto','MotoII','Réservoir','Pare-brise'];
+$versions_bobines = ['Privée','Transport Publique','Institution Internationale','Diplomatique','Gouvernementale','Temporaire'];
 $where=[]; $params=[];
-if($f_site)   {$where[]='b.site_id=?';    $params[]=$f_site;}
-if($f_statut) {$where[]='b.statut=?';     $params[]=$f_statut;}
-if($f_serie)  {$where[]='b.serie=?';      $params[]=$f_serie;}
-if($f_type)   {$where[]='b.type_code=?';  $params[]=$f_type;}
-if($f_search) {$where[]='b.numero ILIKE ?'; $params[]="%$f_search%";}
+if($f_site)    {$where[]='b.site_id=?';    $params[]=$f_site;}
+if($f_statut)  {$where[]='b.statut=?';     $params[]=$f_statut;}
+if($f_serie)   {$where[]='b.serie=?';      $params[]=$f_serie;}
+if($f_type)    {$where[]='b.type_code=?';  $params[]=$f_type;}
+if($f_format)  {$where[]='t.format=?';     $params[]=$f_format;}
+if($f_version) {$where[]='t.version=?';    $params[]=$f_version;}
+if($f_search)  {$where[]='b.numero ILIKE ?'; $params[]="%$f_search%";}
 $wsql = count($where)?'WHERE '.implode(' AND ',$where):'';
 
 $bobines = db_fetch_all(
     "SELECT b.*, s.nom AS site_nom, tv.libelle AS type_vehicule,
+            t.format AS tb_format, t.version AS tb_version,
             -- Quantité réelle au moment de la dernière affectation (transfert)
             COALESCE(
                 (SELECT m.stock_avant FROM mouvements_bobines m
@@ -375,6 +382,7 @@ $bobines = db_fetch_all(
      FROM op_bobines b
      LEFT JOIN sites s ON s.id=b.site_id
      LEFT JOIN op_types_vehicule tv ON tv.id=b.type_vehicule_id
+     LEFT JOIN op_types_bobines t ON t.code=b.type_code
      $wsql ORDER BY b.serie ASC,b.type_code ASC,b.statut ASC,b.numero ASC",
     $params
 );
@@ -657,6 +665,20 @@ endif;
       <?php endforeach; ?>
     </select>
 
+    <select name="format" class="fsel" aria-label="Filtrer par format" onchange="bobFiltrer(this.form)">
+      <option value="">Tous les formats</option>
+      <?php foreach($formats_bobines as $f): ?>
+      <option value="<?= h($f) ?>" <?= $f_format===$f?'selected':'' ?>><?= h($f) ?></option>
+      <?php endforeach; ?>
+    </select>
+
+    <select name="version" class="fsel" aria-label="Filtrer par version" onchange="bobFiltrer(this.form)">
+      <option value="">Toutes les versions</option>
+      <?php foreach($versions_bobines as $v): ?>
+      <option value="<?= h($v) ?>" <?= $f_version===$v?'selected':'' ?>><?= h($v) ?></option>
+      <?php endforeach; ?>
+    </select>
+
     <div style="position:relative">
       <i class="ph-duotone ph-magnifying-glass" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none"></i>
       <input type="text" name="q" value="<?= h($f_search) ?>" aria-label="Rechercher un numéro de bobine"
@@ -665,7 +687,7 @@ endif;
     </div>
 
     <a href="bobines.php" class="btn btn-secondary btn-sm" onclick="return bobEffacer(event)"
-       style="<?= ($f_site||$f_statut||$f_serie||$f_type||$f_search) ? '' : 'display:none' ?>" id="bobEffacerBtn"><i class="ph ph-x" aria-hidden="true"></i> Effacer</a>
+       style="<?= ($f_site||$f_statut||$f_serie||$f_type||$f_format||$f_version||$f_search) ? '' : 'display:none' ?>" id="bobEffacerBtn"><i class="ph ph-x" aria-hidden="true"></i> Effacer</a>
 
     <?php if(can('inventaire_bobines','can_read')): ?>
     <a href="<?= APP_URL ?>/pages/inventaire_bobines.php" class="btn btn-primary btn-sm" style="margin-left:auto"><i class="ph ph-chart-bar" aria-hidden="true"></i> Inventaire</a>
@@ -680,7 +702,7 @@ endif;
     <div class="table-wrap" id="bobinesTableWrap">
       <table>
         <thead><tr>
-          <th>Numéro</th><th>Type</th><th>Site</th>
+          <th>Numéro</th><th>Type</th><th>Format</th><th>Version</th><th>Site</th>
           <th style="text-align:center">Qté livrée</th>
           <th style="text-align:center">Consommé</th>
           <th style="text-align:center">Restants</th>
@@ -690,7 +712,7 @@ endif;
         </tr></thead>
         <tbody>
         <?php if(empty($bobines)): ?>
-          <tr><td colspan="9" style="text-align:center;padding:40px;color:var(--muted)">Aucune bobine trouvée.</td></tr>
+          <tr><td colspan="11" style="text-align:center;padding:40px;color:var(--muted)">Aucune bobine trouvée.</td></tr>
         <?php else: foreach($bobines as $b):
           $qte_init  = max(1,(int)($b['qte_livree'] ?? $b['qte_initiale'] ?? 500));
           $restants  = (int)$b['stock_systeme'];
@@ -702,6 +724,8 @@ endif;
           <tr>
             <td><span style="font-family:monospace;font-weight:700;font-size:13px;color:var(--navy)"><?= h($b['numero']) ?></span></td>
             <td><span style="font-size:12px;background:var(--lighter);padding:2px 8px;border-radius:5px;font-weight:600"><?= h($b['type_code']) ?></span></td>
+            <td style="font-size:12.5px"><?= h($b['tb_format'] ?? '—') ?></td>
+            <td style="font-size:12.5px;color:var(--muted)"><?= h($b['tb_version'] ?? '—') ?></td>
             <td style="font-size:12.5px"><?= h($b['site_nom']??'') ?:('<span style="color:var(--muted)">Non affectée</span>') ?></td>
             <td style="text-align:center;font-size:12px;color:var(--muted);font-weight:600"><?= number_format($qte_init) ?></td>
             <td style="text-align:center">
@@ -1197,7 +1221,7 @@ function bobCharger(url){
     });
 }
 function bobMajEffacer(form){
-  const actif = ['site','statut','type','q'].some(n => form.elements[n] && form.elements[n].value);
+  const actif = ['site','statut','type','format','version','q'].some(n => form.elements[n] && form.elements[n].value);
   const btn = document.getElementById('bobEffacerBtn');
   if(btn) btn.style.display = actif ? '' : 'none';
 }
@@ -1208,7 +1232,7 @@ function bobFiltrer(form){
 function bobEffacer(ev){
   ev.preventDefault();
   const form = document.getElementById('bobFiltreForm');
-  ['site','statut','type','q'].forEach(n => { if(form.elements[n]) form.elements[n].value = ''; });
+  ['site','statut','type','format','version','q'].forEach(n => { if(form.elements[n]) form.elements[n].value = ''; });
   document.getElementById('bobEffacerBtn').style.display = 'none';
   bobCharger(location.pathname);
   return false;
