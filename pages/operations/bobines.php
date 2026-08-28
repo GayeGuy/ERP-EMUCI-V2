@@ -730,7 +730,10 @@ endif;
               <span style="font-weight:700;color:#1D4ED8"><?= number_format($consomme) ?></span>
               <div style="font-size:12px;color:var(--muted)"><?= $pct_conso ?>%</div>
             </td>
-            <td style="text-align:center;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;color:<?= $bar_color ?>"><?= number_format($restants) ?></td>
+            <td style="text-align:center">
+              <span style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;color:<?= $bar_color ?>"><?= number_format($restants) ?></span>
+              <div style="font-size:12px;color:var(--muted)"><?= $pct ?>%</div>
+            </td>
             <td><span class="bobine-status <?= $b['statut'] ?>"><?= ['en_stock'=>'<i class="ph ph-package" aria-hidden="true"></i> En stock','en_cours'=>'<i class="ph ph-film-strip" aria-hidden="true"></i> En cours','epuisee'=>'<i class="ph ph-x-circle" aria-hidden="true"></i> Épuisée','retiree'=>'<i class="ph ph-circle" aria-hidden="true"></i> Retirée'][$b['statut']]??$b['statut'] ?></span></td>
             <td style="text-align:center;white-space:nowrap">
               <button class="btn btn-secondary btn-sm" onclick="viewBobine(<?= $b['id'] ?>)" title="Détail"><i class="ph ph-magnifying-glass" aria-hidden="true"></i></button>
