@@ -76,6 +76,15 @@ function _groupes_def(): array {
                 ['label'=>'Rivets',    'icon'=>'ph-nut',
                  'url'=>'pages/operations/rivets.php','active_keys'=>['rivets'],
                  'perm'=>['rivets','can_read']],
+                // Même mécanisme que "Inventaire bobines"/"Écarts bobines"
+                // (groupe BOBINES) — roles_include calqué sur
+                // $roles_autorises_inv de pages/inventaire_rivets.php.
+                ['label'=>'Inventaire rivets', 'icon'=>'ph-clipboard-text',
+                 'url'=>'pages/inventaire_rivets.php','active_keys'=>['inventaire_rivets'],
+                 'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','admin','superadmin']],
+                ['label'=>'Écarts rivets', 'icon'=>'ph-warning-diamond',
+                 'url'=>'pages/ecarts_rivets.php','active_keys'=>['ecarts_rivets'],
+                 'perm'=>['ecarts_rivets','can_read']],
                 ['label'=>'Commandes', 'icon'=>'ph-shopping-cart',
                  'url'=>'pages/commandes.php','active_keys'=>['commandes'],
                  'perm'=>['commandes','can_read']],

@@ -91,3 +91,45 @@ function inv_creer_mensuel(int $site_id, string $date, ?int $session_id, int $us
 
     return ['id' => $inv_id, 'nb' => count($bobines)];
 }
+
+// ── Crée l'inventaire mensuel des rivets d'un site (+ ses lignes détail,
+//    une par type_rivet en stock) et le rattache à une session. Même
+//    logique que inv_creer_mensuel(), mais rivets = stock agrégé par
+//    (site_id,type_rivet) dans op_stock_rivets, pas d'objet individuel :
+//    le détail clé sur type_rivet plutôt que sur un id.
+function inv_creer_rivets(int $site_id, string $date, ?int $session_id, int $user_id): array {
+    $exist = db_fetch_one(
+        "SELECT id FROM inventaires_rivets WHERE site_id=? AND date_inventaire=? AND type_inventaire='mensuel' AND statut!='annule'",
+        [$site_id, $date]
+    );
+    if ($exist) throw new Exception("Un inventaire mensuel de rivets existe déjà pour ce site à cette date.");
+
+    $stocks = db_fetch_all(
+        "SELECT type_rivet, quantite FROM op_stock_rivets WHERE site_id=? ORDER BY type_rivet",
+        [$site_id]
+    );
+    if (empty($stocks)) throw new Exception('Aucun stock de rivets sur ce site.');
+
+    $total_systeme = array_sum(array_column($stocks, 'quantite'));
+
+    db_query(
+        "INSERT INTO inventaires_rivets (site_id,date_inventaire,type_inventaire,statut,nb_types,total_quantite_systeme,cree_par,session_id)
+         VALUES (?,?,'mensuel','brouillon',?,?,?,?)",
+        [$site_id, $date, count($stocks), $total_systeme, $user_id, $session_id]
+    );
+    $inv_id = (int)db_last_id();
+
+    foreach ($stocks as $s) {
+        $ecart_connu = (int)db_fetch_value(
+            "SELECT COALESCE(SUM(ecart),0) FROM ecarts_rivets WHERE site_id=? AND type_rivet=? AND statut='ouvert'",
+            [$site_id, $s['type_rivet']]
+        );
+        db_query(
+            "INSERT INTO inventaire_details_rivets (inventaire_id,type_rivet,stock_systeme,stock_physique,ecart,ecart_connu_avant)
+             VALUES (?,?,?,0,0,?)",
+            [$inv_id, $s['type_rivet'], (int)$s['quantite'], $ecart_connu]
+        );
+    }
+
+    return ['id' => $inv_id, 'nb' => count($stocks)];
+}
