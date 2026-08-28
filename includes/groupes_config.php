@@ -210,7 +210,7 @@ function _groupes_def(): array {
                  'roles_exclude'=>['lecteur']],
                 ['label'=>'Nouvelle demande','icon'=>'ph-plus-circle',
                  'url'=>'pages/demandes_new.php','active_keys'=>['demandes_new'],
-                 'perm'=>['demandes','can_read'],
+                 'perm'=>['demandes','can_create'],
                  'roles_exclude'=>['lecteur']],
                 ['label'=>'À valider',       'icon'=>'ph-seal-check',
                  'url'=>'pages/demandes_a_valider.php','active_keys'=>['demandes_valider'],
