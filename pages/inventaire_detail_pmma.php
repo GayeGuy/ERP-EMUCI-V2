@@ -265,7 +265,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
 
                 db_query(
                     "INSERT INTO stock_pmma_site (site_id,type_pmma,quantite) VALUES (?,?,?)
-                     ON CONFLICT (site_id,type_pmma) DO UPDATE SET quantite=?",
+                     ON DUPLICATE KEY UPDATE quantite=?",
                     [$inv['site_id'], $l['type_pmma'], $phy, $phy]
                 );
 

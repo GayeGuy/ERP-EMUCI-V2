@@ -128,7 +128,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
                 db_query(
                     "INSERT INTO stock_pmma_site (site_id,type_pmma,quantite) VALUES (?,?,?)
-                     ON CONFLICT (site_id,type_pmma) DO UPDATE SET quantite=?",
+                     ON DUPLICATE KEY UPDATE quantite=?",
                     [$inv['site_id'], $l['type_pmma'], $phy, $phy]
                 );
 
@@ -163,7 +163,7 @@ $where = ['1=1']; $params = [];
 if ($site_force)  { $where[] = 'i.site_id=?'; $params[] = $site_force; }
 elseif ($f_site)  { $where[] = 'i.site_id=?'; $params[] = $f_site; }
 if ($f_type)      { $where[] = 'i.type_inventaire=?'; $params[] = $f_type; }
-if ($f_mois)      { $where[] = "TO_CHAR(i.date_inventaire,'YYYY-MM')=?"; $params[] = $f_mois; }
+if ($f_mois)      { $where[] = "DATE_FORMAT(i.date_inventaire,'%Y-%m')=?"; $params[] = $f_mois; }
 
 $inventaires = db_fetch_all(
     "SELECT i.*, s.nom AS site_nom, CONCAT(u.prenom,' ',u.nom) AS createur

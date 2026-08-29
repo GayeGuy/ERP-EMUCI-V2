@@ -58,8 +58,8 @@ $ecarts = db_fetch_all(
 // ── KPIs
 $kpis = db_fetch_one(
     "SELECT
-        COUNT(*) FILTER (WHERE er.statut='ouvert')  AS nb_ouvert,
-        COUNT(*) FILTER (WHERE er.statut='resolu')  AS nb_resolu,
+        SUM(CASE WHEN er.statut='ouvert' THEN 1 ELSE 0 END)  AS nb_ouvert,
+        SUM(CASE WHEN er.statut='resolu' THEN 1 ELSE 0 END)  AS nb_resolu,
         COUNT(*)                                     AS nb_total
      FROM ecarts_rivets er
      $sql_where",
