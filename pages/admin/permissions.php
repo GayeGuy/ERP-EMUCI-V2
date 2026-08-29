@@ -35,8 +35,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             json_response(false, 'Les permissions du Super Administrateur ne peuvent pas être modifiées.');
 
         $modules  = ['equipements','sites','consommables','nomenclatures','affectations','receptions',
-                       'bobines','inventaire_bobines','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
-                       'operations','rivets','pmma','point_emuci','import_emuci',
+                       'bobines','inventaire','inventaire_bobines','inventaire_rivets','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
+                       'operations','rivets','pmma','inventaire_pmma','inventaire_equipements','point_emuci','import_emuci',
                        'interventions','rapport_journalier','affectations_it',
                        'commandes','demandes','agents','delegations','departements','users','audit','rapports'];
         $actions  = ['can_create','can_read','can_update','can_delete','can_export'];
@@ -85,7 +85,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $id = (int)db_last_id();
         // Initialiser avec aucune permission
         $modules = ['equipements','sites','consommables','nomenclatures','affectations','receptions',
-                    'bobines','inventaire_bobines','stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
+                    'bobines','inventaire','inventaire_bobines','inventaire_rivets','inventaire_pmma','inventaire_equipements',
+                    'stock_bobines','validation_stock','commandes_bobines','rapports_gsb',
                     'operations','rivets','pmma','point_emuci','import_emuci',
                     'interventions','rapport_journalier','affectations_it',
                     'commandes','demandes','agents','delegations','departements','users','audit','rapports'];
@@ -117,7 +118,11 @@ $modules = [
     'equipements'        => ['<i class="ph ph-desktop" aria-hidden="true"></i>', 'Équipements'],
     'import_emuci'       => ['<i class="ph ph-download-simple" aria-hidden="true"></i>', 'Import EMUCI'],
     'interventions'      => ['<i class="ph ph-wrench" aria-hidden="true"></i>', 'Interventions maintenance'],
+    'inventaire'         => ['<i class="ph ph-clipboard-text" aria-hidden="true"></i>', 'Inventaire (accès module)'],
     'inventaire_bobines' => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Inventaire bobines'],
+    'inventaire_rivets'  => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Inventaire rivets'],
+    'inventaire_pmma'    => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Inventaire PMMA'],
+    'inventaire_equipements' => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Inventaire équipements'],
     'audit'              => ['<i class="ph ph-clipboard-text" aria-hidden="true"></i>', 'Journal d\'audit'],
     'nomenclatures'      => ['<i class="ph ph-tag" aria-hidden="true"></i>', 'Nomenclatures'],
     'pmma'               => ['<i class="ph ph-printer" aria-hidden="true"></i>', 'PMMA'],

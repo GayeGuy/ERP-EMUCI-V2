@@ -5,7 +5,7 @@
 // ============================================================
 
 define('TOUS_LES_GROUPES', [
-    'DASHBOARD','OPERATIONS','BOBINES','STOCK',
+    'DASHBOARD','OPERATIONS','BOBINES','STOCK','INVENTAIRE',
     'INFORMATIQUE','RAPPORTS','DEMANDES','ACHATS','ADMINISTRATION'
 ]);
 
@@ -43,21 +43,39 @@ function _groupes_def(): array {
             'gradient'    => 'linear-gradient(135deg, #1B75BC 0%, #00AEEF 100%)',
             'first_page'  => 'pages/equipements.php',
             'nav' => [
-                ['label'=>'Équipements',   'icon'=>'ph-monitor',
-                 'url'=>'pages/equipements.php',
-                 'active_keys'=>['equipements','equipements_info','equipements_op']],
+                ['label'=>'Équipements Informatique',   'icon'=>'ph-monitor',
+                 'url'=>'pages/equipements.php?categorie=informatique',
+                 'active_keys'=>['equipements','equipements_info'],
+                 'perm'=>['equipements','can_read']],
+                ['label'=>'Équipements Opérationnel',   'icon'=>'ph-hard-hat',
+                 'url'=>'pages/equipements.php?categorie=operationnel',
+                 'active_keys'=>['equipements_op'],
+                 'perm'=>['equipements','can_read']],
                 ['label'=>'Articles',      'icon'=>'ph-cube',
                  'url'=>'pages/articles.php','active_keys'=>['consommables'],
                  'perm'=>['consommables','can_read']],
-                ['label'=>'Affectations',  'icon'=>'ph-arrows-left-right',
-                 'url'=>'pages/affectations.php','active_keys'=>['affectations'],
-                 'perm'=>['equipements','can_read'],
+                ['label'=>'Historique des mouvements', 'icon'=>'ph-clipboard-text',
+                 'url'=>'pages/mouvements_equipements.php','active_keys'=>['mouvements_equipements'],
+                 'perm'=>['affectations','can_read'],
                  'roles_exclude'=>['coordinateur_site']],
                 ['label'=>'PMMA',      'icon'=>'ph-printer',
                  'url'=>'pages/pmma.php','active_keys'=>['pmma'],
                  'perm'=>['pmma','can_read']],
+                // roles_include aligné sur $roles_autorises dans
+                // pages/operations/bobines.php (gate en dur, pas de perm DB) —
+                // gestionnaire_stock et superviseur_achat n'y ont pas accès
+                // (cf. entrée "Gestion bobines" du groupe BOBINES, même page).
+                ['label'=>'Bobines',   'icon'=>'ph-film-strip',
+                 'url'=>'pages/operations/bobines.php','active_keys'=>['bobines'],
+                 'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','superviseur_it','maintenance_info','admin','superadmin']],
+                // Meme page que "Bobines" (?categorie=vignette), memes roles —
+                // Reservoir/Pare-brise plutot que Auto/Carre/Moto/MotoII.
+                ['label'=>'Vignette',  'icon'=>'ph-sticker',
+                 'url'=>'pages/operations/bobines.php?categorie=vignette','active_keys'=>['bobines_vignette'],
+                 'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','superviseur_it','maintenance_info','admin','superadmin']],
                 ['label'=>'Rivets',    'icon'=>'ph-nut',
-                 'url'=>'pages/operations/rivets.php','active_keys'=>['rivets']],
+                 'url'=>'pages/operations/rivets.php','active_keys'=>['rivets'],
+                 'perm'=>['rivets','can_read']],
                 ['label'=>'Commandes', 'icon'=>'ph-shopping-cart',
                  'url'=>'pages/commandes.php','active_keys'=>['commandes'],
                  'perm'=>['commandes','can_read']],
@@ -74,27 +92,71 @@ function _groupes_def(): array {
             'first_page'  => 'pages/operations/bobines.php',
             'nav' => [
                 ['label'=>'Commande bobines',     'icon'=>'ph-shopping-cart',
-                 'url'=>'pages/commandes_bobines.php','active_keys'=>['commandes_bobines']],
-                ['label'=>'Gestion bobines',      'icon'=>'ph-film-strip',
-                 'url'=>'pages/operations/bobines.php','active_keys'=>['bobines']],
+                 'url'=>'pages/commandes_bobines.php','active_keys'=>['commandes_bobines'],
+                 'perm'=>['commandes_bobines','can_read']],
+                // roles_exclude aligné sur validation_stock_matin.php : accès
+                // ouvert au coordinateur (is_coord) ou via can('validation_stock',
+                // 'can_create') — controleur_production n'a ni l'un ni l'autre.
                 ['label'=>'Validation stock jour','icon'=>'ph-seal-check',
-                 'url'=>'pages/validation_stock_matin.php','active_keys'=>['validation_stock_matin']],
-                ['label'=>'Inventaire bobines',   'icon'=>'ph-clipboard-text',
-                 'url'=>'pages/inventaire_bobines.php','active_keys'=>['inventaire_bobines']],
-                // n° 19 réunion ERP : réservé au responsable des sessions
-                // (admin/superadmin ou délégation, cf. can() et Délégations).
-                ['label'=>"Sessions d'inventaire", 'icon'=>'ph-calendar-check',
-                 'url'=>'pages/inventaire_sessions.php','active_keys'=>['inventaire_sessions'],
-                 'perm'=>['inventaire_sessions','can_read']],
+                 'url'=>'pages/validation_stock_matin.php','active_keys'=>['validation_stock_matin'],
+                 'roles_exclude'=>['controleur_production']],
                 ['label'=>'Rapports & Exports',   'icon'=>'ph-file-arrow-down',
                  'url'=>'pages/rapports_gsb.php','active_keys'=>['rapports_gsb'],
                  'roles_include'=>['admin','superadmin','gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation']],
                 ['label'=>'Vue stock par site',   'icon'=>'ph-table',
                  'url'=>'pages/stock_bobines_vue.php','active_keys'=>['stock_bobines_vue'],
                  'roles_exclude'=>['coordinateur_site']],
+            ],
+        ],
+
+        // ── 3bis. INVENTAIRE (module dédié — sorti de BOBINES le 2026-08-28,
+        //         demande utilisateur : sessions + inventaire + écarts pour
+        //         les 4 commodités partageant le même mécanisme, cf.
+        //         includes/inventaire.php)
+        'INVENTAIRE' => [
+            'icon'        => 'ph-clipboard-text',
+            'titre'       => 'Inventaire',
+            'description' => 'Sessions et suivi des inventaires physiques — bobines, rivets, PMMA, équipements',
+            'couleur'     => '#7C3AED',
+            'gradient'    => 'linear-gradient(135deg, #7C3AED 0%, #A78BFA 100%)',
+            'first_page'  => 'pages/inventaire_sessions.php',
+            'nav' => [
+                // n° 19 réunion ERP : réservé au responsable des sessions
+                // (admin/superadmin ou délégation, cf. can() et Délégations).
+                // Placée avant les 4 paires Inventaire/Écarts : c'est l'écran
+                // qui pilote (ouverture/clôture) les quatre à la fois.
+                ['label'=>"Sessions d'inventaire", 'icon'=>'ph-calendar-check',
+                 'url'=>'pages/inventaire_sessions.php','active_keys'=>['inventaire_sessions'],
+                 'perm'=>['inventaire_sessions','can_read']],
+                // perm plutôt que roles_include : sinon le droit 'inventaire'
+                // (visibilité du groupe) ne suffit jamais à faire apparaître
+                // cet écran pour un rôle qui n'était pas dans la liste en dur,
+                // même avec inventaire_bobines.can_read=1 en base (trouvé en
+                // activant 'inventaire' pour superviseur_it, 2026-08-29).
+                ['label'=>'Inventaire bobines',   'icon'=>'ph-clipboard-text',
+                 'url'=>'pages/inventaire_bobines.php','active_keys'=>['inventaire_bobines'],
+                 'perm'=>['inventaire_bobines','can_read']],
                 ['label'=>'Écarts bobines',       'icon'=>'ph-warning-diamond',
                  'url'=>'pages/ecarts_bobines.php','active_keys'=>['ecarts_bobines'],
                  'perm'=>['ecarts_bobines','can_read']],
+                ['label'=>'Inventaire rivets', 'icon'=>'ph-clipboard-text',
+                 'url'=>'pages/inventaire_rivets.php','active_keys'=>['inventaire_rivets'],
+                 'perm'=>['inventaire_rivets','can_read']],
+                ['label'=>'Écarts rivets', 'icon'=>'ph-warning-diamond',
+                 'url'=>'pages/ecarts_rivets.php','active_keys'=>['ecarts_rivets'],
+                 'perm'=>['ecarts_rivets','can_read']],
+                ['label'=>'Inventaire PMMA', 'icon'=>'ph-clipboard-text',
+                 'url'=>'pages/inventaire_pmma.php','active_keys'=>['inventaire_pmma'],
+                 'perm'=>['inventaire_pmma','can_read']],
+                ['label'=>'Écarts PMMA', 'icon'=>'ph-warning-diamond',
+                 'url'=>'pages/ecarts_pmma.php','active_keys'=>['ecarts_pmma'],
+                 'perm'=>['ecarts_pmma','can_read']],
+                ['label'=>'Inventaire équipements', 'icon'=>'ph-clipboard-text',
+                 'url'=>'pages/inventaire_equipements.php','active_keys'=>['inventaire_equipements'],
+                 'perm'=>['inventaire_equipements','can_read']],
+                ['label'=>'Écarts équipements', 'icon'=>'ph-warning-diamond',
+                 'url'=>'pages/ecarts_equipements.php','active_keys'=>['ecarts_equipements'],
+                 'perm'=>['ecarts_equipements','can_read']],
             ],
         ],
 
@@ -108,9 +170,11 @@ function _groupes_def(): array {
             'first_page'  => 'pages/operations/point_journalier.php',
             'nav' => [
                 ['label'=>'Point journalier',       'icon'=>'ph-clipboard-text',
-                 'url'=>'pages/operations/point_journalier.php','active_keys'=>['operations']],
+                 'url'=>'pages/operations/point_journalier.php','active_keys'=>['operations'],
+                 'perm'=>['operations','can_read']],
                 ['label'=>'Demande d\'intervention','icon'=>'ph-warning-circle',
                  'url'=>'pages/interventions.php','active_keys'=>['interventions'],
+                 'perm'=>['interventions','can_read'],
                  'roles_exclude'=>['coordinateur_site']],
                 // Commandes dans OPERATIONS uniquement pour les profils sans STOCK
                 ['label'=>'Commandes',              'icon'=>'ph-shopping-cart',
@@ -120,9 +184,11 @@ function _groupes_def(): array {
                 // EMUCI : réservé aux profils de supervision, pas au coordinateur
                 ['label'=>'Point EMUCI',            'icon'=>'ph-chart-scatter',
                  'url'=>'pages/point_emuci.php','active_keys'=>['point_emuci'],
+                 'perm'=>['point_emuci','can_read'],
                  'roles_exclude'=>['coordinateur_site']],
                 ['label'=>'Import EMUCI',           'icon'=>'ph-upload-simple',
                  'url'=>'pages/import_emuci.php','active_keys'=>['import_emuci'],
+                 'perm'=>['import_emuci','can_read'],
                  'roles_exclude'=>['coordinateur_site']],
             ],
         ],
@@ -137,11 +203,20 @@ function _groupes_def(): array {
             'first_page'  => 'pages/interventions.php',
             'nav' => [
                 ['label'=>'Interventions',    'icon'=>'ph-wrench',
-                 'url'=>'pages/interventions.php','active_keys'=>['interventions']],
+                 'url'=>'pages/interventions.php','active_keys'=>['interventions'],
+                 'perm'=>['interventions','can_read']],
                 ['label'=>'Rapport journalier','icon'=>'ph-file-text',
-                 'url'=>'pages/rapport_journalier.php','active_keys'=>['rapport_journalier']],
+                 'url'=>'pages/rapport_journalier.php','active_keys'=>['rapport_journalier'],
+                 'perm'=>['rapport_journalier','can_read']],
                 ['label'=>'Affectations IT',  'icon'=>'ph-arrows-left-right',
-                 'url'=>'pages/affectations_it.php','active_keys'=>['affectations_it']],
+                 'url'=>'pages/affectations_it.php','active_keys'=>['affectations_it'],
+                 'perm'=>['affectations_it','can_read']],
+                // Deplace depuis STOCK et renomme (2026-08-28) — meme page/perm,
+                // juste un nouvel emplacement dans le menu.
+                ['label'=>'Transfert équipement',  'icon'=>'ph-arrows-left-right',
+                 'url'=>'pages/affectations.php','active_keys'=>['affectations'],
+                 'perm'=>['affectations','can_create'],
+                 'roles_exclude'=>['coordinateur_site']],
             ],
         ],
 
@@ -150,12 +225,16 @@ function _groupes_def(): array {
             'icon'        => 'ph-chart-bar',
             'titre'       => 'Rapports',
             'description' => 'Résumés superviseur, analyses et exports de données',
-            'couleur'     => '#0D5C8A',
-            'gradient'    => 'linear-gradient(135deg, #0D5C8A 0%, #1B75BC 100%)',
+            'couleur'     => '#047857',
+            'gradient'    => 'linear-gradient(135deg, #047857 0%, #10B981 100%)',
             'first_page'  => 'pages/resume_superviseur.php',
             'nav' => [
+                // roles_exclude aligné sur $roles_autorises dans
+                // pages/resume_superviseur.php (gate en dur) : raf/daf n'y
+                // figurent pas, contrairement à leur accès normal à RAPPORTS.
                 ['label'=>'Résumé superviseur','icon'=>'ph-chart-line-up',
-                 'url'=>'pages/resume_superviseur.php','active_keys'=>['resume_superviseur']],
+                 'url'=>'pages/resume_superviseur.php','active_keys'=>['resume_superviseur'],
+                 'roles_exclude'=>['raf','daf','directeur_general']],
                 ['label'=>'Rapports généraux','icon'=>'ph-chart-bar',
                  'url'=>'pages/rapports.php','active_keys'=>['rapports']],
                 ['label'=>'Exports',          'icon'=>'ph-export',
@@ -177,15 +256,19 @@ function _groupes_def(): array {
                 // garde que la file de validation.
                 ['label'=>'Mes demandes',    'icon'=>'ph-list-checks',
                  'url'=>'pages/demandes.php','active_keys'=>['demandes'],
+                 'perm'=>['demandes','can_read'],
                  'roles_exclude'=>['lecteur']],
                 ['label'=>'Nouvelle demande','icon'=>'ph-plus-circle',
                  'url'=>'pages/demandes_new.php','active_keys'=>['demandes_new'],
+                 'perm'=>['demandes','can_create'],
                  'roles_exclude'=>['lecteur']],
                 ['label'=>'À valider',       'icon'=>'ph-seal-check',
                  'url'=>'pages/demandes_a_valider.php','active_keys'=>['demandes_valider'],
+                 'perm'=>['demandes','can_read'],
                  'roles_exclude'=>['coordinateur_site']],
                 ['label'=>'Traitements IT',  'icon'=>'ph-wrench',
                  'url'=>'pages/demandes_it.php','active_keys'=>['demandes_it'],
+                 'perm'=>['demandes','can_read'],
                  'roles_include'=>['admin','superadmin','support_it','superviseur_it','maintenance_info']],
                 ['label'=>'Types & circuits','icon'=>'ph-git-branch',
                  'url'=>'pages/demandes_types.php','active_keys'=>['demandes_types'],
@@ -239,9 +322,13 @@ function _groupes_def(): array {
                 ['label'=>'Suivi Achats (DA/BC)',  'icon'=>'ph-truck',
                  'url'=>'pages/achats/suivi_achats.php','active_keys'=>['achats_suivi'],
                  'perm'=>['achats_suivi','can_read']],
+                // can_read, pas can_create : la garde reelle de la page est
+                // can('achats_suivi','can_read') || N+1 (cf. $peut_voir_etape3
+                // dans pages/achats/receptions.php) - un profil can_read seul
+                // (raf/daf/lecteur) voit l'ecran meme sans pouvoir confirmer.
                 ['label'=>'Réceptions',            'icon'=>'ph-package',
                  'url'=>'pages/achats/receptions.php','active_keys'=>['achats_receptions'],
-                 'perm'=>['achats_suivi','can_create'], 'ou_n1'=>true],
+                 'perm'=>['achats_suivi','can_read'], 'ou_n1'=>true],
                 ['label'=>'Stock par département', 'icon'=>'ph-buildings',
                  'url'=>'pages/achats/stock_departements.php','active_keys'=>['achats_stock_departements'],
                  'perm'=>['achats_suivi','can_read'], 'ou_n1'=>true],
@@ -289,8 +376,8 @@ function _groupes_def(): array {
             'icon'        => 'ph-shield-check',
             'titre'       => 'Administration',
             'description' => 'Utilisateurs, rôles, permissions et configuration système',
-            'couleur'     => '#06033A',
-            'gradient'    => 'linear-gradient(135deg, #06033A 0%, #1B75BC 100%)',
+            'couleur'     => '#374151',
+            'gradient'    => 'linear-gradient(135deg, #374151 0%, #6B7280 100%)',
             'first_page'  => 'pages/admin/users.php',
             'nav' => [
                 ['label'=>'Utilisateurs',  'icon'=>'ph-users',
@@ -347,6 +434,10 @@ function get_groupes_pour_role(string $role_slug): array {
         // RAF / DAF — validation administrative et financière
         'raf'                        => ['DASHBOARD','RAPPORTS'],
         'daf'                        => ['DASHBOARD','RAPPORTS'],
+        // Directeur général — porte rapports.can_read/can_export en base
+        // (audit permissions du 2026-08-27) mais n'avait aucun groupe pour
+        // s'y rendre ; ajouté ici plutôt que laissé en accès fantôme.
+        'directeur_general'          => ['DASHBOARD','RAPPORTS'],
         // Admin
         'admin'                      => $all,
         'superadmin'                 => $all,
@@ -363,14 +454,29 @@ function get_groupes_pour_role(string $role_slug): array {
 }
 
 // ── Retourne les groupes accessibles pour l'utilisateur connecté (clé => def)
+//    N'inclut un groupe que s'il reste au moins un item de nav visible pour
+//    ce rôle une fois les permissions appliquées (get_groupe_nav_items) :
+//    sinon la carte "Mes espaces" mène à un groupe entièrement vide, qui
+//    retombe sur 'first_page' et finit en 403 (trouvé avec DEMANDES pour un
+//    rôle dont can_read a été désactivé sur ce module, 2026-08-28).
 function get_groupes_utilisateur(): array {
     $user = current_user();
     if (!$user) return [];
     $slugs = get_groupes_pour_role($user['role_slug'] ?? '');
+    // Le groupe INVENTAIRE (sorti de BOBINES le 2026-08-28) a son propre
+    // droit en base ('inventaire', can_read) plutôt qu'un rôle en dur dans
+    // $map ci-dessus : modifiable depuis Admin → Permissions sans toucher
+    // au code. Les filtres par item de get_groupe_nav_items() continuent
+    // de s'appliquer en plus (ex. Écarts X reste gardé par ecarts_X).
+    if (!in_array('INVENTAIRE', $slugs, true) && can('inventaire', 'can_read')) {
+        $slugs[] = 'INVENTAIRE';
+    }
     $def   = _groupes_def();
     $result = [];
     foreach ($slugs as $slug) {
-        if (isset($def[$slug])) $result[$slug] = $def[$slug];
+        if (!isset($def[$slug])) continue;
+        if (empty(get_groupe_nav_items($slug))) continue;
+        $result[$slug] = $def[$slug];
     }
     return $result;
 }
