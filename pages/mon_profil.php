@@ -46,9 +46,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
     // ── Changer le mot de passe
     if ($action === 'change_password') {
-        $old  = $_POST['old_password']     ?? '';
-        $new  = $_POST['new_password']     ?? '';
-        $conf = $_POST['confirm_password'] ?? '';
+        // trim() comme login.php : cf. changer-mot-de-passe.php.
+        $old  = trim($_POST['old_password']     ?? '');
+        $new  = trim($_POST['new_password']     ?? '');
+        $conf = trim($_POST['confirm_password'] ?? '');
 
         if (!$old) json_response(false, 'Le mot de passe actuel est requis.');
         if ($new !== $conf) json_response(false, 'Les nouveaux mots de passe ne correspondent pas.');
