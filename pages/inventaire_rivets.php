@@ -18,12 +18,9 @@ $role_slug = $user['role_slug'] ?? '';
 $is_coord  = ($role_slug === 'coordinateur_site');
 $site_force = ($is_coord && $user['site_id']) ? (int)$user['site_id'] : 0;
 
-$roles_autorises_inv = ['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','admin','superadmin'];
-if (!in_array($role_slug, $roles_autorises_inv)) {
-    http_response_code(403);
-    include __DIR__ . '/../templates/403.php';
-    exit;
-}
+// Gate pilotée par la permission DB (comme inventaire_pmma) plutôt qu'un
+// roles_include en dur — cf. pages/inventaire_bobines.php.
+require_permission('inventaire_rivets', 'can_read');
 
 $page_title   = 'Inventaire Rivets';
 $active_page  = 'inventaire_rivets';
