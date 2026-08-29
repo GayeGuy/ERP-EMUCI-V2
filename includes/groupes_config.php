@@ -128,17 +128,20 @@ function _groupes_def(): array {
                 ['label'=>"Sessions d'inventaire", 'icon'=>'ph-calendar-check',
                  'url'=>'pages/inventaire_sessions.php','active_keys'=>['inventaire_sessions'],
                  'perm'=>['inventaire_sessions','can_read']],
-                // roles_include aligné sur $roles_autorises_inv dans
-                // pages/inventaire_bobines.php.
+                // perm plutôt que roles_include : sinon le droit 'inventaire'
+                // (visibilité du groupe) ne suffit jamais à faire apparaître
+                // cet écran pour un rôle qui n'était pas dans la liste en dur,
+                // même avec inventaire_bobines.can_read=1 en base (trouvé en
+                // activant 'inventaire' pour superviseur_it, 2026-08-29).
                 ['label'=>'Inventaire bobines',   'icon'=>'ph-clipboard-text',
                  'url'=>'pages/inventaire_bobines.php','active_keys'=>['inventaire_bobines'],
-                 'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','admin','superadmin']],
+                 'perm'=>['inventaire_bobines','can_read']],
                 ['label'=>'Écarts bobines',       'icon'=>'ph-warning-diamond',
                  'url'=>'pages/ecarts_bobines.php','active_keys'=>['ecarts_bobines'],
                  'perm'=>['ecarts_bobines','can_read']],
                 ['label'=>'Inventaire rivets', 'icon'=>'ph-clipboard-text',
                  'url'=>'pages/inventaire_rivets.php','active_keys'=>['inventaire_rivets'],
-                 'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','admin','superadmin']],
+                 'perm'=>['inventaire_rivets','can_read']],
                 ['label'=>'Écarts rivets', 'icon'=>'ph-warning-diamond',
                  'url'=>'pages/ecarts_rivets.php','active_keys'=>['ecarts_rivets'],
                  'perm'=>['ecarts_rivets','can_read']],
@@ -150,7 +153,7 @@ function _groupes_def(): array {
                  'perm'=>['ecarts_pmma','can_read']],
                 ['label'=>'Inventaire équipements', 'icon'=>'ph-clipboard-text',
                  'url'=>'pages/inventaire_equipements.php','active_keys'=>['inventaire_equipements'],
-                 'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','admin','superadmin']],
+                 'perm'=>['inventaire_equipements','can_read']],
                 ['label'=>'Écarts équipements', 'icon'=>'ph-warning-diamond',
                  'url'=>'pages/ecarts_equipements.php','active_keys'=>['ecarts_equipements'],
                  'perm'=>['ecarts_equipements','can_read']],
