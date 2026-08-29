@@ -12,12 +12,8 @@ require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
 
 require_auth();
-$_tmp_user = current_user();
-$_tmp_role = $_tmp_user['role_slug'] ?? '';
-if (!in_array($_tmp_role, ['coordinateur_site','gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation','admin','superadmin'])) {
-    http_response_code(403); include __DIR__ . '/../templates/403.php'; exit;
-}
-unset($_tmp_user, $_tmp_role);
+// Gate pilotée par la permission DB — cf. pages/inventaire_equipements.php.
+require_permission('inventaire_equipements', 'can_read');
 
 $user   = current_user();
 $inv_id = (int)($_GET['id'] ?? 0);
