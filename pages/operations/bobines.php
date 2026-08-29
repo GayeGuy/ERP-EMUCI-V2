@@ -16,26 +16,18 @@ require_auth();
 $user      = current_user();
 $role_slug = $user['role_slug'] ?? '';
 
-// Rôles autorisés explicitement (sans dépendre des permissions DB)
 $is_coord = ($role_slug === 'coordinateur_site');
 $is_gsb   = in_array($role_slug, ['gestionnaire_stock_bobines','admin','superadmin']);
 
-// gestionnaire_stock N'a PAS accès à cette page
-$roles_autorises = [
-    'coordinateur_site',
-    'gestionnaire_stock_bobines',
-    'superviseur_operation',
-    'superviseur_it',
-    'maintenance_info',
-    'admin',
-    'superadmin',
-];
-
-if (!in_array($role_slug, $roles_autorises)) {
-    http_response_code(403);
-    include __DIR__ . '/../../templates/403.php';
-    exit;
-}
+// Gate pilotée par la permission DB — cf. sql/migration_bobines_permission_
+// alignement.sql : cette page n'appelait jamais require_permission() pour
+// la lecture, l'accès était géré à 100% par une liste de rôles en dur qui
+// ignorait ce que Admin → Permissions affichait pourtant comme réglable.
+// gestionnaire_stock reste explicitement exclu (can_read=0 en base), et
+// support_it/gestionnaire_bobines — qui listait déjà 'bobines' dans son
+// sous-rôle sans jamais pouvoir l'atteindre — accède enfin à cette page
+// (trouvé en corrigeant, 2026-08-29).
+require_permission('bobines', 'can_read');
 
 $site_force = ($is_coord && ($user['site_id'] ?? 0)) ? (int)$user['site_id'] : 0;
 

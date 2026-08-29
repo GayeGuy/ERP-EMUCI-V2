@@ -54,6 +54,7 @@ $modules = [
     'rapports'           => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Rapports & Analyses'],
     'rapports_gsb'       => ['<i class="ph ph-clipboard-text" aria-hidden="true"></i>', 'Rapports GSB'],
     'receptions'         => ['<i class="ph ph-package" aria-hidden="true"></i>', 'Réceptions site'],
+    'resume_superviseur' => ['<i class="ph ph-chart-line-up" aria-hidden="true"></i>', 'Résumé superviseur'],
     'rivets'             => ['<i class="ph ph-wrench" aria-hidden="true"></i>', 'Rivets'],
     'sites'              => ['<i class="ph ph-buildings" aria-hidden="true"></i>', 'Sites'],
     'users'              => ['<i class="ph ph-users" aria-hidden="true"></i>', 'Utilisateurs'],

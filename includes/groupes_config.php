@@ -61,18 +61,20 @@ function _groupes_def(): array {
                 ['label'=>'PMMA',      'icon'=>'ph-printer',
                  'url'=>'pages/pmma.php','active_keys'=>['pmma'],
                  'perm'=>['pmma','can_read']],
-                // roles_include aligné sur $roles_autorises dans
-                // pages/operations/bobines.php (gate en dur, pas de perm DB) —
-                // gestionnaire_stock et superviseur_achat n'y ont pas accès
-                // (cf. entrée "Gestion bobines" du groupe BOBINES, même page).
+                // perm plutôt que roles_include : pages/operations/bobines.php
+                // appelle désormais require_permission('bobines','can_read')
+                // (audit permissions du 2026-08-29 — l'ancienne liste en dur
+                // ignorait totalement la table permissions). gestionnaire_stock
+                // reste exclu via can_read=0 en base (cf. sql/migration_
+                // bobines_permission_alignement.sql), pas via roles_exclude ici.
                 ['label'=>'Bobines',   'icon'=>'ph-film-strip',
                  'url'=>'pages/operations/bobines.php','active_keys'=>['bobines'],
-                 'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','superviseur_it','maintenance_info','admin','superadmin']],
-                // Meme page que "Bobines" (?categorie=vignette), memes roles —
+                 'perm'=>['bobines','can_read']],
+                // Meme page que "Bobines" (?categorie=vignette), meme droit —
                 // Reservoir/Pare-brise plutot que Auto/Carre/Moto/MotoII.
                 ['label'=>'Vignette',  'icon'=>'ph-sticker',
                  'url'=>'pages/operations/bobines.php?categorie=vignette','active_keys'=>['bobines_vignette'],
-                 'roles_include'=>['coordinateur_site','gestionnaire_stock_bobines','superviseur_operation','superviseur_it','maintenance_info','admin','superadmin']],
+                 'perm'=>['bobines','can_read']],
                 ['label'=>'Rivets',    'icon'=>'ph-nut',
                  'url'=>'pages/operations/rivets.php','active_keys'=>['rivets'],
                  'perm'=>['rivets','can_read']],
@@ -94,18 +96,31 @@ function _groupes_def(): array {
                 ['label'=>'Commande bobines',     'icon'=>'ph-shopping-cart',
                  'url'=>'pages/commandes_bobines.php','active_keys'=>['commandes_bobines'],
                  'perm'=>['commandes_bobines','can_read']],
-                // roles_exclude aligné sur validation_stock_matin.php : accès
-                // ouvert au coordinateur (is_coord) ou via can('validation_stock',
-                // 'can_create') — controleur_production n'a ni l'un ni l'autre.
+                // perm + bypass, réplique exactement le gate à 3 conditions de
+                // pages/validation_stock_matin.php : can('validation_stock',
+                // 'can_create') || is_support_it_with('gestionnaire_bobines')
+                // || $is_coord (audit permissions du 2026-08-29 — l'ancien
+                // roles_exclude ne reflétait pas la logique réelle de la page).
                 ['label'=>'Validation stock jour','icon'=>'ph-seal-check',
                  'url'=>'pages/validation_stock_matin.php','active_keys'=>['validation_stock_matin'],
-                 'roles_exclude'=>['controleur_production']],
+                 'perm'=>['validation_stock','can_create'],
+                 'ou_role'=>['coordinateur_site'],
+                 'ou_support_it_sous_role'=>'gestionnaire_bobines'],
+                // perm plutôt que roles_include : pages/rapports_gsb.php
+                // n'a qu'un require_permission('rapports_gsb','can_read'), la
+                // liste en dur ici correspondait déjà exactement aux rôles
+                // ayant can_read=1 en base (audit permissions du 2026-08-29).
                 ['label'=>'Rapports & Exports',   'icon'=>'ph-file-arrow-down',
                  'url'=>'pages/rapports_gsb.php','active_keys'=>['rapports_gsb'],
-                 'roles_include'=>['admin','superadmin','gestionnaire_stock_bobines','gestionnaire_stock','superviseur_operation']],
+                 'perm'=>['rapports_gsb','can_read']],
+                // perm plutôt que roles_exclude : pages/stock_bobines_vue.php
+                // n'a qu'un require_permission('stock_bobines','can_read') —
+                // cf. sql/migration_stock_bobines_rapports_gsb_alignement.sql
+                // pour l'alignement de coordinateur_site en base (audit
+                // permissions du 2026-08-29).
                 ['label'=>'Vue stock par site',   'icon'=>'ph-table',
                  'url'=>'pages/stock_bobines_vue.php','active_keys'=>['stock_bobines_vue'],
-                 'roles_exclude'=>['coordinateur_site']],
+                 'perm'=>['stock_bobines','can_read']],
             ],
         ],
 
@@ -229,14 +244,21 @@ function _groupes_def(): array {
             'gradient'    => 'linear-gradient(135deg, #047857 0%, #10B981 100%)',
             'first_page'  => 'pages/resume_superviseur.php',
             'nav' => [
-                // roles_exclude aligné sur $roles_autorises dans
-                // pages/resume_superviseur.php (gate en dur) : raf/daf n'y
-                // figurent pas, contrairement à leur accès normal à RAPPORTS.
+                // perm sur un module dédié plutôt que roles_exclude — cf.
+                // sql/migration_resume_superviseur_permission_dediee.sql
+                // (audit permissions du 2026-08-29).
                 ['label'=>'Résumé superviseur','icon'=>'ph-chart-line-up',
                  'url'=>'pages/resume_superviseur.php','active_keys'=>['resume_superviseur'],
-                 'roles_exclude'=>['raf','daf','directeur_general']],
+                 'perm'=>['resume_superviseur','can_read']],
+                // perm ajouté : pages/rapports.php appelle require_permission(
+                // 'rapports','can_read') mais l'item n'avait aucun gate ici —
+                // sans effet aujourd'hui (les 6 rôles voyant ce groupe ont tous
+                // can_read=1 en base), mais protège contre un futur droit
+                // désactivé qui laisserait un lien mort (audit permissions du
+                // 2026-08-29).
                 ['label'=>'Rapports généraux','icon'=>'ph-chart-bar',
-                 'url'=>'pages/rapports.php','active_keys'=>['rapports']],
+                 'url'=>'pages/rapports.php','active_keys'=>['rapports'],
+                 'perm'=>['rapports','can_read']],
                 ['label'=>'Exports',          'icon'=>'ph-export',
                  'url'=>'pages/export.php','active_keys'=>['export']],
             ],
@@ -266,10 +288,18 @@ function _groupes_def(): array {
                  'url'=>'pages/demandes_a_valider.php','active_keys'=>['demandes_valider'],
                  'perm'=>['demandes','can_read'],
                  'roles_exclude'=>['coordinateur_site']],
+                // roles_include correspond exactement aux rôles ERP dont
+                // di_user_roles() inclut 'it' (includes/demandes.php) — accès
+                // garanti quel que soit le département. ou_departement_it
+                // couvre le cas restant : un rôle hors de cette liste mais
+                // rattaché au département lié à di_roles(code='it') passe
+                // aussi di_user_can_traiter_it() côté page (audit permissions
+                // du 2026-08-29).
                 ['label'=>'Traitements IT',  'icon'=>'ph-wrench',
                  'url'=>'pages/demandes_it.php','active_keys'=>['demandes_it'],
                  'perm'=>['demandes','can_read'],
-                 'roles_include'=>['admin','superadmin','support_it','superviseur_it','maintenance_info']],
+                 'roles_include'=>['admin','superadmin','support_it','superviseur_it','maintenance_info'],
+                 'ou_departement_it'=>true],
                 ['label'=>'Types & circuits','icon'=>'ph-git-branch',
                  'url'=>'pages/demandes_types.php','active_keys'=>['demandes_types'],
                  'roles_include'=>['admin','superadmin']],
@@ -509,12 +539,37 @@ function get_groupe_nav_items(string $slug): array {
                     [(int)$user['id']]
                 );
             }
+            // Bypass rôle(s) — réplique une condition OR par rôle du gate réel
+            // de la page (ex. pages/validation_stock_matin.php : $is_coord),
+            // sans dépendre du droit DB du module.
+            if (!$autorise && !empty($item['ou_role']) && in_array($role, (array)$item['ou_role'], true)) {
+                $autorise = true;
+            }
+            // Bypass sous-rôle support_it — réplique is_support_it_with() du
+            // gate réel de la page (ex. validation_stock_matin.php : support_it
+            // avec le sous-rôle 'gestionnaire_bobines').
+            if (!$autorise && !empty($item['ou_support_it_sous_role']) && $role === 'support_it' && $user) {
+                $autorise = is_support_it_with($item['ou_support_it_sous_role']);
+            }
             if (!$autorise) continue;
         }
         // Filtre rôles exclus (blacklist)
         if (!empty($item['roles_exclude']) && in_array($role, $item['roles_exclude'])) continue;
         // Filtre rôles autorisés (whitelist) — si défini, seuls ces rôles voient l'item
-        if (!empty($item['roles_include']) && !in_array($role, $item['roles_include'])) continue;
+        if (!empty($item['roles_include']) && !in_array($role, $item['roles_include'])) {
+            // Bypass département IT — réplique di_user_can_traiter_it()
+            // (includes/demandes.php) sans dépendre de son chargement sur les
+            // pages hors Demandes, même principe que 'ou_n1' ci-dessus.
+            $ou_dept_it = false;
+            if (!empty($item['ou_departement_it']) && $user) {
+                $dept_it = db_fetch_value("SELECT departement_id FROM di_roles WHERE code='it'");
+                $ou_dept_it = $dept_it && (bool) db_fetch_value(
+                    "SELECT COUNT(*) FROM user_departements WHERE user_id=? AND departement_id=?",
+                    [(int)$user['id'], (int)$dept_it]
+                );
+            }
+            if (!$ou_dept_it) continue;
+        }
         // Item ajouté uniquement pour compenser un groupe masqué en mode
         // recette (cf. 'Commandes' dans ACHATS) — inutile et redondant en
         // production, où ce groupe reste accessible normalement.
