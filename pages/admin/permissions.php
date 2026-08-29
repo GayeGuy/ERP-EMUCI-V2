@@ -201,6 +201,9 @@ include __DIR__ . '/../../templates/header.php';
 .perm-pane{display:none}
 .perm-pane.active{display:block}
 
+/* Scroll interne au-delà de 8 lignes : hauteur = header (~46px) + 8 lignes (~50px/ligne).
+   Classe plutôt qu'id : ce wrapper est répété une fois par rôle (foreach $roles). */
+.perm-table-wrap{max-height:446px;overflow-y:auto}
 .perm-table{width:100%;border-collapse:separate;border-spacing:0}
 .perm-table thead{position:sticky;top:0;z-index:5}
 .perm-table th{padding:10px 14px;font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;text-align:left;background:var(--lighter,#f0f4f8);border-bottom:1px solid var(--border)}
@@ -308,6 +311,7 @@ include __DIR__ . '/../../templates/header.php';
   <?php else: ?>
   <!-- TABLEAU DES PERMISSIONS -->
   <div class="card">
+    <div class="perm-table-wrap">
     <table class="perm-table">
       <thead>
         <tr>
@@ -360,6 +364,7 @@ include __DIR__ . '/../../templates/header.php';
         <?php endforeach; ?>
       </tbody>
     </table>
+    </div>
   </div>
 
   <?php if($can_edit): ?>
