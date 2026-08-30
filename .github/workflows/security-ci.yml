@@ -1,0 +1,59 @@
+name: Security CI
+
+# Adapté de la carte Trello "Config Critique : GitHub Actions CI/CD
+# Sécurisé" — le yaml d'origine installait Node 18 et lançait `npm audit`,
+# alors que ce dépôt est 100% PHP sans aucune dépendance JS (pas de
+# package.json). Remplacé par `composer audit` (2 dépendances déclarées :
+# phpoffice/phpspreadsheet, dompdf/dompdf).
+#
+# Pas de job de déploiement ici : Render redéploie déjà automatiquement à
+# chaque push sur main (cf. render.yaml / dashboard Render) — un second
+# déclencheur via l'API Render serait redondant, pas une sécurité de plus.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # SAST : détecte les vulnérabilités PHP courantes (injection SQL,
+      # XSS, secrets en dur...). Non bloquant au premier passage
+      # (continue-on-error) : personne n'a encore mesuré le nombre de
+      # signalements sur ce dépôt existant — à resserrer une fois le
+      # premier rapport passé en revue, plutôt que de bloquer toutes les
+      # PR dès le premier jour sur des résultats jamais vus.
+      - name: Semgrep (OWASP Top Ten + règles PHP)
+        continue-on-error: true
+        run: |
+          python3 -m pip install --quiet semgrep
+          semgrep scan --config=p/owasp-top-ten --config=p/php \
+            --sarif --output=semgrep.sarif
+
+      - name: Publier les résultats Semgrep (onglet Security du dépôt)
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+
+      - name: PHP 8.2
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      - name: Installer les dépendances Composer
+        run: composer install --no-interaction --no-progress
+
+      # SCA : vulnérabilités connues sur phpoffice/phpspreadsheet et
+      # dompdf/dompdf. Bloquant — peu de bruit attendu sur 2 dépendances.
+      - name: Audit des dépendances PHP
+        run: composer audit
