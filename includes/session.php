@@ -9,13 +9,35 @@
 // (SESSION_LIFETIME, utilisé juste en dessous, en vient).
 require_once __DIR__ . '/audit.php';
 
+// Render termine le TLS à la frontière et transmet en HTTP simple au
+// conteneur : $_SERVER['HTTPS'] n'est donc jamais posé en production, il
+// faut se fier à l'en-tête X-Forwarded-Proto posé par le proxy. Sans ce
+// second test, le cookie de session ne recevait jamais l'attribut Secure
+// en production malgré le HTTPS réel.
+$_https = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+
 if (session_status() === PHP_SESSION_NONE) {
     session_start([
         'cookie_lifetime' => SESSION_LIFETIME,
         'cookie_httponly'  => true,
         'cookie_samesite'  => 'Lax',
-        'cookie_secure'    => isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+        'cookie_secure'    => $_https,
     ]);
+}
+
+// En-têtes de sécurité — posés ici car includes/session.php est chargé par
+// virtuellement toutes les pages, avant toute sortie.
+if (!headers_sent()) {
+    header_remove('X-Powered-By');
+    header('X-Content-Type-Options: nosniff');
+    // SAMEORIGIN, pas DENY : pages/achats/param_fournisseurs.php prévisualise
+    // les pièces jointes fournisseur dans un <iframe> même origine.
+    header('X-Frame-Options: SAMEORIGIN');
+    header('Referrer-Policy: strict-origin-when-cross-origin');
+    if ($_https) {
+        header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+    }
 }
 
 // ── Retourner l'utilisateur connecté (cache par requête uniquement — pas de session cache pour éviter les données périmées)
