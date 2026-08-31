@@ -10952,3 +10952,453 @@ END$$
 DELIMITER ;
 CALL _fix_rivets_uq();
 DROP PROCEDURE IF EXISTS _fix_rivets_uq;
+
+-- ============================================================
+-- Rattrapage main -> vps-mysql du 30/08/2026 (traduit depuis les
+-- migrations Postgres correspondantes, cf. sql/migration_*.sql sur
+-- main). Idempotent comme le reste de ce patch.
+-- ============================================================
+
+-- users.failed_login_attempts / locked_until — verrouillage temporaire
+-- après 5 échecs de connexion consécutifs (includes/auth.php).
+DROP PROCEDURE IF EXISTS _add_col;
+DELIMITER $$
+CREATE PROCEDURE _add_col(IN tbl VARCHAR(64), IN col VARCHAR(64), IN ddl VARCHAR(255))
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables
+             WHERE table_schema = DATABASE() AND table_name = tbl)
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = DATABASE() AND table_name = tbl AND column_name = col) THEN
+    SET @s = CONCAT('ALTER TABLE `', tbl, '` ADD COLUMN `', col, '` ', ddl);
+    PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+  END IF;
+END$$
+DELIMITER ;
+
+CALL _add_col('users','failed_login_attempts','int NOT NULL DEFAULT 0');
+CALL _add_col('users','locked_until','timestamp NULL DEFAULT NULL');
+-- must_change_password : trouvé manquant sur cette branche en testant ce
+-- rattrapage — includes/auth.php le lit/l'écrit partout (connexion,
+-- création de compte, changement de mot de passe) depuis
+-- migration_mdp_premiere_connexion.sql sur main, jamais reporté ici.
+-- Sans cette colonne, auth_create_user() et auth_change_password()
+-- échouaient purement et simplement sur cette branche.
+CALL _add_col('users','must_change_password','smallint NOT NULL DEFAULT 0');
+DROP PROCEDURE IF EXISTS _add_col;
+
+-- 8 autres colonnes trouvées manquantes en testant ce rattrapage —
+-- sql/migration_vps_mysql_colonnes_manquantes_diverses.sql existait déjà
+-- pour elles (préparé lors du rattrapage du 29/08) mais n'était appelé
+-- nulle part : sa première instruction (users.must_change_password,
+-- traitée ci-dessus) le rendait de toute façon inexécutable en bloc via
+-- `mysql < fichier` dès que must_change_password existait déjà (arrêt à
+-- la première erreur, les 5 ALTER suivants ne s'exécutaient jamais).
+-- Reprises ici une à une, chacune sous garde d'existence, pour rester
+-- ré-exécutable comme le reste de ce patch.
+DROP PROCEDURE IF EXISTS _add_col_fk;
+DELIMITER $$
+CREATE PROCEDURE _add_col_fk(IN tbl VARCHAR(64), IN col VARCHAR(64), IN ddl VARCHAR(255))
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables
+             WHERE table_schema = DATABASE() AND table_name = tbl)
+     AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = DATABASE() AND table_name = tbl AND column_name = col) THEN
+    SET @s = CONCAT('ALTER TABLE `', tbl, '` ', ddl);
+    PREPARE st FROM @s; EXECUTE st; DEALLOCATE PREPARE st;
+  END IF;
+END$$
+DELIMITER ;
+
+-- articles.famille_id (-> familles_achat), commande_lignes.feb_ligne_id
+-- (-> feb_lignes) et commandes.feb_id (-> feb) NE SONT PAS ici : ces 3
+-- tables cibles n'existent que dans sql/achats_mysql.sql, chargé APRÈS
+-- ce fichier (docker/initdb.sh) — une FK vers une table pas encore créée
+-- fait échouer toute la suite de ce patch (constaté : plus rien après
+-- ne s'exécutait, y compris les permissions et les tables inventaire un
+-- peu plus bas). Ces 3-là sont à la fin de sql/achats_mysql.sql à la
+-- place, où l'ordre est le bon.
+CALL _add_col_fk('articles','site_id',
+  "ADD COLUMN site_id INT UNSIGNED NULL, ADD CONSTRAINT articles_site_id_fkey FOREIGN KEY (site_id) REFERENCES sites(id)");
+CALL _add_col_fk('commande_lignes','motif_modification',
+  "ADD COLUMN motif_modification TEXT NULL");
+CALL _add_col_fk('di_demandes','site_id',
+  "ADD COLUMN site_id INT UNSIGNED NULL, ADD CONSTRAINT di_demandes_site_id_fkey FOREIGN KEY (site_id) REFERENCES sites(id)");
+CALL _add_col_fk('di_demandes','ticket_glpi',
+  "ADD COLUMN ticket_glpi VARCHAR(50) NULL");
+CALL _add_col_fk('equipements','bon_livraison',
+  "ADD COLUMN bon_livraison VARCHAR(255) NULL DEFAULT NULL");
+DROP PROCEDURE IF EXISTS _add_col_fk;
+
+-- op_types_bobines.format/version + correction serie 'T'/'W' -> 'TL'/
+-- 'WSL' : sql/migration_vps_mysql_bobines_format_version_serie_tlwsl.sql
+-- existait déjà (rattrapage du 29/08) mais jamais appliqué — trouvé en
+-- testant pages/operations/bobines.php ce jour (500 : Unknown column
+-- 't.format'). Colonnes sous garde ; les UPDATE de correction en dessous
+-- sont réexécutables sans risque (CASE déterministe, WHERE qui devient
+-- faux une fois corrigé).
+DROP PROCEDURE IF EXISTS _add_bobines_format_version;
+DELIMITER $$
+CREATE PROCEDURE _add_bobines_format_version()
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_schema = DATABASE() AND table_name = 'op_types_bobines' AND column_name = 'format') THEN
+    ALTER TABLE op_types_bobines
+        ADD COLUMN format  VARCHAR(30) NULL AFTER serie,
+        ADD COLUMN version VARCHAR(40) NULL AFTER format;
+  END IF;
+END$$
+DELIMITER ;
+CALL _add_bobines_format_version();
+DROP PROCEDURE IF EXISTS _add_bobines_format_version;
+
+UPDATE op_types_bobines SET
+    format = CASE TRIM(serie)
+        WHEN 'A'   THEN 'Auto'
+        WHEN 'B'   THEN 'Carre'
+        WHEN 'C'   THEN 'Moto'
+        WHEN 'D'   THEN 'MotoII'
+        WHEN 'TL'  THEN 'Reservoir'
+        WHEN 'WSL' THEN 'Pare-brise'
+    END,
+    version = CASE RIGHT(code, 1)
+        WHEN '1' THEN 'Privee'
+        WHEN '2' THEN 'Transport Publique'
+        WHEN '3' THEN 'Institution Internationale'
+        WHEN '4' THEN 'Diplomatique'
+        WHEN '5' THEN 'Gouvernementale'
+        WHEN '6' THEN 'Temporaire'
+    END
+WHERE format IS NULL OR version IS NULL;
+
+ALTER TABLE op_types_bobines
+    MODIFY COLUMN format  VARCHAR(30) NOT NULL,
+    MODIFY COLUMN version VARCHAR(40) NOT NULL;
+
+ALTER TABLE op_bobines MODIFY COLUMN serie VARCHAR(4) NOT NULL;
+
+UPDATE op_bobines SET serie = 'TL'  WHERE serie = 'T' AND type_code LIKE 'TL%';
+UPDATE op_bobines SET serie = 'WSL' WHERE serie = 'W' AND type_code LIKE 'WSL%';
+
+-- di_roles.departement_id, equipements.departement_id/feb_ligne_id et
+-- inventaires_bobines.session_id : déplacés à la fin de sql/achats_mysql.
+-- sql, même raison que articles.famille_id un peu plus haut — leurs FK
+-- visent departements/feb_lignes/inventaire_sessions, absentes à ce
+-- point du chargement.
+
+-- statut_stock/type restaient limités à un ENUM MySQL trop étroit par
+-- rapport au TEXT libre de PostgreSQL — MODIFY COLUMN, rejouable sans
+-- risque.
+ALTER TABLE equipements MODIFY COLUMN statut_stock VARCHAR(30) NOT NULL DEFAULT 'affecte';
+ALTER TABLE sites MODIFY COLUMN type VARCHAR(20) NOT NULL DEFAULT 'saisie';
+
+-- Permissions : mêmes corrections que sur main (audit permissions du
+-- 30/08), plus 'stock_bobines' et 'inventaire' qui n'avaient jamais été
+-- semés du tout sur cette branche (aucune ligne existante, contrairement
+-- à Neon où elles existaient déjà avec des valeurs à aligner) —
+-- l'INSERT...SELECT...ON DUPLICATE KEY UPDATE ci-dessous sème donc
+-- directement l'état final voulu plutôt qu'un correctif en deux temps.
+
+-- bobines : pages/operations/bobines.php vérifie désormais can_read en
+-- base (roles_autorises codé en dur retiré) — gestionnaire_stock_bobines,
+-- superviseur_it, maintenance_info, support_it manquaient.
+INSERT INTO permissions (role_id, module, can_read)
+SELECT r.id, 'bobines', 1 FROM roles r
+WHERE r.slug IN ('superadmin','admin','coordinateur_site','superviseur_operation','gestionnaire_stock_bobines','superviseur_it','maintenance_info','support_it')
+ON DUPLICATE KEY UPDATE can_read = 1;
+UPDATE permissions SET can_read = 0
+WHERE module = 'bobines'
+  AND role_id IN (SELECT id FROM roles WHERE slug IN ('gestionnaire_stock','controleur_production','gestionnaire_operation','lecteur','superviseur_achat'));
+
+-- stock_bobines : jamais semé sur cette branche — état final direct.
+INSERT INTO permissions (role_id, module, can_read)
+SELECT r.id, 'stock_bobines', 1 FROM roles r
+WHERE r.slug IN ('controleur_production','gestionnaire_operation','gestionnaire_stock','gestionnaire_stock_bobines','lecteur','superviseur_it','superviseur_operation')
+ON DUPLICATE KEY UPDATE can_read = 1;
+
+-- resume_superviseur : module dédié, jamais semé sur cette branche non
+-- plus (pages/resume_superviseur.php empilait rapports + liste en dur).
+INSERT INTO permissions (role_id, module, can_read)
+SELECT r.id, 'resume_superviseur', 1 FROM roles r
+WHERE r.slug IN ('admin','superadmin','superviseur_operation','gestionnaire_operation','lecteur')
+ON DUPLICATE KEY UPDATE can_read = 1;
+
+-- inventaire (visibilité du groupe de menu) : semée par le bloc
+-- inventaires_rivets/pmma/equipements à la fin de sql/achats_mysql.sql
+-- (déplacé là — référence inventaire_sessions, absente à ce point du
+-- chargement), qui couvre aussi ce droit — pas dupliqué ici.
+
+-- ============================================================
+-- Matrice de permissions complète — sql/migration_vps_mysql_
+-- permissions_matrice_complete.sql existait déjà (rattrapage du
+-- 29/08) mais n'était référencé nulle part. La table ne portait
+-- que 82 lignes contre 264 sur main. INSERT IGNORE : idempotent
+-- tel quel, ne touche à aucun droit déjà présent.
+-- ============================================================
+--  les lignes manquantes, ne touche a aucun droit deja present
+--  (personnalisation locale eventuelle preservee).
+-- ============================================================
+
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_dashboard', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_param', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_suivi', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'affectations', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'affectations_it', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'audit', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'bobines', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'commandes', 1, 1, 1, 0, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'commandes_bobines', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'consommables', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'delegations', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'demandes', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'departements', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'equipements', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'import_emuci', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'interventions', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'inventaire_bobines', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'nomenclatures', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'operations', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'pmma', 1, 1, 1, 0, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'point_emuci', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapport_journalier', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapports', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapports_gsb', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'receptions', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rivets', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'sites', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'stock_bobines', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'users', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'validation_stock', 1, 1, 1, 1, 1 FROM roles WHERE slug='admin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats', 1, 1, 0, 0, 0 FROM roles WHERE slug='controleur_production';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'audit', 0, 1, 0, 0, 0 FROM roles WHERE slug='controleur_production';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'bobines', 0, 1, 0, 0, 0 FROM roles WHERE slug='controleur_production';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'demandes', 1, 1, 0, 0, 0 FROM roles WHERE slug='controleur_production';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'ecarts_bobines', 0, 1, 0, 0, 1 FROM roles WHERE slug='controleur_production';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'equipements', 0, 1, 0, 0, 0 FROM roles WHERE slug='controleur_production';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'import_emuci', 0, 1, 0, 0, 0 FROM roles WHERE slug='controleur_production';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'interventions', 0, 1, 0, 0, 0 FROM roles WHERE slug='controleur_production';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'inventaire_bobines', 0, 1, 0, 0, 0 FROM roles WHERE slug='controleur_production';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'operations', 1, 1, 0, 0, 0 FROM roles WHERE slug='controleur_production';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'point_emuci', 1, 1, 0, 0, 0 FROM roles WHERE slug='controleur_production';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rivets', 0, 1, 0, 0, 0 FROM roles WHERE slug='controleur_production';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'sites', 0, 1, 0, 0, 0 FROM roles WHERE slug='controleur_production';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'stock_bobines', 0, 1, 0, 0, 0 FROM roles WHERE slug='controleur_production';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats', 1, 1, 0, 0, 0 FROM roles WHERE slug='coordinateur_site';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_suivi', 1, 1, 0, 0, 0 FROM roles WHERE slug='coordinateur_site';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'bobines', 1, 1, 1, 0, 1 FROM roles WHERE slug='coordinateur_site';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'commandes', 1, 1, 0, 0, 0 FROM roles WHERE slug='coordinateur_site';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'commandes_bobines', 1, 1, 0, 0, 0 FROM roles WHERE slug='coordinateur_site';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'consommables', 0, 1, 0, 0, 0 FROM roles WHERE slug='coordinateur_site';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'demandes', 1, 1, 0, 0, 0 FROM roles WHERE slug='coordinateur_site';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'equipements', 0, 1, 0, 0, 0 FROM roles WHERE slug='coordinateur_site';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'inventaire_bobines', 1, 1, 1, 0, 0 FROM roles WHERE slug='coordinateur_site';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'operations', 1, 1, 1, 0, 1 FROM roles WHERE slug='coordinateur_site';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'pmma', 1, 1, 1, 0, 0 FROM roles WHERE slug='coordinateur_site';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'point_emuci', 0, 1, 0, 0, 0 FROM roles WHERE slug='coordinateur_site';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapports', 0, 1, 0, 0, 1 FROM roles WHERE slug='coordinateur_site';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'receptions', 1, 1, 1, 0, 1 FROM roles WHERE slug='coordinateur_site';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rivets', 0, 1, 0, 0, 0 FROM roles WHERE slug='coordinateur_site';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'sites', 0, 1, 0, 0, 0 FROM roles WHERE slug='coordinateur_site';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'stock_bobines', 0, 1, 0, 0, 0 FROM roles WHERE slug='coordinateur_site';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'validation_stock', 0, 1, 0, 0, 0 FROM roles WHERE slug='coordinateur_site';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats', 1, 1, 1, 0, 0 FROM roles WHERE slug='daf';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_dashboard', 0, 1, 0, 0, 0 FROM roles WHERE slug='daf';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_param', 0, 1, 1, 0, 0 FROM roles WHERE slug='daf';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_suivi', 0, 1, 0, 0, 0 FROM roles WHERE slug='daf';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'consommables', 0, 1, 0, 0, 1 FROM roles WHERE slug='daf';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'equipements', 0, 1, 0, 0, 1 FROM roles WHERE slug='daf';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapports', 0, 1, 0, 0, 1 FROM roles WHERE slug='daf';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats', 1, 1, 1, 0, 0 FROM roles WHERE slug='directeur_general';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapports', 0, 1, 0, 0, 1 FROM roles WHERE slug='directeur_general';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats', 1, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'bobines', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'commandes', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'commandes_bobines', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'demandes', 1, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'equipements', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'import_emuci', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'interventions', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'operations', 1, 1, 1, 0, 0 FROM roles WHERE slug='gestionnaire_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'point_emuci', 0, 1, 1, 0, 0 FROM roles WHERE slug='gestionnaire_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapports', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rivets', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'sites', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'stock_bobines', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'validation_stock', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats', 1, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_suivi', 1, 1, 1, 0, 0 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'affectations', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'audit', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'bobines', 1, 1, 1, 0, 1 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'commandes', 0, 1, 1, 0, 1 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'commandes_bobines', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'consommables', 1, 1, 1, 0, 1 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'demandes', 1, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'ecarts_bobines', 0, 1, 0, 0, 1 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'equipements', 1, 1, 1, 0, 1 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'interventions', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'inventaire_bobines', 1, 1, 1, 0, 0 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'nomenclatures', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'operations', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'pmma', 1, 1, 1, 0, 1 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapports', 0, 1, 0, 0, 1 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapports_gsb', 0, 1, 0, 0, 1 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'receptions', 1, 1, 1, 0, 1 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rivets', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'sites', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'stock_bobines', 0, 1, 0, 0, 1 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'validation_stock', 1, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats', 1, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock_bobines';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'bobines', 1, 1, 1, 0, 1 FROM roles WHERE slug='gestionnaire_stock_bobines';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'commandes', 1, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock_bobines';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'commandes_bobines', 1, 1, 1, 0, 0 FROM roles WHERE slug='gestionnaire_stock_bobines';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'consommables', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock_bobines';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'demandes', 1, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock_bobines';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'ecarts_bobines', 0, 1, 0, 0, 1 FROM roles WHERE slug='gestionnaire_stock_bobines';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'equipements', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock_bobines';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'inventaire_bobines', 1, 1, 1, 0, 1 FROM roles WHERE slug='gestionnaire_stock_bobines';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'operations', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock_bobines';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'pmma', 1, 1, 1, 0, 1 FROM roles WHERE slug='gestionnaire_stock_bobines';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'point_emuci', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock_bobines';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapports', 0, 1, 0, 0, 1 FROM roles WHERE slug='gestionnaire_stock_bobines';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapports_gsb', 0, 1, 0, 0, 1 FROM roles WHERE slug='gestionnaire_stock_bobines';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rivets', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock_bobines';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'sites', 0, 1, 0, 0, 0 FROM roles WHERE slug='gestionnaire_stock_bobines';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'stock_bobines', 0, 1, 0, 0, 1 FROM roles WHERE slug='gestionnaire_stock_bobines';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'validation_stock', 1, 1, 1, 0, 1 FROM roles WHERE slug='gestionnaire_stock_bobines';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats', 0, 1, 1, 0, 0 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_dashboard', 0, 1, 0, 0, 0 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_param', 0, 1, 0, 0, 0 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_suivi', 0, 1, 0, 0, 0 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'audit', 0, 1, 0, 0, 0 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'bobines', 0, 1, 0, 0, 0 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'commandes', 0, 1, 0, 0, 0 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'consommables', 0, 1, 0, 0, 0 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'demandes', 0, 1, 0, 0, 0 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'ecarts_bobines', 0, 1, 0, 0, 1 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'equipements', 0, 1, 0, 0, 0 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'interventions', 0, 1, 0, 0, 0 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'inventaire_bobines', 0, 1, 0, 0, 0 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'operations', 0, 1, 0, 0, 0 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'pmma', 0, 1, 0, 0, 0 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapports', 0, 1, 0, 0, 1 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapports_gsb', 0, 1, 0, 0, 1 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rivets', 0, 1, 0, 0, 0 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'sites', 0, 1, 0, 0, 0 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'stock_bobines', 0, 1, 0, 0, 0 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'validation_stock', 0, 1, 0, 0, 0 FROM roles WHERE slug='lecteur';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats', 1, 1, 0, 0, 0 FROM roles WHERE slug='maintenance_info';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'affectations', 0, 1, 0, 0, 0 FROM roles WHERE slug='maintenance_info';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'audit', 0, 1, 0, 0, 0 FROM roles WHERE slug='maintenance_info';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'demandes', 1, 1, 0, 0, 0 FROM roles WHERE slug='maintenance_info';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'equipements', 0, 1, 1, 0, 1 FROM roles WHERE slug='maintenance_info';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'interventions', 1, 1, 1, 0, 1 FROM roles WHERE slug='maintenance_info';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'nomenclatures', 0, 1, 0, 0, 0 FROM roles WHERE slug='maintenance_info';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapport_journalier', 1, 1, 1, 0, 1 FROM roles WHERE slug='maintenance_info';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'sites', 0, 1, 0, 0, 0 FROM roles WHERE slug='maintenance_info';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats', 1, 1, 1, 0, 0 FROM roles WHERE slug='raf';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_dashboard', 0, 1, 0, 0, 0 FROM roles WHERE slug='raf';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_param', 0, 1, 1, 0, 0 FROM roles WHERE slug='raf';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_suivi', 0, 1, 0, 0, 0 FROM roles WHERE slug='raf';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'consommables', 0, 1, 0, 0, 1 FROM roles WHERE slug='raf';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'equipements', 0, 1, 0, 0, 1 FROM roles WHERE slug='raf';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapports', 0, 1, 0, 0, 1 FROM roles WHERE slug='raf';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_dashboard', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_param', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_suivi', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'affectations', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'affectations_it', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'audit', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'bobines', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'commandes', 1, 1, 1, 0, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'commandes_bobines', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'consommables', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'delegations', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'demandes', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'departements', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'equipements', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'import_emuci', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'interventions', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'inventaire_bobines', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'nomenclatures', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'operations', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'pmma', 1, 1, 1, 0, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'point_emuci', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapport_journalier', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapports', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapports_gsb', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'receptions', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rivets', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'sites', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'stock_bobines', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'users', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'validation_stock', 1, 1, 1, 1, 1 FROM roles WHERE slug='superadmin';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats', 1, 1, 1, 1, 1 FROM roles WHERE slug='superviseur_achat';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_dashboard', 1, 1, 1, 1, 1 FROM roles WHERE slug='superviseur_achat';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_param', 1, 1, 1, 1, 1 FROM roles WHERE slug='superviseur_achat';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats_suivi', 1, 1, 1, 1, 1 FROM roles WHERE slug='superviseur_achat';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'affectations', 0, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_achat';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'audit', 0, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_achat';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'bobines', 0, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_achat';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'commandes', 0, 1, 1, 0, 1 FROM roles WHERE slug='superviseur_achat';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'consommables', 0, 1, 0, 0, 1 FROM roles WHERE slug='superviseur_achat';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'demandes', 1, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_achat';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'equipements', 0, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_achat';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'interventions', 0, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_achat';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'pmma', 1, 1, 1, 0, 1 FROM roles WHERE slug='superviseur_achat';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapports', 0, 1, 0, 0, 1 FROM roles WHERE slug='superviseur_achat';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'receptions', 0, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_achat';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rivets', 0, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_achat';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'sites', 0, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_achat';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats', 1, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'affectations', 1, 1, 1, 0, 0 FROM roles WHERE slug='superviseur_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'affectations_it', 1, 1, 1, 1, 0 FROM roles WHERE slug='superviseur_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'audit', 0, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'commandes', 1, 1, 1, 0, 1 FROM roles WHERE slug='superviseur_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'demandes', 1, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'departements', 0, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'equipements', 0, 1, 1, 0, 1 FROM roles WHERE slug='superviseur_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'interventions', 1, 1, 1, 0, 1 FROM roles WHERE slug='superviseur_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'nomenclatures', 0, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'pmma', 1, 1, 1, 0, 1 FROM roles WHERE slug='superviseur_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapport_journalier', 0, 1, 0, 0, 1 FROM roles WHERE slug='superviseur_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'sites', 0, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'users', 0, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'validation_stock', 1, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats', 1, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'affectations', 0, 1, 0, 0, 1 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'affectations_it', 0, 0, 0, 0, 0 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'audit', 0, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'bobines', 1, 1, 1, 0, 1 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'commandes', 1, 1, 1, 0, 1 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'commandes_bobines', 0, 1, 1, 0, 0 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'consommables', 0, 1, 0, 0, 1 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'delegations', 1, 1, 1, 1, 0 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'demandes', 1, 1, 1, 0, 0 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'departements', 0, 0, 0, 0, 0 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'ecarts_bobines', 0, 1, 0, 0, 1 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'equipements', 0, 1, 0, 0, 1 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'import_emuci', 0, 1, 0, 0, 1 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'interventions', 0, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'inventaire_bobines', 1, 1, 1, 0, 1 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'operations', 1, 1, 1, 0, 1 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'pmma', 1, 1, 1, 0, 1 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'point_emuci', 1, 1, 1, 0, 1 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapport_journalier', 0, 0, 0, 0, 0 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapports', 0, 1, 0, 0, 1 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapports_gsb', 0, 1, 0, 0, 1 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'receptions', 1, 1, 1, 0, 1 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rivets', 1, 1, 1, 0, 1 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'sites', 0, 1, 0, 0, 1 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'stock_bobines', 0, 1, 0, 0, 1 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'validation_stock', 1, 1, 0, 0, 0 FROM roles WHERE slug='superviseur_operation';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'achats', 1, 1, 0, 0, 0 FROM roles WHERE slug='support_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'audit', 0, 1, 0, 0, 0 FROM roles WHERE slug='support_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'bobines', 0, 1, 0, 0, 0 FROM roles WHERE slug='support_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'demandes', 1, 1, 0, 0, 0 FROM roles WHERE slug='support_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'equipements', 0, 1, 0, 0, 0 FROM roles WHERE slug='support_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'interventions', 1, 1, 1, 0, 1 FROM roles WHERE slug='support_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'inventaire_bobines', 0, 1, 0, 0, 0 FROM roles WHERE slug='support_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'rapport_journalier', 1, 1, 0, 0, 0 FROM roles WHERE slug='support_it';
+INSERT IGNORE INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export) SELECT id, 'sites', 0, 1, 0, 0, 0 FROM roles WHERE slug='support_it';
