@@ -28,7 +28,8 @@ RUN echo "variables_order = EGPCS" >> /usr/local/etc/php/php.ini \
     && echo "display_errors = Off" >> /usr/local/etc/php/php.ini \
     && echo "display_startup_errors = Off" >> /usr/local/etc/php/php.ini \
     && echo "log_errors = On" >> /usr/local/etc/php/php.ini \
-    && echo "error_reporting = E_ALL" >> /usr/local/etc/php/php.ini
+    && echo "error_reporting = E_ALL" >> /usr/local/etc/php/php.ini \
+    && echo "expose_php = Off" >> /usr/local/etc/php/php.ini
 
 # Installer Composer
 COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
