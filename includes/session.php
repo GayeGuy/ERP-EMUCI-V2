@@ -9,11 +9,12 @@
 // (SESSION_LIFETIME, utilisé juste en dessous, en vient).
 require_once __DIR__ . '/audit.php';
 
-// Render termine le TLS à la frontière et transmet en HTTP simple au
-// conteneur : $_SERVER['HTTPS'] n'est donc jamais posé en production, il
-// faut se fier à l'en-tête X-Forwarded-Proto posé par le proxy. Sans ce
-// second test, le cookie de session ne recevait jamais l'attribut Secure
-// en production malgré le HTTPS réel.
+// Apache pose $_SERVER['HTTPS'] directement quand mod_ssl termine le TLS
+// (cf. VirtualHost du guide DEPLOY-VPS-MYSQL.md) — mais si un proxy/load
+// balancer venait un jour s'intercaler, seul X-Forwarded-Proto le
+// saurait. Les deux tests couvrent les deux cas sans rien casser dans
+// l'autre : sans ce second test, un déploiement derrière un proxy ne
+// poserait jamais l'attribut Secure sur le cookie malgré le HTTPS réel.
 $_https = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
     || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
 

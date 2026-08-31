@@ -193,8 +193,7 @@ function ach_numero_commande(): string {
     if ($transaction_locale) db_begin();
     try {
         db_query(
-            "INSERT INTO commande_compteurs (jour, dernier_numero) VALUES (?, 0)
-             ON CONFLICT (jour) DO NOTHING",
+            "INSERT IGNORE INTO commande_compteurs (jour, dernier_numero) VALUES (?, 0)",
             [$jour]
         );
         $row = db_fetch_one(

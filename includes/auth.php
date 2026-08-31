@@ -40,7 +40,7 @@ function auth_login(string $email, string $password): array {
             $tentatives = (int)$user['failed_login_attempts'] + 1;
             if ($tentatives >= 5) {
                 db_query(
-                    "UPDATE users SET failed_login_attempts = 0, locked_until = NOW() + INTERVAL '15 minutes' WHERE id = ?",
+                    "UPDATE users SET failed_login_attempts = 0, locked_until = NOW() + INTERVAL 15 MINUTE WHERE id = ?",
                     [$user['id']]
                 );
                 audit_log(null, 'LOGIN', 'auth', $user['id'], "Compte verrouillé 15 min après 5 échecs consécutifs : $email");
