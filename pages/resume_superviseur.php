@@ -107,20 +107,6 @@ if (isset($_GET['export'])) {
         foreach(range('A','H') as $c) $ws->getColumnDimension($c)->setAutoSize(true);
         $filename = "Resume_Mensuel_{$f_mois}.xlsx";
 
-    } elseif ($type === 'optoplate') {
-        $ws->setTitle('OptoPlate');
-        $where = ["date_import=?"]; $params = [$f_date];
-        if ($f_site) { $where[] = "site_id=?"; $params[] = $f_site; }
-        $data = db_fetch_all("SELECT * FROM import_optoplate WHERE ".implode(' AND ',$where)." ORDER BY site_nom_emuci, statut_plaque", $params);
-        $headers = ['Date install','Immat','VIN','Type plaque','Statut','Position','N°Film','N°Bobine','Site EMUCI'];
-        foreach($headers as $i=>$h) $ws->setCellValueByColumnAndRow($i+1,1,$h);
-        $ws->getStyle('A1:I1')->applyFromArray($header_style);
-        foreach($data as $ri=>$row) {
-            $vals = [$row['date_installation'],$row['immatriculation'],$row['vin'],$row['type_plaque'],$row['statut_plaque'],$row['position'],$row['num_consommable'],$row['num_bobine'],$row['site_nom_emuci']];
-            foreach($vals as $ci=>$v) $ws->setCellValueByColumnAndRow($ci+1,$ri+2,$v);
-        }
-        foreach(range('A','I') as $c) $ws->getColumnDimension($c)->setAutoSize(true);
-        $filename = "OptoPlate_{$f_date}.xlsx";
     } else {
         die('Type export inconnu.');
     }
