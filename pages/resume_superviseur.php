@@ -94,7 +94,7 @@ if (isset($_GET['export'])) {
              FROM op_points_journaliers p
              JOIN sites s ON s.id=p.site_id
              WHERE ".implode(' AND ',$where)."
-             GROUP BY p.site_id, mois ORDER BY s.nom",
+             GROUP BY p.site_id, s.nom, mois ORDER BY s.nom",
             $params
         );
         $headers = ['Site','Mois','Nb Points','Total Plaques','Total Engins','Rivets utilisés','Heures travail','Points validés'];
@@ -165,7 +165,7 @@ if ($f_vue === 'mensuel') {
          FROM op_points_journaliers p
          JOIN sites s ON s.id=p.site_id
          WHERE ".implode(' AND ',$where)."
-         GROUP BY p.site_id ORDER BY total_plaques DESC",
+         GROUP BY p.site_id, s.nom ORDER BY total_plaques DESC",
         $params
     );
     // Données graphique — plaques par jour du mois
