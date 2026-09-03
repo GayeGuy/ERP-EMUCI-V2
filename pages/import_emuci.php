@@ -88,9 +88,11 @@ function _verifier_coherence_optoplate(string $date_import, int $user_id): array
     foreach ($sites_avec_data as $s) {
         $site_id = (int)$s['site_id'];
 
-        // EMUCI : total plaques posées sur ce site = COUNT(in_use)
+        // EMUCI : total plaques posées sur ce site = COUNT(in_use), compté sur la
+        // vraie date d'installation de chaque plaque (pas la date saisie à l'import,
+        // qui peut couvrir un historique de plusieurs jours voire complet).
         $nb_inuse_emuci = (int)db_fetch_value(
-            "SELECT COUNT(*) FROM import_optoplate WHERE site_id=? AND statut_plaque='in_use' AND date_import=?",
+            "SELECT COUNT(*) FROM import_optoplate WHERE site_id=? AND statut_plaque='in_use' AND date_installation::date=?",
             [$site_id, $date_import]
         );
 
@@ -618,7 +620,12 @@ $f_date = trim($_GET['date'] ?? date('Y-m-d'));
 $f_site = (int)($_GET['site'] ?? 0);
 $onglet = $_GET['tab'] ?? 'optoplate';
 
-// Stats OptoPlate du jour
+// Stats OptoPlate du jour — "in_use" (plaque réellement posée) compté sur sa
+// vraie date d'installation (date_installation), pas la date saisie à l'import
+// (date_import), qui peut couvrir un historique de plusieurs jours voire
+// complet. Les autres statuts (reserved, declared_broken...) n'ont pas de date
+// d'installation puisque la plaque n'est pas posée : ils restent rattachés à
+// la date de l'import qui les a rapportés.
 $stats_optoplate = db_fetch_all(
     "SELECT
         statut_plaque,
@@ -628,11 +635,12 @@ $stats_optoplate = db_fetch_all(
         COUNT(DISTINCT num_bobine) AS nb_bobines,
         COUNT(DISTINCT immatriculation) AS nb_vehicules
      FROM import_optoplate
-     WHERE date_import=?
+     WHERE ((statut_plaque='in_use' AND date_installation::date=?)
+            OR (statut_plaque!='in_use' AND date_import=?))
      " . ($f_site ? "AND site_id=$f_site" : "") . "
      GROUP BY statut_plaque, site_nom_emuci, site_id
      ORDER BY site_nom_emuci, statut_plaque",
-    [$f_date]
+    [$f_date, $f_date]
 );
 
 // Stats OptoTrace du jour (colonnes nouvelles : keyname, quantity, state, site_nom_emuci)
@@ -667,7 +675,13 @@ $detail_bobines_optotrace = db_fetch_all(
     [$f_date]
 );
 
-// Comparaison OptoPlate vs ERP EMUCI PJ par site
+// Comparaison OptoPlate vs ERP EMUCI PJ par site — "in_use" (plaque réellement
+// posée) compté sur sa vraie date d'installation (date_installation), pas la
+// date saisie à l'import (date_import), qui peut couvrir un historique de
+// plusieurs jours voire complet : compter par date_import ferait remonter
+// tout le fichier sous une seule journée. reserved/declared_broken n'ont pas
+// de date d'installation (plaque pas posée) : ils restent rattachés à la date
+// de l'import.
 $comparaison = db_fetch_all(
     "SELECT
         s.nom AS site_nom,
@@ -685,7 +699,10 @@ $comparaison = db_fetch_all(
                 SUM(CASE WHEN statut_plaque='declared_broken' THEN nb_plaques ELSE 0 END) AS nb_broken
          FROM (
              SELECT site_id, statut_plaque, COUNT(*) AS nb_plaques
-             FROM import_optoplate WHERE date_import=? GROUP BY site_id, statut_plaque
+             FROM import_optoplate
+             WHERE ((statut_plaque='in_use' AND date_installation::date=?)
+                    OR (statut_plaque!='in_use' AND date_import=?))
+             GROUP BY site_id, statut_plaque
          ) sub GROUP BY site_id
      ) op ON op.site_id=s.id
      LEFT JOIN (
@@ -696,7 +713,7 @@ $comparaison = db_fetch_all(
      WHERE s.actif=1
      " . ($f_site ? "AND s.id=$f_site" : "") . "
      ORDER BY s.nom",
-    [$f_date, $f_date]
+    [$f_date, $f_date, $f_date]
 );
 
 // Historique sessions
