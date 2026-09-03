@@ -208,7 +208,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
     $date_import = trim($_POST['date_import'] ?? date('Y-m-d'));
 
     if (empty($_FILES['fichier_optoplate']) || $_FILES['fichier_optoplate']['error'] !== UPLOAD_ERR_OK) {
-        $msg_optoplate = ['type'=>'danger','text'=>'Veuillez sélectionner un fichier CSV ou XLSX valide.'];
+        $err = $_FILES['fichier_optoplate']['error'] ?? null;
+        $detail = match ($err) {
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'Le fichier dépasse la taille maximale autorisée par le serveur ('.ini_get('upload_max_filesize').').',
+            UPLOAD_ERR_PARTIAL => 'Le fichier n\'a été que partiellement envoyé — réessayez.',
+            UPLOAD_ERR_NO_FILE, null => 'Aucun fichier sélectionné.',
+            UPLOAD_ERR_NO_TMP_DIR, UPLOAD_ERR_CANT_WRITE, UPLOAD_ERR_EXTENSION => 'Erreur serveur lors de la réception du fichier (code '.$err.').',
+            default => 'Erreur inconnue (code '.$err.').',
+        };
+        $msg_optoplate = ['type'=>'danger','text'=>"Veuillez sélectionner un fichier CSV ou XLSX valide. — $detail"];
     } else {
         $tmp = $_FILES['fichier_optoplate']['tmp_name'];
         $ext = strtolower(pathinfo($_FILES['fichier_optoplate']['name'], PATHINFO_EXTENSION));
@@ -350,7 +358,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
     $date_import = trim($_POST['date_import_trace'] ?? date('Y-m-d'));
 
     if (empty($_FILES['fichier_optotrace']) || $_FILES['fichier_optotrace']['error'] !== UPLOAD_ERR_OK) {
-        $msg_optotrace = ['type'=>'danger','text'=>'Veuillez sélectionner un fichier XLSX valide.'];
+        $err = $_FILES['fichier_optotrace']['error'] ?? null;
+        $detail = match ($err) {
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'Le fichier dépasse la taille maximale autorisée par le serveur ('.ini_get('upload_max_filesize').').',
+            UPLOAD_ERR_PARTIAL => 'Le fichier n\'a été que partiellement envoyé — réessayez.',
+            UPLOAD_ERR_NO_FILE, null => 'Aucun fichier sélectionné.',
+            UPLOAD_ERR_NO_TMP_DIR, UPLOAD_ERR_CANT_WRITE, UPLOAD_ERR_EXTENSION => 'Erreur serveur lors de la réception du fichier (code '.$err.').',
+            default => 'Erreur inconnue (code '.$err.').',
+        };
+        $msg_optotrace = ['type'=>'danger','text'=>"Veuillez sélectionner un fichier XLSX valide. — $detail"];
     } else {
         $tmp = $_FILES['fichier_optotrace']['tmp_name'];
         $ext = strtolower(pathinfo($_FILES['fichier_optotrace']['name'], PATHINFO_EXTENSION));
