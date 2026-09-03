@@ -226,10 +226,11 @@ include __DIR__ . '/../templates/header.php';
     <thead>
       <tr>
         <th>Site</th>
+        <th style="text-align:center">Plaques posées (système)</th>
+        <th style="text-align:center">Plaques réservées</th>
         <th style="text-align:center">Déclaratif coord.</th>
-        <th style="text-align:center">OptoPlate <em>in_use</em></th>
-        <th style="text-align:center">OptoPlate <em>reserved</em></th>
         <th style="text-align:center">Écart</th>
+        <th style="text-align:center">Correction</th>
         <?php if ($can_correct): ?><th style="text-align:center">Action</th><?php endif; ?>
       </tr>
     </thead>
@@ -242,23 +243,27 @@ include __DIR__ . '/../templates/header.php';
     ?>
     <tr id="row-<?= $r['site_id'] ?>">
       <td><strong><?= h($r['site_nom']) ?></strong></td>
-      <td style="text-align:center" id="corr-<?= $r['site_id'] ?>">
-        <?php if ($r['declared'] === null && $r['corrected'] === null): ?>
+      <td style="text-align:center;font-weight:600;color:#1565c0"><?= $r['in_use'] ?></td>
+      <td style="text-align:center;color:var(--muted)"><?= $r['reserved'] ?></td>
+      <td style="text-align:center">
+        <?php if ($r['declared'] !== null): ?>
+          <span style="font-weight:600;font-size:15px"><?= $r['declared'] ?></span>
+        <?php else: ?>
           <span class="no-pj">Pas de point</span>
-        <?php elseif ($r['corrected'] !== null): ?>
+        <?php endif; ?>
+      </td>
+      <td style="text-align:center">
+        <span id="ecart-<?= $r['site_id'] ?>" class="<?= $ecart_cls ?>"><?= $ecart_lbl ?></span>
+      </td>
+      <td style="text-align:center" id="corr-<?= $r['site_id'] ?>">
+        <?php if ($r['corrected'] !== null): ?>
           <span class="corr-badge" title="<?= h($r['motif']) ?> — <?= h($r['corrected_by']) ?>"
                 onclick="showMotif(<?= $r['pj_id'] ?>, '<?= h(addslashes($r['motif'])) ?>', '<?= h(addslashes($r['corrected_by'] ?? '')) ?>', '<?= h($r['corrected_at']) ?>')">
             <?= $r['corrected'] ?> <i class="ph ph-pencil-simple" aria-hidden="true"></i>
           </span>
-          <div style="font-size:12px;color:var(--muted);text-decoration:line-through"><?= $r['declared'] ?></div>
         <?php else: ?>
-          <span style="font-weight:600;font-size:15px"><?= $r['declared'] ?></span>
+          <span style="color:var(--muted);font-size:13px">—</span>
         <?php endif; ?>
-      </td>
-      <td style="text-align:center;font-weight:600;color:#1565c0"><?= $r['in_use'] ?></td>
-      <td style="text-align:center;color:var(--muted)"><?= $r['reserved'] ?></td>
-      <td style="text-align:center">
-        <span id="ecart-<?= $r['site_id'] ?>" class="<?= $ecart_cls ?>"><?= $ecart_lbl ?></span>
       </td>
       <?php if ($can_correct): ?>
       <td style="text-align:center;white-space:nowrap;padding:8px 12px">
@@ -267,7 +272,7 @@ include __DIR__ . '/../templates/header.php';
             <i class="ph ph-pencil-simple" aria-hidden="true"></i> Corriger
           </button>
           <?php if ($r['corrected'] !== null): ?>
-          <button class="btn-annul" onclick="annulerCorrection(<?= $r['pj_id'] ?>,<?= $r['site_id'] ?>)" title="Annuler la correction GP"><i class="ph ph-x" aria-hidden="true"></i></button>
+          <button class="btn-annul" onclick="annulerCorrection(<?= $r['pj_id'] ?>,<?= $r['site_id'] ?>)" title="Annuler la correction"><i class="ph ph-x" aria-hidden="true"></i></button>
           <?php endif; ?>
         <?php else: ?>
           <span class="no-pj">Pas de PJ</span>
