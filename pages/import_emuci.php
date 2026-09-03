@@ -44,6 +44,24 @@ function trouver_site_id(string $nom_emuci, array $sites): ?int {
     return null;
 }
 
+// Convertit une date au format européen (JJ/MM/AAAA, heure optionnelle) — celui des
+// exports OptoPlate/OptoTrace — vers le format ISO attendu par PostgreSQL. Sans cette
+// conversion, PostgreSQL interprète le séparateur "/" selon son propre DateStyle
+// (souvent MDY) : "13/08/2026" y devient un 13e mois invalide (erreur "field overflow"),
+// et une date comme "05/08/2026" y serait silencieusement lue comme le 8 mai au lieu
+// du 5 août — jour et mois inversés sans la moindre erreur pour tout jour ≤ 12.
+function emuci_parse_date_fr(string $v): ?string {
+    $v = trim($v);
+    if ($v === '') return null;
+    foreach (['d/m/Y H:i:s', 'd/m/Y H:i', 'd/m/Y'] as $fmt) {
+        $dt = DateTime::createFromFormat($fmt, $v);
+        if ($dt !== false) return $dt->format('Y-m-d H:i:s');
+    }
+    // Filet de secours pour un format déjà non ambigu (ISO...)
+    $ts = strtotime($v);
+    return $ts !== false ? date('Y-m-d H:i:s', $ts) : null;
+}
+
 // Enregistre un site EMUCI inconnu pour traitement ultérieur par l'admin
 function logger_site_inconnu(string $nom_emuci, string $type_import): void {
     if (!$nom_emuci) return;
@@ -288,7 +306,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         if (count($row) < 5) continue;
                         $get = fn($k) => trim((string)($row[$col[$k] ?? -1] ?? ''));
 
-                        $date_install = $get("Date d'installation") ?: null;
+                        $date_install = emuci_parse_date_fr($get("Date d'installation"));
                         $immat        = $get("Numéro d'immatriculation");
                         $vin          = $get('Vin');
                         $num_dossier  = $get('Numéro de dossier');
@@ -436,7 +454,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         $quantity   = (int)$get('quantity');  // films restants
                         $type_trace = $get('type');
                         $state      = (int)$get('state');
-                        $parse_dt   = fn($v) => ($v && strtotime($v) !== false) ? date('Y-m-d H:i:s', strtotime($v)) : null;
+                        $parse_dt   = fn($v) => emuci_parse_date_fr($v);
                         $first_use  = $parse_dt($get('first'));
                         $last_use   = $parse_dt($get('last'));
                         $site_nom   = $get('site');
