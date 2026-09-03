@@ -80,6 +80,7 @@ migration_achats_21_equipement_bon_livraison.sql
 migration_achats_22_commande_ligne_feb_ligne.sql
 migration_achats_23_commande_modification.sql
 migration_fix_fk_consommables_legacy.sql
+migration_correction_point_emuci.sql
 "
 
 for f in $FICHIERS; do

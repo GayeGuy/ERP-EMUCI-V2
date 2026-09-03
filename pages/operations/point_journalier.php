@@ -7,6 +7,7 @@ require_once __DIR__ . '/../../includes/session.php';
 require_once __DIR__ . '/../../includes/audit.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/notifications.php';
+require_once __DIR__ . '/../../includes/point_emuci_corrections.php';
 
 require_auth();
 require_permission('operations', 'can_read');
@@ -584,6 +585,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         }
     }
 
+    // ── CORRECTION POINT EMUCI — réponse du coordinateur
+    if ($action === 'pec_accepter') {
+        $role_user = $user['role_slug'] ?? '';
+        if ($role_user !== 'coordinateur_site' && !in_array($role_user, ['admin','superadmin']))
+            json_response(false, 'Accès refusé.');
+        $corr_id = (int)($_POST['corr_id'] ?? 0);
+        $corr = db_fetch_one("SELECT * FROM corrections_point_emuci WHERE id=? AND statut='en_attente'", [$corr_id]);
+        if (!$corr) json_response(false, 'Demande introuvable ou déjà traitée.');
+        if ($role_user === 'coordinateur_site' && (int)$corr['site_id'] !== (int)$user['site_id']) json_response(false, 'Accès refusé.');
+        try {
+            pec_accepter($corr, $user);
+            audit_log($user['id'], 'UPDATE', 'corrections_point_emuci', $corr_id, 'Correction Point EMUCI acceptée');
+            json_response(true, 'Correction acceptée.');
+        } catch (Exception $e) { json_response(false, $e->getMessage()); }
+    }
+
+    if ($action === 'pec_contester') {
+        $role_user = $user['role_slug'] ?? '';
+        if ($role_user !== 'coordinateur_site' && !in_array($role_user, ['admin','superadmin']))
+            json_response(false, 'Accès refusé.');
+        $corr_id  = (int)($_POST['corr_id'] ?? 0);
+        $propose  = (int)($_POST['total_propose_coord'] ?? -1);
+        $reponse  = trim($_POST['reponse'] ?? '');
+        $corr = db_fetch_one("SELECT * FROM corrections_point_emuci WHERE id=? AND statut='en_attente'", [$corr_id]);
+        if (!$corr) json_response(false, 'Demande introuvable ou déjà traitée.');
+        if ($role_user === 'coordinateur_site' && (int)$corr['site_id'] !== (int)$user['site_id']) json_response(false, 'Accès refusé.');
+        if ($propose < 0) json_response(false, 'Valeur invalide.');
+        try {
+            pec_contester($corr, $user, $propose, $reponse);
+            audit_log($user['id'], 'UPDATE', 'corrections_point_emuci', $corr_id, "Correction Point EMUCI contestée → $propose");
+            json_response(true, 'Contre-proposition envoyée au GP.');
+        } catch (Exception $e) { json_response(false, $e->getMessage()); }
+    }
+
     json_response(false, 'Action inconnue.');
 }
 
@@ -668,6 +703,21 @@ if ($role_slug_pj === 'coordinateur_site' && $user['site_id']) {
         [(int)$user['site_id']]
     );
     $nb_corrections_attente = count($corrections_en_attente);
+}
+
+// Corrections Point EMUCI en attente (pour coordinateur seulement)
+$pec_en_attente = [];
+$nb_pec_attente = 0;
+if ($role_slug_pj === 'coordinateur_site' && $user['site_id']) {
+    $pec_en_attente = db_fetch_all(
+        "SELECT c.*, CONCAT(gp.prenom,' ',gp.nom) AS gp_nom
+         FROM corrections_point_emuci c
+         JOIN users gp ON gp.id = c.gp_id
+         WHERE c.site_id = ? AND c.statut = 'en_attente'
+         ORDER BY c.created_at DESC",
+        [(int)$user['site_id']]
+    );
+    $nb_pec_attente = count($pec_en_attente);
 }
 
 include __DIR__ . '/../../templates/header.php';
@@ -957,6 +1007,57 @@ $corrections_demandees = ($role_slug_pj === 'coordinateur_site' && $user['site_i
           <td style="padding:9px 14px;text-align:center">
             <div style="display:flex;gap:6px;justify-content:center">
               <button onclick="ouvrirReponseCorrection(<?= $cb['id'] ?>, <?= (int)$cb['films_original'] ?>, <?= (int)$cb['films_proposes'] ?>, '<?= addslashes(h($cb['bobine_num'])) ?>')"
+                      style="background:#1a56a0;color:white;border:none;border-radius:7px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer">
+                Répondre
+              </button>
+            </div>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+<?php endif; ?>
+
+<!-- CORRECTIONS POINT EMUCI EN ATTENTE — visible coordinateur uniquement -->
+<?php if($role_slug_pj === 'coordinateur_site' && $nb_pec_attente > 0): ?>
+<div id="panel-pec" style="background:white;border:2px solid #f59e0b;border-radius:14px;margin-bottom:20px;overflow:hidden">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;background:linear-gradient(90deg,#fffbeb,#fef3c7);border-bottom:1px solid #fcd34d">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:20px"><i class="ph ph-bell" aria-hidden="true"></i></span>
+      <div>
+        <div style="font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;color:#92400e">
+          <?= $nb_pec_attente ?> demande<?= $nb_pec_attente > 1 ? 's' : '' ?> de correction Point EMUCI en attente
+        </div>
+        <div style="font-size:12px;color:#a16207">Le service Gestion Production conteste votre déclaratif de plaques posées.</div>
+      </div>
+    </div>
+    <button onclick="const b=this.closest('#panel-pec').querySelector('.corr-body');b.style.display=b.style.display==='none'?'block':'none'" style="background:none;border:1px solid #fcd34d;border-radius:8px;padding:4px 12px;font-size:12px;color:#92400e;cursor:pointer">Afficher / Masquer</button>
+  </div>
+  <div class="corr-body">
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead>
+        <tr style="background:#fffbeb">
+          <th style="padding:9px 14px;text-align:left;font-size:12px;color:#78350f;font-weight:700;text-transform:uppercase;letter-spacing:.4px">Date</th>
+          <th style="padding:9px 14px;text-align:center;font-size:12px;color:#78350f;font-weight:700;text-transform:uppercase">Déclaré</th>
+          <th style="padding:9px 14px;text-align:center;font-size:12px;color:#78350f;font-weight:700;text-transform:uppercase">Proposé (GP)</th>
+          <th style="padding:9px 14px;text-align:left;font-size:12px;color:#78350f;font-weight:700;text-transform:uppercase">Motif</th>
+          <th style="padding:9px 14px;text-align:left;font-size:12px;color:#78350f;font-weight:700;text-transform:uppercase">Demandé par</th>
+          <th style="padding:9px 14px;text-align:center;font-size:12px;color:#78350f;font-weight:700;text-transform:uppercase">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+      <?php foreach($pec_en_attente as $pc): ?>
+        <tr style="border-top:1px solid #fde68a" data-pec-id="<?= $pc['id'] ?>">
+          <td style="padding:9px 14px;font-size:12px;color:#6b7280"><?= fmt_date($pc['date_point'], 'd/m/Y') ?></td>
+          <td style="padding:9px 14px;text-align:center;font-family:'Montserrat',sans-serif;font-weight:700;color:#475569"><?= (int)$pc['total_declare'] ?></td>
+          <td style="padding:9px 14px;text-align:center;font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#d97706"><?= (int)$pc['total_propose'] ?></td>
+          <td style="padding:9px 14px;font-size:12px;color:#374151;max-width:220px"><?= h($pc['motif_gp']) ?></td>
+          <td style="padding:9px 14px;font-size:12px;color:#6b7280"><?= h($pc['gp_nom']) ?></td>
+          <td style="padding:9px 14px;text-align:center">
+            <div style="display:flex;gap:6px;justify-content:center">
+              <button onclick="ouvrirReponsePec(<?= $pc['id'] ?>, <?= (int)$pc['total_declare'] ?>, <?= (int)$pc['total_propose'] ?>)"
                       style="background:#1a56a0;color:white;border:none;border-radius:7px;padding:5px 12px;font-size:12px;font-weight:700;cursor:pointer">
                 Répondre
               </button>
@@ -1409,6 +1510,66 @@ foreach($points as $p):
     <div class="mfoot" style="display:flex;justify-content:flex-end;gap:10px">
       <button class="btn btn-secondary" onclick="fermerReponseCorrection()">Annuler</button>
       <button class="btn btn-primary" id="rc-submit-btn" onclick="submitReponseCorrection()">Envoyer ma réponse</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL REPONSE CORRECTION POINT EMUCI -->
+<div class="modal-overlay" id="mReponsePec">
+  <div class="modal" style="width:520px">
+    <div class="mhdr"><h3><i class="ph ph-bell" aria-hidden="true"></i> Répondre à la demande de correction</h3>
+      <button class="mclose" onclick="fermerReponsePec()"><i class="ph ph-x" aria-hidden="true"></i></button>
+    </div>
+    <div class="mbody">
+      <input type="hidden" id="pec-id" value="">
+      <div style="background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="text-align:center;background:white;border-radius:8px;padding:8px">
+            <div style="font-size:12px;color:#6b7280;text-transform:uppercase;font-weight:600;margin-bottom:4px">Déclaré (vous)</div>
+            <div id="pec-declare" style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#0d1f35"></div>
+          </div>
+          <div style="text-align:center;background:#fef3c7;border-radius:8px;padding:8px">
+            <div style="font-size:12px;color:#92400e;text-transform:uppercase;font-weight:600;margin-bottom:4px">Proposé (GP)</div>
+            <div id="pec-propose" style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#d97706"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:14px">
+        <label style="font-size:13px;font-weight:700;color:#374151;display:block;margin-bottom:8px">Votre décision :</label>
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer">
+            <input type="radio" name="pec-reponse" value="accepter" onchange="onPecReponseChange()">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#065f46"><i class="ph ph-check-circle" aria-hidden="true"></i> Accepter la valeur proposée</div>
+              <div style="font-size:12px;color:#6b7280">Votre déclaratif sera corrigé à la valeur proposée par le GP.</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;cursor:pointer">
+            <input type="radio" name="pec-reponse" value="contester" onchange="onPecReponseChange()">
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#b45309"><i class="ph ph-arrow-clockwise" aria-hidden="true"></i> Contester avec ma propre valeur</div>
+              <div style="font-size:12px;color:#6b7280">Le GP tranchera en dernier ressort entre votre valeur et la sienne.</div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <div id="pec-section-valeur" style="display:none;margin-bottom:14px">
+        <label style="font-size:13px;font-weight:700;color:#374151;display:block;margin-bottom:6px">Votre valeur <span style="color:#dc2626">*</span></label>
+        <input type="number" id="pec-valeur-coord" min="0" step="1" placeholder="0"
+               style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;font-family:'Montserrat',sans-serif;font-size:20px;font-weight:800;text-align:center">
+      </div>
+
+      <div id="pec-section-note" style="display:none;margin-bottom:4px">
+        <label style="font-size:13px;font-weight:700;color:#374151;display:block;margin-bottom:6px">Explication <span style="color:#dc2626">*</span></label>
+        <textarea id="pec-note" rows="3" placeholder="Expliquez votre décision…"
+                  style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;resize:vertical;box-sizing:border-box"></textarea>
+      </div>
+    </div>
+    <div class="mfoot" style="display:flex;justify-content:flex-end;gap:10px">
+      <button class="btn btn-secondary" onclick="fermerReponsePec()">Annuler</button>
+      <button class="btn btn-primary" id="pec-submit-btn" onclick="submitReponsePec()">Envoyer ma réponse</button>
     </div>
   </div>
 </div>
@@ -2232,6 +2393,53 @@ async function submitReponseCorrection(){
   }
 }
 document.getElementById('mReponseCorr').addEventListener('click',e=>{if(e.target===e.currentTarget)fermerReponseCorrection();});
+
+function ouvrirReponsePec(id, declare, propose){
+  document.getElementById('pec-id').value = id;
+  document.getElementById('pec-declare').textContent = declare;
+  document.getElementById('pec-propose').textContent = propose;
+  document.getElementById('pec-valeur-coord').value = declare;
+  document.querySelectorAll('input[name="pec-reponse"]').forEach(r=>r.checked=false);
+  document.getElementById('pec-section-valeur').style.display = 'none';
+  document.getElementById('pec-section-note').style.display = 'none';
+  document.getElementById('pec-note').value = '';
+  document.getElementById('mReponsePec').classList.add('open');
+}
+function fermerReponsePec(){
+  document.getElementById('mReponsePec').classList.remove('open');
+}
+function onPecReponseChange(){
+  const val = document.querySelector('input[name="pec-reponse"]:checked')?.value;
+  const secValeur = document.getElementById('pec-section-valeur');
+  const secNote   = document.getElementById('pec-section-note');
+  secValeur.style.display = val === 'contester' ? 'block' : 'none';
+  secNote.style.display   = val === 'contester' ? 'block' : 'none';
+}
+async function submitReponsePec(){
+  const id      = document.getElementById('pec-id').value;
+  const reponse = document.querySelector('input[name="pec-reponse"]:checked')?.value;
+  const valeur  = document.getElementById('pec-valeur-coord').value;
+  const note    = document.getElementById('pec-note').value.trim();
+  if(!reponse){ toast('Veuillez choisir une réponse.','warning'); return; }
+  if(reponse === 'contester' && (valeur===''||isNaN(parseInt(valeur)))){ toast('Veuillez saisir votre valeur.','warning'); return; }
+  if(reponse === 'contester' && !note){ toast('Veuillez expliquer votre contestation.','warning'); return; }
+  const payload = reponse === 'accepter'
+    ? { action:'pec_accepter', corr_id:id }
+    : { action:'pec_contester', corr_id:id, total_propose_coord:valeur, reponse:note };
+  const btn = document.getElementById('pec-submit-btn');
+  btn.disabled = true; btn.textContent = 'Envoi…';
+  try {
+    const d = await ap(payload);
+    toast(d.message, d.success?'success':'danger');
+    if(d.success){
+      fermerReponsePec();
+      setTimeout(()=>location.reload(), 1200);
+    }
+  } finally {
+    btn.disabled = false; btn.textContent = 'Envoyer ma réponse';
+  }
+}
+document.getElementById('mReponsePec').addEventListener('click',e=>{if(e.target===e.currentTarget)fermerReponsePec();});
 </script>
 <style>@media print{.sidebar,.topbar,.mhdr button,.mfoot{display:none!important}.modal{position:static;border:none;box-shadow:none}.point-preview{color:black!important;background:white!important}.point-preview *{color:black!important}}</style>
 
