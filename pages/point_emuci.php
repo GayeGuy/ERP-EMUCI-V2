@@ -68,7 +68,7 @@ if (!$f_date) {
 }
 
 $has_import = (int)db_fetch_value(
-    "SELECT COUNT(*) FROM import_optoplate WHERE date_import=?", [$f_date]
+    "SELECT COUNT(*) FROM import_optoplate WHERE date_import=? OR date_installation::date=?", [$f_date, $f_date]
 ) > 0;
 
 $sites_list = db_fetch_all("SELECT id, nom FROM sites WHERE actif=1 ORDER BY nom");
@@ -91,8 +91,13 @@ foreach ($sites_list as $s) {
         [$sid, $f_date]
     );
 
+    // Comparaison au jour réel d'installation (date_installation), pas à la date
+    // saisie à l'écran d'import (date_import) : un import OptoPlate couvre souvent
+    // plusieurs jours ("export_plates_from_...until_..."), voire un historique
+    // complet — compter par date_import y ferait remonter tout le fichier sous
+    // une seule journée.
     $in_use   = (int)db_fetch_value(
-        "SELECT COUNT(*) FROM import_optoplate WHERE site_id=? AND statut_plaque='in_use' AND date_import=?",
+        "SELECT COUNT(*) FROM import_optoplate WHERE site_id=? AND statut_plaque='in_use' AND date_installation::date=?",
         [$sid, $f_date]
     );
     $reserved = (int)db_fetch_value(
