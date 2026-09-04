@@ -42,10 +42,34 @@ $ohada_durees = [
     'default'       => 60,
 ];
 
+// ── Numéro de série interne "CODE-EMUCI-NNNN" — reprise du trigger MySQL
+// trg_equipement_numero_serie (sql/migration_stockapp_complet.sql), jamais
+// recréé lors de la migration vers PostgreSQL du 2026-07-21 : le champ
+// restait vide à la création faute d'équivalent côté base. Séquence par
+// nomenclature (comme l'original), pas globale.
+function _prochain_numero_serie(int $nomenclature_id): string {
+    $code = $nomenclature_id
+        ? (db_fetch_value("SELECT code FROM nomenclatures WHERE id=?", [$nomenclature_id]) ?: 'EQP')
+        : 'EQP';
+    $seq = (int)db_fetch_value(
+        "SELECT COALESCE(MAX((regexp_replace(numero_serie_interne,'.*-',''))::int),0)+1
+         FROM equipements
+         WHERE nomenclature_id=? AND numero_serie_interne ~ ('^' || ? || '-[A-Z]+-[0-9]+$')",
+        [$nomenclature_id, $code]
+    );
+    return $code . '-EMUCI-' . str_pad((string)$seq, 4, '0', STR_PAD_LEFT);
+}
+
 // ── AJAX
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     header('Content-Type: application/json');
     $action = $_POST['action'] ?? '';
+
+    if ($action === 'apercu_numero') {
+        if (!$can_create) json_response(false,'Accès refusé.');
+        $nom_id = (int)($_POST['nomenclature_id'] ?? 0);
+        json_response(true, '', ['numero' => _prochain_numero_serie($nom_id)]);
+    }
 
     if ($action === 'creer' || $action === 'modifier') {
         if (!$can_create && $action==='creer') json_response(false,'Accès refusé.');
@@ -76,12 +100,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $label = ($marque ? $marque . ' ' : '') . ($modele ?: $nsi);
 
         if ($action === 'creer') {
+            if ($nsi === '' || $nsi === '0') $nsi = _prochain_numero_serie($nom_id);
+            $numero_chrono = (int)db_fetch_value("SELECT COALESCE(MAX(numero_chrono),0)+1 FROM equipements");
             db_query(
                 "INSERT INTO equipements
-                 (marque,modele,categorie,nomenclature_id,numero_serie_interne,numero_serie_externe,
+                 (marque,modele,categorie,nomenclature_id,numero_serie_interne,numero_chrono,numero_serie_externe,
                   site_id,etat,statut_stock,date_acquisition,prix_achat,date_fin_cycle,duree_vie_mois,actif)
-                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,1)",
-                [$marque,$modele,$f_categorie,$nom_id ?: null,$nsi,$nse,
+                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)",
+                [$marque,$modele,$f_categorie,$nom_id ?: null,$nsi,$numero_chrono,$nse,
                  $site_id,$etat,$statut_stock,$date_achat ?: null,$prix_achat,$date_fin_cycle,$duree_mois]
             );
             $id = (int)db_last_id();
@@ -444,7 +470,7 @@ include __DIR__ . '/../templates/header.php';
       </div>
       <div class="form-group">
         <label>N° Série interne</label>
-        <input type="text" class="form-control" id="eNsi">
+        <input type="text" class="form-control" id="eNsi" placeholder="Auto-généré après sélection du type">
       </div>
       <div class="form-group">
         <label>N° Série externe</label>
@@ -577,6 +603,13 @@ function modifierEquip(e){
   document.getElementById('modalEquip').style.display='flex';
 }
 function fermerModal(){document.getElementById('modalEquip').style.display='none';}
+document.getElementById('eNom_id').addEventListener('change', async function(){
+  if (document.getElementById('eAction').value !== 'creer') return;
+  if (document.getElementById('eNsi').value.trim() !== '') return;
+  if (!this.value) return;
+  const d = await ap({action:'apercu_numero', nomenclature_id:this.value});
+  if (d.success) document.getElementById('eNsi').value = d.data.numero;
+});
 async function sauvegarder(){
   const btn = document.getElementById('btnSave');
   btn.disabled = true;
