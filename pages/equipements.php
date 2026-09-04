@@ -105,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             db_query(
                 "INSERT INTO equipements
                  (marque,modele,categorie,nomenclature_id,numero_serie_interne,numero_chrono,numero_serie_externe,
-                  site_id,etat,statut_stock,date_acquisition,prix_achat,date_fin_cycle,duree_vie_mois,actif)
+                  site_id,etat,statut_stock,date_acquisition,prix_achat,date_fin_cycle,duree_amortissement_mois,actif)
                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)",
                 [$marque,$modele,$f_categorie,$nom_id ?: null,$nsi,$numero_chrono,$nse,
                  $site_id,$etat,$statut_stock,$date_achat ?: null,$prix_achat,$date_fin_cycle,$duree_mois]
@@ -118,7 +118,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             db_query(
                 "UPDATE equipements
                  SET marque=?,modele=?,nomenclature_id=?,numero_serie_interne=?,numero_serie_externe=?,
-                     site_id=?,etat=?,statut_stock=?,date_acquisition=?,prix_achat=?,date_fin_cycle=?,duree_vie_mois=?
+                     site_id=?,etat=?,statut_stock=?,date_acquisition=?,prix_achat=?,date_fin_cycle=?,duree_amortissement_mois=?
                  WHERE id=?",
                 [$marque,$modele,$nom_id ?: null,$nsi,$nse,
                  $site_id,$etat,$statut_stock,$date_achat ?: null,$prix_achat,$date_fin_cycle,$duree_mois,$id]
@@ -523,7 +523,7 @@ include __DIR__ . '/../templates/header.php';
 <?php endif; ?>
 
 <script>
-function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(r=>r.json());}
+function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(achParseJson);}
 
 // ── Filtres sans rechargement de page : remplace les KPI et le tableau par
 // le fragment equivalent de la page fraichement chargee (memes id), evite
@@ -639,7 +639,7 @@ async function sauvegarder(){
     }
   } catch(err) {
     document.getElementById('eAlert').innerHTML =
-      '<div class="alert alert-danger">Erreur réseau. Réessayez.</div>';
+      `<div class="alert alert-danger">${(err && err.message) || 'Erreur réseau. Réessayez.'}</div>`;
   } finally {
     btn.disabled = false;
     btn.textContent = '✅ Enregistrer';
