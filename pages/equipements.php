@@ -104,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             $numero_chrono = (int)db_fetch_value("SELECT COALESCE(MAX(numero_chrono),0)+1 FROM equipements");
             db_query(
                 "INSERT INTO equipements
-                 (marque,modele,categorie,nomenclature_id,numero_serie_interne,numero_chrono,numero_serie_externe,
+                 (marque,modele,categorie,nomenclature_id,numero_serie_interne,numero_chrono,numero_serie_origine,
                   site_id,etat,statut_stock,date_acquisition,prix_achat,date_fin_cycle,duree_amortissement_mois,actif)
                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)",
                 [$marque,$modele,$f_categorie,$nom_id ?: null,$nsi,$numero_chrono,$nse,
@@ -117,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             $id = (int)($_POST['id'] ?? 0);
             db_query(
                 "UPDATE equipements
-                 SET marque=?,modele=?,nomenclature_id=?,numero_serie_interne=?,numero_serie_externe=?,
+                 SET marque=?,modele=?,nomenclature_id=?,numero_serie_interne=?,numero_serie_origine=?,
                      site_id=?,etat=?,statut_stock=?,date_acquisition=?,prix_achat=?,date_fin_cycle=?,duree_amortissement_mois=?
                  WHERE id=?",
                 [$marque,$modele,$nom_id ?: null,$nsi,$nse,
@@ -593,7 +593,7 @@ function modifierEquip(e){
   document.getElementById('eMarque').value=e.marque||'';document.getElementById('eModele').value=e.modele||'';
   document.getElementById('eNom_id').value=e.nomenclature_id||'';
   document.getElementById('eNsi').value=e.numero_serie_interne||'';
-  document.getElementById('eNse').value=e.numero_serie_externe||'';
+  document.getElementById('eNse').value=e.numero_serie_origine||'';
   document.getElementById('eSite').value=e.site_id||'';
   document.getElementById('eEtat').value=e.etat||'bon';
   document.getElementById('eStatutStock').value=e.statut_stock||'affecte';
