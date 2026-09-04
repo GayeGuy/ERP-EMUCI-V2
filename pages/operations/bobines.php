@@ -394,7 +394,8 @@ $bobines = db_fetch_all(
                  WHERE m.bobine_id=b.id AND m.type='transfert'
                  ORDER BY m.created_at DESC LIMIT 1),
                 b.qte_initiale
-            ) AS qte_livree
+            ) AS qte_livree,
+            (SELECT dd.id FROM demandes_bobines dd WHERE dd.bobine_id=b.id AND dd.statut='en_attente' LIMIT 1) AS demande_attente_id
      FROM op_bobines b
      LEFT JOIN sites s ON s.id=b.site_id
      LEFT JOIN op_types_vehicule tv ON tv.id=b.type_vehicule_id
@@ -550,9 +551,13 @@ $coord_types = db_fetch_all("SELECT DISTINCT type_code FROM op_bobines WHERE sit
         </td>
         <td style="text-align:center">
           <?php if($b['statut'] === 'en_stock'): ?>
-          <button class="btn btn-primary btn-sm" onclick="demanderUtilisation(<?= $b['id'] ?>, '<?= h($b['numero']) ?>')">
-            ▶️ Demander utilisation
-          </button>
+            <?php if(!empty($b['demande_attente_id'])): ?>
+            <span style="display:inline-block;padding:4px 10px;border-radius:12px;font-size:12px;font-weight:700;background:#fff3e0;color:#e65100">⏳ Demande envoyée</span>
+            <?php else: ?>
+            <button class="btn btn-primary btn-sm" onclick="demanderUtilisation(<?= $b['id'] ?>, '<?= h($b['numero']) ?>')">
+              ▶️ Demander utilisation
+            </button>
+            <?php endif; ?>
           <?php endif; ?>
         </td>
       </tr>
