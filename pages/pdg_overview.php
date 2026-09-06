@@ -5,6 +5,7 @@
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/helpers.php';
+require_once __DIR__ . '/../includes/periode.php';
 require_once __DIR__ . '/../includes/notifications.php';
 require_once __DIR__ . '/../includes/achats.php';
 
@@ -14,86 +15,27 @@ $user = current_user();
 $page_title  = 'Vue PDG';
 $active_page = 'pdg_overview';
 
-$mois    = trim($_GET['mois'] ?? date('Y-m'));
-if (!preg_match('/^\d{4}-\d{2}$/', $mois)) $mois = date('Y-m');
-$site_id = (int)($_GET['site_id'] ?? 0);
-$mc = ['01'=>'Jan','02'=>'Fév','03'=>'Mar','04'=>'Avr','05'=>'Mai','06'=>'Juin',
-       '07'=>'Juil','08'=>'Aoû','09'=>'Sep','10'=>'Oct','11'=>'Nov','12'=>'Déc'];
-$ml = ['01'=>'Janvier','02'=>'Février','03'=>'Mars','04'=>'Avril','05'=>'Mai','06'=>'Juin',
-       '07'=>'Juillet','08'=>'Août','09'=>'Septembre','10'=>'Octobre','11'=>'Novembre','12'=>'Décembre'];
-
-// ── PÉRIODE — mensuel (comportement d'origine) ou annuel (n° du rapport
-// réunion ERP : point d'une année complète). $date_fmt/$periode_val
-// pilotent tous les TO_CHAR(...)='?' de la page ; $periode_val_prec sert
-// aux comparaisons vs période précédente.
-// n° 2.4 CR PDG : quatre granularités au lieu de deux. Le mécanisme
-// $date_fmt / $periode_val / $periode_val_prec existait déjà et pilote les
-// 16 TO_CHAR(...) de la page — on l'étend, on n'en écrit pas un second.
-$periode = in_array($_GET['periode'] ?? '', ['journalier','hebdomadaire','annuel'], true)
-         ? $_GET['periode'] : 'mensuel';
-$annee_max = (int)date('Y');
-$annee_min = (int)(db_fetch_value("SELECT MIN(EXTRACT(YEAR FROM date_point)) FROM op_points_journaliers") ?? $annee_max);
-if ($annee_min > $annee_max) $annee_min = $annee_max;
-
-// Jour sélectionné — sert aux vues journalière et hebdomadaire.
-$jour = trim($_GET['jour'] ?? date('Y-m-d'));
-if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $jour) || !strtotime($jour)) $jour = date('Y-m-d');
-
-if ($periode === 'journalier') {
-    $annee_filtre     = (int)substr($jour, 0, 4);
-    $annee            = substr($jour, 0, 4);
-    $date_fmt         = 'YYYY-MM-DD';
-    $periode_val      = $jour;
-    $jour_prec        = date('Y-m-d', strtotime($jour.' -1 day'));
-    $periode_val_prec = $jour_prec;
-    $mois_display     = fmt_date($jour, 'd/m/Y');
-    $mois_prec_lbl    = fmt_date($jour_prec, 'd/m/Y');
-    $periode_du       = $jour;
-    $periode_au       = $jour;
-    $periode_mot      = 'aujourd\'hui';
-} elseif ($periode === 'hebdomadaire') {
-    // IYYY-IW et non YYYY-WW : sur une semaine à cheval sur deux années,
-    // les deux formats divergent et la comparaison à la semaine précédente
-    // tomberait sur la mauvaise semaine.
-    $annee_filtre     = (int)date('o', strtotime($jour));
-    $annee            = date('o', strtotime($jour));
-    $date_fmt         = 'IYYY-IW';
-    $periode_val      = date('o-W', strtotime($jour));
-    $sem_prec         = date('o-W', strtotime($jour.' -7 days'));
-    $periode_val_prec = $sem_prec;
-    $lundi            = date('Y-m-d', strtotime($jour.' monday this week'));
-    $dimanche         = date('Y-m-d', strtotime($lundi.' +6 days'));
-    $mois_display     = 'Semaine ' . date('W', strtotime($jour)) . ' — du '
-                      . fmt_date($lundi, 'd/m') . ' au ' . fmt_date($dimanche, 'd/m/Y');
-    $mois_prec_lbl    = 'Semaine ' . substr($sem_prec, -2);
-    $periode_mot      = 'cette semaine';
-    $periode_du       = $lundi;
-    $periode_au       = $dimanche;
-} elseif ($periode === 'annuel') {
-    $annee_filtre = (int)($_GET['annee'] ?? $annee_max);
-    if ($annee_filtre < 2000 || $annee_filtre > 2100) $annee_filtre = $annee_max;
-    $annee            = (string)$annee_filtre;
-    $date_fmt         = 'YYYY';
-    $periode_val      = $annee;
-    $periode_val_prec = (string)($annee_filtre - 1);
-    $mois_display     = 'Année ' . $annee;
-    $mois_prec_lbl    = 'Année ' . $periode_val_prec;
-    $periode_mot      = 'cette année';
-    $periode_du       = $annee . '-01-01';
-    $periode_au       = $annee . '-12-31';
-} else {
-    $annee_filtre     = (int)substr($mois, 0, 4);
-    $annee            = substr($mois, 0, 4);
-    $date_fmt         = 'YYYY-MM';
-    $periode_val      = $mois;
-    $mois_prec        = date('Y-m', strtotime($mois.'-01 -1 month'));
-    $periode_val_prec = $mois_prec;
-    $mois_display     = ($ml[substr($mois,5,2)] ?? '') . ' ' . $annee;
-    $mois_prec_lbl    = ($mc[substr($mois_prec,5,2)] ?? '') . ' ' . substr($mois_prec,0,4);
-    $periode_mot      = 'ce mois';
-    $periode_du       = $mois . '-01';
-    $periode_au       = date('Y-m-t', strtotime($periode_du));
-}
+// n° 2.2 — la granularité temporelle vient désormais de
+// includes/periode.php, partagée avec le dashboard KPI. Les variables
+// locales sont conservées sous leurs noms d'origine : les 19 TO_CHAR
+// et les comparaisons à la période précédente en aval restent inchangés.
+$P = periode_contexte();
+$periode          = $P['periode'];
+$date_fmt         = $P['date_fmt'];
+$periode_val      = $P['val'];
+$periode_val_prec = $P['val_prec'];
+$periode_du       = $P['du'];
+$periode_au       = $P['au'];
+$mois_display     = $P['libelle'];
+$mois_prec_lbl    = $P['libelle_prec'];
+$periode_mot      = $P['mot'];
+$mois             = $P['mois'];
+$jour             = $P['jour'];
+$annee            = (string)$P['annee'];
+$annee_filtre     = (int)$P['annee'];
+$annee_min        = $P['annee_min'];
+$annee_max        = $P['annee_max'];
+$site_id          = (int)($_GET['site_id'] ?? 0);
 
 // ── LISTE DES SITES pour le filtre
 $sites_list = db_fetch_all("SELECT id, nom FROM sites WHERE actif=1 ORDER BY nom");

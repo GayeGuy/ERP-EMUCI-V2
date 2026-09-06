@@ -271,6 +271,11 @@ function _groupes_def(): array {
                 ['label'=>'Rapports généraux','icon'=>'ph-chart-bar',
                  'url'=>'pages/rapports.php','active_keys'=>['rapports'],
                  'perm'=>['rapports','can_read']],
+                // n° 2.2 CR PDG — lecture rapide des indicateurs, distincte
+                // du tableau de bord opérationnel et de la vue exécutive.
+                ['label'=>'Dashboard KPI', 'icon'=>'ph-gauge',
+                 'url'=>'pages/kpi_dashboard.php','active_keys'=>['kpi_dashboard'],
+                 'perm'=>['kpi_dashboard','can_read']],
                 // n° 2.6 CR PDG — outil de projection. Le CR demandait un
                 // groupe de navigation dédié ; il rejoint RAPPORTS, qui
                 // existe déjà et accueille les écrans d'analyse. Créer un
