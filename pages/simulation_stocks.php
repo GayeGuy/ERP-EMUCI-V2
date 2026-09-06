@@ -43,6 +43,20 @@ $active_page = 'simulation_stocks';
 //  Tout vient de l'URL : la page est rejouable et partageable par lien,
 //  et aucune saisie n'a besoin d'être stockée.
 // ============================================================
+// Mode de simulation — le choix est explicite plutot que deduit du
+// remplissage des champs : projeter un stock et projeter une ouverture
+// de site sont deux questions distinctes, et les melanger obligeait
+// l'utilisateur a deviner ce que la page allait calculer.
+$MODES = [
+    'stock'     => ['Projection du stock',      'Jusqu\'à quand le stock permet-il de travailler ?'],
+    'ouverture' => ['Ouverture de site',        'Le stock actuel absorbe-t-il un ou plusieurs sites de plus ?'],
+    'les_deux'  => ['Les deux',                 'Projeter une quantité choisie, sites supplémentaires compris.'],
+];
+$mode = $_GET['mode'] ?? 'stock';
+if (!isset($MODES[$mode])) $mode = 'stock';
+$avec_stock     = ($mode === 'stock' || $mode === 'les_deux');
+$avec_ouverture = ($mode === 'ouverture' || $mode === 'les_deux');
+
 $f_site      = (int)($_GET['site'] ?? 0);
 $fenetre     = max(7, min(365, (int)($_GET['fenetre'] ?? 30)));   // historique retenu
 $horizon     = (int)($_GET['horizon'] ?? 6);                      // mois projetés
@@ -65,12 +79,14 @@ $stock_films_reel = (int) db_fetch_value(
 );
 $bobines_defaut = (int) ceil($stock_films_reel / $films_bobine);
 
-$nb_bobines  = isset($_GET['bobines']) && $_GET['bobines'] !== ''
+// En mode « ouverture de site », la quantite n'est pas un parametre : la
+// question porte sur le stock reellement detenu aujourd'hui.
+$nb_bobines  = ($avec_stock && isset($_GET['bobines']) && $_GET['bobines'] !== '')
              ? max(0, (int)$_GET['bobines'])
              : $bobines_defaut;
 
-// ── Cas 2 : nouveaux sites
-$nb_sites_new   = max(0, min(20, (int)($_GET['sites_new'] ?? 0)));
+// ── Nouveaux sites — ignores si le mode ne les couvre pas
+$nb_sites_new   = $avec_ouverture ? max(0, min(20, (int)($_GET['sites_new'] ?? 1))) : 0;
 $conso_site_new = max(0.0, (float)($_GET['conso_new'] ?? 0));
 // Sans estimation saisie, on prend la consommation moyenne d'un site
 // existant : plus honnête qu'un zéro qui rendrait l'ajout indolore.
@@ -121,6 +137,16 @@ foreach ($formats as $code => $f) {
     $formats[$code]['couvre']         = $j !== null && $j >= $jours_cible;
     $manque_films = $j !== null ? max(0, (int)ceil($c * $jours_cible) - $f['films_restants']) : 0;
     $formats[$code]['bobines_manquantes'] = (int) ceil($manque_films / $f['films_par_bobine']);
+}
+
+// ── Impact d'une ouverture : ce qui compte n'est pas l'autonomie
+// resultante mais l'ecart avec la situation actuelle. On calcule donc la
+// meme projection sans les nouveaux sites, pour pouvoir montrer les deux.
+$jours_sans_new = null;
+$jours_perdus   = null;
+if ($avec_ouverture && $nb_sites_new > 0 && $conso_jour > 0) {
+    $jours_sans_new = (int) floor($stock_films / $conso_jour);
+    if ($jours_tenus !== null) $jours_perdus = $jours_sans_new - $jours_tenus;
 }
 
 // Format contraignant : celui qui s'epuise le plus tot.
@@ -174,6 +200,7 @@ if ($export !== '' && !can('simulation_stocks', 'can_export')) {
 }
 
 $resume = [
+    ['Mode de simulation',          $MODES[$mode][0]],
     ['Périmètre',                   $site_nom ?: 'Tous les sites'],
     ['Bobines projetées',           fmt_number($nb_bobines)],
     ['Films par bobine',            fmt_number($films_bobine)],
@@ -316,6 +343,15 @@ include __DIR__ . '/../templates/header.php';
 .sim-f input,.sim-f select{width:100%;padding:8px 11px;border:1.5px solid var(--border);border-radius:9px;
   font-size:13.5px;outline:none;box-sizing:border-box}
 .sim-f .sub{font-size:11.5px;color:var(--muted);margin-top:3px;line-height:1.45}
+.sim-fixe{padding:9px 12px;background:var(--lighter);border-radius:9px;font-size:14px;color:var(--navy)}
+.sim-modes{display:flex;flex-direction:column;gap:7px;margin-bottom:4px}
+.sim-mode{display:block;border:1.5px solid var(--border);border-radius:10px;padding:9px 12px;
+  cursor:pointer;transition:border-color .15s,background .15s}
+.sim-mode:hover{background:var(--lighter)}
+.sim-mode.on{border-color:var(--blue);background:var(--primary-l,#eaf3fb)}
+.sim-mode input{margin-right:7px}
+.sim-mode-t{font-size:13.5px;font-weight:700;color:var(--navy)}
+.sim-mode-d{display:block;font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.4;padding-left:21px}
 .sim-verdict{border-radius:16px;padding:22px 24px;margin-bottom:18px;color:white}
 .sim-verdict.ok{background:linear-gradient(135deg,#0f6b3f,#1e8449)}
 .sim-verdict.ko{background:linear-gradient(135deg,#8c2c22,#c0392b)}
@@ -378,6 +414,18 @@ table.sim-fmt td.manque{color:var(--danger-d);font-weight:800}
     <h3>Paramètres</h3>
     <p class="hint">Les valeurs par défaut viennent de votre stock et de votre historique réels.</p>
 
+    <div class="sim-sec">Que voulez-vous simuler ?</div>
+    <div class="sim-modes">
+      <?php foreach ($MODES as $k => [$lbl, $desc]): ?>
+      <label class="sim-mode <?= $mode === $k ? 'on' : '' ?>">
+        <input type="radio" name="mode" value="<?= $k ?>" <?= $mode === $k ? 'checked' : '' ?>
+               onchange="this.form.submit()">
+        <span class="sim-mode-t"><?= h($lbl) ?></span>
+        <span class="sim-mode-d"><?= h($desc) ?></span>
+      </label>
+      <?php endforeach; ?>
+    </div>
+
     <div class="sim-sec">Périmètre</div>
     <div class="sim-f">
       <label>Site</label>
@@ -398,7 +446,8 @@ table.sim-fmt td.manque{color:var(--danger-d);font-weight:800}
       <div class="sub">Période sur laquelle la consommation moyenne est mesurée.</div>
     </div>
 
-    <div class="sim-sec">Cas 1 — stock à projeter</div>
+    <?php if ($avec_stock): ?>
+    <div class="sim-sec">Stock à projeter</div>
     <div class="sim-f">
       <label>Bobines disponibles</label>
       <input type="number" name="bobines" min="0" value="<?= $nb_bobines ?>">
@@ -410,6 +459,19 @@ table.sim-fmt td.manque{color:var(--danger-d);font-weight:800}
       <input type="number" name="films_bobine" min="1" value="<?= $films_bobine ?>">
       <div class="sub">Moyenne du parc en service. Le stock est suivi en films.</div>
     </div>
+    <?php else: ?>
+    <div class="sim-sec">Stock de référence</div>
+    <div class="sim-f">
+      <div class="sim-fixe">
+        <strong><?= fmt_number($bobines_defaut) ?></strong> bobine(s) ·
+        <?= fmt_number($stock_films_reel) ?> films
+      </div>
+      <div class="sub">Votre stock réel. En mode ouverture de site, la question porte sur
+        ce que vous détenez aujourd'hui — pour projeter une autre quantité, choisissez « Les deux ».</div>
+    </div>
+    <?php endif; ?>
+
+    <div class="sim-sec">Consommation & horizon</div>
     <div class="sim-f">
       <label>Consommation journalière</label>
       <input type="number" name="conso" step="0.1" min="0" value="<?= $conso_manuelle ? h($conso_saisie) : '' ?>"
@@ -426,10 +488,11 @@ table.sim-fmt td.manque{color:var(--danger-d);font-weight:800}
       </select>
     </div>
 
-    <div class="sim-sec">Cas 2 — ouverture de sites</div>
+    <?php if ($avec_ouverture): ?>
+    <div class="sim-sec">Sites à ouvrir</div>
     <div class="sim-f">
-      <label>Nouveaux sites</label>
-      <input type="number" name="sites_new" min="0" max="20" value="<?= $nb_sites_new ?>">
+      <label>Nombre de nouveaux sites</label>
+      <input type="number" name="sites_new" min="1" max="20" value="<?= max(1, $nb_sites_new) ?>">
     </div>
     <div class="sim-f">
       <label>Consommation par nouveau site</label>
@@ -438,6 +501,7 @@ table.sim-fmt td.manque{color:var(--danger-d);font-weight:800}
       <div class="sub">Vide = moyenne d'un site existant
         (<strong><?= number_format($conso_site_new, 1, ',', ' ') ?></strong> films/jour).</div>
     </div>
+    <?php endif; ?>
 
     <button class="btn btn-primary" style="width:100%;margin-top:6px" type="submit">
       <i class="ph ph-play" aria-hidden="true"></i> Lancer la simulation
@@ -458,11 +522,24 @@ table.sim-fmt td.manque{color:var(--danger-d);font-weight:800}
     <?php else: ?>
     <div class="sim-verdict <?= $couvre_horizon ? 'ok' : 'ko' ?>">
       <div class="t">
-        <?= fmt_number($nb_bobines) ?> bobines = utilisation jusqu'en <?= h($epuis_texte) ?>
+        <?php if ($mode === 'ouverture'): ?>
+          <?= $nb_sites_new ?> site<?= $nb_sites_new > 1 ? 's' : '' ?> de plus =
+          autonomie ramenée à <?= fmt_number($jours_tenus) ?> jours
+        <?php else: ?>
+          <?= fmt_number($nb_bobines) ?> bobines = utilisation jusqu'en <?= h($epuis_texte) ?>
+        <?php endif; ?>
       </div>
       <div class="s">
-        Au rythme de <?= number_format($conso_totale, 1, ',', ' ') ?> films/jour, ce stock tient
-        <strong><?= fmt_number($jours_tenus) ?> jours</strong>, soit jusqu'au <?= h(fmt_date($date_epuis)) ?>.
+        <?php if ($mode === 'ouverture' && $jours_sans_new !== null): ?>
+          Sans ouverture, votre stock tiendrait <strong><?= fmt_number($jours_sans_new) ?> jours</strong>.
+          Avec <?= $nb_sites_new ?> site<?= $nb_sites_new > 1 ? 's' : '' ?> supplémentaire<?= $nb_sites_new > 1 ? 's' : '' ?>
+          consommant <?= number_format($conso_site_new, 1, ',', ' ') ?> films/jour chacun,
+          il tient <strong><?= fmt_number($jours_tenus) ?> jours</strong> —
+          soit <strong><?= fmt_number((int)$jours_perdus) ?> jours perdus</strong>.
+        <?php else: ?>
+          Au rythme de <?= number_format($conso_totale, 1, ',', ' ') ?> films/jour, ce stock tient
+          <strong><?= fmt_number($jours_tenus) ?> jours</strong>, soit jusqu'au <?= h(fmt_date($date_epuis)) ?>.
+        <?php endif; ?>
         <?php if ($couvre_horizon): ?>
           Il couvre l'horizon de <?= $horizon ?> mois demandé.
         <?php else: ?>
@@ -499,6 +576,12 @@ table.sim-fmt td.manque{color:var(--danger-d);font-weight:800}
         <div class="sim-kpi-v"><?= $couvre_horizon ? '0' : fmt_number($bobines_a_commander) ?></div>
         <div class="sim-kpi-l">Bobines à commander</div>
       </div>
+      <?php if ($jours_perdus !== null): ?>
+      <div class="sim-kpi <?= $jours_perdus > 0 ? 'crit' : '' ?>">
+        <div class="sim-kpi-v">−<?= fmt_number((int)$jours_perdus) ?></div>
+        <div class="sim-kpi-l">Jours perdus par l'ouverture</div>
+      </div>
+      <?php endif; ?>
     </div>
 
     <!-- ══ PROJECTION PAR FORMAT ══ -->
