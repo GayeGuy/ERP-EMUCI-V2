@@ -218,20 +218,11 @@ if (!$conso_manuelle && count($formats_stock) < count($formats_dispo)) {
     $conso_jour = $conso_base_sel;
 }
 
-$conso_totale  = $conso_jour + ($nb_sites_new * $conso_site_new);
-$jours_tenus   = $conso_totale > 0 ? (int) floor($stock_films / $conso_totale) : null;
-$date_epuis    = $jours_tenus !== null ? date('Y-m-d', strtotime("+$jours_tenus days")) : null;
-$jours_cible   = (int) round($horizon * 30.44);          // mois moyen grégorien
-$films_requis  = (int) ceil($conso_totale * $jours_cible);
-$deficit_films = max(0, $films_requis - $stock_films);
-// Conditionnement moyen de la SELECTION, pas du parc entier : convertir un
-// deficit en bobines avec la moyenne generale reintroduirait l'ecart que
-// la projection par format vient justement de corriger.
-$films_bobine_sel = $nb_bobines > 0
-                  ? (int) round($stock_films / $nb_bobines)
-                  : $films_bobine;
-$bobines_a_commander = (int) ceil($deficit_films / max(1, $films_bobine_sel));
-$couvre_horizon = $jours_tenus !== null && $jours_tenus >= $jours_cible;
+// L'autonomie ne se calcule plus globalement : bobines et vignettes ont
+// chacune la leur, plus bas dans $cats. Un chiffre unique melangeait deux
+// echeances sans rapport et pouvait annoncer six mois alors qu'une des
+// deux categories s'arrete dans trois semaines.
+$jours_cible = (int) round($horizon * 30.44);            // mois moyen grégorien
 
 // ── PROJECTION PAR FORMAT
 // Deux articles distincts cohabitent ici : les bobines de films (series
@@ -281,25 +272,122 @@ foreach ($formats as $code => $f) {
     $formats[$code]['bobines_manquantes'] = (int) ceil($manque_films / $f['films_par_bobine']);
 }
 
-// ── Impact d'une ouverture : ce qui compte n'est pas l'autonomie
-// resultante mais l'ecart avec la situation actuelle. On calcule donc la
-// meme projection sans les nouveaux sites, pour pouvoir montrer les deux.
-$jours_sans_new = null;
-$jours_perdus   = null;
-if ($avec_ouverture && $nb_sites_new > 0 && $conso_jour > 0) {
-    $jours_sans_new = (int) floor($stock_films / $conso_jour);
-    if ($jours_tenus !== null) $jours_perdus = $jours_sans_new - $jours_tenus;
-}
+// L'impact d'une ouverture (jours perdus) et le format contraignant se
+// calculent eux aussi par categorie : voir $cats plus bas.
 
-// Format contraignant : celui qui s'epuise le plus tot, parmi les formats
-// que l'utilisateur a mis dans le perimetre de projection. Un format qu'il
-// a explicitement ecarte ne doit pas venir dicter la conclusion.
-$format_critique = null;
-foreach ($formats as $code => $f) {
-    if ($f['jours_projetes'] === null || !$f['retenu_stock']) continue;
-    if ($format_critique === null || $f['jours_projetes'] < $formats[$format_critique]['jours_projetes']) {
-        $format_critique = $code;
+// ============================================================
+//  AGREGATION PAR CATEGORIE
+// ============================================================
+//  Une bobine de films et une vignette ne se remplacent pas : une
+//  autonomie unique calculee sur les deux est une moyenne entre deux
+//  echeances sans rapport. Elle peut annoncer six mois alors que les
+//  vignettes s'arretent dans trois semaines, et que la production
+//  correspondante s'arrete avec elles.
+//
+//  Chaque categorie porte donc sa propre projection : son stock, sa
+//  consommation, son autonomie, son format contraignant et ce qu'il faut
+//  commander. Les totaux tous articles confondus restent calcules pour
+//  les exports, mais ne servent plus de conclusion.
+//
+//  La consommation d'une categorie est la somme de celle de ses formats,
+//  et non conso_moy_site() qui ne sait pas distinguer les deux. Les deux
+//  grandeurs peuvent legerement diverger, leur denominateur n'etant pas
+//  identique : la premiere compte les jours depuis la premiere conso de
+//  chaque format, la seconde depuis la premiere conso du site. La somme
+//  des formats est retenue parce qu'elle est coherente avec le detail
+//  affiche juste en dessous.
+$CATS = ['bobine' => 'Bobines de films', 'vignette' => 'Vignettes'];
+$cats = [];
+
+// Base observee par categorie, avant toute saisie manuelle.
+$obs_cat = ['bobine' => 0.0, 'vignette' => 0.0];
+foreach ($formats as $code => $f)
+    if ($f['retenu_stock']) $obs_cat[$f['categorie']] += $f['conso'];
+$obs_total = array_sum($obs_cat);
+
+foreach ($CATS as $cle => $titre) {
+    $codes   = [];
+    $retenus = [];
+    foreach ($formats as $code => $f) {
+        if ($f['categorie'] !== $cle) continue;
+        $codes[] = $code;
+        if ($f['retenu_stock']) $retenus[] = $code;
     }
+    if (!$codes) continue;                     // categorie absente du perimetre
+
+    $stock = 0; $unites = 0; $charge = 0.0;
+    foreach ($retenus as $code) {
+        $stock  += $formats[$code]['films_projete'];
+        $unites += $formats[$code]['bobines_projete'];
+        $charge += $formats[$code]['charge_new'];
+    }
+
+    // Une consommation saisie a la main porte sur tout le perimetre : on
+    // la repartit au prorata de l'observe, faute de savoir ce que
+    // l'utilisateur attribuait a chaque categorie. A defaut d'historique,
+    // parts egales entre les categories presentes.
+    if ($conso_manuelle) {
+        $c_obs = $obs_total > 0
+               ? $conso_jour * ($obs_cat[$cle] / $obs_total)
+               : $conso_jour / max(1, count($CATS));
+    } else {
+        $c_obs = $obs_cat[$cle];
+    }
+    $c_tot = $c_obs + $charge;
+
+    $j     = $c_tot > 0 ? (int) floor($stock / $c_tot) : null;
+    $requis = (int) ceil($c_tot * $jours_cible);
+    $manque = max(0, $requis - $stock);
+    // Conditionnement moyen de la categorie, pas du parc : convertir un
+    // deficit de vignettes avec la moyenne des bobines n'aurait pas de sens.
+    $fpu    = $unites > 0 ? (int) round($stock / $unites) : 0;
+    if ($fpu <= 0) {
+        $fpu = 0; $n = 0;
+        foreach ($retenus as $code) { $fpu += $formats[$code]['films_par_bobine']; $n++; }
+        $fpu = $n ? (int) round($fpu / $n) : 500;
+    }
+
+    $crit = null;
+    foreach ($retenus as $code) {
+        if ($formats[$code]['jours_projetes'] === null) continue;
+        if ($crit === null
+            || $formats[$code]['jours_projetes'] < $formats[$crit]['jours_projetes']) $crit = $code;
+    }
+
+    $sans_new = ($avec_ouverture && $nb_sites_new > 0 && $c_obs > 0)
+              ? (int) floor($stock / $c_obs) : null;
+
+    // Une courbe par categorie : superposer deux stocks sans rapport sur
+    // un meme axe laisserait croire a un total.
+    $courbe_cat = [];
+    if ($c_tot > 0) {
+        for ($d = 0; $d <= $jours_cible; $d += 7) {
+            $courbe_cat[] = ['date'  => date('Y-m-d', strtotime("+$d days")),
+                             'films' => max(0, (int) round($stock - $c_tot * $d))];
+        }
+    }
+
+    $cats[$cle] = [
+        'titre'        => $titre,
+        'mot'          => libelle_categorie($cle, true),
+        'codes'        => $codes,
+        'retenus'      => $retenus,
+        'stock'        => $stock,
+        'unites'       => $unites,
+        'conso_obs'    => $c_obs,
+        'charge_new'   => $charge,
+        'conso_totale' => $c_tot,
+        'jours'        => $j,
+        'date_epuis'   => $j !== null ? date('Y-m-d', strtotime("+$j days")) : null,
+        'deficit'      => $manque,
+        'par_unite'    => $fpu,
+        'a_commander'  => (int) ceil($manque / max(1, $fpu)),
+        'couvre'       => $j !== null && $j >= $jours_cible,
+        'critique'     => $crit,
+        'jours_sans_new' => $sans_new,
+        'jours_perdus' => ($sans_new !== null && $j !== null) ? $sans_new - $j : null,
+        'courbe'       => $courbe_cat,
+    ];
 }
 
 // ── PROJECTION PMMA — meme raisonnement, un type ne remplace pas un
@@ -348,28 +436,15 @@ foreach ($pmma_formats as $t => $p) {
     }
 }
 
-// Courbe d'évolution — un point par semaine jusqu'à épuisement ou horizon
-$courbe = [];
-if ($conso_totale > 0) {
-    $bornes = min($jours_cible, max($jours_tenus ?? 0, $jours_cible));
-    for ($j = 0; $j <= $bornes; $j += 7) {
-        $courbe[] = [
-            'date'  => date('Y-m-d', strtotime("+$j days")),
-            'films' => max(0, (int) round($stock_films - $conso_totale * $j)),
-        ];
-    }
-}
+// La courbe d'evolution est calculee par categorie dans $cats : additionner
+// un stock de bobines et un stock de vignettes sur un meme axe produirait
+// un total qui ne correspond a aucune realite d'approvisionnement.
 
 $sites_list = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom");
 $site_nom   = '';
 foreach ($sites_list as $s) if ((int)$s['id'] === $f_site) $site_nom = $s['nom'];
 $conso_sites = conso_moy_par_site($fenetre);
 
-$mois_fr = [1=>'janvier',2=>'février',3=>'mars',4=>'avril',5=>'mai',6=>'juin',7=>'juillet',
-            8=>'août',9=>'septembre',10=>'octobre',11=>'novembre',12=>'décembre'];
-$epuis_texte = $date_epuis
-    ? $mois_fr[(int)date('n', strtotime($date_epuis))] . ' ' . date('Y', strtotime($date_epuis))
-    : null;
 
 // ============================================================
 //  EXPORTS
@@ -388,43 +463,20 @@ $resume = [
     ['Types de PMMA projetés',      count($pmma_stock) === count($pmma_dispo)
         ? 'tous (' . implode(', ', $pmma_dispo) . ')'
         : implode(', ', $pmma_stock)],
-    [ucfirst($mot_unites($formats_stock)) . ' projetées', fmt_number($nb_bobines)],
-    ['Stock projeté (films)',       fmt_number($stock_films)
-                                    . ' — somme des formats retenus'],
     ['Stock réel du périmètre',     fmt_number($bobines_defaut) . ' '
                                     . $mot_unites($formats_dispo) . ', '
                                     . fmt_number($stock_films_reel) . ' films'],
-    ['Consommation retenue',        number_format($conso_jour, 1, ',', ' ') . ' films/jour'
-                                    . ($conso_manuelle ? ' (saisie)' : ' (observée)')],
+    ['Consommation saisie',         $conso_manuelle
+                                    ? number_format($conso_jour, 1, ',', ' ')
+                                      . ' films/jour, répartie entre catégories au prorata de l’observé'
+                                    : 'aucune — consommation observée par catégorie'],
     ['Nouveaux sites simulés',      $nb_sites_new . ($nb_sites_new ? ' × ' . number_format($conso_site_new, 1, ',', ' ') . ' films/jour' : '')],
     ['Formats prévus sur ces sites', $nb_sites_new ? $fmt_lbls($formats_new) : '—'],
     ['Catégories concernées',       $nb_sites_new ? $mot_unites($formats_new) : '—'],
     ['PMMA prévu sur ces sites',    $nb_sites_new
         ? implode(', ', $pmma_new) . ' — ' . number_format($conso_pmma_new, 1, ',', ' ') . ' unités/jour et par site'
         : '—'],
-    ['Consommation totale',         number_format($conso_totale, 1, ',', ' ') . ' films/jour'],
-    ['Autonomie',                   $jours_tenus !== null ? $jours_tenus . ' jours' : 'indéterminée'],
-    ["Date estimée d'épuisement",   $date_epuis ? fmt_date($date_epuis) : '—'],
     ['Horizon cible',               $horizon . ' mois (' . $jours_cible . ' jours)'],
-    ['Couvre l’horizon',            $couvre_horizon ? 'Oui' : 'Non'],
-    ['À commander',                 $couvre_horizon ? '0'
-                                    : fmt_number($bobines_a_commander) . ' ' . $mot_unites($formats_stock)],
-    // « Le plus contraint » se cherche dans le perimetre PROJETE, mais
-    // sans tenir compte de la selection faite pour les nouveaux sites :
-    // un format qui ne recoit aucune charge nouvelle peut rester celui
-    // qui s'epuise en premier, et c'est justement ce qu'il faut savoir.
-    // Le libelle le dit, sinon on croit a une erreur.
-    ['Format le plus contraint (périmètre projeté)', $format_critique !== null
-        ? $fmt_lbl($format_critique) . ' : ' . fmt_number($formats[$format_critique]['jours_projetes'])
-          . ' jours (' . fmt_date($formats[$format_critique]['date_projetee']) . ')'
-          . ($nb_sites_new > 0
-             ? (!empty($formats[$format_critique]['retenu'])
-                ? ' — prévu sur les nouveaux sites'
-                : ' — hors sélection nouveaux sites')
-             : '')
-        : (count($formats_stock) < count($formats_dispo)
-           ? 'aucun format retenu n’a de consommation observée'
-           : 'aucune consommation par format')],
     ['PMMA le plus contraint (périmètre projeté)', $pmma_critique !== null
         ? $pmma_critique . ' — ' . fmt_number($pmma_formats[$pmma_critique]['jours_projetes'])
           . ' jours (' . fmt_date($pmma_formats[$pmma_critique]['date_projetee']) . ')'
@@ -437,6 +489,35 @@ $resume = [
            ? 'aucun type retenu n’a de consommation observée'
            : 'aucune consommation PMMA')],
 ];
+
+// Chaque categorie apporte ses propres conclusions. Les empiler dans un
+// meme tableau plutot que de les moyenner est tout l'objet de la
+// separation : une autonomie unique melangeait deux echeances sans
+// rapport.
+foreach ($cats as $C) {
+    $t = strtoupper($C['titre']);
+    $resume[] = ["── $t", ''];
+    $resume[] = ["  Unités projetées",     fmt_number($C['unites'])
+                                           . ' (' . fmt_number($C['stock']) . ' films)'];
+    $resume[] = ["  Consommation retenue", number_format($C['conso_obs'], 1, ',', ' ') . ' films/jour'
+                                           . ($C['charge_new'] > 0.05
+                                              ? ' + ' . number_format($C['charge_new'], 1, ',', ' ')
+                                                . ' des nouveaux sites' : '')];
+    $resume[] = ["  Autonomie",            $C['jours'] !== null
+                                           ? $C['jours'] . ' jours (' . fmt_date($C['date_epuis']) . ')'
+                                           : 'indéterminée'];
+    $resume[] = ["  Couvre l’horizon",     $C['couvre'] ? 'Oui' : 'Non'];
+    $resume[] = ["  À commander",          $C['couvre'] ? '0'
+                                           : fmt_number($C['a_commander']) . ' ' . $C['mot']
+                                             . ' (' . fmt_number($C['deficit']) . ' films)'];
+    $resume[] = ["  Format le plus contraint", $C['critique'] !== null
+        ? $fmt_lbl($C['critique']) . ' : '
+          . fmt_number($formats[$C['critique']]['jours_projetes']) . ' jours ('
+          . fmt_date($formats[$C['critique']]['date_projetee']) . ')'
+        : 'aucun format retenu n’a de consommation observée'];
+    if ($C['jours_perdus'] !== null)
+        $resume[] = ["  Jours perdus par l'ouverture", fmt_number((int)$C['jours_perdus'])];
+}
 
 // Detail par format, repris dans les deux exports : un agregat sans son
 // detail par format ferait perdre l'information qui compte.
@@ -473,13 +554,19 @@ if ($export === 'xlsx') {
         foreach ($lig as $i => $v) $sh->setCellValue([$i+1, $r], $v);
         $r++;
     }
-    $r += 1;
-    $sh->setCellValue("A$r", 'Date'); $sh->setCellValue("B$r", 'Films restants');
-    $sh->getStyle("A$r:B$r")->getFont()->setBold(true);
-    $r++;
-    foreach ($courbe as $p) { $sh->setCellValue("A$r", $p['date']); $sh->setCellValue("B$r", $p['films']); $r++; }
+    foreach ($cats as $C) {
+        if (empty($C['courbe'])) continue;
+        $r += 1;
+        $sh->setCellValue("A$r", 'Date'); $sh->setCellValue("B$r", 'Films restants — ' . $C['titre']);
+        $sh->getStyle("A$r:B$r")->getFont()->setBold(true);
+        $r++;
+        foreach ($C['courbe'] as $pt) {
+            $sh->setCellValue("A$r", $pt['date']); $sh->setCellValue("B$r", $pt['films']); $r++;
+        }
+    }
     foreach (['A','B'] as $c) $sh->getColumnDimension($c)->setAutoSize(true);
-    audit_log($user['id'],'READ','simulation_stocks',0,"Export XLSX — $nb_bobines bobines, horizon $horizon mois");
+    audit_log($user['id'],'READ','simulation_stocks',0,
+        "Export XLSX — $nb_bobines unité(s) sur " . count($cats) . " catégorie(s), horizon $horizon mois");
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     header('Content-Disposition: attachment;filename="simulation_stocks.xlsx"');
     header('Cache-Control: max-age=0');
@@ -503,17 +590,24 @@ if ($export === 'pdf') {
     <div class="meta">
       <?= h($site_nom ?: 'Tous les sites') ?> · généré le <?= date('d/m/Y à H:i') ?> · ERP EMUCI
     </div>
+    <?php if (empty($cats)): ?>
+    <div class="concl">Aucun stock de bobine ni de vignette sur ce périmètre.</div>
+    <?php endif; ?>
+    <?php foreach ($cats as $C): ?>
     <div class="concl">
-      <?php if ($jours_tenus === null): ?>
-        Aucune consommation observée sur la période : la projection ne peut pas être calculée.
+      <strong><?= h($C['titre']) ?></strong> —
+      <?php if ($C['jours'] === null): ?>
+        aucune consommation observée sur la période, la projection ne peut pas être calculée.
       <?php else: ?>
-        <?= fmt_number($nb_bobines) ?> bobines = utilisation jusqu'en <?= h($epuis_texte) ?>
-        au rythme actuel, soit <?= $jours_tenus ?> jours.
-        <?php if (!$couvre_horizon): ?>
-          Pour tenir <?= $horizon ?> mois, il manque <?= fmt_number($bobines_a_commander) ?> bobine(s).
+        <?= fmt_number($C['unites']) ?> <?= h($C['mot']) ?> = utilisation jusqu'au
+        <?= h(fmt_date($C['date_epuis'])) ?> au rythme actuel, soit <?= $C['jours'] ?> jours.
+        <?php if (!$C['couvre']): ?>
+          Pour tenir <?= $horizon ?> mois, il manque <?= fmt_number($C['a_commander']) ?>
+          <?= h($C['mot']) ?>.
         <?php endif; ?>
       <?php endif; ?>
     </div>
+    <?php endforeach; ?>
     <table>
       <thead><tr><th>Paramètre</th><th>Valeur</th></tr></thead>
       <tbody>
@@ -540,7 +634,8 @@ if ($export === 'pdf') {
     $html = ob_get_clean();
     $opt = new Options(); $opt->set('isHtml5ParserEnabled', true); $opt->set('defaultFont','DejaVu Sans');
     $pdf = new Dompdf($opt); $pdf->loadHtml($html,'UTF-8'); $pdf->setPaper('A4','portrait'); $pdf->render();
-    audit_log($user['id'],'READ','simulation_stocks',0,"Export PDF — $nb_bobines bobines");
+    audit_log($user['id'],'READ','simulation_stocks',0,
+        "Export PDF — $nb_bobines unité(s) sur " . count($cats) . " catégorie(s)");
     $pdf->stream('simulation_stocks.pdf', ['Attachment'=>true]);
     exit;
 }
@@ -570,6 +665,11 @@ include __DIR__ . '/../templates/header.php';
 .sim-mode input{margin-right:7px}
 .sim-mode-t{font-size:13.5px;font-weight:700;color:var(--navy)}
 .sim-mode-d{display:block;font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.4;padding-left:21px}
+.sim-cat{margin-bottom:30px}
+.sim-cat-t{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:12px;
+  padding-bottom:9px;border-bottom:2px solid var(--border);
+  font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)}
+.sim-cat-t em{font-style:normal;font-size:12px;font-weight:600;color:var(--muted)}
 .sim-verdict{border-radius:16px;padding:22px 24px;margin-bottom:18px;color:white}
 .sim-verdict.ok{background:linear-gradient(135deg,#0f6b3f,#1e8449)}
 .sim-verdict.ko{background:linear-gradient(135deg,#8c2c22,#c0392b)}
@@ -772,7 +872,8 @@ tr.hors td{opacity:.55}
         format pour le sortir de la projection. La quantité est en unités (une bobine, une
         vignette) : laissée vide, c'est le stock réel qui est repris. Chaque format est
         converti avec <strong>son propre</strong> conditionnement.<br>
-        Stock réel du périmètre : <strong><?= fmt_number($bobines_defaut) ?></strong> bobine(s)
+        Stock réel du périmètre : <strong><?= fmt_number($bobines_defaut) ?></strong>
+        <?= h($mot_unites($formats_dispo)) ?>
         (<?= fmt_number($stock_films_reel) ?> films).</div>
     </div>
     <div class="sim-f">
@@ -935,159 +1036,172 @@ tr.hors td{opacity:.55}
 
   <!-- ══ RÉSULTATS ══ -->
   <div>
-    <?php if ($jours_tenus === null): ?>
+    <?php if (empty($cats)): ?>
     <div class="sim-verdict na">
-      <div class="t">Projection impossible</div>
-      <div class="s">Aucune consommation n'a été enregistrée sur les <?= $fenetre ?> derniers jours
-        pour ce périmètre. Saisissez une consommation journalière à la main pour simuler malgré tout.</div>
-    </div>
-    <?php else: ?>
-    <div class="sim-verdict <?= $couvre_horizon ? 'ok' : 'ko' ?>">
-      <div class="t">
-        <?php if ($mode === 'ouverture'): ?>
-          <?= $nb_sites_new ?> site<?= $nb_sites_new > 1 ? 's' : '' ?> de plus =
-          autonomie ramenée à <?= fmt_number($jours_tenus) ?> jours
-        <?php else: ?>
-          <?= fmt_number($nb_bobines) ?> <?= h($mot_unites($formats_stock)) ?>
-          = utilisation jusqu'en <?= h($epuis_texte) ?>
-        <?php endif; ?>
-      </div>
-      <div class="s">
-        <?php if ($mode === 'ouverture' && $jours_sans_new !== null): ?>
-          Sans ouverture, votre stock tiendrait <strong><?= fmt_number($jours_sans_new) ?> jours</strong>.
-          Avec <?= $nb_sites_new ?> site<?= $nb_sites_new > 1 ? 's' : '' ?> supplémentaire<?= $nb_sites_new > 1 ? 's' : '' ?>
-          consommant <?= number_format($conso_site_new, 1, ',', ' ') ?> films/jour chacun,
-          il tient <strong><?= fmt_number($jours_tenus) ?> jours</strong> —
-          soit <strong><?= fmt_number((int)$jours_perdus) ?> jours perdus</strong>.
-        <?php else: ?>
-          Au rythme de <?= number_format($conso_totale, 1, ',', ' ') ?> films/jour, ce stock tient
-          <strong><?= fmt_number($jours_tenus) ?> jours</strong>, soit jusqu'au <?= h(fmt_date($date_epuis)) ?>.
-        <?php endif; ?>
-        <?php if ($couvre_horizon): ?>
-          Il couvre l'horizon de <?= $horizon ?> mois demandé.
-        <?php else: ?>
-          Il <strong>ne couvre pas</strong> l'horizon de <?= $horizon ?> mois :
-          il manque <strong><?= fmt_number($bobines_a_commander) ?>
-          <?= h($mot_unites($formats_stock)) ?></strong>
-          (<?= fmt_number($deficit_films) ?> films) à commander.
-        <?php endif; ?>
-        <?php if ($format_critique !== null
-                  && $formats[$format_critique]['jours_projetes'] < ($jours_tenus ?? PHP_INT_MAX)): ?>
-          <br><br>Attention : ce chiffre agrège tous les formats. Le format
-          <strong><?= h($fmt_lbl($format_critique)) ?></strong> s'épuise dès
-          <strong><?= h(fmt_date($formats[$format_critique]['date_projetee'])) ?></strong>,
-          soit <?= fmt_number($formats[$format_critique]['jours_projetes']) ?> jours —
-          c'est lui qui arrêtera la production correspondante.
-        <?php endif; ?>
-      </div>
+      <div class="t">Aucun stock sur ce périmètre</div>
+      <div class="s">Ni bobine ni vignette n'est enregistrée pour ce site.
+        Changez de périmètre pour lancer une projection.</div>
     </div>
     <?php endif; ?>
 
-    <div class="sim-kpis">
-      <div class="sim-kpi">
-        <div class="sim-kpi-v"><?= fmt_number($stock_films) ?></div>
-        <div class="sim-kpi-l">Films projetés</div>
+    <?php /* Une section complète par catégorie : bobines et vignettes ne se
+             remplacent pas, une conclusion commune serait une moyenne entre
+             deux échéances sans rapport. */ ?>
+    <?php foreach ($cats as $cle => $C): ?>
+    <div class="sim-cat">
+      <div class="sim-cat-t">
+        <span class="tag-cat <?= $cle ?>"><?= h($C['mot']) ?></span>
+        <?= h($C['titre']) ?>
+        <em><?= count($C['retenus']) ?> format<?= count($C['retenus']) > 1 ? 's' : '' ?>
+          sur <?= count($C['codes']) ?> dans le périmètre</em>
       </div>
-      <div class="sim-kpi">
-        <div class="sim-kpi-v"><?= number_format($conso_totale, 1, ',', ' ') ?></div>
-        <div class="sim-kpi-l">Films / jour</div>
-      </div>
-      <div class="sim-kpi <?= $jours_tenus !== null && $jours_tenus < 30 ? 'crit' : ($couvre_horizon ? '' : 'warn') ?>">
-        <div class="sim-kpi-v"><?= $jours_tenus !== null ? fmt_number($jours_tenus) : '—' ?></div>
-        <div class="sim-kpi-l">Jours d'autonomie</div>
-      </div>
-      <div class="sim-kpi <?= $couvre_horizon ? '' : 'crit' ?>">
-        <div class="sim-kpi-v"><?= $couvre_horizon ? '0' : fmt_number($bobines_a_commander) ?></div>
-        <div class="sim-kpi-l"><?= h($mot_unites($formats_stock)) ?> à commander</div>
-      </div>
-      <?php if ($jours_perdus !== null): ?>
-      <div class="sim-kpi <?= $jours_perdus > 0 ? 'crit' : '' ?>">
-        <div class="sim-kpi-v">−<?= fmt_number((int)$jours_perdus) ?></div>
-        <div class="sim-kpi-l">Jours perdus par l'ouverture</div>
-      </div>
-      <?php endif; ?>
-    </div>
 
-    <!-- ══ PROJECTION PAR FORMAT ══ -->
-    <div class="sim-card">
-      <h4>Par format de bobine et de vignette</h4>
-      <div class="sc-sub">
-        Deux articles distincts figurent ici : les <strong>bobines</strong> de films
-        (Auto, Carré, Moto, MotoII) et les <strong>vignettes</strong> (Réservoir, Pare-brise).
-        Aucun ne remplace l'autre, et à l'intérieur d'une catégorie un format n'en remplace pas
-        un autre non plus — chaque type de véhicule dépend d'une série précise. C'est le format
-        qui s'épuise en premier qui arrête la production, pas la moyenne globale. Le total en
-        tête de page est la somme de ces lignes.
-        <?php if (count($formats_stock) < count($formats_dispo)): ?>
-        <br>Les formats marqués « hors projection » ne sont pas retenus dans votre périmètre :
-        ils restent affichés avec leur stock réel, à titre indicatif, et ne comptent ni dans
-        le total ni dans la contrainte.
-        <?php endif; ?>
-        <?php if ($nb_sites_new > 0): ?>
-        <br>Tous les formats du périmètre sont listés, y compris ceux que vous n'avez pas
-        retenus pour les nouveaux sites : ils gardent leur consommation actuelle et peuvent
-        rester la contrainte. Seuls les formats marqués « nouveaux sites » reçoivent la charge
-        supplémentaire.
-        <?php endif; ?>
+      <?php if ($C['jours'] === null): ?>
+      <div class="sim-verdict na">
+        <div class="t">Projection impossible pour les <?= h($C['mot']) ?></div>
+        <div class="s">Aucune consommation n'a été enregistrée sur les <?= $fenetre ?> derniers
+          jours pour cette catégorie. Saisissez une consommation journalière à la main pour
+          simuler malgré tout.</div>
       </div>
-      <?php if (empty($formats)): ?>
-        <div style="color:var(--muted);font-size:13.5px">Aucune bobine en stock sur ce périmètre.</div>
       <?php else: ?>
-      <div style="overflow-x:auto">
-      <table class="sim-fmt">
-        <thead><tr>
-          <th>Format</th><th>Catégorie</th><th>Version</th>
-          <th class="n">Unités</th><th class="n">Films</th>
-          <th class="n">Films / jour</th><th class="n">Autonomie</th>
-          <th>Épuisement</th><th class="n">À commander</th>
-        </tr></thead>
-        <tbody>
-        <?php foreach ($formats as $code => $f):
-          $crit = ($code === $format_critique);
-          $hors = !$f['retenu_stock']; ?>
-        <tr class="<?= $crit ? 'crit' : ($hors ? 'hors' : '') ?>">
-          <td>
-            <strong><?= h($f['format']) ?></strong>
-            <?php if ($crit): ?><span class="tag-crit">contrainte</span><?php endif; ?>
-            <?php if ($hors): ?><span class="tag-hors">hors projection</span><?php endif; ?>
-            <?php if ($nb_sites_new > 0 && !empty($f['retenu'])): ?><span class="tag-new">nouveaux sites</span><?php endif; ?>
-          </td>
-          <td><span class="tag-cat <?= $f['categorie'] ?>"><?= h(libelle_categorie($f['categorie'])) ?></span></td>
-          <td style="color:var(--muted)"><?= h($f['version']) ?></td>
-          <td class="n"><?= fmt_number($f['bobines_ligne']) ?></td>
-          <td class="n"><?= fmt_number($f['films_ligne']) ?></td>
-          <td class="n">
-            <?= number_format($f['conso_projetee'], 1, ',', ' ') ?>
-            <?php if (!empty($f['charge_new']) && $f['charge_new'] > 0.05): ?>
-            <em class="ajout">+<?= number_format($f['charge_new'], 1, ',', ' ') ?></em>
-            <?php endif; ?>
-          </td>
-          <td class="n"><?= $f['jours_projetes'] !== null ? fmt_number($f['jours_projetes']).' j' : '—' ?></td>
-          <td><?= $f['date_projetee'] ? h(fmt_date($f['date_projetee'])) : '<span style="color:var(--muted)">pas de consommation</span>' ?></td>
-          <td class="n <?= $f['bobines_manquantes'] > 0 ? 'manque' : '' ?>">
-            <?= $f['jours_projetes'] === null ? '—' : ($f['bobines_manquantes'] > 0 ? fmt_number($f['bobines_manquantes']) : '0') ?>
-          </td>
-        </tr>
-        <?php endforeach; ?>
-        </tbody>
-      </table>
-      </div>
-      <?php if ($format_critique !== null && !$formats[$format_critique]['couvre']): ?>
-      <div class="sim-alerte">
-        <strong><?= h($fmt_lbl($format_critique)) ?></strong> s'épuise le premier, dans
-        <strong><?= fmt_number($formats[$format_critique]['jours_projetes']) ?> jours</strong>
-        (<?= h(fmt_date($formats[$format_critique]['date_projetee'])) ?>) — bien avant l'horizon
-        de <?= $horizon ?> mois. Les véhicules traités avec ce format
-        (<?= h($formats[$format_critique]['format']) ?>) ne pourront plus l'être
-        à partir de cette date, quel que soit le stock des autres formats.
-        <?php if ($nb_sites_new > 0 && empty($formats[$format_critique]['retenu'])): ?>
-        Ce format n'est pas prévu sur les nouveaux sites : il ne subit aucune charge
-        supplémentaire, sa consommation actuelle suffit à en faire la contrainte.
-        <?php endif; ?>
+      <div class="sim-verdict <?= $C['couvre'] ? 'ok' : 'ko' ?>">
+        <div class="t">
+          <?php if ($mode === 'ouverture' && $C['jours_perdus'] !== null): ?>
+            <?= $nb_sites_new ?> site<?= $nb_sites_new > 1 ? 's' : '' ?> de plus =
+            autonomie <?= h($C['mot']) ?> ramenée à <?= fmt_number($C['jours']) ?> jours
+          <?php else: ?>
+            <?= fmt_number($C['unites']) ?> <?= h($C['mot']) ?> =
+            utilisation jusqu'au <?= h(fmt_date($C['date_epuis'])) ?>
+          <?php endif; ?>
+        </div>
+        <div class="s">
+          <?php if ($mode === 'ouverture' && $C['jours_sans_new'] !== null): ?>
+            Sans ouverture, ce stock tiendrait <strong><?= fmt_number($C['jours_sans_new']) ?> jours</strong>.
+            Avec <?= $nb_sites_new ?> site<?= $nb_sites_new > 1 ? 's' : '' ?>
+            supplémentaire<?= $nb_sites_new > 1 ? 's' : '' ?>, il tient
+            <strong><?= fmt_number($C['jours']) ?> jours</strong> — soit
+            <strong><?= fmt_number((int)$C['jours_perdus']) ?> jours perdus</strong>.
+          <?php else: ?>
+            Au rythme de <?= number_format($C['conso_totale'], 1, ',', ' ') ?> films/jour,
+            ce stock tient <strong><?= fmt_number($C['jours']) ?> jours</strong>.
+          <?php endif; ?>
+          <?php if ($C['couvre']): ?>
+            Il couvre l'horizon de <?= $horizon ?> mois demandé.
+          <?php else: ?>
+            Il <strong>ne couvre pas</strong> l'horizon de <?= $horizon ?> mois :
+            il manque <strong><?= fmt_number($C['a_commander']) ?> <?= h($C['mot']) ?></strong>
+            (<?= fmt_number($C['deficit']) ?> films) à commander.
+          <?php endif; ?>
+          <?php if ($C['critique'] !== null
+                    && $formats[$C['critique']]['jours_projetes'] < $C['jours']): ?>
+            <br><br>Ce chiffre agrège les formats de la catégorie. Le format
+            <strong><?= h($formats[$C['critique']]['format']) ?></strong> s'épuise dès
+            <strong><?= h(fmt_date($formats[$C['critique']]['date_projetee'])) ?></strong>,
+            soit <?= fmt_number($formats[$C['critique']]['jours_projetes']) ?> jours —
+            c'est lui qui arrêtera la production correspondante.
+          <?php endif; ?>
+        </div>
       </div>
       <?php endif; ?>
+
+      <div class="sim-kpis">
+        <div class="sim-kpi">
+          <div class="sim-kpi-v"><?= fmt_number($C['stock']) ?></div>
+          <div class="sim-kpi-l">Films projetés</div>
+        </div>
+        <div class="sim-kpi">
+          <div class="sim-kpi-v"><?= number_format($C['conso_totale'], 1, ',', ' ') ?></div>
+          <div class="sim-kpi-l">Films / jour</div>
+        </div>
+        <div class="sim-kpi <?= $C['jours'] !== null && $C['jours'] < 30 ? 'crit' : ($C['couvre'] ? '' : 'warn') ?>">
+          <div class="sim-kpi-v"><?= $C['jours'] !== null ? fmt_number($C['jours']) : '—' ?></div>
+          <div class="sim-kpi-l">Jours d'autonomie</div>
+        </div>
+        <div class="sim-kpi <?= $C['couvre'] ? '' : 'crit' ?>">
+          <div class="sim-kpi-v"><?= $C['couvre'] ? '0' : fmt_number($C['a_commander']) ?></div>
+          <div class="sim-kpi-l"><?= h($C['mot']) ?> à commander</div>
+        </div>
+        <?php if ($C['jours_perdus'] !== null): ?>
+        <div class="sim-kpi <?= $C['jours_perdus'] > 0 ? 'crit' : '' ?>">
+          <div class="sim-kpi-v">−<?= fmt_number((int)$C['jours_perdus']) ?></div>
+          <div class="sim-kpi-l">Jours perdus par l'ouverture</div>
+        </div>
+        <?php endif; ?>
+      </div>
+
+      <div class="sim-card">
+        <h4>Détail par format</h4>
+        <div class="sc-sub">
+          Un format n'en remplace pas un autre : chaque type de véhicule dépend d'une série
+          précise. C'est le format qui s'épuise en premier qui arrête la production, pas la
+          moyenne de la catégorie. Le total ci-dessus est la somme de ces lignes.
+          <?php if (count($C['retenus']) < count($C['codes'])): ?>
+          <br>Les formats marqués « hors projection » ne sont pas retenus dans votre périmètre :
+          ils restent affichés avec leur stock réel, à titre indicatif, et ne comptent ni dans
+          le total ni dans la contrainte.
+          <?php endif; ?>
+          <?php if ($nb_sites_new > 0): ?>
+          <br>Seuls les formats marqués « nouveaux sites » reçoivent la charge supplémentaire.
+          <?php endif; ?>
+        </div>
+        <div style="overflow-x:auto">
+        <table class="sim-fmt">
+          <thead><tr>
+            <th>Format</th><th>Version</th>
+            <th class="n">Unités</th><th class="n">Films</th>
+            <th class="n">Films / jour</th><th class="n">Autonomie</th>
+            <th>Épuisement</th><th class="n">À commander</th>
+          </tr></thead>
+          <tbody>
+          <?php foreach ($C['codes'] as $code): $f = $formats[$code];
+            $crit = ($code === $C['critique']);
+            $hors = !$f['retenu_stock']; ?>
+          <tr class="<?= $crit ? 'crit' : ($hors ? 'hors' : '') ?>">
+            <td>
+              <strong><?= h($f['format']) ?></strong>
+              <?php if ($crit): ?><span class="tag-crit">contrainte</span><?php endif; ?>
+              <?php if ($hors): ?><span class="tag-hors">hors projection</span><?php endif; ?>
+              <?php if ($nb_sites_new > 0 && !empty($f['retenu'])): ?><span class="tag-new">nouveaux sites</span><?php endif; ?>
+            </td>
+            <td style="color:var(--muted)"><?= h($f['version']) ?></td>
+            <td class="n"><?= fmt_number($f['bobines_ligne']) ?></td>
+            <td class="n"><?= fmt_number($f['films_ligne']) ?></td>
+            <td class="n">
+              <?= number_format($f['conso_projetee'], 1, ',', ' ') ?>
+              <?php if (!empty($f['charge_new']) && $f['charge_new'] > 0.05): ?>
+              <em class="ajout">+<?= number_format($f['charge_new'], 1, ',', ' ') ?></em>
+              <?php endif; ?>
+            </td>
+            <td class="n"><?= $f['jours_projetes'] !== null ? fmt_number($f['jours_projetes']).' j' : '—' ?></td>
+            <td><?= $f['date_projetee'] ? h(fmt_date($f['date_projetee'])) : '<span style="color:var(--muted)">pas de consommation</span>' ?></td>
+            <td class="n <?= $f['bobines_manquantes'] > 0 ? 'manque' : '' ?>">
+              <?= $f['jours_projetes'] === null ? '—' : ($f['bobines_manquantes'] > 0 ? fmt_number($f['bobines_manquantes']) : '0') ?>
+            </td>
+          </tr>
+          <?php endforeach; ?>
+          </tbody>
+        </table>
+        </div>
+        <?php if ($C['critique'] !== null && !$formats[$C['critique']]['couvre']): ?>
+        <div class="sim-alerte">
+          <strong><?= h($formats[$C['critique']]['format']) ?></strong> s'épuise le premier, dans
+          <strong><?= fmt_number($formats[$C['critique']]['jours_projetes']) ?> jours</strong>
+          (<?= h(fmt_date($formats[$C['critique']]['date_projetee'])) ?>) — bien avant l'horizon
+          de <?= $horizon ?> mois. Les véhicules traités avec ce format ne pourront plus l'être
+          à partir de cette date, quel que soit le stock des autres formats.
+        </div>
+        <?php endif; ?>
+      </div>
+
+      <?php if (!empty($C['courbe'])): ?>
+      <div class="sim-card">
+        <h4>Évolution du stock — <?= h($C['mot']) ?></h4>
+        <div class="sc-sub">Projection linéaire au rythme retenu, sur l'horizon de <?= $horizon ?> mois.</div>
+        <canvas class="sim-chart" data-pts="<?= h(json_encode($C['courbe'])) ?>" height="190"></canvas>
+      </div>
       <?php endif; ?>
     </div>
+    <?php endforeach; ?>
 
     <!-- ══ PROJECTION PMMA ══ -->
     <div class="sim-card">
@@ -1140,13 +1254,6 @@ tr.hors td{opacity:.55}
       <?php endif; ?>
     </div>
 
-    <?php if (!empty($courbe)): ?>
-    <div class="sim-card">
-      <h4>Évolution du stock — tous formats confondus</h4>
-      <div class="sc-sub">Projection linéaire au rythme retenu, sur l'horizon de <?= $horizon ?> mois.</div>
-      <canvas id="simChart" height="190"></canvas>
-    </div>
-    <?php endif; ?>
 
     <div class="sim-card">
       <h4>Détail du calcul</h4>
@@ -1299,15 +1406,23 @@ document.querySelectorAll('.sim-dd').forEach(function(dd){
 });
 </script>
 
-<?php if (!empty($courbe)): ?>
 <script>
-(function(){
-  const pts = <?= json_encode($courbe) ?>;
-  const cv  = document.getElementById('simChart');
-  if (!cv || !pts.length) return;
+// Une courbe par catégorie : le stock de bobines et celui de vignettes ne
+// s'additionnent pas, les superposer sur un même axe laisserait croire à
+// un total. Chaque canvas porte ses propres points en data-pts.
+document.querySelectorAll('canvas.sim-chart').forEach(function(cv){
+  let pts;
+  try { pts = JSON.parse(cv.dataset.pts || '[]'); } catch (e) { return; }
+  if (!pts.length) return;
   const dpr = window.devicePixelRatio || 1;
   function dessiner(){
-    const w = cv.clientWidth, h = 190;
+    // La taille CSS doit être fixée explicitement : sans elle, l'élément
+    // prend pour dimensions les attributs width/height, multipliés par le
+    // devicePixelRatio. Sur un écran HiDPI le graphique sortait de sa
+    // carte et n'occupait que la moitié haute de sa propre surface.
+    cv.style.width = '100%';
+    cv.style.height = '190px';
+    const h = 190, w = cv.clientWidth || cv.parentElement.clientWidth;
     cv.width = w * dpr; cv.height = h * dpr;
     const g = cv.getContext('2d'); g.scale(dpr, dpr);
     g.clearRect(0, 0, w, h);
@@ -1353,8 +1468,7 @@ document.querySelectorAll('.sim-dd').forEach(function(dd){
   }
   dessiner();
   window.addEventListener('resize', dessiner);
-})();
+});
 </script>
-<?php endif; ?>
 
 <?php include __DIR__ . '/../templates/footer.php'; ?>
