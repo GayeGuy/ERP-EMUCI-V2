@@ -17,6 +17,7 @@ require_once __DIR__ . '/../../includes/session.php';
 require_once __DIR__ . '/../../includes/audit.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/notifications.php';
+require_once __DIR__ . '/../../includes/referentiels.php';
 
 require_auth();
 require_permission('referentiels_operations', 'can_read');
@@ -130,10 +131,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 // série, dont le format se déduit 1:1, et sur le dernier chiffre du code
 // pour la version — c'est exactement le mapping qu'appliquait cette
 // migration.
-$FORMATS_SERIE  = ['A'=>'Auto','B'=>'Carré','C'=>'Moto','D'=>'MotoII',
-                   'TL'=>'Réservoir','WSL'=>'Pare-brise'];
-$VERSIONS_CODE  = ['1'=>'Privée','2'=>'Transport Publique','3'=>'Institution Internationale',
-                   '4'=>'Diplomatique','5'=>'Gouvernementale','6'=>'Temporaire'];
+// Le mapping lui-même vit dans includes/referentiels.php : le recopier ici
+// aurait refait exactement la duplication que cet écran vient supprimer.
 try {
     $types_bobines = db_fetch_all(
         "SELECT id, code, libelle, TRIM(serie) AS serie, format, version, films_par_bobine, actif
@@ -147,9 +146,9 @@ try {
 }
 foreach ($types_bobines as $i => $t) {
     if (($t['format'] ?? '') === '')
-        $types_bobines[$i]['format'] = $FORMATS_SERIE[$t['serie']] ?? $t['serie'];
+        $types_bobines[$i]['format'] = libelle_format_serie($t['serie']);
     if (($t['version'] ?? '') === '')
-        $types_bobines[$i]['version'] = $VERSIONS_CODE[substr($t['code'], -1)] ?? '—';
+        $types_bobines[$i]['version'] = libelle_version_code($t['code']);
 }
 
 $series = [];

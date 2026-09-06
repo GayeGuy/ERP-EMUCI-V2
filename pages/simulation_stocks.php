@@ -81,6 +81,20 @@ $pmma_base     = conso_stock_par_pmma($f_site, $fenetre);
 $formats_dispo = array_keys($formats_base);
 $pmma_dispo    = array_keys($pmma_base);
 
+// Libelle lisible d'un format. Les ecrans affichaient le code type (A001)
+// et la serie (A) : deux identifiants internes qui ne disent rien a qui
+// lit la projection. « Auto — Privee » porte la meme information.
+// Le code reste la valeur transmise par le formulaire, c'est la cle.
+$fmt_lbl = function (string $code) use ($formats_base): string {
+    $f = $formats_base[$code] ?? null;
+    if (!$f) return $code;
+    $v = $f['version'] ?? '';
+    return $f['format'] . ($v !== '' && $v !== '—' ? ' — ' . $v : '');
+};
+$fmt_lbls = function (array $codes) use ($fmt_lbl): string {
+    return implode(', ', array_map($fmt_lbl, $codes));
+};
+
 $formats_stock = isset($_GET['fmt_stock']) && is_array($_GET['fmt_stock'])
                ? array_values(array_intersect($_GET['fmt_stock'], $formats_dispo))
                : $formats_dispo;
@@ -354,8 +368,8 @@ $resume = [
     ['Mode de simulation',          $MODES[$mode][0]],
     ['Périmètre',                   $site_nom ?: 'Tous les sites'],
     ['Formats de bobines projetés', count($formats_stock) === count($formats_dispo)
-        ? 'tous (' . implode(', ', $formats_dispo) . ')'
-        : implode(', ', $formats_stock)],
+        ? 'tous (' . $fmt_lbls($formats_dispo) . ')'
+        : $fmt_lbls($formats_stock)],
     ['Types de PMMA projetés',      count($pmma_stock) === count($pmma_dispo)
         ? 'tous (' . implode(', ', $pmma_dispo) . ')'
         : implode(', ', $pmma_stock)],
@@ -367,7 +381,7 @@ $resume = [
     ['Consommation retenue',        number_format($conso_jour, 1, ',', ' ') . ' films/jour'
                                     . ($conso_manuelle ? ' (saisie)' : ' (observée)')],
     ['Nouveaux sites simulés',      $nb_sites_new . ($nb_sites_new ? ' × ' . number_format($conso_site_new, 1, ',', ' ') . ' films/jour' : '')],
-    ['Formats prévus sur ces sites', $nb_sites_new ? implode(', ', $formats_new) : '—'],
+    ['Formats prévus sur ces sites', $nb_sites_new ? $fmt_lbls($formats_new) : '—'],
     ['PMMA prévu sur ces sites',    $nb_sites_new
         ? implode(', ', $pmma_new) . ' — ' . number_format($conso_pmma_new, 1, ',', ' ') . ' unités/jour et par site'
         : '—'],
@@ -383,7 +397,7 @@ $resume = [
     // qui s'epuise en premier, et c'est justement ce qu'il faut savoir.
     // Le libelle le dit, sinon on croit a une erreur.
     ['Format le plus contraint (périmètre projeté)', $format_critique !== null
-        ? $format_critique . ' — ' . fmt_number($formats[$format_critique]['jours_projetes'])
+        ? $fmt_lbl($format_critique) . ' : ' . fmt_number($formats[$format_critique]['jours_projetes'])
           . ' jours (' . fmt_date($formats[$format_critique]['date_projetee']) . ')'
           . ($nb_sites_new > 0
              ? (!empty($formats[$format_critique]['retenu'])
@@ -411,8 +425,8 @@ $resume = [
 $detail_formats = [];
 foreach ($formats as $code => $f) {
     $detail_formats[] = [
-        $code . ($f['retenu_stock'] ? '' : ' (hors projection)'),
-        $f['serie'] ?: '—', $f['bobines_ligne'], $f['films_ligne'],
+        $f['format'] . ($f['retenu_stock'] ? '' : ' (hors projection)'),
+        $f['version'], $f['bobines_ligne'], $f['films_ligne'],
         number_format($f['conso_projetee'], 1, ',', ' '),
         $f['jours_projetes'] !== null ? $f['jours_projetes'] : '—',
         $f['date_projetee'] ? fmt_date($f['date_projetee']) : '—',
@@ -432,7 +446,7 @@ if ($export === 'xlsx') {
     $r += 1;
     // setCellValueByColumnAndRow() a disparu en PhpSpreadsheet 2.0 ; le
     // projet est en 5.9. La notation [colonne, ligne] la remplace.
-    $ent = ['Format','Série','Bobines','Films','Films/jour','Autonomie (j)','Épuisement','À commander'];
+    $ent = ['Format','Version','Bobines','Films','Films/jour','Autonomie (j)','Épuisement','À commander'];
     foreach ($ent as $i => $t) $sh->setCellValue([$i+1, $r], $t);
     $sh->getStyle("A$r:H$r")->getFont()->setBold(true);
     $r++;
@@ -493,7 +507,7 @@ if ($export === 'pdf') {
     <h1 style="font-size:13px;margin:14px 0 4px">Détail par format</h1>
     <table>
       <thead><tr>
-        <th>Format</th><th>Série</th><th>Bobines</th><th>Films</th>
+        <th>Format</th><th>Version</th><th>Bobines</th><th>Films</th>
         <th>Films/j</th><th>Autonomie</th><th>Épuisement</th><th>À commander</th>
       </tr></thead>
       <tbody>
@@ -714,10 +728,11 @@ tr.hors td{opacity:.55}
           <div class="sim-dd-i">
             <label>
               <input type="checkbox" name="fmt_stock[]" value="<?= h($code) ?>"
+                     data-lbl="<?= h($fmt_lbl($code)) ?>"
                      <?= in_array($code, $formats_stock, true) ? 'checked' : '' ?>
                      onchange="ddMaj(this)">
-              <span class="sim-dd-n"><?= h($code) ?>
-                <em>série <?= h($f['serie'] ?: '—') ?> · <?= fmt_number($f['films_par_bobine']) ?> films/bobine</em>
+              <span class="sim-dd-n"><?= h($f['format']) ?>
+                <em><?= h($f['version']) ?> · <?= fmt_number($f['films_par_bobine']) ?> films/bobine</em>
               </span>
             </label>
             <input type="number" class="sim-dd-q" min="0" name="qte_fmt[<?= h($code) ?>]"
@@ -830,10 +845,11 @@ tr.hors td{opacity:.55}
           <div class="sim-dd-i">
             <label>
               <input type="checkbox" name="fmt_new[]" value="<?= h($code) ?>"
+                     data-lbl="<?= h($fmt_lbl($code)) ?>"
                      <?= in_array($code, $formats_new, true) ? 'checked' : '' ?>
                      onchange="ddMaj(this)">
-              <span class="sim-dd-n"><?= h($code) ?>
-                <em>série <?= h($f['serie'] ?: '—') ?></em></span>
+              <span class="sim-dd-n"><?= h($f['format']) ?>
+                <em><?= h($f['version']) ?></em></span>
             </label>
           </div>
           <?php endforeach; ?>
@@ -930,7 +946,7 @@ tr.hors td{opacity:.55}
         <?php if ($format_critique !== null
                   && $formats[$format_critique]['jours_projetes'] < ($jours_tenus ?? PHP_INT_MAX)): ?>
           <br><br>Attention : ce chiffre agrège tous les formats. Le format
-          <strong><?= h($format_critique) ?></strong> s'épuise dès
+          <strong><?= h($fmt_lbl($format_critique)) ?></strong> s'épuise dès
           <strong><?= h(fmt_date($formats[$format_critique]['date_projetee'])) ?></strong>,
           soit <?= fmt_number($formats[$format_critique]['jours_projetes']) ?> jours —
           c'est lui qui arrêtera la production correspondante.
@@ -989,7 +1005,7 @@ tr.hors td{opacity:.55}
       <div style="overflow-x:auto">
       <table class="sim-fmt">
         <thead><tr>
-          <th>Format</th><th>Série</th>
+          <th>Format</th><th>Version</th>
           <th class="n">Bobines</th><th class="n">Films</th>
           <th class="n">Films / jour</th><th class="n">Autonomie</th>
           <th>Épuisement</th><th class="n">À commander</th>
@@ -1000,12 +1016,12 @@ tr.hors td{opacity:.55}
           $hors = !$f['retenu_stock']; ?>
         <tr class="<?= $crit ? 'crit' : ($hors ? 'hors' : '') ?>">
           <td>
-            <strong><?= h($code) ?></strong>
+            <strong><?= h($f['format']) ?></strong>
             <?php if ($crit): ?><span class="tag-crit">contrainte</span><?php endif; ?>
             <?php if ($hors): ?><span class="tag-hors">hors projection</span><?php endif; ?>
             <?php if ($nb_sites_new > 0 && !empty($f['retenu'])): ?><span class="tag-new">nouveaux sites</span><?php endif; ?>
           </td>
-          <td style="color:var(--muted)"><?= h($f['serie'] ?: '—') ?></td>
+          <td style="color:var(--muted)"><?= h($f['version']) ?></td>
           <td class="n"><?= fmt_number($f['bobines_ligne']) ?></td>
           <td class="n"><?= fmt_number($f['films_ligne']) ?></td>
           <td class="n">
@@ -1026,11 +1042,11 @@ tr.hors td{opacity:.55}
       </div>
       <?php if ($format_critique !== null && !$formats[$format_critique]['couvre']): ?>
       <div class="sim-alerte">
-        <strong><?= h($format_critique) ?></strong> s'épuise le premier, dans
+        <strong><?= h($fmt_lbl($format_critique)) ?></strong> s'épuise le premier, dans
         <strong><?= fmt_number($formats[$format_critique]['jours_projetes']) ?> jours</strong>
         (<?= h(fmt_date($formats[$format_critique]['date_projetee'])) ?>) — bien avant l'horizon
-        de <?= $horizon ?> mois. Les véhicules dépendant de la série
-        <?= h($formats[$format_critique]['serie'] ?: '—') ?> ne pourront plus être traités
+        de <?= $horizon ?> mois. Les véhicules traités avec ce format
+        (<?= h($formats[$format_critique]['format']) ?>) ne pourront plus l'être
         à partir de cette date, quel que soit le stock des autres formats.
         <?php if ($nb_sites_new > 0 && empty($formats[$format_critique]['retenu'])): ?>
         Ce format n'est pas prévu sur les nouveaux sites : il ne subit aucune charge
@@ -1135,8 +1151,10 @@ function ddTexte(dd){
   var lbl   = dd.querySelector('.sim-dd-txt');
   if (!lbl) return;
   if (!cases.length){ lbl.textContent = 'Aucune référence'; return; }
+  // data-lbl porte le libelle lisible ; sa valeur reste le code, qui est
+  // la cle transmise au formulaire mais ne veut rien dire a l'ecran.
   var pris = [];
-  cases.forEach(function(c){ if (c.checked) pris.push(c.value); });
+  cases.forEach(function(c){ if (c.checked) pris.push(c.dataset.lbl || c.value); });
   if (pris.length === 0)                 lbl.textContent = 'Aucun — tout sera repris';
   else if (pris.length === cases.length) lbl.textContent = 'Tous (' + cases.length + ')';
   else if (pris.length <= 2)             lbl.textContent = pris.join(', ');

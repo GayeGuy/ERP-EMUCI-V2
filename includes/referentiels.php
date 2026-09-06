@@ -116,6 +116,35 @@ function types_pmma_actifs(): array {
 }
 
 /**
+ * Libellé lisible du format d'une bobine à partir de sa série.
+ *
+ * Le mapping est celui de migration_types_bobines_format_version.sql, qui
+ * a rempli op_types_bobines.format à partir de la série. Il sert ici de
+ * repli quand cette colonne n'est pas disponible — et pour les codes qui
+ * ne figurent pas au catalogue. Une série inconnue est rendue telle
+ * quelle : mieux vaut afficher « X » qu'un tiret qui masque l'anomalie.
+ */
+function libelle_format_serie(?string $serie): string {
+    static $m = ['A'=>'Auto', 'B'=>'Carré', 'C'=>'Moto', 'D'=>'MotoII',
+                 'T'=>'Réservoir', 'TL'=>'Réservoir',
+                 'W'=>'Pare-brise', 'WSL'=>'Pare-brise'];
+    $s = strtoupper(trim((string)$serie));
+    return $m[$s] ?? ($s !== '' ? $s : '—');
+}
+
+/**
+ * Libellé lisible de la version, déduit du dernier chiffre du code type.
+ * Même origine que ci-dessus : le mapping 1=Privée … 6=Temporaire est
+ * constant sur toutes les séries.
+ */
+function libelle_version_code(?string $code): string {
+    static $m = ['1'=>'Privée', '2'=>'Transport Publique',
+                 '3'=>'Institution Internationale', '4'=>'Diplomatique',
+                 '5'=>'Gouvernementale', '6'=>'Temporaire'];
+    return $m[substr(trim((string)$code), -1)] ?? '—';
+}
+
+/**
  * Ramène un libellé libre au code exact du catalogue PMMA, ou null.
  *
  * La réception de commande fabrique le type en retirant le préfixe « PMMA »

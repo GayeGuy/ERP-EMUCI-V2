@@ -38,6 +38,8 @@
 //  seuls les inventaires ouverts apres cette correction en beneficient.
 // ============================================================
 
+require_once __DIR__ . '/referentiels.php';   // libelles format / version
+
 /**
  * Consommation moyenne journaliere d'une bobine, en films par jour.
  */
@@ -131,13 +133,37 @@ function conso_stock_par_format(int $site_id = 0, int $jours = 30): array {
     // La lecture est isolee dans un try : le code peut etre deploye avant
     // que la migration ne soit passee sur la base, et la simulation doit
     // continuer de fonctionner avec l'ancienne estimation en attendant.
+    //
+    // Le catalogue fournit aussi le format et la version en clair. Les
+    // ecrans montraient jusqu'ici le code type (A001) et la serie (A), qui
+    // ne disent rien a un lecteur non initie ; "Auto" et "Privee" portent
+    // la meme information de facon lisible.
     $catalogue = [];
     try {
-        foreach (db_fetch_all("SELECT UPPER(code) AS c, films_par_bobine FROM op_types_bobines") as $t) {
-            if ((int)$t['films_par_bobine'] > 0) $catalogue[$t['c']] = (int)$t['films_par_bobine'];
+        foreach (db_fetch_all(
+            "SELECT UPPER(code) AS c, films_par_bobine, format, version FROM op_types_bobines") as $t) {
+            $catalogue[$t['c']] = [
+                'fpb'     => (int)$t['films_par_bobine'] > 0 ? (int)$t['films_par_bobine'] : null,
+                'format'  => $t['format']  ?: null,
+                'version' => $t['version'] ?: null,
+            ];
         }
     } catch (Throwable $e) {
-        // Colonne ou table absente : on garde l'estimation par le parc.
+        // Colonnes format/version absentes (migration anterieure non
+        // passee) : on retente sans elles avant de renoncer.
+        try {
+            foreach (db_fetch_all(
+                "SELECT UPPER(code) AS c, films_par_bobine FROM op_types_bobines") as $t) {
+                $catalogue[$t['c']] = [
+                    'fpb'     => (int)$t['films_par_bobine'] > 0 ? (int)$t['films_par_bobine'] : null,
+                    'format'  => null,
+                    'version' => null,
+                ];
+            }
+        } catch (Throwable $e2) {
+            // Table ou colonne absente : estimation par le parc, libelles
+            // deduits de la serie et du code.
+        }
     }
 
     $conso = db_fetch_all(
@@ -158,11 +184,16 @@ function conso_stock_par_format(int $site_id = 0, int $jours = 30): array {
         $c    = $par_conso[$code] ?? 0.0;
         $f    = (int)$s['films'];
         $j    = $c > 0 ? (int) floor($f / $c) : null;
+        $cat  = $catalogue[strtoupper($code)] ?? [];
         $out[$code] = [
             'serie'            => $s['serie'],
+            // Un type absent du catalogue garde des libelles deduits de sa
+            // serie et de son code, plutot qu'une ligne vide.
+            'format'           => $cat['format']  ?? libelle_format_serie($s['serie']),
+            'version'          => $cat['version'] ?? libelle_version_code($code),
             'films_restants'   => $f,
             'bobines'          => (int)$s['nb_bobines'],
-            'films_par_bobine' => $catalogue[strtoupper($code)]
+            'films_par_bobine' => $cat['fpb']
                                   ?? max(1, (int) round((float)$s['fpb'])),
             'conso'            => $c,
             'jours'            => $j,
