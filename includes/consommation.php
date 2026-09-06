@@ -1,0 +1,104 @@
+<?php
+// ============================================================
+//  includes/consommation.php
+//  Socle de calcul de la consommation moyenne de films.
+//
+//  Phase 3, tache 3.0 du plan PDG. La meme formule etait recopiee a
+//  l'identique dans includes/inventaire.php et pages/inventaire_bobines.php ;
+//  les modules KPI (n° 2.2) et Simulation (n° 2.6) en ont besoin a leur
+//  tour. Trois copies auraient fini par diverger, et un ecart de calcul
+//  entre l'inventaire et la projection serait invisible et couteux.
+//
+//  ── Semantique de la moyenne, a connaitre avant de s'en servir ──
+//  Le denominateur n'est pas la fenetre (30 jours) mais le nombre de
+//  jours ecoules depuis la PREMIERE consommation observee dans cette
+//  fenetre. Une bobine ouverte il y a 5 jours est donc divisee par 5,
+//  pas par 30 : c'est une moyenne "par jour d'activite depuis
+//  l'ouverture", pas une moyenne lissee sur la periode.
+//
+//  Ce choix vient du code d'origine (calcul des jours restants a
+//  l'inventaire) et il est conserve tel quel : le modifier changerait
+//  silencieusement les projections deja affichees dans les inventaires.
+//  Les nouveaux ecrans s'y alignent donc plutot que d'inventer une
+//  seconde definition de la meme grandeur.
+// ============================================================
+
+/**
+ * Consommation moyenne journaliere d'une bobine, en films par jour.
+ */
+function conso_moy_bobine(int $bobine_id, int $jours = 30): float {
+    return (float) db_fetch_value(
+        "SELECT COALESCE(SUM(quantite) / GREATEST(((NOW())::date - (MIN(date_conso)::date)), 1), 0)
+           FROM consommations_bobines
+          WHERE bobine_id = ?
+            AND date_conso >= (CURRENT_DATE - (? || ' DAY')::interval)",
+        [$bobine_id, $jours]
+    );
+}
+
+/**
+ * Consommation moyenne journaliere d'un site, en films par jour.
+ * site_id = 0 : tous les sites confondus.
+ */
+function conso_moy_site(int $site_id = 0, int $jours = 30): float {
+    $filtre = $site_id ? "AND site_id = ?" : "";
+    $params = $site_id ? [$jours, $site_id] : [$jours];
+    return (float) db_fetch_value(
+        "SELECT COALESCE(SUM(quantite) / GREATEST(((NOW())::date - (MIN(date_conso)::date)), 1), 0)
+           FROM consommations_bobines
+          WHERE date_conso >= (CURRENT_DATE - (? || ' DAY')::interval)
+            $filtre",
+        $params
+    );
+}
+
+/**
+ * Consommation moyenne journaliere par site, en films par jour.
+ * Retourne site_id => ['nom' => ..., 'conso' => float].
+ *
+ * Une seule requete plutot qu'un appel a conso_moy_site() par site :
+ * l'ecran de simulation liste tous les sites actifs, ce qui ferait
+ * autant d'allers-retours pour une grandeur qu'un GROUP BY suffit a
+ * produire.
+ */
+function conso_moy_par_site(int $jours = 30): array {
+    $rows = db_fetch_all(
+        "SELECT s.id, s.nom,
+                COALESCE(SUM(c.quantite) / GREATEST(((NOW())::date - (MIN(c.date_conso)::date)), 1), 0) AS conso
+           FROM sites s
+           LEFT JOIN consommations_bobines c
+                  ON c.site_id = s.id
+                 AND c.date_conso >= (CURRENT_DATE - (? || ' DAY')::interval)
+          WHERE s.actif = 1
+          GROUP BY s.id, s.nom
+          ORDER BY s.nom",
+        [$jours]
+    );
+    $out = [];
+    foreach ($rows as $r) {
+        $out[(int)$r['id']] = ['nom' => $r['nom'], 'conso' => (float)$r['conso']];
+    }
+    return $out;
+}
+
+/**
+ * Nombre moyen de films par bobine, pour convertir une quantite de
+ * bobines en films. Le stock est suivi en films ; les demandes de
+ * projection s'expriment en bobines.
+ *
+ * S'appuie sur qte_initiale des bobines reellement en service (500 ou
+ * 2000 selon le format) plutot que sur une constante : le parc melange
+ * les deux, et une valeur en dur fausserait la projection des le jour
+ * ou la repartition change.
+ */
+function films_par_bobine_moyen(int $site_id = 0): int {
+    $filtre = $site_id ? "AND site_id = ?" : "";
+    $params = $site_id ? [$site_id] : [];
+    $v = (float) db_fetch_value(
+        "SELECT COALESCE(AVG(NULLIF(qte_initiale, 0)), 0)
+           FROM op_bobines
+          WHERE statut IN ('en_stock','en_cours') $filtre",
+        $params
+    );
+    return $v > 0 ? (int) round($v) : 500;   // 500 = format standard
+}

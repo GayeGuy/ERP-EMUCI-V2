@@ -126,10 +126,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             $inv_id = (int)db_last_id();
 
             foreach ($bobines as $b) {
-                $conso_moy = (float)db_fetch_value(
-                    "SELECT COALESCE(SUM(quantite)/GREATEST(((NOW())::date - (MIN(date_conso)::date)),1),0) FROM consommations_bobines WHERE bobine_id=? AND date_conso>=(CURRENT_DATE - INTERVAL '30 DAY')",
-                    [$b['id']]
-                );
+                // n° 3.0 — formule centralisee dans includes/consommation.php.
+                $conso_moy = conso_moy_bobine((int)$b['id']);
                 $ecart_connu = (int)db_fetch_value("SELECT COALESCE(SUM(ecart),0) FROM ecarts_bobines WHERE bobine_id=? AND statut='ouvert'", [$b['id']]);
                 db_query(
                     "INSERT INTO inventaire_details_bobines (inventaire_id,bobine_id,stock_systeme,qte_temps_reel,stock_physique,ecart,ecart_connu_avant,conso_quotidienne_moy)
