@@ -803,7 +803,7 @@ tr.hors td{opacity:.55}
       <?php foreach ($MODES as $k => [$lbl, $desc]): ?>
       <label class="sim-mode <?= $mode === $k ? 'on' : '' ?>">
         <input type="radio" name="mode" value="<?= $k ?>" <?= $mode === $k ? 'checked' : '' ?>
-               onchange="this.form.submit()">
+               onchange="soumettre(this.form)">
         <span class="sim-mode-t"><?= h($lbl) ?></span>
         <span class="sim-mode-d"><?= h($desc) ?></span>
       </label>
@@ -1283,6 +1283,38 @@ tr.hors td{opacity:.55}
 // ── Menus déroulants à choix multiple
 // Le libellé du bouton doit dire ce qui est retenu sans ouvrir le panneau :
 // « Tous les formats (3) » ou la liste quand elle tient, sinon un compte.
+// ── Position de lecture conservee d'une soumission a l'autre
+// Le formulaire est un GET : chaque changement de site, de fenetre, de
+// mode ou de selection recharge la page, et le navigateur repart en haut.
+// L'utilisateur qui ajustait un parametre a mi-page perdait sa place a
+// chaque essai. history.scrollRestoration ne couvre que le retour
+// arriere, pas une nouvelle navigation : il faut memoriser la position.
+var CLE_SCROLL = 'sim_stocks_scroll';
+
+function memoriserScroll(){
+  try { sessionStorage.setItem(CLE_SCROLL, String(window.scrollY || 0)); } catch (e) {}
+}
+
+// form.submit() appele par script ne declenche PAS l'evenement submit :
+// chaque chemin de soumission doit passer par ici.
+function soumettre(form){
+  memoriserScroll();
+  form.submit();
+}
+
+function restaurerScroll(){
+  var y;
+  try { y = sessionStorage.getItem(CLE_SCROLL); sessionStorage.removeItem(CLE_SCROLL); }
+  catch (e) { return; }
+  if (y === null) return;
+  y = parseInt(y, 10);
+  if (isNaN(y) || y <= 0) return;
+  // Deux passes : la premiere des que le DOM est la, la seconde apres le
+  // chargement des polices, qui decale la hauteur du contenu.
+  window.scrollTo(0, y);
+  window.addEventListener('load', function(){ window.scrollTo(0, y); });
+}
+
 function ddPanneau(el){ return el.closest('.sim-dd'); }
 
 function ddTexte(dd){
@@ -1350,7 +1382,7 @@ function ddAnnuler(btn){
 function ddValider(btn){
   var dd = ddPanneau(btn);
   dd.classList.remove('open');
-  if (btn.form) btn.form.submit();
+  if (btn.form) soumettre(btn.form);
 }
 
 function ddOuvrir(btn){
@@ -1398,12 +1430,19 @@ document.addEventListener('keydown', function(e){
 // silencieusement fausse.
 function simSite(el){
   el.form.querySelectorAll('.sim-dd-q').forEach(function(q){ q.value = ''; });
-  el.form.submit();
+  soumettre(el.form);
 }
 
 document.querySelectorAll('.sim-dd').forEach(function(dd){
   ddPied(dd); ddTexte(dd); ddQte(dd);
 });
+
+// Le bouton « Lancer la simulation » et la touche Entree passent par
+// l'evenement submit, que form.submit() ne declenche pas — d'ou les deux
+// mecanismes.
+var formSim = document.querySelector('.sim-form');
+if (formSim) formSim.addEventListener('submit', memoriserScroll);
+restaurerScroll();
 </script>
 
 <script>
