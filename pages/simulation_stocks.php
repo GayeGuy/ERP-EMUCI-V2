@@ -87,6 +87,25 @@ $nb_bobines  = ($avec_stock && isset($_GET['bobines']) && $_GET['bobines'] !== '
 
 // ── Nouveaux sites — ignores si le mode ne les couvre pas
 $nb_sites_new   = $avec_ouverture ? max(0, min(20, (int)($_GET['sites_new'] ?? 1))) : 0;
+
+// Formats de bobines et types de PMMA prevus sur les nouveaux sites.
+// Sans ce choix, la charge etait repartie sur TOUS les formats existants
+// au prorata — une hypothese commode mais fausse des qu'un site n'est
+// pas equipe comme les autres. Par defaut : tout est coche, ce qui
+// reproduit le comportement precedent.
+$formats_dispo = array_keys(conso_stock_par_format($f_site, $fenetre));
+$pmma_dispo    = array_keys(conso_stock_par_pmma($f_site, $fenetre));
+
+$formats_new = isset($_GET['fmt_new']) && is_array($_GET['fmt_new'])
+             ? array_values(array_intersect($_GET['fmt_new'], $formats_dispo))
+             : $formats_dispo;
+$pmma_new    = isset($_GET['pmma_new']) && is_array($_GET['pmma_new'])
+             ? array_values(array_intersect($_GET['pmma_new'], $pmma_dispo))
+             : $pmma_dispo;
+// Un choix vide n'a pas de sens : on retombe sur l'ensemble plutot que
+// de projeter une ouverture qui ne consommerait rien.
+if (!$formats_new) $formats_new = $formats_dispo;
+if (!$pmma_new)    $pmma_new    = $pmma_dispo;
 $conso_site_new = max(0.0, (float)($_GET['conso_new'] ?? 0));
 // Sans estimation saisie, on prend la consommation moyenne d'un site
 // existant : plus honnête qu'un zéro qui rendrait l'ajout indolore.
@@ -99,6 +118,26 @@ if ($nb_sites_new > 0 && $conso_site_new <= 0) {
 } else {
     $conso_new_estimee = false;
 }
+
+// ── Consommation PMMA d'un nouveau site, en unites/jour.
+// Les nouveaux sites consomment aussi du PMMA : l'ignorer laissait la
+// projection PMMA inchangee par une ouverture, ce qui est faux.
+$pmma_conso_saisie = $_GET['conso_pmma_new'] ?? '';
+$pmma_new_estimee  = false;
+if ($pmma_conso_saisie !== '' && is_numeric($pmma_conso_saisie)) {
+    $conso_pmma_new = max(0.0, (float)$pmma_conso_saisie);
+} else {
+    $sites_pmma = (int) db_fetch_value(
+        "SELECT COUNT(DISTINCT p.site_id)
+           FROM op_pmma_utilises pu JOIN op_points_journaliers p ON p.id = pu.point_id
+          WHERE p.date_point >= (CURRENT_DATE - (? || ' DAY')::interval)
+            AND p.statut <> 'brouillon'", [$fenetre]);
+    $pmma_total = 0.0;
+    foreach (conso_stock_par_pmma(0, $fenetre) as $x) $pmma_total += $x['conso'];
+    $conso_pmma_new  = $sites_pmma > 0 ? $pmma_total / $sites_pmma : 0.0;
+    $pmma_new_estimee = true;
+}
+if (!$avec_ouverture) $conso_pmma_new = 0.0;
 
 // ============================================================
 //  CALCUL
@@ -121,15 +160,23 @@ $couvre_horizon = $jours_tenus !== null && $jours_tenus >= $jours_cible;
 // le format qui arrive a echeance en premier.
 $formats = conso_stock_par_format($f_site, $fenetre);
 
-// Un nouveau site consomme dans les memes proportions que l'existant :
-// on repartit sa consommation estimee au prorata de chaque format.
-$conso_formats_totale = 0.0;
-foreach ($formats as $f) $conso_formats_totale += $f['conso'];
-$charge_new = $nb_sites_new * $conso_site_new;
+// La charge des nouveaux sites ne porte que sur les formats retenus.
+// Repartition au prorata de leur consommation actuelle ; si aucun des
+// formats choisis n'a d'historique — cas d'un format neuf, justement
+// introduit par l'ouverture — on repartit a parts egales, faute de
+// mieux, plutot que de ne rien affecter du tout.
+$charge_new  = $nb_sites_new * $conso_site_new;
+$base_sel    = 0.0;
+foreach ($formats_new as $code) $base_sel += $formats[$code]['conso'] ?? 0;
+$nb_sel      = max(1, count($formats_new));
 
 foreach ($formats as $code => $f) {
-    $part = $conso_formats_totale > 0 ? $f['conso'] / $conso_formats_totale : 0;
-    $c    = $f['conso'] + $charge_new * $part;
+    $retenu = in_array($code, $formats_new, true);
+    $part   = !$retenu ? 0
+            : ($base_sel > 0 ? $f['conso'] / $base_sel : 1 / $nb_sel);
+    $c      = $f['conso'] + $charge_new * $part;
+    $formats[$code]['retenu']     = $retenu;
+    $formats[$code]['charge_new'] = $charge_new * $part;
     $j    = $c > 0 ? (int) floor($f['films_restants'] / $c) : null;
     $formats[$code]['conso_projetee'] = $c;
     $formats[$code]['jours_projetes'] = $j;
@@ -158,12 +205,36 @@ foreach ($formats as $code => $f) {
     }
 }
 
-// ── PROJECTION PMMA — meme raisonnement, un type ne remplace pas un autre
+// ── PROJECTION PMMA — meme raisonnement, un type ne remplace pas un
+// autre, et la charge des nouveaux sites ne porte que sur les types
+// retenus pour ces sites.
 $pmma_formats = conso_stock_par_pmma($f_site, $fenetre);
+$charge_pmma  = $nb_sites_new * $conso_pmma_new;
+$base_pmma    = 0.0;
+foreach ($pmma_new as $t) $base_pmma += $pmma_formats[$t]['conso'] ?? 0;
+$nb_pmma_sel  = max(1, count($pmma_new));
+
+foreach ($pmma_formats as $t => $p) {
+    $retenu = in_array($t, $pmma_new, true);
+    $part   = !$retenu ? 0
+            : ($base_pmma > 0 ? $p['conso'] / $base_pmma : 1 / $nb_pmma_sel);
+    $c      = $p['conso'] + $charge_pmma * $part;
+    $j      = $c > 0 ? (int) floor($p['quantite'] / $c) : null;
+    $pmma_formats[$t]['retenu']         = $retenu;
+    $pmma_formats[$t]['charge_new']     = $charge_pmma * $part;
+    $pmma_formats[$t]['conso_projetee'] = $c;
+    $pmma_formats[$t]['jours_projetes'] = $j;
+    $pmma_formats[$t]['date_projetee']  = $j !== null ? date('Y-m-d', strtotime("+$j days")) : null;
+    // Quantite a prevoir pour tenir l'horizon avec cette charge
+    $pmma_formats[$t]['manque'] = $j !== null
+        ? max(0, (int)ceil($c * $jours_cible) - $p['quantite']) : 0;
+}
+
 $pmma_critique = null;
 foreach ($pmma_formats as $t => $p) {
-    if ($p['jours'] === null) continue;
-    if ($pmma_critique === null || $p['jours'] < $pmma_formats[$pmma_critique]['jours']) {
+    if ($p['jours_projetes'] === null) continue;
+    if ($pmma_critique === null
+        || $p['jours_projetes'] < $pmma_formats[$pmma_critique]['jours_projetes']) {
         $pmma_critique = $t;
     }
 }
@@ -208,6 +279,10 @@ $resume = [
     ['Consommation retenue',        number_format($conso_jour, 1, ',', ' ') . ' films/jour'
                                     . ($conso_manuelle ? ' (saisie)' : ' (observée)')],
     ['Nouveaux sites simulés',      $nb_sites_new . ($nb_sites_new ? ' × ' . number_format($conso_site_new, 1, ',', ' ') . ' films/jour' : '')],
+    ['Formats prévus sur ces sites', $nb_sites_new ? implode(', ', $formats_new) : '—'],
+    ['PMMA prévu sur ces sites',    $nb_sites_new
+        ? implode(', ', $pmma_new) . ' — ' . number_format($conso_pmma_new, 1, ',', ' ') . ' unités/jour et par site'
+        : '—'],
     ['Consommation totale',         number_format($conso_totale, 1, ',', ' ') . ' films/jour'],
     ['Autonomie',                   $jours_tenus !== null ? $jours_tenus . ' jours' : 'indéterminée'],
     ["Date estimée d'épuisement",   $date_epuis ? fmt_date($date_epuis) : '—'],
@@ -386,6 +461,19 @@ table.sim-fmt td.manque{color:var(--danger-d);font-weight:800}
   text-transform:uppercase;letter-spacing:.05em;vertical-align:1px}
 .sim-alerte{margin-top:14px;background:#fdf3f2;border-left:3px solid var(--danger);
   border-radius:0 9px 9px 0;padding:11px 14px;font-size:13px;line-height:1.55;color:var(--navy)}
+.tag-new{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:9px;
+  background:var(--blue);color:#fff;font-size:10px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.05em;vertical-align:1px}
+table.sim-fmt em.ajout{font-style:normal;color:var(--blue-deep,#0E5A94);font-size:11.5px;
+  font-weight:700;margin-left:5px}
+.sim-choix{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+.sim-chk{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--border);
+  border-radius:9px;padding:6px 10px;cursor:pointer;font-size:12.5px;
+  transition:border-color .15s,background .15s}
+.sim-chk:hover{background:var(--lighter)}
+.sim-chk.on{border-color:var(--blue);background:var(--primary-l,#eaf3fb)}
+.sim-chk span{font-weight:700;color:var(--navy);line-height:1.25}
+.sim-chk em{display:block;font-style:normal;font-weight:500;font-size:11px;color:var(--muted)}
 </style>
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:18px">
@@ -495,11 +583,53 @@ table.sim-fmt td.manque{color:var(--danger-d);font-weight:800}
       <input type="number" name="sites_new" min="1" max="20" value="<?= max(1, $nb_sites_new) ?>">
     </div>
     <div class="sim-f">
-      <label>Consommation par nouveau site</label>
+      <label>Films par jour et par nouveau site</label>
       <input type="number" name="conso_new" step="0.1" min="0"
              value="<?= $nb_sites_new && !$conso_new_estimee ? h((string)$conso_site_new) : '' ?>">
       <div class="sub">Vide = moyenne d'un site existant
         (<strong><?= number_format($conso_site_new, 1, ',', ' ') ?></strong> films/jour).</div>
+    </div>
+
+    <div class="sim-f">
+      <label>Formats de bobines prévus sur ces sites</label>
+      <div class="sim-choix">
+        <?php foreach ($formats as $code => $f): ?>
+        <label class="sim-chk <?= in_array($code, $formats_new, true) ? 'on' : '' ?>">
+          <input type="checkbox" name="fmt_new[]" value="<?= h($code) ?>"
+                 <?= in_array($code, $formats_new, true) ? 'checked' : '' ?>>
+          <span><?= h($code) ?><em>série <?= h($f['serie'] ?: '—') ?></em></span>
+        </label>
+        <?php endforeach; ?>
+        <?php if (empty($formats)): ?>
+        <div class="sub">Aucun format en stock sur ce périmètre.</div>
+        <?php endif; ?>
+      </div>
+      <div class="sub">La charge des nouveaux sites ne pèse que sur les formats cochés,
+        répartie au prorata de leur consommation actuelle.</div>
+    </div>
+
+    <div class="sim-f">
+      <label>Unités de PMMA par jour et par nouveau site</label>
+      <input type="number" name="conso_pmma_new" step="0.1" min="0"
+             value="<?= $pmma_new_estimee ? '' : h((string)$conso_pmma_new) ?>">
+      <div class="sub">Vide = moyenne d'un site existant
+        (<strong><?= number_format($conso_pmma_new, 1, ',', ' ') ?></strong> unités/jour).</div>
+    </div>
+
+    <div class="sim-f">
+      <label>Types de PMMA à prévoir</label>
+      <div class="sim-choix">
+        <?php foreach ($pmma_formats as $t => $p): ?>
+        <label class="sim-chk <?= in_array($t, $pmma_new, true) ? 'on' : '' ?>">
+          <input type="checkbox" name="pmma_new[]" value="<?= h($t) ?>"
+                 <?= in_array($t, $pmma_new, true) ? 'checked' : '' ?>>
+          <span><?= h($t) ?><em><?= fmt_number($p['quantite']) ?> en stock</em></span>
+        </label>
+        <?php endforeach; ?>
+        <?php if (empty($pmma_formats)): ?>
+        <div class="sub">Aucun stock PMMA sur ce périmètre.</div>
+        <?php endif; ?>
+      </div>
     </div>
     <?php endif; ?>
 
@@ -610,11 +740,17 @@ table.sim-fmt td.manque{color:var(--danger-d);font-weight:800}
           <td>
             <strong><?= h($code) ?></strong>
             <?php if ($crit): ?><span class="tag-crit">contrainte</span><?php endif; ?>
+            <?php if ($nb_sites_new > 0 && !empty($f['retenu'])): ?><span class="tag-new">nouveaux sites</span><?php endif; ?>
           </td>
           <td style="color:var(--muted)"><?= h($f['serie'] ?: '—') ?></td>
           <td class="n"><?= fmt_number($f['bobines']) ?></td>
           <td class="n"><?= fmt_number($f['films_restants']) ?></td>
-          <td class="n"><?= number_format($f['conso_projetee'], 1, ',', ' ') ?></td>
+          <td class="n">
+            <?= number_format($f['conso_projetee'], 1, ',', ' ') ?>
+            <?php if (!empty($f['charge_new']) && $f['charge_new'] > 0.05): ?>
+            <em class="ajout">+<?= number_format($f['charge_new'], 1, ',', ' ') ?></em>
+            <?php endif; ?>
+          </td>
           <td class="n"><?= $f['jours_projetes'] !== null ? fmt_number($f['jours_projetes']).' j' : '—' ?></td>
           <td><?= $f['date_projetee'] ? h(fmt_date($f['date_projetee'])) : '<span style="color:var(--muted)">pas de consommation</span>' ?></td>
           <td class="n <?= $f['bobines_manquantes'] > 0 ? 'manque' : '' ?>">
@@ -650,6 +786,7 @@ table.sim-fmt td.manque{color:var(--danger-d);font-weight:800}
         <thead><tr>
           <th>Type</th><th class="n">Stock</th><th class="n">Seuil</th>
           <th class="n">Unités / jour</th><th class="n">Autonomie</th><th>Épuisement</th>
+          <th class="n">À prévoir</th>
         </tr></thead>
         <tbody>
         <?php foreach ($pmma_formats as $t => $p):
@@ -657,12 +794,22 @@ table.sim-fmt td.manque{color:var(--danger-d);font-weight:800}
           $sous = $p['quantite'] < $p['seuil']; ?>
         <tr class="<?= $crit ? 'crit' : '' ?>">
           <td><strong><?= h($t) ?></strong>
-            <?php if ($crit): ?><span class="tag-crit">contrainte</span><?php endif; ?></td>
+            <?php if ($crit): ?><span class="tag-crit">contrainte</span><?php endif; ?>
+            <?php if ($nb_sites_new > 0 && !empty($p['retenu'])): ?><span class="tag-new">nouveaux sites</span><?php endif; ?>
+          </td>
           <td class="n <?= $sous ? 'manque' : '' ?>"><?= fmt_number($p['quantite']) ?></td>
           <td class="n" style="color:var(--muted)"><?= fmt_number($p['seuil']) ?></td>
-          <td class="n"><?= number_format($p['conso'], 1, ',', ' ') ?></td>
-          <td class="n"><?= $p['jours'] !== null ? fmt_number($p['jours']).' j' : '—' ?></td>
-          <td><?= $p['date_epuisement'] ? h(fmt_date($p['date_epuisement'])) : '<span style="color:var(--muted)">pas de consommation</span>' ?></td>
+          <td class="n">
+            <?= number_format($p['conso_projetee'], 1, ',', ' ') ?>
+            <?php if (!empty($p['charge_new']) && $p['charge_new'] > 0.05): ?>
+            <em class="ajout">+<?= number_format($p['charge_new'], 1, ',', ' ') ?></em>
+            <?php endif; ?>
+          </td>
+          <td class="n"><?= $p['jours_projetes'] !== null ? fmt_number($p['jours_projetes']).' j' : '—' ?></td>
+          <td><?= $p['date_projetee'] ? h(fmt_date($p['date_projetee'])) : '<span style="color:var(--muted)">pas de consommation</span>' ?></td>
+          <td class="n <?= !empty($p['manque']) ? 'manque' : '' ?>">
+            <?= $p['jours_projetes'] === null ? '—' : fmt_number($p['manque']) ?>
+          </td>
         </tr>
         <?php endforeach; ?>
         </tbody>
