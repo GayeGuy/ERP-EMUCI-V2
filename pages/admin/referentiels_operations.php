@@ -209,6 +209,10 @@ table.ref-t td.n,table.ref-t th.n{text-align:right}
 .ref-lien{border:none;background:none;padding:0;font-family:inherit;font-size:12px;
   font-weight:700;color:var(--primary-d);cursor:pointer;text-decoration:underline}
 .ref-detail{background:var(--lighter);border-radius:10px;padding:12px 14px;margin-top:10px}
+.ref-cat{display:inline-block;padding:1px 8px;border-radius:9px;font-size:10.5px;
+  font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.ref-cat.bobine{background:var(--primary-l,#eaf3fb);color:var(--primary-d,#3D4FD1)}
+.ref-cat.vignette{background:var(--secondary-l,#E8F5FF);color:#0E5A94}
 .ref-orph{background:#fdf3f2;border-left:3px solid var(--danger);border-radius:0 9px 9px 0;
   padding:12px 15px;margin-top:14px;font-size:13px;line-height:1.55;color:var(--navy)}
 .ref-msg{position:fixed;right:20px;bottom:20px;z-index:60;padding:11px 16px;border-radius:10px;
@@ -234,7 +238,7 @@ table.ref-t td.n,table.ref-t th.n{text-align:right}
 
 <div class="ref-onglets">
   <button type="button" class="ref-onglet on" data-vue="bob" onclick="refVue('bob')">
-    <i class="ph ph-scroll" aria-hidden="true"></i> Bobines — films par bobine
+    <i class="ph ph-scroll" aria-hidden="true"></i> Bobines &amp; vignettes
   </button>
   <button type="button" class="ref-onglet" data-vue="pm" onclick="refVue('pm')">
     <i class="ph ph-printer" aria-hidden="true"></i> PMMA — unités par carton
@@ -245,12 +249,14 @@ table.ref-t td.n,table.ref-t th.n{text-align:right}
 <div id="vue-bob">
   <div class="ref-card">
     <h4>Capacité par série</h4>
-    <div class="sub">Le conditionnement dépend de la série, pas de la version : les six versions
-      d'une série partagent la même bobine. Modifier une série applique la valeur à tous ses types.</div>
+    <div class="sub">Deux articles distincts : les <strong>bobines</strong> de films (séries A à D)
+      et les <strong>vignettes</strong> (TL Réservoir, WSL Pare-brise). Le conditionnement dépend
+      de la série, pas de la version — les versions d'une même série partagent le même
+      conditionnement. Modifier une série applique la valeur à tous ses types.</div>
     <table class="ref-t">
       <thead><tr>
-        <th>Série</th><th>Format</th><th class="n">Types</th>
-        <th class="n">Films par bobine</th><th></th>
+        <th>Série</th><th>Format</th><th>Catégorie</th><th class="n">Types</th>
+        <th class="n">Films par unité</th><th></th>
       </tr></thead>
       <tbody>
       <?php foreach ($series as $s => $inf):
@@ -258,6 +264,8 @@ table.ref-t td.n,table.ref-t th.n{text-align:right}
       <tr>
         <td><span class="ref-serie"><?= h($s) ?></span></td>
         <td style="color:var(--muted)"><?= h($inf['format']) ?></td>
+        <td><span class="ref-cat <?= h(categorie_serie($s)) ?>">
+          <?= h(libelle_categorie(categorie_serie($s))) ?></span></td>
         <td class="n"><?= count($inf['types']) ?></td>
         <td class="n">
           <input class="ref-inp" type="number" min="1" max="100000"
@@ -276,7 +284,7 @@ table.ref-t td.n,table.ref-t th.n{text-align:right}
           <button type="button" class="ref-lien" onclick="refDetail('<?= h($s) ?>')">détail</button>
         </td>
       </tr>
-      <tr id="det-<?= h($s) ?>" style="display:none"><td colspan="5">
+      <tr id="det-<?= h($s) ?>" style="display:none"><td colspan="6">
         <div class="ref-detail">
           <div class="sub" style="margin-bottom:8px">Exception possible type par type — à n'utiliser
             que si un conditionnement diffère réellement au sein de la série.</div>

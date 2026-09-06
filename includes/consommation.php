@@ -187,6 +187,11 @@ function conso_stock_par_format(int $site_id = 0, int $jours = 30): array {
         $cat  = $catalogue[strtoupper($code)] ?? [];
         $out[$code] = [
             'serie'            => $s['serie'],
+            // A/B/C/D sont des bobines de films, TL et WSL des vignettes :
+            // deux articles distincts, que l'application separe deja dans
+            // ses ecrans de gestion. Un ecran qui l'ignore finit par
+            // annoncer des "bobines WSL", qui n'existent pas.
+            'categorie'        => categorie_serie($s['serie']),
             // Un type absent du catalogue garde des libelles deduits de sa
             // serie et de son code, plutot qu'une ligne vide.
             'format'           => $cat['format']  ?? libelle_format_serie($s['serie']),

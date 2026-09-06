@@ -95,6 +95,18 @@ $fmt_lbls = function (array $codes) use ($fmt_lbl): string {
     return implode(', ', array_map($fmt_lbl, $codes));
 };
 
+// Bobines et vignettes se comptent separement. Le mot employe dans les
+// totaux suit donc le perimetre retenu : parler de « bobines » quand la
+// selection ne contient que des vignettes serait faux, et l'inverse
+// aussi. Les deux ensemble se disent « bobines et vignettes ».
+$mot_unites = function (array $codes) use ($formats_base): string {
+    $cats = [];
+    foreach ($codes as $c)
+        if (isset($formats_base[$c])) $cats[$formats_base[$c]['categorie']] = true;
+    if (count($cats) === 1) return libelle_categorie(array_key_first($cats), true);
+    return 'bobines et vignettes';
+};
+
 $formats_stock = isset($_GET['fmt_stock']) && is_array($_GET['fmt_stock'])
                ? array_values(array_intersect($_GET['fmt_stock'], $formats_dispo))
                : $formats_dispo;
@@ -222,11 +234,14 @@ $bobines_a_commander = (int) ceil($deficit_films / max(1, $films_bobine_sel));
 $couvre_horizon = $jours_tenus !== null && $jours_tenus >= $jours_cible;
 
 // ── PROJECTION PAR FORMAT
-// Une bobine WSL ne remplace pas une bobine TL : op_types_vehicule relie
-// chaque type de vehicule a une serie. Une projection globale peut donc
-// annoncer des semaines d'autonomie alors qu'un format est deja epuise
-// et que la production correspondante s'arrete. La contrainte reelle est
-// le format qui arrive a echeance en premier.
+// Deux articles distincts cohabitent ici : les bobines de films (series
+// A, B, C, D) et les vignettes (TL Reservoir, WSL Pare-brise). Aucun ne
+// remplace l'autre, et a l'interieur d'une categorie un format n'en
+// remplace pas un autre non plus : op_types_vehicule relie chaque type
+// de vehicule a une serie. Une projection globale peut donc annoncer des
+// semaines d'autonomie alors que le format Moto est deja epuise et que
+// cette production s'arrete. La contrainte reelle est le format qui
+// arrive a echeance en premier, toutes categories confondues.
 //
 // $formats porte deja les quantites projetees calculees plus haut : le
 // recharger ici les ecraserait et l'agregat ne correspondrait plus au
@@ -367,21 +382,23 @@ if ($export !== '' && !can('simulation_stocks', 'can_export')) {
 $resume = [
     ['Mode de simulation',          $MODES[$mode][0]],
     ['Périmètre',                   $site_nom ?: 'Tous les sites'],
-    ['Formats de bobines projetés', count($formats_stock) === count($formats_dispo)
+    ['Formats projetés',            count($formats_stock) === count($formats_dispo)
         ? 'tous (' . $fmt_lbls($formats_dispo) . ')'
         : $fmt_lbls($formats_stock)],
     ['Types de PMMA projetés',      count($pmma_stock) === count($pmma_dispo)
         ? 'tous (' . implode(', ', $pmma_dispo) . ')'
         : implode(', ', $pmma_stock)],
-    ['Bobines projetées',           fmt_number($nb_bobines)],
+    [ucfirst($mot_unites($formats_stock)) . ' projetées', fmt_number($nb_bobines)],
     ['Stock projeté (films)',       fmt_number($stock_films)
                                     . ' — somme des formats retenus'],
-    ['Stock réel du périmètre',     fmt_number($bobines_defaut) . ' bobine(s), '
+    ['Stock réel du périmètre',     fmt_number($bobines_defaut) . ' '
+                                    . $mot_unites($formats_dispo) . ', '
                                     . fmt_number($stock_films_reel) . ' films'],
     ['Consommation retenue',        number_format($conso_jour, 1, ',', ' ') . ' films/jour'
                                     . ($conso_manuelle ? ' (saisie)' : ' (observée)')],
     ['Nouveaux sites simulés',      $nb_sites_new . ($nb_sites_new ? ' × ' . number_format($conso_site_new, 1, ',', ' ') . ' films/jour' : '')],
     ['Formats prévus sur ces sites', $nb_sites_new ? $fmt_lbls($formats_new) : '—'],
+    ['Catégories concernées',       $nb_sites_new ? $mot_unites($formats_new) : '—'],
     ['PMMA prévu sur ces sites',    $nb_sites_new
         ? implode(', ', $pmma_new) . ' — ' . number_format($conso_pmma_new, 1, ',', ' ') . ' unités/jour et par site'
         : '—'],
@@ -390,7 +407,8 @@ $resume = [
     ["Date estimée d'épuisement",   $date_epuis ? fmt_date($date_epuis) : '—'],
     ['Horizon cible',               $horizon . ' mois (' . $jours_cible . ' jours)'],
     ['Couvre l’horizon',            $couvre_horizon ? 'Oui' : 'Non'],
-    ['Bobines à commander',         $couvre_horizon ? '0' : fmt_number($bobines_a_commander)],
+    ['À commander',                 $couvre_horizon ? '0'
+                                    : fmt_number($bobines_a_commander) . ' ' . $mot_unites($formats_stock)],
     // « Le plus contraint » se cherche dans le perimetre PROJETE, mais
     // sans tenir compte de la selection faite pour les nouveaux sites :
     // un format qui ne recoit aucune charge nouvelle peut rester celui
@@ -426,6 +444,7 @@ $detail_formats = [];
 foreach ($formats as $code => $f) {
     $detail_formats[] = [
         $f['format'] . ($f['retenu_stock'] ? '' : ' (hors projection)'),
+        libelle_categorie($f['categorie']),
         $f['version'], $f['bobines_ligne'], $f['films_ligne'],
         number_format($f['conso_projetee'], 1, ',', ' '),
         $f['jours_projetes'] !== null ? $f['jours_projetes'] : '—',
@@ -446,9 +465,9 @@ if ($export === 'xlsx') {
     $r += 1;
     // setCellValueByColumnAndRow() a disparu en PhpSpreadsheet 2.0 ; le
     // projet est en 5.9. La notation [colonne, ligne] la remplace.
-    $ent = ['Format','Version','Bobines','Films','Films/jour','Autonomie (j)','Épuisement','À commander'];
+    $ent = ['Format','Catégorie','Version','Unités','Films','Films/jour','Autonomie (j)','Épuisement','À commander'];
     foreach ($ent as $i => $t) $sh->setCellValue([$i+1, $r], $t);
-    $sh->getStyle("A$r:H$r")->getFont()->setBold(true);
+    $sh->getStyle("A$r:I$r")->getFont()->setBold(true);
     $r++;
     foreach ($detail_formats as $lig) {
         foreach ($lig as $i => $v) $sh->setCellValue([$i+1, $r], $v);
@@ -507,7 +526,7 @@ if ($export === 'pdf') {
     <h1 style="font-size:13px;margin:14px 0 4px">Détail par format</h1>
     <table>
       <thead><tr>
-        <th>Format</th><th>Version</th><th>Bobines</th><th>Films</th>
+        <th>Format</th><th>Cat.</th><th>Version</th><th>Unités</th><th>Films</th>
         <th>Films/j</th><th>Autonomie</th><th>Épuisement</th><th>À commander</th>
       </tr></thead>
       <tbody>
@@ -644,6 +663,10 @@ table.sim-fmt em.ajout{font-style:normal;color:var(--blue-deep,#0E5A94);font-siz
 .sim-dd-f .dd-ok{background:var(--primary-d);border-color:var(--primary-d);color:white}
 .sim-dd-f .dd-ok:hover{filter:brightness(1.08)}
 tr.hors td{opacity:.55}
+.tag-cat{display:inline-block;padding:1px 8px;border-radius:9px;font-size:10.5px;
+  font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+.tag-cat.bobine{background:var(--primary-l,#eaf3fb);color:var(--primary-d,#3D4FD1)}
+.tag-cat.vignette{background:var(--secondary-l,#E8F5FF);color:#0E5A94}
 .tag-hors{display:inline-block;margin-left:7px;padding:1px 7px;border-radius:9px;
   background:var(--lighter);color:var(--muted);font-size:10px;font-weight:700;
   text-transform:uppercase;letter-spacing:.05em;vertical-align:1px}
@@ -710,7 +733,7 @@ tr.hors td{opacity:.55}
     <?php if ($avec_stock): ?>
     <div class="sim-sec">Stock à projeter</div>
     <div class="sim-f">
-      <label>Formats de bobines retenus</label>
+      <label>Formats retenus — bobines &amp; vignettes</label>
       <div class="sim-dd">
         <button type="button" class="sim-dd-b" onclick="ddOuvrir(this)">
           <span class="sim-dd-txt"></span><i class="ph ph-caret-down" aria-hidden="true"></i>
@@ -722,7 +745,7 @@ tr.hors td{opacity:.55}
           <div class="sim-dd-h">
             <button type="button" onclick="ddTout(this,1)">Tout</button>
             <button type="button" onclick="ddTout(this,0)">Aucun</button>
-            <span class="sim-dd-c">quantité en bobines</span>
+            <span class="sim-dd-c">quantité en unités</span>
           </div>
           <?php foreach ($formats_base as $code => $f): ?>
           <div class="sim-dd-i">
@@ -732,7 +755,8 @@ tr.hors td{opacity:.55}
                      <?= in_array($code, $formats_stock, true) ? 'checked' : '' ?>
                      onchange="ddMaj(this)">
               <span class="sim-dd-n"><?= h($f['format']) ?>
-                <em><?= h($f['version']) ?> · <?= fmt_number($f['films_par_bobine']) ?> films/bobine</em>
+                <em><?= h(libelle_categorie($f['categorie'])) ?> · <?= h($f['version']) ?>
+                  · <?= fmt_number($f['films_par_bobine']) ?> films par <?= h(libelle_categorie($f['categorie'])) ?></em>
               </span>
             </label>
             <input type="number" class="sim-dd-q" min="0" name="qte_fmt[<?= h($code) ?>]"
@@ -743,9 +767,11 @@ tr.hors td{opacity:.55}
           <?php endif; ?>
         </div>
       </div>
-      <div class="sub">Décochez un format pour le sortir de la projection. La quantité est en
-        bobines : laissée vide, c'est le stock réel qui est repris. Chaque format est converti
-        avec <strong>son propre</strong> conditionnement.<br>
+      <div class="sub">Bobines de films et vignettes figurent dans la même liste, chacune
+        étiquetée : ce sont deux articles distincts, aucun ne remplace l'autre. Décochez un
+        format pour le sortir de la projection. La quantité est en unités (une bobine, une
+        vignette) : laissée vide, c'est le stock réel qui est repris. Chaque format est
+        converti avec <strong>son propre</strong> conditionnement.<br>
         Stock réel du périmètre : <strong><?= fmt_number($bobines_defaut) ?></strong> bobine(s)
         (<?= fmt_number($stock_films_reel) ?> films).</div>
     </div>
@@ -828,7 +854,7 @@ tr.hors td{opacity:.55}
     </div>
 
     <div class="sim-f">
-      <label>Formats de bobines prévus sur ces sites</label>
+      <label>Formats prévus sur ces sites</label>
       <div class="sim-dd">
         <button type="button" class="sim-dd-b" onclick="ddOuvrir(this)">
           <span class="sim-dd-txt"></span><i class="ph ph-caret-down" aria-hidden="true"></i>
@@ -849,7 +875,7 @@ tr.hors td{opacity:.55}
                      <?= in_array($code, $formats_new, true) ? 'checked' : '' ?>
                      onchange="ddMaj(this)">
               <span class="sim-dd-n"><?= h($f['format']) ?>
-                <em><?= h($f['version']) ?></em></span>
+                <em><?= h(libelle_categorie($f['categorie'])) ?> · <?= h($f['version']) ?></em></span>
             </label>
           </div>
           <?php endforeach; ?>
@@ -922,7 +948,8 @@ tr.hors td{opacity:.55}
           <?= $nb_sites_new ?> site<?= $nb_sites_new > 1 ? 's' : '' ?> de plus =
           autonomie ramenée à <?= fmt_number($jours_tenus) ?> jours
         <?php else: ?>
-          <?= fmt_number($nb_bobines) ?> bobines = utilisation jusqu'en <?= h($epuis_texte) ?>
+          <?= fmt_number($nb_bobines) ?> <?= h($mot_unites($formats_stock)) ?>
+          = utilisation jusqu'en <?= h($epuis_texte) ?>
         <?php endif; ?>
       </div>
       <div class="s">
@@ -940,7 +967,8 @@ tr.hors td{opacity:.55}
           Il couvre l'horizon de <?= $horizon ?> mois demandé.
         <?php else: ?>
           Il <strong>ne couvre pas</strong> l'horizon de <?= $horizon ?> mois :
-          il manque <strong><?= fmt_number($bobines_a_commander) ?> bobine(s)</strong>
+          il manque <strong><?= fmt_number($bobines_a_commander) ?>
+          <?= h($mot_unites($formats_stock)) ?></strong>
           (<?= fmt_number($deficit_films) ?> films) à commander.
         <?php endif; ?>
         <?php if ($format_critique !== null
@@ -970,7 +998,7 @@ tr.hors td{opacity:.55}
       </div>
       <div class="sim-kpi <?= $couvre_horizon ? '' : 'crit' ?>">
         <div class="sim-kpi-v"><?= $couvre_horizon ? '0' : fmt_number($bobines_a_commander) ?></div>
-        <div class="sim-kpi-l">Bobines à commander</div>
+        <div class="sim-kpi-l"><?= h($mot_unites($formats_stock)) ?> à commander</div>
       </div>
       <?php if ($jours_perdus !== null): ?>
       <div class="sim-kpi <?= $jours_perdus > 0 ? 'crit' : '' ?>">
@@ -982,11 +1010,14 @@ tr.hors td{opacity:.55}
 
     <!-- ══ PROJECTION PAR FORMAT ══ -->
     <div class="sim-card">
-      <h4>Par format de bobine</h4>
+      <h4>Par format de bobine et de vignette</h4>
       <div class="sc-sub">
-        Une bobine WSL ne remplace pas une bobine TL : chaque type de véhicule dépend
-        d'une série précise. C'est le format qui s'épuise en premier qui arrête la production,
-        pas la moyenne globale. Le total en tête de page est la somme de ces lignes.
+        Deux articles distincts figurent ici : les <strong>bobines</strong> de films
+        (Auto, Carré, Moto, MotoII) et les <strong>vignettes</strong> (Réservoir, Pare-brise).
+        Aucun ne remplace l'autre, et à l'intérieur d'une catégorie un format n'en remplace pas
+        un autre non plus — chaque type de véhicule dépend d'une série précise. C'est le format
+        qui s'épuise en premier qui arrête la production, pas la moyenne globale. Le total en
+        tête de page est la somme de ces lignes.
         <?php if (count($formats_stock) < count($formats_dispo)): ?>
         <br>Les formats marqués « hors projection » ne sont pas retenus dans votre périmètre :
         ils restent affichés avec leur stock réel, à titre indicatif, et ne comptent ni dans
@@ -1005,8 +1036,8 @@ tr.hors td{opacity:.55}
       <div style="overflow-x:auto">
       <table class="sim-fmt">
         <thead><tr>
-          <th>Format</th><th>Version</th>
-          <th class="n">Bobines</th><th class="n">Films</th>
+          <th>Format</th><th>Catégorie</th><th>Version</th>
+          <th class="n">Unités</th><th class="n">Films</th>
           <th class="n">Films / jour</th><th class="n">Autonomie</th>
           <th>Épuisement</th><th class="n">À commander</th>
         </tr></thead>
@@ -1021,6 +1052,7 @@ tr.hors td{opacity:.55}
             <?php if ($hors): ?><span class="tag-hors">hors projection</span><?php endif; ?>
             <?php if ($nb_sites_new > 0 && !empty($f['retenu'])): ?><span class="tag-new">nouveaux sites</span><?php endif; ?>
           </td>
+          <td><span class="tag-cat <?= $f['categorie'] ?>"><?= h(libelle_categorie($f['categorie'])) ?></span></td>
           <td style="color:var(--muted)"><?= h($f['version']) ?></td>
           <td class="n"><?= fmt_number($f['bobines_ligne']) ?></td>
           <td class="n"><?= fmt_number($f['films_ligne']) ?></td>

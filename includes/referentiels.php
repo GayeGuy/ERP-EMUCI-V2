@@ -116,6 +116,31 @@ function types_pmma_actifs(): array {
 }
 
 /**
+ * Catégorie d'une série : 'bobine' ou 'vignette'.
+ *
+ * Les séries A, B, C et D sont des bobines de films ; TL (Réservoir) et
+ * WSL (Pare-brise) sont des vignettes. Ce ne sont pas deux variantes du
+ * même article : l'application leur donne déjà deux écrans distincts
+ * (pages/operations/bobines.php?categorie=vignette), et les confondre
+ * dans un total revient à additionner des choses non substituables.
+ *
+ * Le partage vit ici plutôt que recopié : bobines.php portait cette
+ * liste seul, et tout écran qui l'ignorait parlait de « bobines WSL ».
+ */
+function categorie_serie(?string $serie): string {
+    $s = strtoupper(trim((string)$serie));
+    // 'T' et 'W' sont les valeurs abrégées portées par op_bobines.serie,
+    // char(1) ne pouvant contenir 'TL' ni 'WSL'.
+    return in_array($s, ['TL', 'WSL', 'T', 'W'], true) ? 'vignette' : 'bobine';
+}
+
+/** Libellé de la catégorie, au singulier ou au pluriel. */
+function libelle_categorie(string $categorie, bool $pluriel = false): string {
+    $c = $categorie === 'vignette' ? 'vignette' : 'bobine';
+    return $pluriel ? $c . 's' : $c;
+}
+
+/**
  * Libellé lisible du format d'une bobine à partir de sa série.
  *
  * Le mapping est celui de migration_types_bobines_format_version.sql, qui
