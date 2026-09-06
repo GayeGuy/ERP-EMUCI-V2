@@ -72,6 +72,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $obs        = trim($_POST['observations'] ?? '');
         $films_data = json_decode($_POST['films_data'] ?? '[]', true);
         $pmma_data  = json_decode($_POST['pmma_data']  ?? '[]', true);
+        // n° 2.1 CR PDG — une ligne par bobine endommagée, saisie dans le
+        // pop-up déclenché par la quantité endommagée.
+        $endo_data  = json_decode($_POST['endommagements_data'] ?? '[]', true);
+        if (!is_array($endo_data)) $endo_data = [];
 
         $types_valides = ['point_9h', 'point_13h', 'point_18h', 'final', 'intermediaire'];
         if (!$site_id)                              json_response(false, 'Veuillez sélectionner un site.');
@@ -165,6 +169,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 // Supprimer anciens films et PMMA
                 db_query("DELETE FROM op_films_utilises WHERE point_id=?", [$point_id]);
                 db_query("DELETE FROM op_pmma_utilises  WHERE point_id=?", [$point_id]);
+                // n° 2.1 CR PDG — les déclarations d'endommagement suivent le
+                // même sort que les films : sans cela, corriger un point en
+                // retirant une bobine laisserait une déclaration orpheline
+                // pointant sur une bobine absente du point.
+                db_query("DELETE FROM op_endommagements WHERE point_id=?", [$point_id]);
             } else {
                 db_query("INSERT INTO op_points_journaliers
                     (site_id,date_point,type_point,nb_vp,nb_camion,nb_semi,nb_moto,
@@ -243,6 +252,43 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     [$f_util, $f_endomm, $new_restants, $new_statut, $date_point, $bobine_id]);
 
                 $films_detail[] = "Bobine {$bobine['numero']} : $f_util utilisés, $f_endomm endommagés";
+            }
+
+            // ── n° 2.1 CR PDG — déclarations d'endommagement
+            // On n'accepte une déclaration que pour une bobine réellement
+            // déclarée endommagée dans ce point : le pop-up est la seule
+            // porte prévue, mais la requête peut être forgée.
+            $bobines_endommagees = [];
+            foreach ($films_data as $fd) {
+                if ((int)($fd['films_endommages'] ?? 0) > 0) {
+                    $bobines_endommagees[(int)$fd['bobine_id']] = (int)$fd['films_endommages'];
+                }
+            }
+            $etapes_ok = ['pose','impression','transport','stockage','autre'];
+            $causes_ok = ['manipulation','defaut_materiel','incident_externe','autre'];
+
+            foreach ($endo_data as $ed) {
+                $e_bobine = (int)($ed['bobine_id'] ?? 0);
+                if (!isset($bobines_endommagees[$e_bobine])) continue;
+
+                $e_personne = trim((string)($ed['personne'] ?? ''));
+                $e_etape    = trim((string)($ed['etape'] ?? ''));
+                $e_cause    = trim((string)($ed['cause'] ?? ''));
+                if ($e_personne === '') throw new Exception("Déclaration d'endommagement : la personne concernée est obligatoire.");
+                if (!in_array($e_etape, $etapes_ok, true)) throw new Exception("Déclaration d'endommagement : étape invalide.");
+                if (!in_array($e_cause, $causes_ok, true)) throw new Exception("Déclaration d'endommagement : cause invalide.");
+
+                $e_heure = trim((string)($ed['heure'] ?? ''));
+                if ($e_heure !== '' && !preg_match('/^\d{2}:\d{2}$/', $e_heure)) $e_heure = '';
+
+                db_query(
+                    "INSERT INTO op_endommagements
+                     (point_id,bobine_id,site_id,quantite,personne,etape,cause,heure,observations,created_by)
+                     VALUES (?,?,?,?,?,?,?,?,?,?)",
+                    [$point_id, $e_bobine, $site_id, $bobines_endommagees[$e_bobine],
+                     $e_personne, $e_etape, $e_cause, $e_heure ?: null,
+                     trim((string)($ed['observations'] ?? '')), $user['id']]
+                );
             }
 
             audit_log($user['id'], 'CREATE', 'operations', $point_id,
@@ -1188,6 +1234,31 @@ foreach($points as $p):
 <?php endif; ?>
 
 <!-- ═════════ MODAL SAISIE POINT ═════════ -->
+<!-- ══════ n° 2.1 CR PDG — DÉCLARATION D'ENDOMMAGEMENT ══════
+     Une ligne indépendante par bobine endommagée. Le pop-up s'ouvre
+     automatiquement à la saisie d'une quantité endommagée, et de nouveau
+     à l'enregistrement si une bobine reste sans déclaration. -->
+<div class="modal-overlay" id="mEndommagement">
+  <div class="modal" style="width:720px">
+    <div class="mhdr">
+      <h3><i class="ph ph-first-aid-kit" aria-hidden="true"></i> Déclaration d'endommagement</h3>
+      <button class="mclose" onclick="document.getElementById('mEndommagement').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button>
+    </div>
+    <div class="mbody">
+      <p style="font-size:13px;color:var(--muted);margin:0 0 16px">
+        Renseignez les circonstances pour chaque bobine endommagée. Ces informations
+        alimentent le suivi de traçabilité et ne peuvent pas être saisies plus tard.
+      </p>
+      <div id="endoAlert"></div>
+      <div id="endoLignes"></div>
+    </div>
+    <div class="mfoot">
+      <button class="btn btn-secondary" onclick="document.getElementById('mEndommagement').classList.remove('open')">Annuler</button>
+      <button class="btn btn-primary" onclick="validerEndommagements()"><i class="ph ph-check" aria-hidden="true"></i> Valider les déclarations</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="mPoint">
   <div class="modal" style="width:900px">
     <div class="mhdr">
@@ -1917,7 +1988,7 @@ function buildBobineRow(selectedBobineId, idx){
       <div>
         <label style="font-size:12px;font-weight:700;color:var(--danger-d);text-transform:uppercase;letter-spacing:.5px">Endommagés</label>
         <input type="number" class="form-control" id="bendomm-${idx}" min="0" value="0"
-               oninput="updateBobineRestants(${idx})"
+               oninput="updateBobineRestants(${idx})" onchange="onEndommageChange(${idx})"
                style="margin-top:4px;text-align:center;border-color:var(--danger)">
       </div>
       <div style="text-align:center;margin-top:18px">
@@ -1970,6 +2041,120 @@ function updateBobineRestants(idx){
 
 function getSelectedBobineIds(){
   return Array.from(document.querySelectorAll('[id^="bsel-"]')).map(s=>s.value);
+}
+
+/* ══════════════════════════════════════════════════════════════
+   n° 2.1 CR PDG — déclaration d'endommagement
+   Le pop-up s'ouvre dès qu'une quantité endommagée est saisie, et
+   affiche une ligne indépendante par bobine concernée. Les réponses
+   sont conservées ici, indexées par bobine, puis envoyées avec le
+   point : une ligne par bobine, comme demandé au compte rendu.
+   ══════════════════════════════════════════════════════════════ */
+const ETAPES_ENDO = [
+  ['pose',       'À la pose'],
+  ['impression', "À l'impression"],
+  ['transport',  'Au transport'],
+  ['stockage',   'Au stockage'],
+  ['autre',      'Autre'],
+];
+const CAUSES_ENDO = [
+  ['manipulation',     'Manipulation incorrecte'],
+  ['defaut_materiel',  'Défaut matériel'],
+  ['incident_externe', 'Incident externe'],
+  ['autre',            'Autre'],
+];
+let endommagementsSaisis = {};   // bobine_id -> {personne, etape, cause, heure, observations}
+
+// Appelé quand une quantité endommagée change : on ouvre le pop-up à la
+// première saisie, sans harceler l'agent à chaque frappe suivante.
+function onEndommageChange(idx){
+  updateBobineRestants(idx);
+  const bid    = document.getElementById('bsel-'+idx)?.value;
+  const endomm = parseInt(document.getElementById('bendomm-'+idx)?.value||0);
+  if (endomm > 0 && bid && !endommagementsSaisis[bid]) ouvrirPopupEndommagement();
+  if (endomm === 0 && bid) delete endommagementsSaisis[bid];
+}
+
+function ouvrirPopupEndommagement(){
+  const lignes = getBobinesData().filter(f => (f.films_endommages|0) > 0);
+  const box = document.getElementById('endoLignes');
+  if (!lignes.length){
+    box.innerHTML = '<div style="color:var(--muted);font-size:13px">Aucune bobine endommagée saisie.</div>';
+  } else {
+    box.innerHTML = lignes.map(f => {
+      const b = bobinesCache[f.bobine_id] || {};
+      const d = endommagementsSaisis[f.bobine_id] || {};
+      const opt = (arr, sel) => arr.map(([v,l]) =>
+        `<option value="${v}" ${sel===v?'selected':''}>${l}</option>`).join('');
+      return `
+      <div class="endo-ligne" data-bobine="${f.bobine_id}" style="border:1.5px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:12px;background:var(--lighter)">
+        <div style="font-weight:800;color:var(--navy);font-size:14px;margin-bottom:2px">
+          Bobine ${b.numero||f.bobine_id}
+        </div>
+        <div style="font-size:12px;color:var(--danger-d);font-weight:700;margin-bottom:12px">
+          ${f.films_endommages} film(s) endommagé(s)
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div>
+            <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Personne concernée *</label>
+            <input type="text" class="form-control endo-personne" value="${(d.personne||'').replace(/"/g,'&quot;')}"
+                   placeholder="Nom de la personne" style="margin-top:4px">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Heure de l'incident</label>
+            <input type="time" class="form-control endo-heure" value="${d.heure||''}" style="margin-top:4px">
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Étape *</label>
+            <select class="form-control endo-etape" style="margin-top:4px">${opt(ETAPES_ENDO, d.etape)}</select>
+          </div>
+          <div>
+            <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Cause *</label>
+            <select class="form-control endo-cause" style="margin-top:4px">${opt(CAUSES_ENDO, d.cause)}</select>
+          </div>
+        </div>
+        <div style="margin-top:10px">
+          <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Observations</label>
+          <textarea class="form-control endo-obs" rows="2" placeholder="Précisions libres…"
+                    style="margin-top:4px">${d.observations||''}</textarea>
+        </div>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('endoAlert').innerHTML = '';
+  document.getElementById('mEndommagement').classList.add('open');
+}
+
+function validerEndommagements(){
+  const lignes = document.querySelectorAll('#endoLignes .endo-ligne');
+  const saisie = {};
+  for (const l of lignes){
+    const personne = l.querySelector('.endo-personne').value.trim();
+    if (!personne){
+      document.getElementById('endoAlert').innerHTML =
+        '<div class="alert alert-danger" style="font-size:13px">La personne concernée est obligatoire pour chaque bobine.</div>';
+      l.querySelector('.endo-personne').focus();
+      return;
+    }
+    saisie[l.dataset.bobine] = {
+      personne,
+      etape:        l.querySelector('.endo-etape').value,
+      cause:        l.querySelector('.endo-cause').value,
+      heure:        l.querySelector('.endo-heure').value,
+      observations: l.querySelector('.endo-obs').value.trim(),
+    };
+  }
+  endommagementsSaisis = saisie;
+  document.getElementById('mEndommagement').classList.remove('open');
+  toast('Déclaration(s) enregistrée(s).','success');
+}
+
+// N'envoie que les déclarations dont la bobine est encore endommagée
+// dans le point au moment de l'enregistrement.
+function collectEndommagements(films){
+  return films
+    .filter(f => (f.films_endommages|0) > 0 && endommagementsSaisis[f.bobine_id])
+    .map(f => Object.assign({bobine_id: f.bobine_id}, endommagementsSaisis[f.bobine_id]));
 }
 
 function getBobinesData(){
@@ -2055,6 +2240,16 @@ function savePoint(){
   // Collecter films depuis le nouveau sélecteur dynamique
   const films_data = getBobinesData();
 
+  // n° 2.1 CR PDG — chaque bobine endommagée doit porter sa déclaration.
+  // On bloque avant l'envoi plutôt que de laisser le serveur refuser :
+  // l'agent est déjà dans le formulaire, autant lui ouvrir le pop-up.
+  const manquantes = films_data.filter(f => (f.films_endommages|0) > 0 && !endommagementsSaisis[f.bobine_id]);
+  if (manquantes.length) {
+    btn.disabled = false; btn.textContent = '💾 Enregistrer le point';
+    ouvrirPopupEndommagement();
+    return;
+  }
+
   ap({
     action:'save_point', site_id,
     date_point:  document.getElementById('p-date').value,
@@ -2073,6 +2268,7 @@ function savePoint(){
     observations:JSON.stringify(collectObservations()),
     films_data:  JSON.stringify(films_data),
     pmma_data:   JSON.stringify(collectPmmaData()),
+    endommagements_data: JSON.stringify(collectEndommagements(films_data)),
   }).then(d=>{
     btn.disabled=false; btn.textContent='💾 Enregistrer le point';
     if(d.success){

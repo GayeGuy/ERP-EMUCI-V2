@@ -121,6 +121,12 @@ function _groupes_def(): array {
                 ['label'=>'Vue stock par site',   'icon'=>'ph-table',
                  'url'=>'pages/stock_bobines_vue.php','active_keys'=>['stock_bobines_vue'],
                  'perm'=>['stock_bobines','can_read']],
+                // n° 2.1 CR PDG — historique des bobines endommagées. La
+                // saisie reste dans le point journalier ; cet écran ne fait
+                // que restituer, d'où le simple can_read.
+                ['label'=>'Traçabilité endommagements', 'icon'=>'ph-first-aid-kit',
+                 'url'=>'pages/tracabilite_endommagements.php','active_keys'=>['tracabilite_endommagements'],
+                 'perm'=>['tracabilite_endommagements','can_read']],
             ],
         ],
 
