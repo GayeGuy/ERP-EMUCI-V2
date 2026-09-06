@@ -8,6 +8,7 @@ require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/audit.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
+require_once __DIR__ . '/../includes/referentiels.php';
 
 require_auth();
 
@@ -495,8 +496,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                             if (str_starts_with(strtoupper($format), 'WSL')) $serie_bobine = 'W';
                             elseif (str_starts_with(strtoupper($format), 'TL')) $serie_bobine = 'T';
 
-                            $qte_init = (str_starts_with(strtoupper($format),'WSL') || str_starts_with(strtoupper($format),'TL'))
-                                ? 2000 : 500;
+                            // Capacité lue au catalogue ; l'ancienne règle
+                            // « WSL/TL = 2000, sinon 500 » reste le repli des
+                            // codes qui n'y figurent pas.
+                            $qte_init = capacite_bobine(
+                                $format,
+                                (str_starts_with(strtoupper($format),'WSL') || str_starts_with(strtoupper($format),'TL'))
+                                    ? 2000 : 500);
 
                             $tv = db_fetch_one("SELECT id FROM op_types_vehicule WHERE serie_bobine=? LIMIT 1",
                                 [$serie_bobine]);

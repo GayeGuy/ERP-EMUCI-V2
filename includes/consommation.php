@@ -122,6 +122,24 @@ function conso_stock_par_format(int $site_id = 0, int $jours = 30): array {
           WHERE b.statut IN ('en_stock','en_cours') AND b.type_code IS NOT NULL $f_b
           GROUP BY b.type_code");
 
+    // Conditionnement declare au catalogue, quand il existe : c'est la
+    // valeur de reference, la moyenne des qte_initiale n'en etait qu'une
+    // estimation. Un parc melangeant des bobines entamees avant la mise en
+    // place du referentiel produisait un "films par bobine" ne correspondant
+    // a aucune bobine reelle.
+    //
+    // La lecture est isolee dans un try : le code peut etre deploye avant
+    // que la migration ne soit passee sur la base, et la simulation doit
+    // continuer de fonctionner avec l'ancienne estimation en attendant.
+    $catalogue = [];
+    try {
+        foreach (db_fetch_all("SELECT UPPER(code) AS c, films_par_bobine FROM op_types_bobines") as $t) {
+            if ((int)$t['films_par_bobine'] > 0) $catalogue[$t['c']] = (int)$t['films_par_bobine'];
+        }
+    } catch (Throwable $e) {
+        // Colonne ou table absente : on garde l'estimation par le parc.
+    }
+
     $conso = db_fetch_all(
         "SELECT b.type_code,
                 COALESCE(SUM(c.quantite)::numeric
@@ -144,7 +162,8 @@ function conso_stock_par_format(int $site_id = 0, int $jours = 30): array {
             'serie'            => $s['serie'],
             'films_restants'   => $f,
             'bobines'          => (int)$s['nb_bobines'],
-            'films_par_bobine' => max(1, (int) round((float)$s['fpb'])),
+            'films_par_bobine' => $catalogue[strtoupper($code)]
+                                  ?? max(1, (int) round((float)$s['fpb'])),
             'conso'            => $c,
             'jours'            => $j,
             'date_epuisement'  => $j !== null ? date('Y-m-d', strtotime("+$j days")) : null,

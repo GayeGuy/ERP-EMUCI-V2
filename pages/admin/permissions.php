@@ -88,6 +88,7 @@ $modules = [
     'simulation_stocks'  => ['<i class="ph ph-trend-up" aria-hidden="true"></i>', 'Simulation & projection', 'RAPPORTS'],
     'sites'              => ['<i class="ph ph-buildings" aria-hidden="true"></i>', 'Sites', 'STOCK'],
     'tracabilite_endommagements' => ['<i class="ph ph-first-aid-kit" aria-hidden="true"></i>', 'Traçabilité endommagements', 'BOBINES'],
+    'referentiels_operations' => ['<i class="ph ph-sliders-horizontal" aria-hidden="true"></i>', 'Référentiels & capacités', 'ADMINISTRATION'],
     'users'              => ['<i class="ph ph-users" aria-hidden="true"></i>', 'Utilisateurs', 'ADMINISTRATION'],
     'validation_stock'   => ['<i class="ph ph-check-circle" aria-hidden="true"></i>', 'Validation stock matin', 'BOBINES'],
     'stock_bobines'      => ['<i class="ph ph-chart-line-up" aria-hidden="true"></i>', 'Vue stock bobines', 'BOBINES'],

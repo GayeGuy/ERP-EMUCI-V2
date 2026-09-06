@@ -9,6 +9,7 @@ require_once __DIR__ . '/../../includes/audit.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/notifications.php';
 require_once __DIR__ . '/../../includes/upload.php';
+require_once __DIR__ . '/../../includes/referentiels.php';
 
 require_auth();
  // Force rechargement depuis DB (évite cache de rôle périmé)
@@ -87,16 +88,20 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         if (!$serie) json_response(false,"Type '$type_code' inconnu au catalogue.");
         if (!in_array($serie, $series_actives, true)) json_response(false,"Ce type n'appartient pas à la catégorie « $bob_label_pl ».");
         $tv = db_fetch_one("SELECT id FROM op_types_vehicule WHERE serie_bobine=?",[$serie]);
+        // Capacité lue au catalogue : le 500 en dur ici créait des TL/WSL à
+        // 500 films alors qu'elles en contiennent 2000, écart que seuls les
+        // imports corrigeaient.
+        $cap = capacite_bobine($type_code);
         db_begin();
         try {
-            db_query("INSERT INTO op_bobines (numero,type_code,serie,type_vehicule_id,site_id,format,qte_initiale,stock_systeme,statut) VALUES (?,?,?,?,?,?,500,500,'en_stock')",
-                [$numero,$type_code,$serie,$tv['id']??null,$site_id,$format]);
+            db_query("INSERT INTO op_bobines (numero,type_code,serie,type_vehicule_id,site_id,format,qte_initiale,stock_systeme,statut) VALUES (?,?,?,?,?,?,?,?,'en_stock')",
+                [$numero,$type_code,$serie,$tv['id']??null,$site_id,$format,$cap,$cap]);
             $id = (int)db_last_id();
             db_query("INSERT INTO mouvements_bobines (bobine_id,type,quantite,stock_avant,stock_apres,motif,created_by) VALUES (?,?,?,?,?,?,?)",
-                [$id,'entree',500,0,500,"Création bobine $numero",$user['id']]);
-            audit_log($user['id'],'CREATE','operations',$id,"Création bobine $numero ($type_code) — stock initial: 500");
+                [$id,'entree',$cap,0,$cap,"Création bobine $numero",$user['id']]);
+            audit_log($user['id'],'CREATE','operations',$id,"Création bobine $numero ($type_code) — stock initial: $cap");
             db_commit();
-            json_response(true,'Bobine créée avec stock initial de 500.',['id'=>$id]);
+            json_response(true,"Bobine créée avec stock initial de $cap.",['id'=>$id]);
         } catch(Exception $e){ db_rollback(); json_response(false,'Erreur: '.$e->getMessage()); }
     }
 
@@ -269,11 +274,12 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
                 if (!$serie) {$errors[]="$num : type '$type' inconnu";continue;}
                 if (!in_array($serie, $series_actives, true)) {$errors[]="$num : type '$type' hors categorie $bob_label_pl";continue;}
                 $tv=db_fetch_one("SELECT id FROM op_types_vehicule WHERE serie_bobine=?",[$serie]);
-                db_query("INSERT INTO op_bobines (numero,type_code,serie,type_vehicule_id,site_id,format,qte_initiale,stock_systeme,statut) VALUES (?,?,?,?,?,?,500,500,'en_stock')",
-                    [strtoupper($num),strtoupper($type),$serie,$tv['id']??null,$site_id,$format]);
+                $cap=capacite_bobine($type);
+                db_query("INSERT INTO op_bobines (numero,type_code,serie,type_vehicule_id,site_id,format,qte_initiale,stock_systeme,statut) VALUES (?,?,?,?,?,?,?,?,'en_stock')",
+                    [strtoupper($num),strtoupper($type),$serie,$tv['id']??null,$site_id,$format,$cap,$cap]);
                 $new_id=(int)db_last_id();
                 db_query("INSERT INTO mouvements_bobines (bobine_id,type,quantite,stock_avant,stock_apres,motif,created_by) VALUES (?,?,?,?,?,?,?)",
-                    [$new_id,'entree',500,0,500,"Import lot - bobine $num",$user['id']]);
+                    [$new_id,'entree',$cap,0,$cap,"Import lot - bobine $num",$user['id']]);
                 $created++;
             }
             db_commit();
