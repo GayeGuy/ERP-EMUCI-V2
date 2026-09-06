@@ -174,6 +174,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 // retirant une bobine laisserait une déclaration orpheline
                 // pointant sur une bobine absente du point.
                 db_query("DELETE FROM op_endommagements WHERE point_id=?", [$point_id]);
+                // n° 2.8 CR PDG — idem pour les observations, mais on épargne
+                // celles déjà prises en charge : les supprimer effacerait le
+                // travail du superviseur (responsable, dates, commentaire).
+                db_query("DELETE FROM op_observations WHERE point_id=? AND statut='en_attente'", [$point_id]);
             } else {
                 db_query("INSERT INTO op_points_journaliers
                     (site_id,date_point,type_point,nb_vp,nb_camion,nb_semi,nb_moto,
@@ -289,6 +293,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                      $e_personne, $e_etape, $e_cause, $e_heure ?: null,
                      trim((string)($ed['observations'] ?? '')), $user['id']]
                 );
+            }
+
+            // ── n° 2.8 CR PDG — observations suivies
+            // La colonne JSON reste écrite (elle sert au réaffichage du
+            // formulaire et à la fiche PDF) ; ces lignes portent le workflow.
+            // Les deux restent alignés parce qu'écrits dans la même
+            // transaction. On ne recrée que les lignes encore en attente :
+            // celles déjà prises en charge ont été épargnées par le DELETE.
+            $obs_list = json_decode($obs ?: '[]', true);
+            if (is_array($obs_list)) {
+                $types_obs = ['info','alerte','relance','incident','urgence','autre'];
+                foreach (array_values($obs_list) as $i => $o) {
+                    $o_texte = trim((string)($o['texte'] ?? ''));
+                    if ($o_texte === '') continue;
+                    $o_type = (string)($o['type'] ?? 'info');
+                    if (!in_array($o_type, $types_obs, true)) $o_type = 'info';
+                    db_query(
+                        "INSERT INTO op_observations (point_id,ordre,site_id,type,texte,created_by)
+                         VALUES (?,?,?,?,?,?)
+                         ON CONFLICT (point_id,ordre) DO UPDATE
+                            SET type=EXCLUDED.type, texte=EXCLUDED.texte
+                          WHERE op_observations.statut='en_attente'",
+                        [$point_id, $i, $site_id, $o_type, $o_texte, $user['id']]
+                    );
+                }
             }
 
             audit_log($user['id'], 'CREATE', 'operations', $point_id,

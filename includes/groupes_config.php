@@ -203,6 +203,12 @@ function _groupes_def(): array {
                  'perm'=>['commandes','can_read'],
                  'roles_include'=>['superviseur_operation','gestionnaire_operation']],
                 // EMUCI : réservé aux profils de supervision, pas au coordinateur
+                // n° 2.8 CR PDG — suivi des observations saisies dans le point
+                // journalier. Visible aussi du coordinateur : c'est lui qui
+                // relance et confirme la clôture, la page filtre sur son site.
+                ['label'=>'Suivi des observations', 'icon'=>'ph-chat-dots',
+                 'url'=>'pages/observations.php','active_keys'=>['observations'],
+                 'perm'=>['observations','can_read']],
                 ['label'=>'Point EMUCI',            'icon'=>'ph-chart-scatter',
                  'url'=>'pages/point_emuci.php','active_keys'=>['point_emuci'],
                  'perm'=>['point_emuci','can_read'],
