@@ -289,13 +289,27 @@ $resume = [
     ['Horizon cible',               $horizon . ' mois (' . $jours_cible . ' jours)'],
     ['Couvre l’horizon',            $couvre_horizon ? 'Oui' : 'Non'],
     ['Bobines à commander',         $couvre_horizon ? '0' : fmt_number($bobines_a_commander)],
-    ['Format contraignant',         $format_critique !== null
+    // « Le plus contraint » porte sur tout le perimetre, pas sur la
+    // selection faite pour les nouveaux sites : un format non retenu peut
+    // rester celui qui s'epuise en premier, et c'est justement ce qu'il
+    // faut savoir. Le libelle le dit, sinon on croit a une erreur.
+    ['Format le plus contraint (tout le périmètre)', $format_critique !== null
         ? $format_critique . ' — ' . fmt_number($formats[$format_critique]['jours_projetes'])
           . ' jours (' . fmt_date($formats[$format_critique]['date_projetee']) . ')'
+          . ($nb_sites_new > 0
+             ? (!empty($formats[$format_critique]['retenu'])
+                ? ' — prévu sur les nouveaux sites'
+                : ' — hors sélection nouveaux sites')
+             : '')
         : 'aucune consommation par format'],
-    ['PMMA contraignant',           $pmma_critique !== null
-        ? $pmma_critique . ' — ' . fmt_number($pmma_formats[$pmma_critique]['jours'])
-          . ' jours (' . fmt_date($pmma_formats[$pmma_critique]['date_epuisement']) . ')'
+    ['PMMA le plus contraint (tout le périmètre)', $pmma_critique !== null
+        ? $pmma_critique . ' — ' . fmt_number($pmma_formats[$pmma_critique]['jours_projetes'])
+          . ' jours (' . fmt_date($pmma_formats[$pmma_critique]['date_projetee']) . ')'
+          . ($nb_sites_new > 0
+             ? (!empty($pmma_formats[$pmma_critique]['retenu'])
+                ? ' — prévu sur les nouveaux sites'
+                : ' — hors sélection nouveaux sites')
+             : '')
         : 'aucune consommation PMMA'],
 ];
 
@@ -721,6 +735,12 @@ table.sim-fmt em.ajout{font-style:normal;color:var(--blue-deep,#0E5A94);font-siz
         Une bobine WSL ne remplace pas une bobine TL : chaque type de véhicule dépend
         d'une série précise. C'est le format qui s'épuise en premier qui arrête la production,
         pas la moyenne globale.
+        <?php if ($nb_sites_new > 0): ?>
+        <br>Tous les formats du périmètre sont listés, y compris ceux que vous n'avez pas
+        retenus pour les nouveaux sites : ils gardent leur consommation actuelle et peuvent
+        rester la contrainte. Seuls les formats marqués « nouveaux sites » reçoivent la charge
+        supplémentaire.
+        <?php endif; ?>
       </div>
       <?php if (empty($formats)): ?>
         <div style="color:var(--muted);font-size:13.5px">Aucune bobine en stock sur ce périmètre.</div>
@@ -769,6 +789,10 @@ table.sim-fmt em.ajout{font-style:normal;color:var(--blue-deep,#0E5A94);font-siz
         de <?= $horizon ?> mois. Les véhicules dépendant de la série
         <?= h($formats[$format_critique]['serie'] ?: '—') ?> ne pourront plus être traités
         à partir de cette date, quel que soit le stock des autres formats.
+        <?php if ($nb_sites_new > 0 && empty($formats[$format_critique]['retenu'])): ?>
+        Ce format n'est pas prévu sur les nouveaux sites : il ne subit aucune charge
+        supplémentaire, sa consommation actuelle suffit à en faire la contrainte.
+        <?php endif; ?>
       </div>
       <?php endif; ?>
       <?php endif; ?>
@@ -777,7 +801,12 @@ table.sim-fmt em.ajout{font-style:normal;color:var(--blue-deep,#0E5A94);font-siz
     <!-- ══ PROJECTION PMMA ══ -->
     <div class="sim-card">
       <h4>Par type de PMMA</h4>
-      <div class="sc-sub">Même raisonnement : un type de PMMA ne remplace pas un autre.</div>
+      <div class="sc-sub">Même raisonnement : un type de PMMA ne remplace pas un autre.
+        <?php if ($nb_sites_new > 0): ?>
+        Les types non retenus pour les nouveaux sites restent affichés avec leur consommation
+        actuelle — c'est souvent l'un d'eux qui reste le plus contraint.
+        <?php endif; ?>
+      </div>
       <?php if (empty($pmma_formats)): ?>
         <div style="color:var(--muted);font-size:13.5px">Aucun stock PMMA sur ce périmètre.</div>
       <?php else: ?>
