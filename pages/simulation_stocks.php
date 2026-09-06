@@ -759,9 +759,14 @@ table.sim-fmt em.ajout{font-style:normal;color:var(--blue-deep,#0E5A94);font-siz
 .sim-dd-f button{border:1.5px solid var(--border);background:white;border-radius:8px;
   padding:5px 13px;font-family:inherit;font-size:12.5px;font-weight:700;
   color:var(--navy);cursor:pointer}
-.sim-dd-f button:hover{background:var(--lighter)}
+/* Le :not(.dd-ok) est indispensable. Sans lui, « .sim-dd-f button:hover »
+   (spécificité 0,2,1) l'emportait au survol sur « .sim-dd-f .dd-ok »
+   (0,2,0) pour le fond — mais pas pour la couleur du texte, qui restait
+   blanche : le bouton Valider devenait blanc sur blanc, donc illisible
+   au moment précis où on le vise. */
+.sim-dd-f button:not(.dd-ok):hover{background:var(--lighter)}
 .sim-dd-f .dd-ok{background:var(--primary-d);border-color:var(--primary-d);color:white}
-.sim-dd-f .dd-ok:hover{filter:brightness(1.08)}
+.sim-dd-f button.dd-ok:hover{background:var(--primary-d);filter:brightness(1.12)}
 tr.hors td{opacity:.55}
 .tag-cat{display:inline-block;padding:1px 8px;border-radius:9px;font-size:10.5px;
   font-weight:700;text-transform:uppercase;letter-spacing:.05em}
