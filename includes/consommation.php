@@ -21,6 +21,21 @@
 //  silencieusement les projections deja affichees dans les inventaires.
 //  Les nouveaux ecrans s'y alignent donc plutot que d'inventer une
 //  seconde definition de la meme grandeur.
+//
+//  ── Un defaut corrige au passage : la division etait entiere ──
+//  SUM(quantite) et l'ecart de dates sont deux entiers : PostgreSQL
+//  faisait donc une division ENTIERE. 200 films sur 9 jours donnaient
+//  22 et non 22,22 ; surtout, 5 films sur 9 jours donnaient 0, soit
+//  une consommation declaree nulle alors qu'elle est reelle — et donc
+//  aucun "jours restants" affiche pour cette bobine.
+//
+//  L'erreur allait toujours dans le meme sens : consommation
+//  sous-estimee, donc autonomie surestimee. Le cast ::numeric la
+//  corrige. Consequence assumee : les jours restants affiches dans les
+//  inventaires deviennent legerement plus courts, parce que plus
+//  justes. Les valeurs conso_quotidienne_moy deja enregistrees dans
+//  inventaire_details_bobines gardent leur ancien chiffre tronque :
+//  seuls les inventaires ouverts apres cette correction en beneficient.
 // ============================================================
 
 /**
@@ -28,7 +43,7 @@
  */
 function conso_moy_bobine(int $bobine_id, int $jours = 30): float {
     return (float) db_fetch_value(
-        "SELECT COALESCE(SUM(quantite) / GREATEST(((NOW())::date - (MIN(date_conso)::date)), 1), 0)
+        "SELECT COALESCE(SUM(quantite)::numeric / GREATEST(((NOW())::date - (MIN(date_conso)::date)), 1), 0)
            FROM consommations_bobines
           WHERE bobine_id = ?
             AND date_conso >= (CURRENT_DATE - (? || ' DAY')::interval)",
@@ -44,7 +59,7 @@ function conso_moy_site(int $site_id = 0, int $jours = 30): float {
     $filtre = $site_id ? "AND site_id = ?" : "";
     $params = $site_id ? [$jours, $site_id] : [$jours];
     return (float) db_fetch_value(
-        "SELECT COALESCE(SUM(quantite) / GREATEST(((NOW())::date - (MIN(date_conso)::date)), 1), 0)
+        "SELECT COALESCE(SUM(quantite)::numeric / GREATEST(((NOW())::date - (MIN(date_conso)::date)), 1), 0)
            FROM consommations_bobines
           WHERE date_conso >= (CURRENT_DATE - (? || ' DAY')::interval)
             $filtre",
@@ -64,7 +79,7 @@ function conso_moy_site(int $site_id = 0, int $jours = 30): float {
 function conso_moy_par_site(int $jours = 30): array {
     $rows = db_fetch_all(
         "SELECT s.id, s.nom,
-                COALESCE(SUM(c.quantite) / GREATEST(((NOW())::date - (MIN(c.date_conso)::date)), 1), 0) AS conso
+                COALESCE(SUM(c.quantite)::numeric / GREATEST(((NOW())::date - (MIN(c.date_conso)::date)), 1), 0) AS conso
            FROM sites s
            LEFT JOIN consommations_bobines c
                   ON c.site_id = s.id

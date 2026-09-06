@@ -271,6 +271,14 @@ function _groupes_def(): array {
                 ['label'=>'Rapports généraux','icon'=>'ph-chart-bar',
                  'url'=>'pages/rapports.php','active_keys'=>['rapports'],
                  'perm'=>['rapports','can_read']],
+                // n° 2.6 CR PDG — outil de projection. Le CR demandait un
+                // groupe de navigation dédié ; il rejoint RAPPORTS, qui
+                // existe déjà et accueille les écrans d'analyse. Créer un
+                // groupe pour une seule page aurait alourdi le menu sans
+                // rien clarifier.
+                ['label'=>'Simulation & projection', 'icon'=>'ph-trend-up',
+                 'url'=>'pages/simulation_stocks.php','active_keys'=>['simulation_stocks'],
+                 'perm'=>['simulation_stocks','can_read']],
                 ['label'=>'Exports',          'icon'=>'ph-export',
                  'url'=>'pages/export.php','active_keys'=>['export']],
             ],
