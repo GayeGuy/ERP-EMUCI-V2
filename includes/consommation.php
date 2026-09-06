@@ -97,6 +97,112 @@ function conso_moy_par_site(int $jours = 30): array {
 }
 
 /**
+ * Consommation moyenne journaliere PAR FORMAT de bobine, en films/jour,
+ * accompagnee du stock et du conditionnement de chaque format.
+ *
+ * Une bobine n'est pas substituable a une autre : op_types_vehicule
+ * relie chaque type de vehicule a une serie de bobine, donc un stock
+ * global peut afficher des semaines d'autonomie alors que le format
+ * moto est deja epuise et que cette production s'arrete. La projection
+ * doit donc se faire format par format, et la contrainte est celle qui
+ * arrive a echeance en premier.
+ *
+ * Retourne type_code => [serie, films_restants, bobines, films_par_bobine,
+ *                        conso, jours, date_epuisement]
+ */
+function conso_stock_par_format(int $site_id = 0, int $jours = 30): array {
+    $f_b = $site_id ? "AND b.site_id = $site_id" : "";
+
+    $stock = db_fetch_all(
+        "SELECT b.type_code, MIN(b.serie) AS serie,
+                COALESCE(SUM(b.films_restants),0) AS films,
+                COUNT(*) AS nb_bobines,
+                COALESCE(AVG(NULLIF(b.qte_initiale,0)),500) AS fpb
+           FROM op_bobines b
+          WHERE b.statut IN ('en_stock','en_cours') AND b.type_code IS NOT NULL $f_b
+          GROUP BY b.type_code");
+
+    $conso = db_fetch_all(
+        "SELECT b.type_code,
+                COALESCE(SUM(c.quantite)::numeric
+                         / GREATEST(((NOW())::date - (MIN(c.date_conso)::date)), 1), 0) AS conso
+           FROM consommations_bobines c
+           JOIN op_bobines b ON b.id = c.bobine_id
+          WHERE c.date_conso >= (CURRENT_DATE - (? || ' DAY')::interval)
+            AND b.type_code IS NOT NULL $f_b
+          GROUP BY b.type_code", [$jours]);
+    $par_conso = [];
+    foreach ($conso as $c) $par_conso[$c['type_code']] = (float)$c['conso'];
+
+    $out = [];
+    foreach ($stock as $s) {
+        $code = $s['type_code'];
+        $c    = $par_conso[$code] ?? 0.0;
+        $f    = (int)$s['films'];
+        $j    = $c > 0 ? (int) floor($f / $c) : null;
+        $out[$code] = [
+            'serie'            => $s['serie'],
+            'films_restants'   => $f,
+            'bobines'          => (int)$s['nb_bobines'],
+            'films_par_bobine' => max(1, (int) round((float)$s['fpb'])),
+            'conso'            => $c,
+            'jours'            => $j,
+            'date_epuisement'  => $j !== null ? date('Y-m-d', strtotime("+$j days")) : null,
+        ];
+    }
+    ksort($out);
+    return $out;
+}
+
+/**
+ * Meme logique pour le PMMA : stock et consommation par type, un type
+ * ne remplacant pas un autre. La consommation vient des points
+ * journaliers (op_pmma_utilises), le stock de stock_pmma_site.
+ */
+function conso_stock_par_pmma(int $site_id = 0, int $jours = 30): array {
+    $f_s = $site_id ? "AND sp.site_id = $site_id" : "";
+    $f_p = $site_id ? "AND p.site_id = $site_id"  : "";
+
+    $stock = db_fetch_all(
+        "SELECT sp.type_pmma,
+                COALESCE(SUM(sp.quantite),0)                AS qte,
+                COALESCE(MIN(sp.seuil_alerte),10)           AS seuil
+           FROM stock_pmma_site sp WHERE 1=1 $f_s
+          GROUP BY sp.type_pmma");
+
+    // Denominateur aligne sur les autres fonctions : jours ecoules depuis
+    // la premiere consommation observee dans la fenetre.
+    $conso = db_fetch_all(
+        "SELECT pu.type_pmma,
+                COALESCE(SUM(pu.utilises)::numeric
+                         / GREATEST(((NOW())::date - (MIN(p.date_point)::date)), 1), 0) AS conso
+           FROM op_pmma_utilises pu
+           JOIN op_points_journaliers p ON p.id = pu.point_id
+          WHERE p.date_point >= (CURRENT_DATE - (? || ' DAY')::interval)
+            AND p.statut <> 'brouillon' $f_p
+          GROUP BY pu.type_pmma", [$jours]);
+    $par_conso = [];
+    foreach ($conso as $c) $par_conso[$c['type_pmma']] = (float)$c['conso'];
+
+    $out = [];
+    foreach ($stock as $s) {
+        $t = $s['type_pmma'];
+        $c = $par_conso[$t] ?? 0.0;
+        $q = (int)$s['qte'];
+        $j = $c > 0 ? (int) floor($q / $c) : null;
+        $out[$t] = [
+            'quantite'        => $q,
+            'seuil'           => (int)$s['seuil'],
+            'conso'           => $c,
+            'jours'           => $j,
+            'date_epuisement' => $j !== null ? date('Y-m-d', strtotime("+$j days")) : null,
+        ];
+    }
+    ksort($out);
+    return $out;
+}
+
+/**
  * Nombre moyen de films par bobine, pour convertir une quantite de
  * bobines en films. Le stock est suivi en films ; les demandes de
  * projection s'expriment en bobines.

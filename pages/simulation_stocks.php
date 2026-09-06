@@ -97,6 +97,51 @@ $deficit_films = max(0, $films_requis - $stock_films);
 $bobines_a_commander = (int) ceil($deficit_films / $films_bobine);
 $couvre_horizon = $jours_tenus !== null && $jours_tenus >= $jours_cible;
 
+// ── PROJECTION PAR FORMAT
+// Une bobine WSL ne remplace pas une bobine TL : op_types_vehicule relie
+// chaque type de vehicule a une serie. Une projection globale peut donc
+// annoncer des semaines d'autonomie alors qu'un format est deja epuise
+// et que la production correspondante s'arrete. La contrainte reelle est
+// le format qui arrive a echeance en premier.
+$formats = conso_stock_par_format($f_site, $fenetre);
+
+// Un nouveau site consomme dans les memes proportions que l'existant :
+// on repartit sa consommation estimee au prorata de chaque format.
+$conso_formats_totale = 0.0;
+foreach ($formats as $f) $conso_formats_totale += $f['conso'];
+$charge_new = $nb_sites_new * $conso_site_new;
+
+foreach ($formats as $code => $f) {
+    $part = $conso_formats_totale > 0 ? $f['conso'] / $conso_formats_totale : 0;
+    $c    = $f['conso'] + $charge_new * $part;
+    $j    = $c > 0 ? (int) floor($f['films_restants'] / $c) : null;
+    $formats[$code]['conso_projetee'] = $c;
+    $formats[$code]['jours_projetes'] = $j;
+    $formats[$code]['date_projetee']  = $j !== null ? date('Y-m-d', strtotime("+$j days")) : null;
+    $formats[$code]['couvre']         = $j !== null && $j >= $jours_cible;
+    $manque_films = $j !== null ? max(0, (int)ceil($c * $jours_cible) - $f['films_restants']) : 0;
+    $formats[$code]['bobines_manquantes'] = (int) ceil($manque_films / $f['films_par_bobine']);
+}
+
+// Format contraignant : celui qui s'epuise le plus tot.
+$format_critique = null;
+foreach ($formats as $code => $f) {
+    if ($f['jours_projetes'] === null) continue;
+    if ($format_critique === null || $f['jours_projetes'] < $formats[$format_critique]['jours_projetes']) {
+        $format_critique = $code;
+    }
+}
+
+// ── PROJECTION PMMA — meme raisonnement, un type ne remplace pas un autre
+$pmma_formats = conso_stock_par_pmma($f_site, $fenetre);
+$pmma_critique = null;
+foreach ($pmma_formats as $t => $p) {
+    if ($p['jours'] === null) continue;
+    if ($pmma_critique === null || $p['jours'] < $pmma_formats[$pmma_critique]['jours']) {
+        $pmma_critique = $t;
+    }
+}
+
 // Courbe d'évolution — un point par semaine jusqu'à épuisement ou horizon
 $courbe = [];
 if ($conso_totale > 0) {
@@ -142,7 +187,28 @@ $resume = [
     ['Horizon cible',               $horizon . ' mois (' . $jours_cible . ' jours)'],
     ['Couvre l’horizon',            $couvre_horizon ? 'Oui' : 'Non'],
     ['Bobines à commander',         $couvre_horizon ? '0' : fmt_number($bobines_a_commander)],
+    ['Format contraignant',         $format_critique !== null
+        ? $format_critique . ' — ' . fmt_number($formats[$format_critique]['jours_projetes'])
+          . ' jours (' . fmt_date($formats[$format_critique]['date_projetee']) . ')'
+        : 'aucune consommation par format'],
+    ['PMMA contraignant',           $pmma_critique !== null
+        ? $pmma_critique . ' — ' . fmt_number($pmma_formats[$pmma_critique]['jours'])
+          . ' jours (' . fmt_date($pmma_formats[$pmma_critique]['date_epuisement']) . ')'
+        : 'aucune consommation PMMA'],
 ];
+
+// Detail par format, repris dans les deux exports : un agregat sans son
+// detail par format ferait perdre l'information qui compte.
+$detail_formats = [];
+foreach ($formats as $code => $f) {
+    $detail_formats[] = [
+        $code, $f['serie'] ?: '—', $f['bobines'], $f['films_restants'],
+        number_format($f['conso_projetee'], 1, ',', ' '),
+        $f['jours_projetes'] !== null ? $f['jours_projetes'] : '—',
+        $f['date_projetee'] ? fmt_date($f['date_projetee']) : '—',
+        $f['jours_projetes'] === null ? '—' : $f['bobines_manquantes'],
+    ];
+}
 
 if ($export === 'xlsx') {
     $sp = new Spreadsheet(); $sh = $sp->getActiveSheet()->setTitle('Simulation');
@@ -153,6 +219,15 @@ if ($export === 'xlsx') {
         'alignment'=>['horizontal'=>Alignment::HORIZONTAL_CENTER]]);
     $r = 2;
     foreach ($resume as [$k, $v]) { $sh->setCellValue("A$r", $k); $sh->setCellValue("B$r", $v); $r++; }
+    $r += 1;
+    $ent = ['Format','Série','Bobines','Films','Films/jour','Autonomie (j)','Épuisement','À commander'];
+    foreach ($ent as $i => $t) $sh->setCellValueByColumnAndRow($i+1, $r, $t);
+    $sh->getStyle("A$r:H$r")->getFont()->setBold(true);
+    $r++;
+    foreach ($detail_formats as $lig) {
+        foreach ($lig as $i => $v) $sh->setCellValueByColumnAndRow($i+1, $r, $v);
+        $r++;
+    }
     $r += 1;
     $sh->setCellValue("A$r", 'Date'); $sh->setCellValue("B$r", 'Films restants');
     $sh->getStyle("A$r:B$r")->getFont()->setBold(true);
@@ -202,6 +277,20 @@ if ($export === 'pdf') {
       <?php endforeach; ?>
       </tbody>
     </table>
+    <?php if (!empty($detail_formats)): ?>
+    <h1 style="font-size:13px;margin:14px 0 4px">Détail par format</h1>
+    <table>
+      <thead><tr>
+        <th>Format</th><th>Série</th><th>Bobines</th><th>Films</th>
+        <th>Films/j</th><th>Autonomie</th><th>Épuisement</th><th>À commander</th>
+      </tr></thead>
+      <tbody>
+      <?php foreach ($detail_formats as $lig): ?>
+        <tr><?php foreach ($lig as $v): ?><td><?= h($v) ?></td><?php endforeach; ?></tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+    <?php endif; ?>
     <?php
     $html = ob_get_clean();
     $opt = new Options(); $opt->set('isHtml5ParserEnabled', true); $opt->set('defaultFont','DejaVu Sans');
@@ -247,6 +336,20 @@ table.sim-t td{padding:7px 0;border-bottom:1px solid var(--border)}
 table.sim-t tr:last-child td{border-bottom:none}
 table.sim-t td:first-child{color:var(--muted)}
 table.sim-t td:last-child{text-align:right;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums}
+table.sim-fmt{width:100%;border-collapse:collapse;font-size:13px}
+table.sim-fmt th{text-align:left;font-size:10.5px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted);padding:0 10px 7px 0;border-bottom:1px solid var(--border);white-space:nowrap}
+table.sim-fmt th.n,table.sim-fmt td.n{text-align:right}
+table.sim-fmt td{padding:9px 10px 9px 0;border-bottom:1px solid var(--border);
+  color:var(--navy);font-variant-numeric:tabular-nums;white-space:nowrap}
+table.sim-fmt tr:last-child td{border-bottom:none}
+table.sim-fmt tr.crit td{background:#fdf3f2}
+table.sim-fmt td.manque{color:var(--danger-d);font-weight:800}
+.tag-crit{display:inline-block;margin-left:7px;padding:1px 7px;border-radius:9px;
+  background:var(--danger);color:#fff;font-size:10px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.05em;vertical-align:1px}
+.sim-alerte{margin-top:14px;background:#fdf3f2;border-left:3px solid var(--danger);
+  border-radius:0 9px 9px 0;padding:11px 14px;font-size:13px;line-height:1.55;color:var(--navy)}
 </style>
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:18px">
@@ -367,6 +470,14 @@ table.sim-t td:last-child{text-align:right;font-weight:700;color:var(--navy);fon
           il manque <strong><?= fmt_number($bobines_a_commander) ?> bobine(s)</strong>
           (<?= fmt_number($deficit_films) ?> films) à commander.
         <?php endif; ?>
+        <?php if ($format_critique !== null
+                  && $formats[$format_critique]['jours_projetes'] < ($jours_tenus ?? PHP_INT_MAX)): ?>
+          <br><br>Attention : ce chiffre agrège tous les formats. Le format
+          <strong><?= h($format_critique) ?></strong> s'épuise dès
+          <strong><?= h(fmt_date($formats[$format_critique]['date_projetee'])) ?></strong>,
+          soit <?= fmt_number($formats[$format_critique]['jours_projetes']) ?> jours —
+          c'est lui qui arrêtera la production correspondante.
+        <?php endif; ?>
       </div>
     </div>
     <?php endif; ?>
@@ -390,9 +501,96 @@ table.sim-t td:last-child{text-align:right;font-weight:700;color:var(--navy);fon
       </div>
     </div>
 
+    <!-- ══ PROJECTION PAR FORMAT ══ -->
+    <div class="sim-card">
+      <h4>Par format de bobine</h4>
+      <div class="sc-sub">
+        Une bobine WSL ne remplace pas une bobine TL : chaque type de véhicule dépend
+        d'une série précise. C'est le format qui s'épuise en premier qui arrête la production,
+        pas la moyenne globale.
+      </div>
+      <?php if (empty($formats)): ?>
+        <div style="color:var(--muted);font-size:13.5px">Aucune bobine en stock sur ce périmètre.</div>
+      <?php else: ?>
+      <div style="overflow-x:auto">
+      <table class="sim-fmt">
+        <thead><tr>
+          <th>Format</th><th>Série</th>
+          <th class="n">Bobines</th><th class="n">Films</th>
+          <th class="n">Films / jour</th><th class="n">Autonomie</th>
+          <th>Épuisement</th><th class="n">À commander</th>
+        </tr></thead>
+        <tbody>
+        <?php foreach ($formats as $code => $f):
+          $crit = ($code === $format_critique); ?>
+        <tr class="<?= $crit ? 'crit' : '' ?>">
+          <td>
+            <strong><?= h($code) ?></strong>
+            <?php if ($crit): ?><span class="tag-crit">contrainte</span><?php endif; ?>
+          </td>
+          <td style="color:var(--muted)"><?= h($f['serie'] ?: '—') ?></td>
+          <td class="n"><?= fmt_number($f['bobines']) ?></td>
+          <td class="n"><?= fmt_number($f['films_restants']) ?></td>
+          <td class="n"><?= number_format($f['conso_projetee'], 1, ',', ' ') ?></td>
+          <td class="n"><?= $f['jours_projetes'] !== null ? fmt_number($f['jours_projetes']).' j' : '—' ?></td>
+          <td><?= $f['date_projetee'] ? h(fmt_date($f['date_projetee'])) : '<span style="color:var(--muted)">pas de consommation</span>' ?></td>
+          <td class="n <?= $f['bobines_manquantes'] > 0 ? 'manque' : '' ?>">
+            <?= $f['jours_projetes'] === null ? '—' : ($f['bobines_manquantes'] > 0 ? fmt_number($f['bobines_manquantes']) : '0') ?>
+          </td>
+        </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+      </div>
+      <?php if ($format_critique !== null && !$formats[$format_critique]['couvre']): ?>
+      <div class="sim-alerte">
+        <strong><?= h($format_critique) ?></strong> s'épuise le premier, dans
+        <strong><?= fmt_number($formats[$format_critique]['jours_projetes']) ?> jours</strong>
+        (<?= h(fmt_date($formats[$format_critique]['date_projetee'])) ?>) — bien avant l'horizon
+        de <?= $horizon ?> mois. Les véhicules dépendant de la série
+        <?= h($formats[$format_critique]['serie'] ?: '—') ?> ne pourront plus être traités
+        à partir de cette date, quel que soit le stock des autres formats.
+      </div>
+      <?php endif; ?>
+      <?php endif; ?>
+    </div>
+
+    <!-- ══ PROJECTION PMMA ══ -->
+    <div class="sim-card">
+      <h4>Par type de PMMA</h4>
+      <div class="sc-sub">Même raisonnement : un type de PMMA ne remplace pas un autre.</div>
+      <?php if (empty($pmma_formats)): ?>
+        <div style="color:var(--muted);font-size:13.5px">Aucun stock PMMA sur ce périmètre.</div>
+      <?php else: ?>
+      <div style="overflow-x:auto">
+      <table class="sim-fmt">
+        <thead><tr>
+          <th>Type</th><th class="n">Stock</th><th class="n">Seuil</th>
+          <th class="n">Unités / jour</th><th class="n">Autonomie</th><th>Épuisement</th>
+        </tr></thead>
+        <tbody>
+        <?php foreach ($pmma_formats as $t => $p):
+          $crit = ($t === $pmma_critique);
+          $sous = $p['quantite'] < $p['seuil']; ?>
+        <tr class="<?= $crit ? 'crit' : '' ?>">
+          <td><strong><?= h($t) ?></strong>
+            <?php if ($crit): ?><span class="tag-crit">contrainte</span><?php endif; ?></td>
+          <td class="n <?= $sous ? 'manque' : '' ?>"><?= fmt_number($p['quantite']) ?></td>
+          <td class="n" style="color:var(--muted)"><?= fmt_number($p['seuil']) ?></td>
+          <td class="n"><?= number_format($p['conso'], 1, ',', ' ') ?></td>
+          <td class="n"><?= $p['jours'] !== null ? fmt_number($p['jours']).' j' : '—' ?></td>
+          <td><?= $p['date_epuisement'] ? h(fmt_date($p['date_epuisement'])) : '<span style="color:var(--muted)">pas de consommation</span>' ?></td>
+        </tr>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+      </div>
+      <?php endif; ?>
+    </div>
+
     <?php if (!empty($courbe)): ?>
     <div class="sim-card">
-      <h4>Évolution du stock</h4>
+      <h4>Évolution du stock — tous formats confondus</h4>
       <div class="sc-sub">Projection linéaire au rythme retenu, sur l'horizon de <?= $horizon ?> mois.</div>
       <canvas id="simChart" height="190"></canvas>
     </div>
