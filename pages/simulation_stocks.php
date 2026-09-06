@@ -69,21 +69,38 @@ $conso_jour  = ($conso_saisie !== '' && is_numeric($conso_saisie))
              : $conso_auto;
 $conso_manuelle = ($conso_saisie !== '' && is_numeric($conso_saisie));
 
-$films_bobine = max(1, (int)($_GET['films_bobine'] ?? films_par_bobine_moyen($f_site)));
+// ── Perimetre matiere de la projection de stock
+// La quantite ne se saisit plus globalement : chaque format a son propre
+// conditionnement (500 ou 2000 films), et multiplier un nombre de bobines
+// par une moyenne du parc donnait un stock projete qui ne correspondait a
+// rien — 11 bobines x 929 = 10 219 films la ou le stock reel en compte
+// 9 600. La projection se fait donc format par format, quantite editable,
+// et l'agregat est la somme de ces lignes.
+$formats_base  = conso_stock_par_format($f_site, $fenetre);
+$pmma_base     = conso_stock_par_pmma($f_site, $fenetre);
+$formats_dispo = array_keys($formats_base);
+$pmma_dispo    = array_keys($pmma_base);
 
-// Stock réellement disponible, proposé par défaut dans le formulaire
-$stock_films_reel = (int) db_fetch_value(
-    "SELECT COALESCE(SUM(films_restants),0) FROM op_bobines
-      WHERE statut IN ('en_stock','en_cours') " . ($f_site ? "AND site_id = ?" : ""),
-    $f_site ? [$f_site] : []
-);
-$bobines_defaut = (int) ceil($stock_films_reel / $films_bobine);
+$formats_stock = isset($_GET['fmt_stock']) && is_array($_GET['fmt_stock'])
+               ? array_values(array_intersect($_GET['fmt_stock'], $formats_dispo))
+               : $formats_dispo;
+$pmma_stock    = isset($_GET['pmma_stock']) && is_array($_GET['pmma_stock'])
+               ? array_values(array_intersect($_GET['pmma_stock'], $pmma_dispo))
+               : $pmma_dispo;
+if (!$formats_stock) $formats_stock = $formats_dispo;
+if (!$pmma_stock)    $pmma_stock    = $pmma_dispo;
 
-// En mode « ouverture de site », la quantite n'est pas un parametre : la
-// question porte sur le stock reellement detenu aujourd'hui.
-$nb_bobines  = ($avec_stock && isset($_GET['bobines']) && $_GET['bobines'] !== '')
-             ? max(0, (int)$_GET['bobines'])
-             : $bobines_defaut;
+// Quantites projetees, par format et par type. Vide = stock reel.
+$qte_fmt_saisie  = (isset($_GET['qte_fmt'])  && is_array($_GET['qte_fmt']))  ? $_GET['qte_fmt']  : [];
+$qte_pmma_saisie = (isset($_GET['qte_pmma']) && is_array($_GET['qte_pmma'])) ? $_GET['qte_pmma'] : [];
+
+$stock_films_reel = 0;
+$bobines_defaut   = 0;
+foreach ($formats_base as $code => $f) {
+    $stock_films_reel += $f['films_restants'];
+    $bobines_defaut   += $f['bobines'];
+}
+$films_bobine = films_par_bobine_moyen($f_site);   // encore utilise pour les libelles
 
 // ── Nouveaux sites — ignores si le mode ne les couvre pas
 $nb_sites_new   = $avec_ouverture ? max(0, min(20, (int)($_GET['sites_new'] ?? 1))) : 0;
@@ -93,9 +110,6 @@ $nb_sites_new   = $avec_ouverture ? max(0, min(20, (int)($_GET['sites_new'] ?? 1
 // au prorata — une hypothese commode mais fausse des qu'un site n'est
 // pas equipe comme les autres. Par defaut : tout est coche, ce qui
 // reproduit le comportement precedent.
-$formats_dispo = array_keys(conso_stock_par_format($f_site, $fenetre));
-$pmma_dispo    = array_keys(conso_stock_par_pmma($f_site, $fenetre));
-
 $formats_new = isset($_GET['fmt_new']) && is_array($_GET['fmt_new'])
              ? array_values(array_intersect($_GET['fmt_new'], $formats_dispo))
              : $formats_dispo;
@@ -142,14 +156,55 @@ if (!$avec_ouverture) $conso_pmma_new = 0.0;
 // ============================================================
 //  CALCUL
 // ============================================================
-$stock_films   = $nb_bobines * $films_bobine;
+// ── PROJECTION PAR FORMAT — base de tout le reste
+// $formats porte, pour chaque format : sa quantite projetee (saisie ou
+// stock reel), sa consommation, et plus bas la charge des nouveaux sites.
+$formats = $formats_base;
+foreach ($formats as $code => $f) {
+    $retenu_stock = in_array($code, $formats_stock, true);
+    $saisie = $qte_fmt_saisie[$code] ?? '';
+    $bob    = ($avec_stock && $saisie !== '' && is_numeric($saisie))
+            ? max(0, (int)$saisie)
+            : $f['bobines'];
+    // Une quantite saisie s'exprime en bobines : on la convertit avec le
+    // conditionnement propre au format, pas avec une moyenne du parc.
+    $films  = ($avec_stock && $saisie !== '' && is_numeric($saisie))
+            ? $bob * $f['films_par_bobine']
+            : $f['films_restants'];
+    if (!$retenu_stock) { $bob = 0; $films = 0; }
+    $formats[$code]['retenu_stock']    = $retenu_stock;
+    $formats[$code]['bobines_projete'] = $bob;
+    $formats[$code]['films_projete']   = $films;
+}
+
+// Agregat : somme des formats retenus, et non un produit moyen.
+$stock_films = 0; $nb_bobines = 0; $conso_base_sel = 0.0;
+foreach ($formats as $f) {
+    if (!$f['retenu_stock']) continue;
+    $stock_films    += $f['films_projete'];
+    $nb_bobines     += $f['bobines_projete'];
+    $conso_base_sel += $f['conso'];
+}
+// La consommation retenue suit le meme perimetre : ne garder que les
+// formats projetes tout en comptant la consommation de tous fausserait
+// l'autonomie.
+if (!$conso_manuelle && count($formats_stock) < count($formats_dispo)) {
+    $conso_jour = $conso_base_sel;
+}
+
 $conso_totale  = $conso_jour + ($nb_sites_new * $conso_site_new);
 $jours_tenus   = $conso_totale > 0 ? (int) floor($stock_films / $conso_totale) : null;
 $date_epuis    = $jours_tenus !== null ? date('Y-m-d', strtotime("+$jours_tenus days")) : null;
 $jours_cible   = (int) round($horizon * 30.44);          // mois moyen grégorien
 $films_requis  = (int) ceil($conso_totale * $jours_cible);
 $deficit_films = max(0, $films_requis - $stock_films);
-$bobines_a_commander = (int) ceil($deficit_films / $films_bobine);
+// Conditionnement moyen de la SELECTION, pas du parc entier : convertir un
+// deficit en bobines avec la moyenne generale reintroduirait l'ecart que
+// la projection par format vient justement de corriger.
+$films_bobine_sel = $nb_bobines > 0
+                  ? (int) round($stock_films / $nb_bobines)
+                  : $films_bobine;
+$bobines_a_commander = (int) ceil($deficit_films / max(1, $films_bobine_sel));
 $couvre_horizon = $jours_tenus !== null && $jours_tenus >= $jours_cible;
 
 // ── PROJECTION PAR FORMAT
@@ -158,7 +213,10 @@ $couvre_horizon = $jours_tenus !== null && $jours_tenus >= $jours_cible;
 // annoncer des semaines d'autonomie alors qu'un format est deja epuise
 // et que la production correspondante s'arrete. La contrainte reelle est
 // le format qui arrive a echeance en premier.
-$formats = conso_stock_par_format($f_site, $fenetre);
+//
+// $formats porte deja les quantites projetees calculees plus haut : le
+// recharger ici les ecraserait et l'agregat ne correspondrait plus au
+// detail affiche.
 
 // La charge des nouveaux sites ne porte que sur les formats retenus.
 // Repartition au prorata de leur consommation actuelle ; si aucun des
@@ -177,12 +235,20 @@ foreach ($formats as $code => $f) {
     $c      = $f['conso'] + $charge_new * $part;
     $formats[$code]['retenu']     = $retenu;
     $formats[$code]['charge_new'] = $charge_new * $part;
-    $j    = $c > 0 ? (int) floor($f['films_restants'] / $c) : null;
+
+    // Un format ecarte de la projection de stock reste affiche avec son
+    // stock reel : c'est une ligne d'information, pas une projection.
+    $stock_ligne = $f['retenu_stock'] ? $f['films_projete'] : $f['films_restants'];
+    $bob_ligne   = $f['retenu_stock'] ? $f['bobines_projete'] : $f['bobines'];
+    $formats[$code]['films_ligne']   = $stock_ligne;
+    $formats[$code]['bobines_ligne'] = $bob_ligne;
+
+    $j    = $c > 0 ? (int) floor($stock_ligne / $c) : null;
     $formats[$code]['conso_projetee'] = $c;
     $formats[$code]['jours_projetes'] = $j;
     $formats[$code]['date_projetee']  = $j !== null ? date('Y-m-d', strtotime("+$j days")) : null;
     $formats[$code]['couvre']         = $j !== null && $j >= $jours_cible;
-    $manque_films = $j !== null ? max(0, (int)ceil($c * $jours_cible) - $f['films_restants']) : 0;
+    $manque_films = $j !== null ? max(0, (int)ceil($c * $jours_cible) - $stock_ligne) : 0;
     $formats[$code]['bobines_manquantes'] = (int) ceil($manque_films / $f['films_par_bobine']);
 }
 
@@ -196,10 +262,12 @@ if ($avec_ouverture && $nb_sites_new > 0 && $conso_jour > 0) {
     if ($jours_tenus !== null) $jours_perdus = $jours_sans_new - $jours_tenus;
 }
 
-// Format contraignant : celui qui s'epuise le plus tot.
+// Format contraignant : celui qui s'epuise le plus tot, parmi les formats
+// que l'utilisateur a mis dans le perimetre de projection. Un format qu'il
+// a explicitement ecarte ne doit pas venir dicter la conclusion.
 $format_critique = null;
 foreach ($formats as $code => $f) {
-    if ($f['jours_projetes'] === null) continue;
+    if ($f['jours_projetes'] === null || !$f['retenu_stock']) continue;
     if ($format_critique === null || $f['jours_projetes'] < $formats[$format_critique]['jours_projetes']) {
         $format_critique = $code;
     }
@@ -208,7 +276,7 @@ foreach ($formats as $code => $f) {
 // ── PROJECTION PMMA — meme raisonnement, un type ne remplace pas un
 // autre, et la charge des nouveaux sites ne porte que sur les types
 // retenus pour ces sites.
-$pmma_formats = conso_stock_par_pmma($f_site, $fenetre);
+$pmma_formats = $pmma_base;
 $charge_pmma  = $nb_sites_new * $conso_pmma_new;
 $base_pmma    = 0.0;
 foreach ($pmma_new as $t) $base_pmma += $pmma_formats[$t]['conso'] ?? 0;
@@ -219,20 +287,32 @@ foreach ($pmma_formats as $t => $p) {
     $part   = !$retenu ? 0
             : ($base_pmma > 0 ? $p['conso'] / $base_pmma : 1 / $nb_pmma_sel);
     $c      = $p['conso'] + $charge_pmma * $part;
-    $j      = $c > 0 ? (int) floor($p['quantite'] / $c) : null;
+
+    // Quantite projetee : saisie de l'utilisateur si presente, sinon le
+    // stock reel du type. Le PMMA se compte a l'unite, aucune conversion.
+    $retenu_stock = in_array($t, $pmma_stock, true);
+    $saisie_p = $qte_pmma_saisie[$t] ?? '';
+    $q = ($avec_stock && $saisie_p !== '' && is_numeric($saisie_p))
+       ? max(0, (int)$saisie_p)
+       : $p['quantite'];
+    if (!$retenu_stock) $q = $p['quantite'];   // ligne informative
+
+    $j = $c > 0 ? (int) floor($q / $c) : null;
     $pmma_formats[$t]['retenu']         = $retenu;
+    $pmma_formats[$t]['retenu_stock']   = $retenu_stock;
+    $pmma_formats[$t]['qte_projetee']   = $q;
     $pmma_formats[$t]['charge_new']     = $charge_pmma * $part;
     $pmma_formats[$t]['conso_projetee'] = $c;
     $pmma_formats[$t]['jours_projetes'] = $j;
     $pmma_formats[$t]['date_projetee']  = $j !== null ? date('Y-m-d', strtotime("+$j days")) : null;
     // Quantite a prevoir pour tenir l'horizon avec cette charge
     $pmma_formats[$t]['manque'] = $j !== null
-        ? max(0, (int)ceil($c * $jours_cible) - $p['quantite']) : 0;
+        ? max(0, (int)ceil($c * $jours_cible) - $q) : 0;
 }
 
 $pmma_critique = null;
 foreach ($pmma_formats as $t => $p) {
-    if ($p['jours_projetes'] === null) continue;
+    if ($p['jours_projetes'] === null || !$p['retenu_stock']) continue;
     if ($pmma_critique === null
         || $p['jours_projetes'] < $pmma_formats[$pmma_critique]['jours_projetes']) {
         $pmma_critique = $t;
@@ -273,9 +353,17 @@ if ($export !== '' && !can('simulation_stocks', 'can_export')) {
 $resume = [
     ['Mode de simulation',          $MODES[$mode][0]],
     ['Périmètre',                   $site_nom ?: 'Tous les sites'],
+    ['Formats de bobines projetés', count($formats_stock) === count($formats_dispo)
+        ? 'tous (' . implode(', ', $formats_dispo) . ')'
+        : implode(', ', $formats_stock)],
+    ['Types de PMMA projetés',      count($pmma_stock) === count($pmma_dispo)
+        ? 'tous (' . implode(', ', $pmma_dispo) . ')'
+        : implode(', ', $pmma_stock)],
     ['Bobines projetées',           fmt_number($nb_bobines)],
-    ['Films par bobine',            fmt_number($films_bobine)],
-    ['Stock projeté (films)',       fmt_number($stock_films)],
+    ['Stock projeté (films)',       fmt_number($stock_films)
+                                    . ' — somme des formats retenus'],
+    ['Stock réel du périmètre',     fmt_number($bobines_defaut) . ' bobine(s), '
+                                    . fmt_number($stock_films_reel) . ' films'],
     ['Consommation retenue',        number_format($conso_jour, 1, ',', ' ') . ' films/jour'
                                     . ($conso_manuelle ? ' (saisie)' : ' (observée)')],
     ['Nouveaux sites simulés',      $nb_sites_new . ($nb_sites_new ? ' × ' . number_format($conso_site_new, 1, ',', ' ') . ' films/jour' : '')],
@@ -289,11 +377,12 @@ $resume = [
     ['Horizon cible',               $horizon . ' mois (' . $jours_cible . ' jours)'],
     ['Couvre l’horizon',            $couvre_horizon ? 'Oui' : 'Non'],
     ['Bobines à commander',         $couvre_horizon ? '0' : fmt_number($bobines_a_commander)],
-    // « Le plus contraint » porte sur tout le perimetre, pas sur la
-    // selection faite pour les nouveaux sites : un format non retenu peut
-    // rester celui qui s'epuise en premier, et c'est justement ce qu'il
-    // faut savoir. Le libelle le dit, sinon on croit a une erreur.
-    ['Format le plus contraint (tout le périmètre)', $format_critique !== null
+    // « Le plus contraint » se cherche dans le perimetre PROJETE, mais
+    // sans tenir compte de la selection faite pour les nouveaux sites :
+    // un format qui ne recoit aucune charge nouvelle peut rester celui
+    // qui s'epuise en premier, et c'est justement ce qu'il faut savoir.
+    // Le libelle le dit, sinon on croit a une erreur.
+    ['Format le plus contraint (périmètre projeté)', $format_critique !== null
         ? $format_critique . ' — ' . fmt_number($formats[$format_critique]['jours_projetes'])
           . ' jours (' . fmt_date($formats[$format_critique]['date_projetee']) . ')'
           . ($nb_sites_new > 0
@@ -301,8 +390,10 @@ $resume = [
                 ? ' — prévu sur les nouveaux sites'
                 : ' — hors sélection nouveaux sites')
              : '')
-        : 'aucune consommation par format'],
-    ['PMMA le plus contraint (tout le périmètre)', $pmma_critique !== null
+        : (count($formats_stock) < count($formats_dispo)
+           ? 'aucun format retenu n’a de consommation observée'
+           : 'aucune consommation par format')],
+    ['PMMA le plus contraint (périmètre projeté)', $pmma_critique !== null
         ? $pmma_critique . ' — ' . fmt_number($pmma_formats[$pmma_critique]['jours_projetes'])
           . ' jours (' . fmt_date($pmma_formats[$pmma_critique]['date_projetee']) . ')'
           . ($nb_sites_new > 0
@@ -310,7 +401,9 @@ $resume = [
                 ? ' — prévu sur les nouveaux sites'
                 : ' — hors sélection nouveaux sites')
              : '')
-        : 'aucune consommation PMMA'],
+        : (count($pmma_stock) < count($pmma_dispo)
+           ? 'aucun type retenu n’a de consommation observée'
+           : 'aucune consommation PMMA')],
 ];
 
 // Detail par format, repris dans les deux exports : un agregat sans son
@@ -318,7 +411,8 @@ $resume = [
 $detail_formats = [];
 foreach ($formats as $code => $f) {
     $detail_formats[] = [
-        $code, $f['serie'] ?: '—', $f['bobines'], $f['films_restants'],
+        $code . ($f['retenu_stock'] ? '' : ' (hors projection)'),
+        $f['serie'] ?: '—', $f['bobines_ligne'], $f['films_ligne'],
         number_format($f['conso_projetee'], 1, ',', ' '),
         $f['jours_projetes'] !== null ? $f['jours_projetes'] : '—',
         $f['date_projetee'] ? fmt_date($f['date_projetee']) : '—',
@@ -336,12 +430,14 @@ if ($export === 'xlsx') {
     $r = 2;
     foreach ($resume as [$k, $v]) { $sh->setCellValue("A$r", $k); $sh->setCellValue("B$r", $v); $r++; }
     $r += 1;
+    // setCellValueByColumnAndRow() a disparu en PhpSpreadsheet 2.0 ; le
+    // projet est en 5.9. La notation [colonne, ligne] la remplace.
     $ent = ['Format','Série','Bobines','Films','Films/jour','Autonomie (j)','Épuisement','À commander'];
-    foreach ($ent as $i => $t) $sh->setCellValueByColumnAndRow($i+1, $r, $t);
+    foreach ($ent as $i => $t) $sh->setCellValue([$i+1, $r], $t);
     $sh->getStyle("A$r:H$r")->getFont()->setBold(true);
     $r++;
     foreach ($detail_formats as $lig) {
-        foreach ($lig as $i => $v) $sh->setCellValueByColumnAndRow($i+1, $r, $v);
+        foreach ($lig as $i => $v) $sh->setCellValue([$i+1, $r], $v);
         $r++;
     }
     $r += 1;
@@ -480,14 +576,63 @@ table.sim-fmt td.manque{color:var(--danger-d);font-weight:800}
   text-transform:uppercase;letter-spacing:.05em;vertical-align:1px}
 table.sim-fmt em.ajout{font-style:normal;color:var(--blue-deep,#0E5A94);font-size:11.5px;
   font-weight:700;margin-left:5px}
-.sim-choix{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
-.sim-chk{display:inline-flex;align-items:center;gap:6px;border:1.5px solid var(--border);
-  border-radius:9px;padding:6px 10px;cursor:pointer;font-size:12.5px;
-  transition:border-color .15s,background .15s}
-.sim-chk:hover{background:var(--lighter)}
-.sim-chk.on{border-color:var(--blue);background:var(--primary-l,#eaf3fb)}
-.sim-chk span{font-weight:700;color:var(--navy);line-height:1.25}
-.sim-chk em{display:block;font-style:normal;font-weight:500;font-size:11px;color:var(--muted)}
+/* Menu déroulant à choix multiple.
+   Les formats et les types de PMMA se comptent en dizaines : une rangée de
+   pastilles à cocher débordait du panneau de paramètres. Un déroulant garde
+   une hauteur fixe quel que soit le nombre de références. */
+.sim-dd{position:relative}
+.sim-dd-b{width:100%;display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:8px 11px;border:1.5px solid var(--border);border-radius:9px;background:white;
+  font-size:13.5px;font-family:inherit;color:var(--navy);text-align:left;cursor:pointer}
+.sim-dd-b:hover{border-color:var(--blue)}
+.sim-dd.open .sim-dd-b{border-color:var(--blue);border-radius:9px 9px 0 0}
+.sim-dd.open .sim-dd-b i{transform:rotate(180deg)}
+.sim-dd-b i{color:var(--muted);transition:transform .15s;flex:none}
+.sim-dd-txt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sim-dd-p{display:none;position:absolute;z-index:30;left:0;right:0;top:100%;
+  background:white;border:1.5px solid var(--blue);border-top:none;border-radius:0 0 9px 9px;
+  max-height:266px;overflow-y:auto;box-shadow:0 10px 26px rgba(6,3,58,.13)}
+.sim-dd.open .sim-dd-p{display:block}
+/* Ouverture vers le haut pour les déroulants en bas de formulaire : sinon
+   le panneau dépasse la fenêtre et son pied devient inatteignable. */
+.sim-dd.haut .sim-dd-p{top:auto;bottom:100%;border-top:1.5px solid var(--blue);
+  border-bottom:none;border-radius:9px 9px 0 0;box-shadow:0 -10px 26px rgba(6,3,58,.13)}
+.sim-dd.haut.open .sim-dd-b{border-radius:0 0 9px 9px}
+.sim-dd-h{display:flex;align-items:center;gap:8px;padding:7px 11px;
+  border-bottom:1px solid var(--border);background:var(--lighter);position:sticky;top:0}
+.sim-dd-h button{border:none;background:none;padding:0;font-family:inherit;font-size:11.5px;
+  font-weight:700;color:var(--blue);cursor:pointer;text-decoration:underline}
+.sim-dd-c{margin-left:auto;font-size:10.5px;color:var(--muted)}
+.sim-dd-i{display:flex;align-items:center;gap:8px;padding:7px 11px;border-bottom:1px solid var(--border)}
+.sim-dd-i:last-child{border-bottom:none}
+.sim-dd-i:hover{background:var(--lighter)}
+.sim-dd-i>label{display:flex;align-items:center;gap:8px;flex:1;min-width:0;cursor:pointer;margin:0}
+/* width:auto est indispensable : .sim-f input impose width:100%, ce qui
+   étirait la case à cocher sur toute la ligne et écrasait le libellé. */
+.sim-f .sim-dd-i input[type=checkbox]{flex:none;width:auto;margin:0}
+.sim-dd-n{font-size:13px;font-weight:700;color:var(--navy);line-height:1.25;min-width:0}
+.sim-dd-n em{display:block;font-style:normal;font-weight:500;font-size:11px;color:var(--muted)}
+/* .sim-f input impose width:100% : il faut au moins autant de spécificité,
+   sinon le champ quantité prend toute la largeur de la ligne. */
+.sim-f .sim-dd-q{flex:none;width:74px;padding:5px 7px;border:1.5px solid var(--border);
+  border-radius:7px;font-size:12.5px;text-align:right;
+  font-variant-numeric:tabular-nums;box-sizing:border-box}
+.sim-dd-q:disabled{background:var(--lighter);color:var(--muted)}
+.sim-dd-vide{padding:11px;font-size:12.5px;color:var(--muted)}
+/* Pied du panneau : collé en bas même quand la liste défile, sinon il
+   faudrait dérouler jusqu'en bas pour trouver le bouton de validation. */
+.sim-dd-f{display:flex;justify-content:flex-end;gap:7px;padding:8px 11px;
+  border-top:1px solid var(--border);background:white;position:sticky;bottom:0}
+.sim-dd-f button{border:1.5px solid var(--border);background:white;border-radius:8px;
+  padding:5px 13px;font-family:inherit;font-size:12.5px;font-weight:700;
+  color:var(--navy);cursor:pointer}
+.sim-dd-f button:hover{background:var(--lighter)}
+.sim-dd-f .dd-ok{background:var(--primary-d);border-color:var(--primary-d);color:white}
+.sim-dd-f .dd-ok:hover{filter:brightness(1.08)}
+tr.hors td{opacity:.55}
+.tag-hors{display:inline-block;margin-left:7px;padding:1px 7px;border-radius:9px;
+  background:var(--lighter);color:var(--muted);font-size:10px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.05em;vertical-align:1px}
 </style>
 
 <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:18px">
@@ -531,7 +676,7 @@ table.sim-fmt em.ajout{font-style:normal;color:var(--blue-deep,#0E5A94);font-siz
     <div class="sim-sec">Périmètre</div>
     <div class="sim-f">
       <label>Site</label>
-      <select name="site" onchange="this.form.submit()">
+      <select name="site" onchange="simSite(this)">
         <option value="0">Tous les sites</option>
         <?php foreach($sites_list as $s): ?>
         <option value="<?= (int)$s['id'] ?>" <?= $f_site===(int)$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
@@ -540,7 +685,7 @@ table.sim-fmt em.ajout{font-style:normal;color:var(--blue-deep,#0E5A94);font-siz
     </div>
     <div class="sim-f">
       <label>Historique retenu</label>
-      <select name="fenetre" onchange="this.form.submit()">
+      <select name="fenetre" onchange="simSite(this)">
         <?php foreach([15=>'15 derniers jours',30=>'30 derniers jours',60=>'60 derniers jours',90=>'90 derniers jours'] as $v=>$l): ?>
         <option value="<?= $v ?>" <?= $fenetre===$v?'selected':'' ?>><?= $l ?></option>
         <?php endforeach; ?>
@@ -551,15 +696,78 @@ table.sim-fmt em.ajout{font-style:normal;color:var(--blue-deep,#0E5A94);font-siz
     <?php if ($avec_stock): ?>
     <div class="sim-sec">Stock à projeter</div>
     <div class="sim-f">
-      <label>Bobines disponibles</label>
-      <input type="number" name="bobines" min="0" value="<?= $nb_bobines ?>">
-      <div class="sub">Stock réel actuel : <strong><?= fmt_number($bobines_defaut) ?></strong> bobine(s)
+      <label>Formats de bobines retenus</label>
+      <div class="sim-dd">
+        <button type="button" class="sim-dd-b" onclick="ddOuvrir(this)">
+          <span class="sim-dd-txt"></span><i class="ph ph-caret-down" aria-hidden="true"></i>
+        </button>
+        <div class="sim-dd-p">
+          <?php if (empty($formats_dispo)): ?>
+            <div class="sim-dd-vide">Aucune bobine en stock sur ce périmètre.</div>
+          <?php else: ?>
+          <div class="sim-dd-h">
+            <button type="button" onclick="ddTout(this,1)">Tout</button>
+            <button type="button" onclick="ddTout(this,0)">Aucun</button>
+            <span class="sim-dd-c">quantité en bobines</span>
+          </div>
+          <?php foreach ($formats_base as $code => $f): ?>
+          <div class="sim-dd-i">
+            <label>
+              <input type="checkbox" name="fmt_stock[]" value="<?= h($code) ?>"
+                     <?= in_array($code, $formats_stock, true) ? 'checked' : '' ?>
+                     onchange="ddMaj(this)">
+              <span class="sim-dd-n"><?= h($code) ?>
+                <em>série <?= h($f['serie'] ?: '—') ?> · <?= fmt_number($f['films_par_bobine']) ?> films/bobine</em>
+              </span>
+            </label>
+            <input type="number" class="sim-dd-q" min="0" name="qte_fmt[<?= h($code) ?>]"
+                   placeholder="<?= (int)$f['bobines'] ?>"
+                   value="<?= h((string)($qte_fmt_saisie[$code] ?? '')) ?>">
+          </div>
+          <?php endforeach; ?>
+          <?php endif; ?>
+        </div>
+      </div>
+      <div class="sub">Décochez un format pour le sortir de la projection. La quantité est en
+        bobines : laissée vide, c'est le stock réel qui est repris. Chaque format est converti
+        avec <strong>son propre</strong> conditionnement.<br>
+        Stock réel du périmètre : <strong><?= fmt_number($bobines_defaut) ?></strong> bobine(s)
         (<?= fmt_number($stock_films_reel) ?> films).</div>
     </div>
     <div class="sim-f">
-      <label>Films par bobine</label>
-      <input type="number" name="films_bobine" min="1" value="<?= $films_bobine ?>">
-      <div class="sub">Moyenne du parc en service. Le stock est suivi en films.</div>
+      <label>Types de PMMA retenus</label>
+      <div class="sim-dd">
+        <button type="button" class="sim-dd-b" onclick="ddOuvrir(this)">
+          <span class="sim-dd-txt"></span><i class="ph ph-caret-down" aria-hidden="true"></i>
+        </button>
+        <div class="sim-dd-p">
+          <?php if (empty($pmma_dispo)): ?>
+            <div class="sim-dd-vide">Aucun stock PMMA sur ce périmètre.</div>
+          <?php else: ?>
+          <div class="sim-dd-h">
+            <button type="button" onclick="ddTout(this,1)">Tout</button>
+            <button type="button" onclick="ddTout(this,0)">Aucun</button>
+            <span class="sim-dd-c">quantité en unités</span>
+          </div>
+          <?php foreach ($pmma_base as $t => $p): ?>
+          <div class="sim-dd-i">
+            <label>
+              <input type="checkbox" name="pmma_stock[]" value="<?= h($t) ?>"
+                     <?= in_array($t, $pmma_stock, true) ? 'checked' : '' ?>
+                     onchange="ddMaj(this)">
+              <span class="sim-dd-n"><?= h($t) ?>
+                <em><?= fmt_number($p['quantite']) ?> en stock · seuil <?= fmt_number($p['seuil']) ?></em>
+              </span>
+            </label>
+            <input type="number" class="sim-dd-q" min="0" name="qte_pmma[<?= h($t) ?>]"
+                   placeholder="<?= (int)$p['quantite'] ?>"
+                   value="<?= h((string)($qte_pmma_saisie[$t] ?? '')) ?>">
+          </div>
+          <?php endforeach; ?>
+          <?php endif; ?>
+        </div>
+      </div>
+      <div class="sub">Le PMMA se compte à l'unité. Vide = stock réel du type.</div>
     </div>
     <?php else: ?>
     <div class="sim-sec">Stock de référence</div>
@@ -606,17 +814,31 @@ table.sim-fmt em.ajout{font-style:normal;color:var(--blue-deep,#0E5A94);font-siz
 
     <div class="sim-f">
       <label>Formats de bobines prévus sur ces sites</label>
-      <div class="sim-choix">
-        <?php foreach ($formats as $code => $f): ?>
-        <label class="sim-chk <?= in_array($code, $formats_new, true) ? 'on' : '' ?>">
-          <input type="checkbox" name="fmt_new[]" value="<?= h($code) ?>"
-                 <?= in_array($code, $formats_new, true) ? 'checked' : '' ?>>
-          <span><?= h($code) ?><em>série <?= h($f['serie'] ?: '—') ?></em></span>
-        </label>
-        <?php endforeach; ?>
-        <?php if (empty($formats)): ?>
-        <div class="sub">Aucun format en stock sur ce périmètre.</div>
-        <?php endif; ?>
+      <div class="sim-dd">
+        <button type="button" class="sim-dd-b" onclick="ddOuvrir(this)">
+          <span class="sim-dd-txt"></span><i class="ph ph-caret-down" aria-hidden="true"></i>
+        </button>
+        <div class="sim-dd-p">
+          <?php if (empty($formats_dispo)): ?>
+            <div class="sim-dd-vide">Aucun format en stock sur ce périmètre.</div>
+          <?php else: ?>
+          <div class="sim-dd-h">
+            <button type="button" onclick="ddTout(this,1)">Tout</button>
+            <button type="button" onclick="ddTout(this,0)">Aucun</button>
+          </div>
+          <?php foreach ($formats_base as $code => $f): ?>
+          <div class="sim-dd-i">
+            <label>
+              <input type="checkbox" name="fmt_new[]" value="<?= h($code) ?>"
+                     <?= in_array($code, $formats_new, true) ? 'checked' : '' ?>
+                     onchange="ddMaj(this)">
+              <span class="sim-dd-n"><?= h($code) ?>
+                <em>série <?= h($f['serie'] ?: '—') ?></em></span>
+            </label>
+          </div>
+          <?php endforeach; ?>
+          <?php endif; ?>
+        </div>
       </div>
       <div class="sub">La charge des nouveaux sites ne pèse que sur les formats cochés,
         répartie au prorata de leur consommation actuelle.</div>
@@ -632,17 +854,31 @@ table.sim-fmt em.ajout{font-style:normal;color:var(--blue-deep,#0E5A94);font-siz
 
     <div class="sim-f">
       <label>Types de PMMA à prévoir</label>
-      <div class="sim-choix">
-        <?php foreach ($pmma_formats as $t => $p): ?>
-        <label class="sim-chk <?= in_array($t, $pmma_new, true) ? 'on' : '' ?>">
-          <input type="checkbox" name="pmma_new[]" value="<?= h($t) ?>"
-                 <?= in_array($t, $pmma_new, true) ? 'checked' : '' ?>>
-          <span><?= h($t) ?><em><?= fmt_number($p['quantite']) ?> en stock</em></span>
-        </label>
-        <?php endforeach; ?>
-        <?php if (empty($pmma_formats)): ?>
-        <div class="sub">Aucun stock PMMA sur ce périmètre.</div>
-        <?php endif; ?>
+      <div class="sim-dd">
+        <button type="button" class="sim-dd-b" onclick="ddOuvrir(this)">
+          <span class="sim-dd-txt"></span><i class="ph ph-caret-down" aria-hidden="true"></i>
+        </button>
+        <div class="sim-dd-p">
+          <?php if (empty($pmma_dispo)): ?>
+            <div class="sim-dd-vide">Aucun stock PMMA sur ce périmètre.</div>
+          <?php else: ?>
+          <div class="sim-dd-h">
+            <button type="button" onclick="ddTout(this,1)">Tout</button>
+            <button type="button" onclick="ddTout(this,0)">Aucun</button>
+          </div>
+          <?php foreach ($pmma_base as $t => $p): ?>
+          <div class="sim-dd-i">
+            <label>
+              <input type="checkbox" name="pmma_new[]" value="<?= h($t) ?>"
+                     <?= in_array($t, $pmma_new, true) ? 'checked' : '' ?>
+                     onchange="ddMaj(this)">
+              <span class="sim-dd-n"><?= h($t) ?>
+                <em><?= fmt_number($p['quantite']) ?> en stock</em></span>
+            </label>
+          </div>
+          <?php endforeach; ?>
+          <?php endif; ?>
+        </div>
       </div>
     </div>
     <?php endif; ?>
@@ -734,7 +970,12 @@ table.sim-fmt em.ajout{font-style:normal;color:var(--blue-deep,#0E5A94);font-siz
       <div class="sc-sub">
         Une bobine WSL ne remplace pas une bobine TL : chaque type de véhicule dépend
         d'une série précise. C'est le format qui s'épuise en premier qui arrête la production,
-        pas la moyenne globale.
+        pas la moyenne globale. Le total en tête de page est la somme de ces lignes.
+        <?php if (count($formats_stock) < count($formats_dispo)): ?>
+        <br>Les formats marqués « hors projection » ne sont pas retenus dans votre périmètre :
+        ils restent affichés avec leur stock réel, à titre indicatif, et ne comptent ni dans
+        le total ni dans la contrainte.
+        <?php endif; ?>
         <?php if ($nb_sites_new > 0): ?>
         <br>Tous les formats du périmètre sont listés, y compris ceux que vous n'avez pas
         retenus pour les nouveaux sites : ils gardent leur consommation actuelle et peuvent
@@ -755,16 +996,18 @@ table.sim-fmt em.ajout{font-style:normal;color:var(--blue-deep,#0E5A94);font-siz
         </tr></thead>
         <tbody>
         <?php foreach ($formats as $code => $f):
-          $crit = ($code === $format_critique); ?>
-        <tr class="<?= $crit ? 'crit' : '' ?>">
+          $crit = ($code === $format_critique);
+          $hors = !$f['retenu_stock']; ?>
+        <tr class="<?= $crit ? 'crit' : ($hors ? 'hors' : '') ?>">
           <td>
             <strong><?= h($code) ?></strong>
             <?php if ($crit): ?><span class="tag-crit">contrainte</span><?php endif; ?>
+            <?php if ($hors): ?><span class="tag-hors">hors projection</span><?php endif; ?>
             <?php if ($nb_sites_new > 0 && !empty($f['retenu'])): ?><span class="tag-new">nouveaux sites</span><?php endif; ?>
           </td>
           <td style="color:var(--muted)"><?= h($f['serie'] ?: '—') ?></td>
-          <td class="n"><?= fmt_number($f['bobines']) ?></td>
-          <td class="n"><?= fmt_number($f['films_restants']) ?></td>
+          <td class="n"><?= fmt_number($f['bobines_ligne']) ?></td>
+          <td class="n"><?= fmt_number($f['films_ligne']) ?></td>
           <td class="n">
             <?= number_format($f['conso_projetee'], 1, ',', ' ') ?>
             <?php if (!empty($f['charge_new']) && $f['charge_new'] > 0.05): ?>
@@ -820,13 +1063,15 @@ table.sim-fmt em.ajout{font-style:normal;color:var(--blue-deep,#0E5A94);font-siz
         <tbody>
         <?php foreach ($pmma_formats as $t => $p):
           $crit = ($t === $pmma_critique);
-          $sous = $p['quantite'] < $p['seuil']; ?>
-        <tr class="<?= $crit ? 'crit' : '' ?>">
+          $hors = !$p['retenu_stock'];
+          $sous = $p['qte_projetee'] < $p['seuil']; ?>
+        <tr class="<?= $crit ? 'crit' : ($hors ? 'hors' : '') ?>">
           <td><strong><?= h($t) ?></strong>
             <?php if ($crit): ?><span class="tag-crit">contrainte</span><?php endif; ?>
+            <?php if ($hors): ?><span class="tag-hors">hors projection</span><?php endif; ?>
             <?php if ($nb_sites_new > 0 && !empty($p['retenu'])): ?><span class="tag-new">nouveaux sites</span><?php endif; ?>
           </td>
-          <td class="n <?= $sous ? 'manque' : '' ?>"><?= fmt_number($p['quantite']) ?></td>
+          <td class="n <?= $sous ? 'manque' : '' ?>"><?= fmt_number($p['qte_projetee']) ?></td>
           <td class="n" style="color:var(--muted)"><?= fmt_number($p['seuil']) ?></td>
           <td class="n">
             <?= number_format($p['conso_projetee'], 1, ',', ' ') ?>
@@ -878,6 +1123,131 @@ table.sim-fmt em.ajout{font-style:normal;color:var(--blue-deep,#0E5A94);font-siz
     <?php endif; ?>
   </div>
 </div>
+
+<script>
+// ── Menus déroulants à choix multiple
+// Le libellé du bouton doit dire ce qui est retenu sans ouvrir le panneau :
+// « Tous les formats (3) » ou la liste quand elle tient, sinon un compte.
+function ddPanneau(el){ return el.closest('.sim-dd'); }
+
+function ddTexte(dd){
+  var cases = dd.querySelectorAll('input[type=checkbox]');
+  var lbl   = dd.querySelector('.sim-dd-txt');
+  if (!lbl) return;
+  if (!cases.length){ lbl.textContent = 'Aucune référence'; return; }
+  var pris = [];
+  cases.forEach(function(c){ if (c.checked) pris.push(c.value); });
+  if (pris.length === 0)                 lbl.textContent = 'Aucun — tout sera repris';
+  else if (pris.length === cases.length) lbl.textContent = 'Tous (' + cases.length + ')';
+  else if (pris.length <= 2)             lbl.textContent = pris.join(', ');
+  else                                   lbl.textContent = pris.length + ' sur ' + cases.length;
+}
+
+// Une quantité saisie sur une ligne décochée ne serait jamais lue : on
+// désactive le champ pour que l'écran ne promette pas ce qu'il ignore.
+function ddQte(dd){
+  dd.querySelectorAll('.sim-dd-i').forEach(function(li){
+    var c = li.querySelector('input[type=checkbox]');
+    var q = li.querySelector('.sim-dd-q');
+    if (c && q) q.disabled = !c.checked;
+  });
+}
+
+function ddMaj(el){ var dd = ddPanneau(el); ddTexte(dd); ddQte(dd); }
+
+function ddTout(btn, on){
+  var dd = ddPanneau(btn);
+  dd.querySelectorAll('input[type=checkbox]').forEach(function(c){ c.checked = !!on; });
+  ddTexte(dd); ddQte(dd);
+}
+
+// État du panneau à l'ouverture, pour qu'« Annuler » puisse le rendre tel
+// qu'il était plutôt que de laisser des cases cochées par erreur.
+function ddPhoto(dd){
+  var etat = [];
+  dd.querySelectorAll('.sim-dd-i').forEach(function(li){
+    var c = li.querySelector('input[type=checkbox]');
+    var q = li.querySelector('.sim-dd-q');
+    etat.push([c ? c.checked : false, q ? q.value : null]);
+  });
+  dd._photo = etat;
+}
+
+function ddAnnuler(btn){
+  var dd = ddPanneau(btn);
+  if (dd._photo) {
+    dd.querySelectorAll('.sim-dd-i').forEach(function(li, i){
+      var c = li.querySelector('input[type=checkbox]');
+      var q = li.querySelector('.sim-dd-q');
+      if (!dd._photo[i]) return;
+      if (c) c.checked = dd._photo[i][0];
+      if (q && dd._photo[i][1] !== null) q.value = dd._photo[i][1];
+    });
+  }
+  ddTexte(dd); ddQte(dd);
+  dd.classList.remove('open');
+}
+
+// « Valider » relance la simulation : sans cela il fallait refermer le
+// panneau puis descendre chercher le bouton en bas du formulaire.
+function ddValider(btn){
+  var dd = ddPanneau(btn);
+  dd.classList.remove('open');
+  if (btn.form) btn.form.submit();
+}
+
+function ddOuvrir(btn){
+  var dd = ddPanneau(btn), ouvert = dd.classList.contains('open');
+  document.querySelectorAll('.sim-dd.open').forEach(function(o){ o.classList.remove('open'); });
+  if (ouvert) return;
+  ddPhoto(dd);
+  dd.classList.add('open');
+  dd.classList.remove('haut');
+  // Mesure après ouverture : un panneau qui déborde en bas se retourne,
+  // à condition qu'il y ait plus de place au-dessus du bouton.
+  var p = dd.querySelector('.sim-dd-p'),
+      r = p.getBoundingClientRect(),
+      b = btn.getBoundingClientRect();
+  if (r.bottom > window.innerHeight - 8 && b.top > r.height + 8) dd.classList.add('haut');
+}
+
+// Le pied est identique dans les quatre panneaux : le poser ici évite de
+// répéter le même bloc de balisage quatre fois dans le formulaire.
+function ddPied(dd){
+  if (!dd.querySelector('.sim-dd-i')) return;          // panneau vide
+  var p = dd.querySelector('.sim-dd-p');
+  var f = document.createElement('div');
+  f.className = 'sim-dd-f';
+  f.innerHTML = '<button type="button" onclick="ddAnnuler(this)">Annuler</button>'
+              + '<button type="button" class="dd-ok" onclick="ddValider(this)">Valider</button>';
+  p.appendChild(f);
+}
+
+document.addEventListener('click', function(e){
+  if (e.target.closest('.sim-dd')) return;
+  document.querySelectorAll('.sim-dd.open').forEach(function(o){ o.classList.remove('open'); });
+});
+// Échap annule, comme partout ailleurs : refermer en gardant des cases
+// cochées par accident serait la mauvaise surprise.
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape')
+    document.querySelectorAll('.sim-dd.open').forEach(function(o){
+      ddAnnuler(o.querySelector('.sim-dd-b'));
+    });
+});
+
+// Changer de site ou de fenêtre change les références disponibles : garder
+// les quantités saisies pour l'ancien périmètre donnerait une projection
+// silencieusement fausse.
+function simSite(el){
+  el.form.querySelectorAll('.sim-dd-q').forEach(function(q){ q.value = ''; });
+  el.form.submit();
+}
+
+document.querySelectorAll('.sim-dd').forEach(function(dd){
+  ddPied(dd); ddTexte(dd); ddQte(dd);
+});
+</script>
 
 <?php if (!empty($courbe)): ?>
 <script>
