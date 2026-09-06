@@ -29,6 +29,13 @@ $active_page = 'permissions';
 // inventaires, demandes, annuaire). Même découpage partout = un seul
 // modèle mental pour l'administrateur.
 $module_groupes = [
+    // Le groupe DASHBOARD n'apparaissait pas ici tant qu'aucun module ne
+    // s'y rattachait : dashboard.php et pdg_overview.php ne passent pas
+    // par require_permission(). Sans cette entrée, le Dashboard KPI serait
+    // devenu invisible sur cet écran — donc impossible à ouvrir à un rôle —
+    // en rejoignant le groupe : l'onglet ne s'affiche que si $module_groupes
+    // le déclare.
+    'DASHBOARD'      => ['<i class="ph ph-squares-four" aria-hidden="true"></i>', 'Dashboard'],
     'STOCK'          => ['<i class="ph ph-package" aria-hidden="true"></i>', 'Stock'],
     'BOBINES'        => ['<i class="ph ph-film-strip" aria-hidden="true"></i>', 'Bobines'],
     'INVENTAIRE'     => ['<i class="ph ph-clipboard-text" aria-hidden="true"></i>', 'Inventaire'],
@@ -73,7 +80,7 @@ $modules = [
     'inventaire_pmma'    => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Inventaire PMMA', 'INVENTAIRE'],
     'inventaire_equipements' => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Inventaire équipements', 'INVENTAIRE'],
     'audit'              => ['<i class="ph ph-clipboard-text" aria-hidden="true"></i>', 'Journal d\'audit', 'ADMINISTRATION'],
-    'kpi_dashboard'      => ['<i class="ph ph-gauge" aria-hidden="true"></i>', 'Dashboard KPI', 'RAPPORTS'],
+    'kpi_dashboard'      => ['<i class="ph ph-gauge" aria-hidden="true"></i>', 'Dashboard KPI', 'DASHBOARD'],
     'nomenclatures'      => ['<i class="ph ph-tag" aria-hidden="true"></i>', 'Nomenclatures', 'STOCK'],
     'observations'       => ['<i class="ph ph-chat-dots" aria-hidden="true"></i>', 'Suivi des observations', 'OPERATIONS'],
     'pmma'               => ['<i class="ph ph-printer" aria-hidden="true"></i>', 'PMMA', 'STOCK'],
@@ -101,6 +108,13 @@ $modules_par_groupe = [];
 foreach ($modules as $mk => $m) {
     $modules_par_groupe[$m[2] ?? 'ADMINISTRATION'][$mk] = $m;
 }
+
+// Onglet ouvert par défaut : le premier groupe qui porte réellement des
+// modules, et non un nom écrit en dur. Le code fixait « STOCK », ce qui
+// laissait l'onglet actif ailleurs qu'en tête dès qu'un groupe était
+// ajouté avant lui.
+$grp_defaut = (string) array_key_first(
+    array_intersect_key($module_groupes, $modules_par_groupe));
 
 // ============================================================
 //  AJAX
@@ -397,7 +411,7 @@ include __DIR__ . '/../../templates/header.php';
       if (empty($modules_par_groupe[$gk])) continue;
       $gcount = count($modules_par_groupe[$gk]);
     ?>
-    <button class="grp-tab <?= $gk==='STOCK'?'active':'' ?>"
+    <button class="grp-tab <?= $gk===$grp_defaut?'active':'' ?>"
             onclick="showGrp('<?= $r['id'] ?>','<?= $gk ?>',this)">
       <?= $gico ?> <?= h($glbl) ?><span class="grp-count"><?= $gcount ?></span>
     </button>
@@ -410,7 +424,7 @@ include __DIR__ . '/../../templates/header.php';
   <?php foreach($module_groupes as $gk=>[$gico,$glbl]):
     if (empty($modules_par_groupe[$gk])) continue;
   ?>
-  <div class="card grp-pane <?= $gk==='STOCK'?'active':'' ?>" id="grp-<?= $r['id'] ?>-<?= $gk ?>">
+  <div class="card grp-pane <?= $gk===$grp_defaut?'active':'' ?>" id="grp-<?= $r['id'] ?>-<?= $gk ?>">
     <div class="perm-table-wrap">
     <table class="perm-table">
       <thead>

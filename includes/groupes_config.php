@@ -31,6 +31,14 @@ function _groupes_def(): array {
                 // que celle du PDG.
                 ['label'=>'Vue exécutive','icon'=>'ph-chart-pie-slice',
                  'url'=>'pages/pdg_overview.php','active_keys'=>['pdg_overview']],
+                // n° 2.2 CR PDG — lecture rapide des indicateurs. Sa place est
+                // ici, aux côtés des deux autres vues d'ensemble : c'est un
+                // tableau de bord, pas un rapport. Il était dans RAPPORTS, où
+                // il obligeait à changer de groupe pour passer d'une lecture
+                // globale à une autre.
+                ['label'=>'Dashboard KPI','icon'=>'ph-gauge',
+                 'url'=>'pages/kpi_dashboard.php','active_keys'=>['kpi_dashboard'],
+                 'perm'=>['kpi_dashboard','can_read']],
             ],
         ],
 
@@ -271,11 +279,6 @@ function _groupes_def(): array {
                 ['label'=>'Rapports généraux','icon'=>'ph-chart-bar',
                  'url'=>'pages/rapports.php','active_keys'=>['rapports'],
                  'perm'=>['rapports','can_read']],
-                // n° 2.2 CR PDG — lecture rapide des indicateurs, distincte
-                // du tableau de bord opérationnel et de la vue exécutive.
-                ['label'=>'Dashboard KPI', 'icon'=>'ph-gauge',
-                 'url'=>'pages/kpi_dashboard.php','active_keys'=>['kpi_dashboard'],
-                 'perm'=>['kpi_dashboard','can_read']],
                 // n° 2.6 CR PDG — outil de projection. Le CR demandait un
                 // groupe de navigation dédié ; il rejoint RAPPORTS, qui
                 // existe déjà et accueille les écrans d'analyse. Créer un
