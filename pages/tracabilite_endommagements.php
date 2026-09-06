@@ -5,9 +5,11 @@
 //
 //  Les déclarations sont saisies dans le pop-up du point journalier
 //  (pages/operations/point_journalier.php) et stockées dans
-//  op_endommagements, une ligne par bobine endommagée. Cet écran ne
-//  fait que les restituer : aucune saisie ici, la source reste le
-//  point journalier pour garder un seul chemin d'écriture.
+//  op_endommagements, une ligne PAR FILM endommagé : six films abîmés
+//  sur une même bobine peuvent l'avoir été à six moments et pour six
+//  causes, et c'est ce détail que la traçabilité doit restituer.
+//  Cet écran ne fait que lire : la source reste le point journalier,
+//  pour garder un seul chemin d'écriture.
 // ============================================================
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx as XlsxWriter;
@@ -75,7 +77,7 @@ $lignes = db_fetch_all(
 $total_films = 0;
 $par_etape = $par_cause = [];
 foreach ($lignes as $l) {
-    $total_films += (int)$l['quantite'];
+    $total_films += 1;
     $par_etape[$l['etape']] = ($par_etape[$l['etape']] ?? 0) + 1;
     $par_cause[$l['cause']] = ($par_cause[$l['cause']] ?? 0) + 1;
 }
@@ -97,7 +99,7 @@ if ($export !== '' && !can('tracabilite_endommagements', 'can_export')) {
 if ($export === 'xlsx') {
     $sp = new Spreadsheet();
     $sh = $sp->getActiveSheet()->setTitle('Endommagements');
-    $entetes = ['Date','Site','Bobine','Films','Étape','Cause','Personne','Heure','Observations','Déclaré par'];
+    $entetes = ['Date','Site','Bobine','Film n°','Étape','Cause','Personne','Heure','Observations','Déclaré par'];
     foreach ($entetes as $i => $t) {
         $col = chr(65 + $i);
         $sh->setCellValue($col.'1', $t);
@@ -112,7 +114,7 @@ if ($export === 'xlsx') {
         $sh->setCellValue("A$r", fmt_date($l['date_point'] ?: $l['created_at']));
         $sh->setCellValue("B$r", $l['site_nom'] ?? '—');
         $sh->setCellValue("C$r", $l['bobine_num'] ?? '—');
-        $sh->setCellValue("D$r", (int)$l['quantite']);
+        $sh->setCellValue("D$r", (int)$l['film_no']);
         $sh->setCellValue("E$r", $ETAPES[$l['etape']] ?? $l['etape']);
         $sh->setCellValue("F$r", $CAUSES[$l['cause']] ?? $l['cause']);
         $sh->setCellValue("G$r", $l['personne']);
@@ -148,7 +150,7 @@ if ($export === 'pdf') {
     </div>
     <table>
       <thead><tr>
-        <th>Date</th><th>Site</th><th>Bobine</th><th>Films</th>
+        <th>Date</th><th>Site</th><th>Bobine</th><th>Film n°</th>
         <th>Étape</th><th>Cause</th><th>Personne</th><th>Observations</th>
       </tr></thead>
       <tbody>
@@ -157,7 +159,7 @@ if ($export === 'pdf') {
           <td><?= h(fmt_date($l['date_point'] ?: $l['created_at'])) ?></td>
           <td><?= h($l['site_nom'] ?? '—') ?></td>
           <td><?= h($l['bobine_num'] ?? '—') ?></td>
-          <td><?= (int)$l['quantite'] ?></td>
+          <td><?= (int)$l['film_no'] ?></td>
           <td><?= h($ETAPES[$l['etape']] ?? $l['etape']) ?></td>
           <td><?= h($CAUSES[$l['cause']] ?? $l['cause']) ?></td>
           <td><?= h($l['personne']) ?></td>
@@ -217,12 +219,12 @@ include __DIR__ . '/../templates/header.php';
 <!-- KPIs -->
 <div class="endo-kpis">
   <div class="endo-kpi">
-    <div class="endo-kpi-v"><?= count($lignes) ?></div>
-    <div class="endo-kpi-l">Déclarations</div>
-  </div>
-  <div class="endo-kpi blue">
     <div class="endo-kpi-v"><?= fmt_number($total_films) ?></div>
     <div class="endo-kpi-l">Films endommagés</div>
+  </div>
+  <div class="endo-kpi blue">
+    <div class="endo-kpi-v"><?= fmt_number(count(array_unique(array_column($lignes,'bobine_id')))) ?></div>
+    <div class="endo-kpi-l">Bobines concernées</div>
   </div>
   <div class="endo-kpi orange">
     <div class="endo-kpi-v" style="font-size:16px;line-height:1.3">
@@ -279,7 +281,7 @@ include __DIR__ . '/../templates/header.php';
     <table>
       <thead><tr>
         <th>Date</th><th>Site</th><th>Bobine</th>
-        <th style="text-align:center">Films</th>
+        <th style="text-align:center">Film n°</th>
         <th>Étape</th><th>Cause</th><th>Personne</th>
         <th style="text-align:center">Heure</th>
         <th>Observations</th><th>Déclaré par</th>
@@ -294,7 +296,7 @@ include __DIR__ . '/../templates/header.php';
           <td style="white-space:nowrap;font-weight:600"><?= h(fmt_date($l['date_point'] ?: $l['created_at'])) ?></td>
           <td style="font-size:12.5px"><?= h($l['site_nom'] ?? '—') ?></td>
           <td style="font-family:monospace;font-weight:700;color:var(--navy)"><?= h($l['bobine_num'] ?? '—') ?></td>
-          <td style="text-align:center;font-weight:800;color:var(--danger-d)"><?= (int)$l['quantite'] ?></td>
+          <td style="text-align:center;font-weight:800;color:var(--danger-d)"><?= (int)$l['film_no'] ?></td>
           <td><span class="badge-etape"><?= h($ETAPES[$l['etape']] ?? $l['etape']) ?></span></td>
           <td><span class="badge-cause"><?= h($CAUSES[$l['cause']] ?? $l['cause']) ?></span></td>
           <td style="font-size:12.5px;font-weight:600"><?= h($l['personne']) ?></td>
