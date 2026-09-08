@@ -3,21 +3,34 @@
 //  pages/kpi_dashboard.php  —  Dashboard KPI centralise
 //  n° 2.2 du CR de reunion PDG.
 //
-//  Distinct des deux tableaux de bord existants, comme demande :
+//  Distinct des deux tableaux de bord existants :
 //   - dashboard.php      : operationnel, oriente action du jour
 //   - pdg_overview.php   : vue executive, decisionnelle et narrative
-//   - celui-ci           : lecture rapide et visuelle des indicateurs,
-//                          six familles cote a cote, chacune comparee
-//                          a la periode precedente
+//   - celui-ci           : lecture visuelle des indicateurs, sept
+//                          familles cote a cote, chacune avec son
+//                          chiffre de tete, son detail et son graphe
+//
+//  ── Refonte 2026-09 sur maquette de reference ──
+//  L'ecran empilait des rangees de tuiles identiques : lisible mais
+//  plat, et sans aucune vue de l'evolution — un chiffre et sa
+//  variation ne disent pas si la tendance monte depuis trois periodes
+//  ou vient de casser. Chaque famille devient un panneau autonome
+//  associant le chiffre, son detail et sa courbe.
+//
+//  Trois ecarts assumes par rapport a la maquette :
+//   1. Pas de barre superieure ni de rail lateral propres a la page :
+//      l'application en a deja (templates/header.php). En ajouter une
+//      seconde donnerait deux navigations concurrentes.
+//   2. Les sous-tuiles n'ont pas de cadre. La maquette encadre des
+//      cartes dans des cartes ; un fond teinte porte la meme lecture
+//      sans le double filet, qui alourdit et tient mal en theme sombre.
+//   3. La carte promotionnelle de bas de page est ecartee. PRODUCT.md
+//      pose un outil interne sobre et factuel : un encart d'ambiance
+//      occupe une place que la production par site utilise mieux.
 //
 //  La granularite vient de includes/periode.php, partagee avec la vue
-//  executive : les quatre filtres (journalier, hebdomadaire, mensuel,
-//  annuel) se comportent donc exactement pareil sur les deux ecrans.
-//
-//  Parti pris de lecture : chaque tuile porte sa valeur, sa variation
-//  et le libelle de la periode comparee. Un chiffre sans son point de
-//  comparaison ne dit rien — c'est precisement ce que le CR reproche
-//  aux ecrans actuels.
+//  executive : les quatre filtres se comportent donc identiquement sur
+//  les deux ecrans.
 // ============================================================
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/session.php';
@@ -26,6 +39,7 @@ require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
 require_once __DIR__ . '/../includes/periode.php';
 require_once __DIR__ . '/../includes/consommation.php';
+require_once __DIR__ . '/../includes/referentiels.php';
 
 require_auth();
 require_permission('kpi_dashboard', 'can_read');
@@ -55,7 +69,7 @@ function kpi_paire(string $sql, array $params): array {
     return [(float)($r['courant'] ?? 0), (float)($r['precedent'] ?? 0)];
 }
 
-// ── PRODUCTION
+// ── PRODUCTION — la periode selectionnee
 [$plaques, $plaques_p] = kpi_paire(
     "SELECT COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'$fmt')=? THEN p.total_plaques END),0) AS courant,
             COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'$fmt')=? THEN p.total_plaques END),0) AS precedent
@@ -73,6 +87,110 @@ $heures = (float) db_fetch_value(
       WHERE TO_CHAR(p.date_point,'$fmt')=? AND p.statut <> 'brouillon' $sf_p", [$val]);
 $prod_horaire = $heures > 0 ? $engins / $heures : 0;
 
+// ── PRODUCTION — les quatre echelles cote a cote
+// La maquette pose jour / semaine / mois / annee ensemble : c'est ce qui
+// permet de voir qu'une bonne journee tient dans un mauvais mois. Une
+// seule requete, huit agregats conditionnels, plutot que huit allers.
+$e_jour = date('Y-m-d');  $e_jour_p = date('Y-m-d', strtotime('-1 day'));
+$e_sem  = date('o-W');    $e_sem_p  = date('o-W', strtotime('-7 days'));
+$e_mois = date('Y-m');    $e_mois_p = date('Y-m', strtotime('first day of last month'));
+$e_an   = date('Y');      $e_an_p   = (string)((int)date('Y') - 1);
+
+$ech = db_fetch_one(
+    "SELECT
+       COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'YYYY-MM-DD')=? THEN p.total_plaques END),0) AS j,
+       COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'YYYY-MM-DD')=? THEN p.total_plaques END),0) AS jp,
+       COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'IYYY-IW')=?   THEN p.total_plaques END),0) AS s,
+       COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'IYYY-IW')=?   THEN p.total_plaques END),0) AS sp,
+       COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'YYYY-MM')=?   THEN p.total_plaques END),0) AS m,
+       COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'YYYY-MM')=?   THEN p.total_plaques END),0) AS mp,
+       COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'YYYY')=?      THEN p.total_plaques END),0) AS a,
+       COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'YYYY')=?      THEN p.total_plaques END),0) AS ap
+     FROM op_points_journaliers p
+     WHERE p.statut <> 'brouillon' $sf_p",
+    [$e_jour, $e_jour_p, $e_sem, $e_sem_p, $e_mois, $e_mois_p, $e_an, $e_an_p]) ?: [];
+
+$echelles = [
+    ['Jour',    (float)($ech['j'] ?? 0), (float)($ech['jp'] ?? 0), 'hier'],
+    ['Semaine', (float)($ech['s'] ?? 0), (float)($ech['sp'] ?? 0), 'sem. précédente'],
+    ['Mois',    (float)($ech['m'] ?? 0), (float)($ech['mp'] ?? 0), 'mois précédent'],
+    ['Année',   (float)($ech['a'] ?? 0), (float)($ech['ap'] ?? 0), 'année précédente'],
+];
+
+// ── PRODUCTION — courbe d'evolution
+// On compare les SOUS-periodes de la periode courante a celles de la
+// precedente, alignees par rang (jour de semaine, quantieme, mois) et non
+// par date : sans cet alignement, comparer le 3 mars au 3 fevrier n'aurait
+// pas de sens un mois sur deux.
+$periode = $P['periode'];
+$sous    = null;
+if ($periode === 'hebdomadaire') {
+    $sous = ['fmt'=>'ID', 'cles'=>['1','2','3','4','5','6','7'],
+             'lbl'=>['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'],
+             'du'=>$P['du'], 'au'=>$P['au'],
+             'du_p'=>date('Y-m-d', strtotime($P['du'].' -7 days')),
+             'au_p'=>date('Y-m-d', strtotime($P['au'].' -7 days'))];
+} elseif ($periode === 'mensuel') {
+    $du_p  = date('Y-m-01', strtotime($P['du'].' -1 month'));
+    $nb_j  = (int) date('t', strtotime($P['du']));
+    $cles  = []; for ($i = 1; $i <= $nb_j; $i++) $cles[] = sprintf('%02d', $i);
+    $sous  = ['fmt'=>'DD', 'cles'=>$cles,
+              'lbl'=>array_map(fn($c) => (int)$c % 5 === 0 || $c === '01' ? (string)(int)$c : '', $cles),
+              'du'=>$P['du'], 'au'=>$P['au'],
+              'du_p'=>$du_p, 'au_p'=>date('Y-m-t', strtotime($du_p))];
+} elseif ($periode === 'annuel') {
+    $an   = (int)$P['annee'];
+    $sous = ['fmt'=>'MM', 'cles'=>['01','02','03','04','05','06','07','08','09','10','11','12'],
+             'lbl'=>['J','F','M','A','M','J','J','A','S','O','N','D'],
+             'du'=>"$an-01-01", 'au'=>"$an-12-31",
+             'du_p'=>($an-1)."-01-01", 'au_p'=>($an-1)."-12-31"];
+}
+
+/** Somme des plaques par sous-periode, sur un intervalle de dates. */
+function kpi_serie(string $sfmt, string $du, string $au, string $filtre): array {
+    $out = [];
+    foreach (db_fetch_all(
+        "SELECT TO_CHAR(p.date_point,'$sfmt') AS b, COALESCE(SUM(p.total_plaques),0) AS v
+           FROM op_points_journaliers p
+          WHERE p.date_point BETWEEN ?::date AND ?::date
+            AND p.statut <> 'brouillon' $filtre
+          GROUP BY 1", [$du, $au]) as $r) $out[$r['b']] = (float)$r['v'];
+    return $out;
+}
+
+$serie_lbl = []; $serie_a = []; $serie_b = []; $serie_note = ''; $serie_borne = -1;
+if ($sous) {
+    $ca = kpi_serie($sous['fmt'], $sous['du'],   $sous['au'],   $sf_p);
+    $cb = kpi_serie($sous['fmt'], $sous['du_p'], $sous['au_p'], $sf_p);
+    foreach ($sous['cles'] as $k) { $serie_a[] = $ca[$k] ?? 0; $serie_b[] = $cb[$k] ?? 0; }
+    $serie_lbl  = $sous['lbl'];
+    $serie_note = 'période actuelle contre ' . mb_strtolower($P['libelle_prec']);
+    // Une periode en cours n'a pas encore ses derniers points : les tracer
+    // a zero dessine une chute qui n'a pas eu lieu. La courbe s'arrete donc
+    // au jour ecoule, l'axe couvrant toujours la periode entiere pour que
+    // la comparaison avec la precedente reste alignee.
+    if (date('Y-m-d') >= $sous['du'] && date('Y-m-d') <= $sous['au']) {
+        $auj = ['ID' => (string)(int)date('N'), 'DD' => date('d'), 'MM' => date('m')][$sous['fmt']];
+        $pos = array_search($auj, $sous['cles'], true);
+        if ($pos !== false) {
+            $serie_borne = (int)$pos + 1;
+            $serie_note .= ' — ' . $serie_borne . ' sur ' . count($sous['cles']) . ' écoulés';
+        }
+    }
+} else {
+    // Vue journaliere : pas de sous-periode a decouper. Les quatorze
+    // derniers jours situent la journee dans sa tendance, ce qu'un seul
+    // point ne fait pas.
+    $fin = $P['val']; $deb = date('Y-m-d', strtotime($fin.' -13 days'));
+    $c   = kpi_serie('YYYY-MM-DD', $deb, $fin, $sf_p);
+    for ($i = 13; $i >= 0; $i--) {
+        $d = date('Y-m-d', strtotime($fin." -$i days"));
+        $serie_a[]   = $c[$d] ?? 0;
+        $serie_lbl[] = ($i === 13 || $i === 0) ? date('d/m', strtotime($d)) : '';
+    }
+    $serie_note = 'quatorze derniers jours';
+}
+
 // ── BOBINES
 $bob = db_fetch_one(
     "SELECT COUNT(*) FILTER (WHERE b.statut IN ('en_cours','en_stock'))       AS actives,
@@ -84,25 +202,73 @@ $bob = db_fetch_one(
             COALESCE(SUM(b.qte_initiale),0)                                   AS initial
        FROM op_bobines b WHERE 1=1 $sf_b") ?: [];
 $b_init  = (float)($bob['initial'] ?? 0);
-$b_util  = (float)($bob['utilises'] ?? 0);
+$b_rest  = (float)($bob['restants'] ?? 0);
 $b_endo  = (float)($bob['endommages'] ?? 0);
-$taux_util  = $b_init > 0 ? $b_util / $b_init * 100 : 0;
-$taux_perte = ($b_util + $b_endo) > 0 ? $b_endo / ($b_util + $b_endo) * 100 : 0;
+// Le taux d'utilisation se lit sur ce qui a QUITTE la bobine, mesure par
+// difference entre dotation et reliquat — et non sur films_utilises.
+// Cette colonne n'est alimentee que par le point journalier ; les bobines
+// entrees par import (import_bobines.php, import_emuci.php) posent
+// qte_initiale et films_restants sans jamais y toucher. Sur un parc
+// majoritairement importe, elle reste donc proche de zero pendant que le
+// stock descend : la production affichait 0,1 % d'utilisation pour
+// 790 167 films restants sur 961 000 de dotation, soit 40 % reels.
+$b_sorti = max(0.0, $b_init - $b_rest);
+$taux_util  = $b_init  > 0 ? $b_sorti / $b_init  * 100 : 0;
+$taux_perte = $b_sorti > 0 ? $b_endo  / $b_sorti * 100 : 0;
 $conso_jour = conso_moy_site($site_id, 30);
 $couverture = $conso_jour > 0 ? (int) floor((float)($bob['restants'] ?? 0) / $conso_jour) : null;
+
+// Detail par serie : le taux global masque qu'une serie peut etre a bout
+// quand une autre est neuve. La serie porte le format lisible, pas le code.
+$bob_series = [];
+foreach (db_fetch_all(
+    "SELECT TRIM(b.serie) AS serie,
+            COALESCE(SUM(b.qte_initiale),0)   AS init,
+            COALESCE(SUM(b.films_restants),0) AS rest
+       FROM op_bobines b
+      WHERE b.serie IS NOT NULL $sf_b
+      GROUP BY TRIM(b.serie) HAVING COALESCE(SUM(b.qte_initiale),0) > 0
+      ORDER BY 1") as $r) {
+    $ini = (float)$r['init'];
+    $bob_series[] = [
+        'lbl' => libelle_format_serie($r['serie']),
+        'cat' => categorie_serie($r['serie']),
+        'pct' => $ini > 0 ? max(0.0, $ini - (float)$r['rest']) / $ini * 100 : 0,
+    ];
+}
 
 // ── PMMA
 $pmma_stock = db_fetch_all(
     "SELECT sp.type_pmma, SUM(sp.quantite) AS qte,
+            MIN(COALESCE(sp.seuil_alerte,10)) AS seuil,
             SUM(CASE WHEN sp.quantite < COALESCE(sp.seuil_alerte,10) THEN 1 ELSE 0 END) AS bas
        FROM stock_pmma_site sp WHERE 1=1 " . ($site_id ? "AND sp.site_id = $site_id" : "") . "
       GROUP BY sp.type_pmma ORDER BY sp.type_pmma");
-$pmma_bas = 0; foreach ($pmma_stock as $x) $pmma_bas += (int)$x['bas'];
+$pmma_bas = 0; $pmma_total = 0;
+foreach ($pmma_stock as $x) { $pmma_bas += (int)$x['bas']; $pmma_total += (int)$x['qte']; }
+
 [$pmma_conso, $pmma_conso_p] = kpi_paire(
     "SELECT COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'$fmt')=? THEN pu.utilises END),0) AS courant,
             COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'$fmt')=? THEN pu.utilises END),0) AS precedent
        FROM op_pmma_utilises pu JOIN op_points_journaliers p ON p.id = pu.point_id
       WHERE 1=1 $sf_p", [$val, $prc]);
+
+// Consommation par type sur la periode — le graphe en barres de la maquette.
+$pmma_par_type = db_fetch_all(
+    "SELECT pu.type_pmma AS t, COALESCE(SUM(pu.utilises),0) AS v
+       FROM op_pmma_utilises pu JOIN op_points_journaliers p ON p.id = pu.point_id
+      WHERE TO_CHAR(p.date_point,'$fmt')=? AND p.statut <> 'brouillon' $sf_p
+      GROUP BY pu.type_pmma HAVING COALESCE(SUM(pu.utilises),0) > 0
+      ORDER BY 2 DESC", [$val]);
+
+// Types reellement sous leur seuil, avec le site concerne : une alerte qui
+// ne dit pas ou regarder oblige a rouvrir une autre page.
+$pmma_alertes = db_fetch_all(
+    "SELECT sp.type_pmma AS t, s.nom AS site, sp.quantite AS q, COALESCE(sp.seuil_alerte,10) AS seuil
+       FROM stock_pmma_site sp JOIN sites s ON s.id = sp.site_id
+      WHERE sp.quantite < COALESCE(sp.seuil_alerte,10)
+        " . ($site_id ? "AND sp.site_id = $site_id" : "") . "
+      ORDER BY sp.quantite ASC LIMIT 4");
 
 // ── RIVETS
 $riv_stock = (int) db_fetch_value(
@@ -113,6 +279,12 @@ $riv_bas = (int) db_fetch_value(
     "SELECT COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'$fmt')=? THEN p.rivets_utilises END),0) AS courant,
             COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'$fmt')=? THEN p.rivets_utilises END),0) AS precedent
        FROM op_points_journaliers p WHERE 1=1 $sf_p", [$val, $prc]);
+$riv_alertes = db_fetch_all(
+    "SELECT s.nom AS site, r.type_rivet AS t, r.quantite AS q, COALESCE(r.seuil_alerte,200) AS seuil
+       FROM op_stock_rivets r JOIN sites s ON s.id = r.site_id
+      WHERE r.quantite < COALESCE(r.seuil_alerte,200)
+        " . ($site_id ? "AND r.site_id = $site_id" : "") . "
+      ORDER BY r.quantite ASC LIMIT 4");
 
 // ── COMMANDES
 $cmd = db_fetch_one(
@@ -126,105 +298,348 @@ $cmd = db_fetch_one(
 $cmd_total = (int)($cmd['total'] ?? 0);
 $taux_service = $cmd_total > 0 ? (int)$cmd['servies'] / $cmd_total * 100 : 0;
 
+// Taux de satisfaction sur les six dernieres periodes : un taux isole ne
+// dit pas si le service se degrade ou se retablit.
+$cmd_hist = [];
+$cmd_hist_lbl = [];
+$unite_pas = ['journalier'=>'day', 'hebdomadaire'=>'week',
+               'mensuel'=>'month', 'annuel'=>'year'][$periode];
+for ($i = 5; $i >= 0; $i--) {
+    $ref = date('Y-m-d', strtotime($P['du'] . " -$i $unite_pas"));
+    $k   = ['journalier'=>date('Y-m-d', strtotime($ref)),
+            'hebdomadaire'=>date('o-W', strtotime($ref)),
+            'mensuel'=>date('Y-m', strtotime($ref)),
+            'annuel'=>date('Y', strtotime($ref))][$periode];
+    $r = db_fetch_one(
+        "SELECT COUNT(*) AS n, COUNT(*) FILTER (WHERE statut IN ('livre','recu')) AS ok
+           FROM commandes WHERE TO_CHAR(created_at,'$fmt')=? $sf", [$k]) ?: [];
+    $n = (int)($r['n'] ?? 0);
+    $cmd_hist[]     = $n > 0 ? (int)$r['ok'] / $n * 100 : 0;
+    $cmd_hist_lbl[] = ($i === 5 || $i === 0) ? $k : '';
+}
+
 // ── ÉQUIPEMENTS
+// equipements.etat prend huit valeurs dans l'application : neuf, bon, ok,
+// usage d'un cote, hs, reforme, endommage, maintenance de l'autre. La
+// requete ne comptait disponible que `etat = 'ok'` : un parc entier saisi
+// en « neuf » ou « bon » ressortait a 0 % de disponibilite, ce que la
+// production affichait effectivement (0,0 % sur 21 equipements actifs).
+// Une valeur inconnue tombe volontairement dans « autre etat » plutot que
+// dans « disponible » : elle reste visible au lieu de gonfler le taux.
 $eq = db_fetch_one(
-    "SELECT COUNT(*)                                        AS total,
-            COUNT(*) FILTER (WHERE etat = 'ok')             AS ok,
-            COUNT(*) FILTER (WHERE etat = 'hs')             AS hs,
-            COUNT(*) FILTER (WHERE statut_stock = 'affecte') AS affectes
+    "SELECT COUNT(*)                                                    AS total,
+            COUNT(*) FILTER (WHERE etat IN ('ok','neuf','bon','usage')) AS ok,
+            COUNT(*) FILTER (WHERE etat IN ('hs','reforme','endommage')) AS hs,
+            COUNT(*) FILTER (WHERE etat = 'maintenance')                AS maint,
+            COUNT(*) FILTER (WHERE statut_stock = 'affecte')            AS affectes
        FROM equipements WHERE actif = 1 $sf") ?: [];
 $eq_total = (int)($eq['total'] ?? 0);
-$dispo    = $eq_total > 0 ? (int)$eq['ok'] / $eq_total * 100 : 0;
+$eq_ok    = (int)($eq['ok'] ?? 0);
+$eq_hs    = (int)($eq['hs'] ?? 0);
+$eq_maint = (int)($eq['maint'] ?? 0);
+$eq_autre = max(0, $eq_total - $eq_ok - $eq_hs - $eq_maint);
+$dispo    = $eq_total > 0 ? $eq_ok / $eq_total * 100 : 0;
 $interv_ouvertes = (int) db_fetch_value(
     "SELECT COUNT(*) FROM interventions_maintenance
       WHERE statut_apres <> 'resolu' " . ($site_id ? "AND site_id = $site_id" : ""));
 
-// ── SITES — classement de productivite sur la periode
+// ── SITES — production comparee et classement
 $classement = db_fetch_all(
     "SELECT s.nom,
-            COALESCE(SUM(p.total_plaques),0) AS plaques,
-            COALESCE(SUM(p.total_engins),0)  AS engins,
-            COALESCE(SUM(p.nb_heures_travail),0) AS heures
+            COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'$fmt')=? THEN p.total_plaques END),0) AS plaques,
+            COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'$fmt')=? THEN p.total_plaques END),0) AS plaques_p,
+            COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'$fmt')=? THEN p.total_engins END),0)  AS engins,
+            COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'$fmt')=? THEN p.nb_heures_travail END),0) AS heures
        FROM sites s
-       LEFT JOIN op_points_journaliers p
-              ON p.site_id = s.id AND TO_CHAR(p.date_point,'$fmt')=? AND p.statut <> 'brouillon'
+       LEFT JOIN op_points_journaliers p ON p.site_id = s.id AND p.statut <> 'brouillon'
       WHERE s.actif = 1 " . ($site_id ? "AND s.id = $site_id" : "") . "
       GROUP BY s.id, s.nom
-      HAVING COALESCE(SUM(p.total_plaques),0) > 0
-      ORDER BY plaques DESC", [$val]);
-$plaques_max = 0; foreach ($classement as $c) $plaques_max = max($plaques_max, (int)$c['plaques']);
+      HAVING COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'$fmt')=? THEN p.total_plaques END),0) > 0
+      ORDER BY plaques DESC", [$val, $prc, $val, $val, $val]);
+$plaques_max = 0;
+foreach ($classement as $c)
+    $plaques_max = max($plaques_max, (int)$c['plaques'], (int)$c['plaques_p']);
 
 $sites_list = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom");
+
+// Une periode en cours n'a pas la duree de celle a laquelle on la compare.
+// Sans le dire, une barre deux fois plus courte se lit comme une chute de
+// production alors qu'il ne s'est ecoule que la moitie du temps.
+$en_cours = ($serie_borne > 0 && isset($sous))
+          ? 'période en cours : ' . $serie_borne . ' sur ' . count($sous['cles'])
+            . ' — l’écart avec ' . mb_strtolower($P['libelle_prec'])
+            . ' tient d’abord au temps écoulé'
+          : '';
+
+// ============================================================
+//  RENDU — aides d'affichage
+// ============================================================
 
 /** Variation en %, ou null si la periode precedente est vide. */
 function kpi_var(float $c, float $p): ?float { return $p > 0 ? ($c - $p) / $p * 100 : null; }
 
 /**
- * Tuile d'indicateur. $sens = 'haut' quand une hausse est favorable,
- * 'bas' quand c'est une baisse qui l'est (pertes, pannes, delais) :
- * sans cela une fleche verte pourrait signaler une degradation.
+ * Delta signe. $sens = 'haut' quand une hausse est favorable, 'bas'
+ * quand c'est une baisse qui l'est (pertes, pannes, delais) : sans cela
+ * une fleche verte signalerait une degradation.
  */
-function kpi_tuile(string $lbl, string $valeur, ?float $var, string $sens = 'haut',
-                   string $note = '', string $ton = ''): string {
-    $h = fn($v) => htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
-    $t = '<div class="kpi-t ' . $h($ton) . '">';
-    $t .= '<div class="kpi-t-l">' . $h($lbl) . '</div>';
-    $t .= '<div class="kpi-t-v">' . $h($valeur) . '</div>';
-    if ($var !== null) {
-        $hausse = $var > 0.05;
-        $baisse = $var < -0.05;
-        $bon = $hausse ? ($sens === 'haut') : ($baisse ? ($sens === 'bas') : null);
-        $cls = $bon === null ? 'neutre' : ($bon ? 'bon' : 'mauvais');
-        $fl  = $hausse ? '▲' : ($baisse ? '▼' : '=');
-        $t .= '<div class="kpi-t-d ' . $cls . '">' . $fl . ' '
-            . number_format(abs($var), 1, ',', ' ') . ' %</div>';
-    } elseif ($note === '') {
-        $t .= '<div class="kpi-t-d neutre">— pas de comparaison</div>';
+function kpi_delta(?float $var, string $sens = 'haut'): string {
+    if ($var === null) return '<span class="kd neutre">pas de comparaison</span>';
+    $hausse = $var > 0.05; $baisse = $var < -0.05;
+    $bon = $hausse ? ($sens === 'haut') : ($baisse ? ($sens === 'bas') : null);
+    $cls = $bon === null ? 'neutre' : ($bon ? 'bon' : 'mauvais');
+    $fl  = $hausse ? '&#9650;' : ($baisse ? '&#9660;' : '=');
+    return '<span class="kd ' . $cls . '">' . $fl . ' '
+         . number_format(abs($var), 1, ',', ' ') . ' %</span>';
+}
+
+/**
+ * Courbe SVG. Une ou deux series alignees sur les memes abscisses.
+ * SVG plutot que canvas : les couleurs suivent les variables de theme,
+ * le trace reste net a tout facteur de zoom, et rien ne depend de JS —
+ * un canvas non dessine laisse un bloc vide, un SVG non lu reste lisible.
+ */
+function kpi_courbe(array $labels, array $a, array $b = [], string $la = '', string $lb = '',
+                    string $unite = '', int $borne_a = -1): string {
+    $n = count($a);
+    if ($n < 2) return '<p class="kvide">Pas assez de points pour tracer une évolution.</p>';
+    $W = 520; $H = 150; $pl = 34; $pr = 8; $pt = 10; $pb = 22;
+    $cw = $W - $pl - $pr; $ch = $H - $pt - $pb;
+    $max = max(1.0, max($a), $b ? max($b) : 0);
+    // Plafond arrondi : un axe qui s'arrete sur 1 837 se lit moins vite
+    // qu'un axe qui s'arrete sur 2 000.
+    $pas = pow(10, max(0, floor(log10($max)) - 1));
+    $max = ceil($max / max($pas, 1)) * max($pas, 1);
+    $x = fn($i) => $pl + ($n > 1 ? $cw * $i / ($n - 1) : 0);
+    $y = fn($v) => $pt + $ch - ($ch * min($v, $max) / $max);
+    // $lim borne la serie tracee sans toucher a l'echelle des abscisses :
+    // une periode en cours s'arrete au point atteint, pas au bord du cadre.
+    $trace = function (array $s, int $lim = -1) use ($n, $x, $y) {
+        $m = ($lim > 1 && $lim < $n) ? $lim : $n;
+        $p = []; for ($i = 0; $i < $m; $i++) $p[] = round($x($i), 1) . ',' . round($y($s[$i]), 1);
+        return implode(' ', $p);
+    };
+    $ya = ''; $vu = null;
+    for ($g = 3; $g >= 0; $g--) {
+        $t = fmt_number((int)round($max * $g / 3));
+        $ya .= '<span>' . ($t === $vu ? '' : h($t)) . '</span>';
+        $vu = $t;
     }
-    if ($note !== '') $t .= '<div class="kpi-t-n">' . $h($note) . '</div>';
-    return $t . '</div>';
+
+    $o  = '<div class="kwrap"><div class="kya" aria-hidden="true">' . $ya . '</div>';
+    $o .= '<svg class="kchart" viewBox="0 0 ' . $W . ' ' . $H . '" role="img" preserveAspectRatio="none"'
+        . ' aria-label="' . h($la !== '' ? $la : 'Évolution') . ' — maximum '
+        . h(fmt_number((int)$max)) . ' ' . h($unite) . '">';
+    for ($g = 0; $g <= 3; $g++) {
+        $yy = round($y($max * $g / 3), 1);
+        $o .= '<line class="kgrid" x1="' . $pl . '" y1="' . $yy . '" x2="' . ($W - $pr) . '" y2="' . $yy . '"/>';
+    }
+    if ($b) $o .= '<polyline class="kline kline-b" points="' . $trace($b) . '"/>';
+    $o .= '<polyline class="kline kline-a" points="' . $trace($a, $borne_a) . '"/>';
+    $o .= '</svg></div>';
+
+    // Etiquettes d'abscisse placees au pourcentage exact du point : une
+    // rangee de cellules egales les decalerait d'une demi-colonne.
+    $xa = '';
+    for ($i = 0; $i < $n; $i++) {
+        if (($labels[$i] ?? '') === '') continue;
+        $pc = $n > 1 ? $i / ($n - 1) * 100 : 50;
+        $xa .= '<span style="left:' . round($pc, 2) . '%">' . h($labels[$i]) . '</span>';
+    }
+    if ($xa !== '') $o .= '<div class="kxa" aria-hidden="true">' . $xa . '</div>';
+    if ($la !== '') {
+        $o .= '<p class="klg"><span class="kpt kpt-a"></span>' . h($la);
+        if ($lb !== '') $o .= '<span class="kpt kpt-b"></span>' . h($lb);
+        $o .= '</p>';
+    }
+    return $o;
+}
+
+/**
+ * Anneau de repartition. $segments = [[libelle, valeur, classe], ...].
+ * Un seul segment donne la jauge de taux ; plusieurs donnent la
+ * repartition. Le centre porte la valeur qui compte, pas un pourcentage
+ * qu'il faudrait retraduire.
+ */
+function kpi_anneau(array $segments, string $centre_v, string $centre_l, string $aria): string {
+    $tot = 0.0; foreach ($segments as $s) $tot += max(0.0, (float)$s[1]);
+    $R = 52; $C = 2 * M_PI * $R; $off = 0.0;
+    $o = '<svg class="kring" viewBox="0 0 140 140" role="img" aria-label="' . h($aria) . '">';
+    $o .= '<circle class="kring-bg" cx="70" cy="70" r="' . $R . '"/>';
+    foreach ($segments as $s) {
+        $v = max(0.0, (float)$s[1]); if ($tot <= 0 || $v <= 0) continue;
+        $len = $C * $v / $tot;
+        $o .= '<circle class="kring-s ' . h($s[2]) . '" cx="70" cy="70" r="' . $R . '"'
+            . ' stroke-dasharray="' . round($len, 2) . ' ' . round($C - $len, 2) . '"'
+            . ' stroke-dashoffset="' . round(-$off, 2) . '"/>';
+        $off += $len;
+    }
+    $o .= '<text class="kring-v" x="70" y="68" text-anchor="middle">' . h($centre_v) . '</text>';
+    $o .= '<text class="kring-l" x="70" y="88" text-anchor="middle">' . h($centre_l) . '</text>';
+    return $o . '</svg>';
 }
 
 include __DIR__ . '/../templates/header.php';
 ?>
 <style>
-.kpi-bar{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:20px}
-.kpi-fam{margin-bottom:24px}
-.kpi-fam-h{display:flex;align-items:baseline;gap:10px;margin-bottom:11px}
-.kpi-fam-t{font-family:'Plus Jakarta Sans',sans-serif;font-size:14.5px;font-weight:800;color:var(--navy)}
-.kpi-fam-s{font-size:12px;color:var(--muted)}
-.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(172px,1fr));gap:12px}
-.kpi-t{background:white;border:1px solid var(--border);border-radius:13px;padding:14px 16px;border-left:4px solid var(--blue)}
-.kpi-t.warn{border-left-color:#f39c12}
-.kpi-t.crit{border-left-color:var(--danger)}
-.kpi-t.good{border-left-color:var(--success)}
-.kpi-t-l{font-size:11.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px}
-.kpi-t-v{font-family:'Plus Jakarta Sans',sans-serif;font-size:24px;font-weight:900;color:var(--navy);
-  line-height:1.1;margin-top:6px;font-variant-numeric:tabular-nums}
-.kpi-t-d{font-size:12px;font-weight:700;margin-top:5px}
-.kpi-t-d.bon{color:var(--success-d,#1e8449)} .kpi-t-d.mauvais{color:var(--danger-d,#c0392b)}
-.kpi-t-d.neutre{color:var(--muted);font-weight:600}
-.kpi-t-n{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.4}
-.kpi-clst{background:white;border:1px solid var(--border);border-radius:13px;padding:16px 18px}
-.kpi-cl{display:grid;grid-template-columns:22px 1fr 92px 62px;align-items:center;gap:10px;
-  padding:8px 0;border-bottom:1px solid var(--border);font-size:13.5px}
-.kpi-cl:last-child{border-bottom:none}
-.kpi-cl-r{font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:700;color:var(--muted)}
-.kpi-cl-n{font-weight:600;color:var(--navy)}
-.kpi-cl-b{height:7px;border-radius:4px;background:var(--lighter);overflow:hidden}
-.kpi-cl-b i{display:block;height:100%;background:var(--blue);border-radius:4px}
-.kpi-cl-v{text-align:right;font-weight:800;color:var(--navy);font-variant-numeric:tabular-nums}
+/* ── Palette de graphes ────────────────────────────────────────────
+   Quatre teintes categorielles, choisies pour rester distinctes en
+   clair comme en sombre et pour ne jamais servir de couleur de texte
+   (elles ne passeraient pas AA) : uniquement des traits et des fonds. */
+.kpi{--k1:#3D4FD1;--k2:#0A7A52;--k3:#B45309;--k4:#7C3AED;--kbg:var(--lighter)}
+:root[data-theme="dark"] .kpi,
+:root:not([data-theme="light"]) .kpi{--k1:#8FA0FF;--k2:#34D399;--k3:#FBBF24;--k4:#C4B5FD}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) .kpi{--k1:#3D4FD1;--k2:#0A7A52;--k3:#B45309;--k4:#7C3AED}}
+
+/* ── En-tete de page ─────────────────────────────────────────────── */
+.kpi-bar{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;
+  flex-wrap:wrap;margin-bottom:18px}
+.kpi-bar h2{font-family:'Plus Jakarta Sans',sans-serif;font-size:1.125rem;font-weight:800;
+  color:var(--navy);display:flex;align-items:center;gap:8px}
+.kpi-bar p{font-size:0.8125rem;color:var(--muted);margin-top:4px}
+
+/* ── Grille de panneaux ──────────────────────────────────────────── */
+.kpi-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+.kp{grid-column:span 12;min-width:0;background:var(--card,#fff);border:1px solid var(--border);
+  border-radius:var(--radius,16px);padding:18px 20px}
+@media(min-width:900px){
+  .kp--prod{grid-column:span 7}.kp--bob{grid-column:span 5}
+  .kp--pmma{grid-column:span 5}.kp--riv{grid-column:span 7}
+  .kp--cmd{grid-column:span 7}.kp--eq{grid-column:span 5}
+  .kp--sites{grid-column:span 12}
+}
+@media(min-width:1400px){
+  .kp--prod{grid-column:span 5}.kp--bob{grid-column:span 4}.kp--pmma{grid-column:span 3}
+  .kp--riv{grid-column:span 3}.kp--cmd{grid-column:span 5}.kp--eq{grid-column:span 4}
+}
+
+/* ── En-tete de panneau ──────────────────────────────────────────── */
+.kp-h{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.kp-ic{flex:none;width:34px;height:34px;border-radius:10px;display:grid;place-items:center;
+  background:var(--primary-l);color:var(--primary-d);font-size:1.0625rem}
+.kp-t{font-family:'Plus Jakarta Sans',sans-serif;font-size:0.875rem;font-weight:800;
+  color:var(--navy);letter-spacing:.02em;text-transform:uppercase;min-width:0}
+.kp-t em{display:block;font-style:normal;font-size:0.75rem;font-weight:600;
+  color:var(--muted);text-transform:none;letter-spacing:0;margin-top:2px}
+
+/* ── Cellules de metrique ────────────────────────────────────────
+   Fond teinte sans filet : une carte dans une carte donne deux cadres
+   concentriques qui n'apportent aucune information et tiennent mal en
+   theme sombre. */
+.kc-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(112px,1fr));gap:8px}
+.kc{background:var(--kbg);border-radius:10px;padding:10px 12px;min-width:0}
+.kc-l{font-size:0.75rem;font-weight:700;color:var(--muted);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+.kc-v{font-family:'Plus Jakarta Sans',sans-serif;font-size:1.375rem;font-weight:800;
+  color:var(--navy);line-height:1.15;margin-top:3px;font-variant-numeric:tabular-nums}
+.kc-v.sm{font-size:1.125rem}
+.kc-n{font-size:0.75rem;color:var(--muted);margin-top:3px;line-height:1.35}
+.kd{display:inline-block;font-size:0.75rem;font-weight:700;margin-top:4px}
+.kd.bon{color:var(--success-d,#0A7A52)}
+.kd.mauvais{color:var(--danger-d,#C0392B)}
+.kd.neutre{color:var(--muted);font-weight:600}
+
+/* ── Graphes ─────────────────────────────────────────────────────── */
+.kwrap{display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px;margin-top:12px}
+.kya{display:flex;flex-direction:column;justify-content:space-between;height:150px;
+  font-size:0.75rem;color:var(--muted);text-align:right;font-variant-numeric:tabular-nums;
+  line-height:1}
+.kya span{display:block}
+.kxa{position:relative;height:1.1rem;margin-top:5px;font-size:0.75rem;color:var(--muted)}
+.kxa span{position:absolute;transform:translateX(-50%);white-space:nowrap}
+.kxa span:first-child{transform:none}
+.kxa span:last-child{transform:translateX(-100%)}
+.kchart{width:100%;height:150px;display:block}
+.kgrid{stroke:var(--border);stroke-width:1;vector-effect:non-scaling-stroke}
+.kline{fill:none;stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round;
+  vector-effect:non-scaling-stroke}
+.kline-a{stroke:var(--k1)}
+.kline-b{stroke:var(--muted);stroke-width:1.6;stroke-dasharray:4 3;opacity:.75}
+.klg{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:0.75rem;
+  color:var(--muted);margin-top:8px}
+.kpt{width:16px;height:2.5px;border-radius:2px;background:var(--k1);flex:none}
+.kpt-b{background:var(--muted);margin-left:10px}
+.kvide{font-size:0.8125rem;color:var(--muted);margin-top:12px}
+
+.kring{width:126px;height:126px;flex:none}
+.kring-bg{fill:none;stroke:var(--kbg);stroke-width:14}
+.kring-s{fill:none;stroke-width:14;stroke-linecap:butt;transform:rotate(-90deg);
+  transform-origin:70px 70px}
+.kring-s.s1{stroke:var(--k1)}.kring-s.s2{stroke:var(--k2)}
+.kring-s.s3{stroke:var(--k3)}.kring-s.s4{stroke:var(--danger)}
+.kring-v{fill:var(--navy);font-size:24px;font-weight:800;
+  font-family:'Plus Jakarta Sans',sans-serif}
+.kring-l{fill:var(--muted);font-size:13.5px}
+
+/* ── Barres horizontales ─────────────────────────────────────────── */
+.kb{display:grid;grid-template-columns:minmax(64px,auto) 1fr 44px;align-items:center;
+  gap:10px;padding:5px 0;font-size:0.8125rem}
+.kb-n{color:var(--navy);font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
+.kb-t{height:8px;border-radius:5px;background:var(--kbg);overflow:hidden;min-width:0}
+.kb-t i{display:block;height:100%;border-radius:5px;background:var(--k1)}
+.kb-t i.c2{background:var(--k2)}.kb-t i.c3{background:var(--k3)}.kb-t i.c4{background:var(--k4)}
+.kb-v{text-align:right;font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums}
+
+/* ── Barres verticales (consommation par type, production par site) ── */
+/* Valeur, barre et libelle en flux normal : les positionner en absolu
+   decrochait la valeur du haut du cadre au lieu de coiffer sa barre, et
+   la colonne la plus haute passait sous le titre de section. */
+.kv{display:flex;align-items:stretch;gap:10px;height:158px;margin-top:12px;overflow-x:auto}
+.kv-c{flex:1 1 0;min-width:38px;display:flex;flex-direction:column;justify-content:flex-end;gap:4px}
+.kv-v{font-size:0.75rem;font-weight:700;color:var(--navy);text-align:center;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.kv-b{flex:1 1 auto;min-height:0;display:flex;gap:3px;align-items:flex-end;justify-content:center}
+.kv-b i{width:100%;max-width:26px;border-radius:4px 4px 0 0;background:var(--k1);min-height:2px}
+.kv-b i.c2{background:var(--k2)}.kv-b i.c3{background:var(--k3)}.kv-b i.c4{background:var(--k4)}
+.kv-b i.prec{background:var(--border)}
+.kv-l{font-size:0.75rem;color:var(--muted);text-align:center;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ── Encart d'alerte ─────────────────────────────────────────────── */
+.ka{margin-top:12px;background:var(--kbg);border-radius:10px;padding:11px 13px}
+.ka-h{display:flex;align-items:center;gap:7px;font-size:0.8125rem;font-weight:700;
+  color:var(--warning-d,#8A5A00);margin-bottom:7px}
+.ka-l{display:flex;justify-content:space-between;gap:10px;font-size:0.8125rem;
+  padding:4px 0;border-bottom:1px solid var(--border)}
+.ka-l:last-child{border-bottom:none}
+.ka-l b{color:var(--navy);font-weight:600;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.ka-l span{color:var(--danger-d,#C0392B);font-weight:700;white-space:nowrap;
+  font-variant-numeric:tabular-nums}
+.ka-ok{font-size:0.8125rem;color:var(--success-d,#0A7A52);font-weight:600}
+
+/* ── Classement ──────────────────────────────────────────────────── */
+.kcl{display:grid;grid-template-columns:24px 1fr auto auto;align-items:center;gap:10px;
+  padding:7px 0;border-bottom:1px solid var(--border);font-size:0.8125rem}
+.kcl:last-child{border-bottom:none}
+.kcl-r{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;
+  background:var(--kbg);color:var(--muted);font-size:0.75rem;font-weight:700}
+.kcl:nth-child(1) .kcl-r{background:var(--primary-l);color:var(--primary-d)}
+.kcl-n{color:var(--navy);font-weight:600;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.kcl-v{font-weight:800;color:var(--navy);font-variant-numeric:tabular-nums}
+.kp-2c{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:20px}
+@media(max-width:780px){.kp-2c{grid-template-columns:minmax(0,1fr)}}
+.kp-ring{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.kp-lg{display:flex;flex-direction:column;gap:6px;font-size:0.8125rem;min-width:0}
+.kp-lg div{display:flex;align-items:center;gap:8px;color:var(--navy)}
+.kp-lg u{width:9px;height:9px;border-radius:50%;flex:none;text-decoration:none}
+.kp-lg u.s1{background:var(--k1)}.kp-lg u.s2{background:var(--k2)}
+.kp-lg u.s3{background:var(--k3)}.kp-lg u.s4{background:var(--danger)}
+.kp-lg b{margin-left:auto;font-variant-numeric:tabular-nums}
+.kp-sep{height:1px;background:var(--border);margin:14px 0}
+.kp-st{font-size:0.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;
+  letter-spacing:.04em;margin-bottom:6px}
 </style>
+
+<div class="kpi">
 
 <div class="kpi-bar">
   <div>
-    <h2 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:18px;font-weight:800;color:var(--navy)">
-      <i class="ph ph-gauge" aria-hidden="true"></i> Dashboard KPI
-    </h2>
-    <p style="font-size:13px;color:var(--muted);margin-top:4px">
-      <?= h($P['libelle']) ?> · comparaison avec <?= h($P['libelle_prec']) ?>
-      <?= $site_id ? ' · un seul site' : ' · tous les sites' ?>
-    </p>
+    <h2><i class="ph ph-gauge" aria-hidden="true"></i> Indicateurs de performance</h2>
+    <p><?= h($P['libelle']) ?> · comparaison avec <?= h($P['libelle_prec']) ?>
+      <?= $site_id ? ' · un seul site' : ' · tous les sites' ?></p>
   </div>
   <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
     <?php if(!$is_coord): ?>
@@ -239,106 +654,267 @@ include __DIR__ . '/../templates/header.php';
   </form>
 </div>
 
-<!-- PRODUCTION -->
-<div class="kpi-fam">
-  <div class="kpi-fam-h"><span class="kpi-fam-t">Production</span>
-    <span class="kpi-fam-s">plaques posées et engins traités sur la période</span></div>
-  <div class="kpi-row">
-    <?= kpi_tuile('Plaques posées', fmt_number($plaques), kpi_var($plaques, $plaques_p), 'haut',
-                  'vs ' . $P['libelle_prec'] . ' : ' . fmt_number($plaques_p)) ?>
-    <?= kpi_tuile('Engins traités', fmt_number($engins), kpi_var($engins, $engins_p), 'haut',
-                  'vs ' . $P['libelle_prec'] . ' : ' . fmt_number($engins_p)) ?>
-    <?= kpi_tuile('Heures travaillées', number_format($heures, 1, ',', ' '), null, 'haut',
-                  $heures > 0 ? 'déclarées sur la période' : 'aucune heure déclarée') ?>
-    <?= kpi_tuile('Productivité', number_format($prod_horaire, 2, ',', ' '), null, 'haut',
-                  'engins par heure travaillée') ?>
-  </div>
-</div>
+<div class="kpi-grid">
 
-<!-- BOBINES -->
-<div class="kpi-fam">
-  <div class="kpi-fam-h"><span class="kpi-fam-t">Bobines</span>
-    <span class="kpi-fam-s">état du parc — photo instantanée, hors période</span></div>
-  <div class="kpi-row">
-    <?= kpi_tuile('Actives', fmt_number((int)($bob['actives'] ?? 0)), null, 'haut',
-                  'en stock ou en cours') ?>
-    <?= kpi_tuile('Épuisées', fmt_number((int)($bob['epuisees'] ?? 0)), null, 'bas',
-                  fmt_number((int)($bob['retirees'] ?? 0)) . ' retirée(s)') ?>
-    <?= kpi_tuile('Films restants', fmt_number((int)($bob['restants'] ?? 0)), null, 'haut',
-                  $couverture !== null
-                    ? 'couverture : ' . fmt_number($couverture) . ' jours au rythme observé'
-                    : 'aucune consommation sur 30 jours') ?>
-    <?= kpi_tuile("Taux d'utilisation", number_format($taux_util, 1, ',', ' ') . ' %', null, 'haut',
-                  'films consommés sur dotation initiale') ?>
-    <?= kpi_tuile('Films endommagés', fmt_number((int)$b_endo), null, 'bas',
-                  number_format($taux_perte, 2, ',', ' ') . ' % des films sortis',
-                  $taux_perte > 5 ? 'crit' : ($taux_perte > 2 ? 'warn' : '')) ?>
-  </div>
-</div>
-
-<!-- PMMA & RIVETS -->
-<div class="kpi-fam">
-  <div class="kpi-fam-h"><span class="kpi-fam-t">PMMA & rivets</span>
-    <span class="kpi-fam-s">consommation sur la période, stock et alertes de seuil</span></div>
-  <div class="kpi-row">
-    <?= kpi_tuile('PMMA consommés', fmt_number($pmma_conso), kpi_var($pmma_conso, $pmma_conso_p), 'haut',
-                  'vs ' . $P['libelle_prec'] . ' : ' . fmt_number($pmma_conso_p)) ?>
-    <?= kpi_tuile('PMMA sous seuil', fmt_number($pmma_bas), null, 'bas',
-                  count($pmma_stock) . ' type(s) suivi(s)',
-                  $pmma_bas > 0 ? 'crit' : 'good') ?>
-    <?= kpi_tuile('Rivets consommés', fmt_number($riv_conso), kpi_var($riv_conso, $riv_conso_p), 'haut',
-                  'vs ' . $P['libelle_prec'] . ' : ' . fmt_number($riv_conso_p)) ?>
-    <?= kpi_tuile('Rivets en stock', fmt_number($riv_stock), null, 'haut',
-                  $riv_bas > 0 ? $riv_bas . ' site(s) sous le seuil' : 'aucun site sous le seuil',
-                  $riv_bas > 0 ? 'crit' : 'good') ?>
-  </div>
-</div>
-
-<!-- COMMANDES & ÉQUIPEMENTS -->
-<div class="kpi-fam">
-  <div class="kpi-fam-h"><span class="kpi-fam-t">Commandes & équipements</span>
-    <span class="kpi-fam-s">commandes de la période, parc équipement en instantané</span></div>
-  <div class="kpi-row">
-    <?= kpi_tuile('Taux de satisfaction', $cmd_total > 0 ? number_format($taux_service, 1, ',', ' ') . ' %' : '—',
-                  null, 'haut',
-                  $cmd_total > 0 ? (int)$cmd['servies'] . ' servie(s) sur ' . $cmd_total : 'aucune commande sur la période',
-                  $cmd_total > 0 && $taux_service < 80 ? 'warn' : '') ?>
-    <?= kpi_tuile('Délai moyen', $cmd_total > 0 ? number_format((float)$cmd['delai'], 1, ',', ' ') . ' j' : '—',
-                  null, 'bas', 'de la création à la livraison') ?>
-    <?= kpi_tuile('Commandes en cours', fmt_number((int)($cmd['en_cours'] ?? 0)), null, 'bas',
-                  'non encore livrées') ?>
-    <?= kpi_tuile('Disponibilité parc', $eq_total > 0 ? number_format($dispo, 1, ',', ' ') . ' %' : '—',
-                  null, 'haut',
-                  $eq_total > 0 ? (int)$eq['hs'] . ' hors service sur ' . $eq_total : 'aucun équipement actif',
-                  $eq_total > 0 && $dispo < 90 ? 'warn' : '') ?>
-    <?= kpi_tuile('Interventions ouvertes', fmt_number($interv_ouvertes), null, 'bas',
-                  'non résolues à ce jour',
-                  $interv_ouvertes > 0 ? 'warn' : 'good') ?>
-  </div>
-</div>
-
-<!-- CLASSEMENT SITES -->
-<?php if (!$site_id): ?>
-<div class="kpi-fam">
-  <div class="kpi-fam-h"><span class="kpi-fam-t">Classement des sites</span>
-    <span class="kpi-fam-s">plaques posées sur la période — <?= h($P['libelle']) ?></span></div>
-  <div class="kpi-clst">
-    <?php if (empty($classement)): ?>
-      <div style="color:var(--muted);font-size:13.5px;padding:8px 0">
-        Aucune production enregistrée sur cette période.
-      </div>
-    <?php else: $r = 0; foreach ($classement as $c): $r++;
-      $pct = $plaques_max > 0 ? (int)$c['plaques'] / $plaques_max * 100 : 0;
-      $vh  = (float)$c['heures'] > 0 ? (float)$c['engins'] / (float)$c['heures'] : 0; ?>
-    <div class="kpi-cl">
-      <span class="kpi-cl-r"><?= $r ?></span>
-      <span class="kpi-cl-n"><?= h($c['nom']) ?></span>
-      <span class="kpi-cl-b"><i style="width:<?= round($pct, 1) ?>%"></i></span>
-      <span class="kpi-cl-v"><?= fmt_number((int)$c['plaques']) ?></span>
+  <!-- ══ PRODUCTION ══ -->
+  <section class="kp kp--prod" aria-labelledby="kp-prod">
+    <div class="kp-h">
+      <span class="kp-ic"><i class="ph ph-car" aria-hidden="true"></i></span>
+      <h3 class="kp-t" id="kp-prod">Production<em>plaques posées, toutes échelles de temps</em></h3>
     </div>
-    <?php endforeach; endif; ?>
-  </div>
+    <div class="kc-row">
+      <?php foreach ($echelles as [$lbl, $v, $vp, $ref]): ?>
+      <div class="kc">
+        <div class="kc-l"><?= h($lbl) ?></div>
+        <div class="kc-v"><?= fmt_number((int)$v) ?></div>
+        <?= kpi_delta(kpi_var($v, $vp)) ?>
+        <div class="kc-n">vs <?= h($ref) ?> (<?= fmt_number((int)$vp) ?>)</div>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <div class="kp-sep"></div>
+    <div class="kp-st">Évolution — <?= h($serie_note) ?></div>
+    <?= kpi_courbe($serie_lbl, $serie_a, $serie_b,
+                   'Période actuelle', $serie_b ? 'Période précédente' : '', 'plaques',
+                   $serie_borne) ?>
+  </section>
+
+  <!-- ══ BOBINES ══ -->
+  <section class="kp kp--bob" aria-labelledby="kp-bob">
+    <div class="kp-h">
+      <span class="kp-ic"><i class="ph ph-film-strip" aria-hidden="true"></i></span>
+      <h3 class="kp-t" id="kp-bob">Bobines<em>état du parc — photo instantanée, hors période</em></h3>
+    </div>
+    <div class="kp-ring">
+      <?= kpi_anneau([['Utilisé', $taux_util, 's1'], ['Restant', 100 - $taux_util, '']],
+                     number_format($taux_util, 1, ',', ' ') . ' %', "d'utilisation",
+                     'Taux d\'utilisation ' . number_format($taux_util, 1, ',', ' ') . ' %') ?>
+      <div class="kp-lg">
+        <div><u class="s1"></u>Actives<b><?= fmt_number((int)($bob['actives'] ?? 0)) ?></b></div>
+        <div><u class="s3"></u>Épuisées<b><?= fmt_number((int)($bob['epuisees'] ?? 0)) ?></b></div>
+        <div><u class="s4"></u>Films endommagés<b><?= fmt_number((int)$b_endo) ?></b></div>
+        <div><u class="s2"></u>Films restants<b><?= fmt_number((int)($bob['restants'] ?? 0)) ?></b></div>
+      </div>
+    </div>
+    <p class="kc-n" style="margin-top:10px">
+      <?= $couverture !== null
+          ? 'Couverture : ' . fmt_number($couverture) . ' jours au rythme observé sur 30 jours.'
+          : 'Aucune consommation observée sur 30 jours : la couverture ne peut pas être calculée.' ?>
+      Perte : <?= number_format($taux_perte, 2, ',', ' ') ?> % des films sortis.
+    </p>
+    <?php if ($bob_series): ?>
+    <div class="kp-sep"></div>
+    <div class="kp-st">Utilisation par format</div>
+    <?php $i = 0; foreach ($bob_series as $bs): $i++; ?>
+    <div class="kb">
+      <span class="kb-n"><?= h($bs['lbl']) ?></span>
+      <span class="kb-t"><i class="c<?= (($i - 1) % 4) + 1 ?>" style="width:<?= round(min(100, $bs['pct']), 1) ?>%"></i></span>
+      <span class="kb-v"><?= number_format($bs['pct'], 0, ',', ' ') ?> %</span>
+    </div>
+    <?php endforeach; ?>
+    <?php endif; ?>
+  </section>
+
+  <!-- ══ PMMA ══ -->
+  <section class="kp kp--pmma" aria-labelledby="kp-pmma">
+    <div class="kp-h">
+      <span class="kp-ic"><i class="ph ph-printer" aria-hidden="true"></i></span>
+      <h3 class="kp-t" id="kp-pmma">PMMA<em>consommation de la période, stock et seuils</em></h3>
+    </div>
+    <div class="kc-row">
+      <div class="kc">
+        <div class="kc-l">Consommés</div>
+        <div class="kc-v"><?= fmt_number($pmma_conso) ?></div>
+        <?= kpi_delta(kpi_var($pmma_conso, $pmma_conso_p)) ?>
+        <div class="kc-n">vs <?= h($P['libelle_prec']) ?> (<?= fmt_number($pmma_conso_p) ?>)</div>
+      </div>
+      <div class="kc">
+        <div class="kc-l">Stock disponible</div>
+        <div class="kc-v"><?= fmt_number($pmma_total) ?></div>
+        <div class="kc-n"><?= count($pmma_stock) ?> type(s) suivi(s)</div>
+      </div>
+    </div>
+    <?php if ($pmma_par_type): $mx = 0; foreach ($pmma_par_type as $t) $mx = max($mx, (int)$t['v']); ?>
+    <div class="kp-st" style="margin-top:14px">Consommation par type</div>
+    <div class="kv">
+      <?php $i = 0; foreach ($pmma_par_type as $t): $i++; ?>
+      <div class="kv-c">
+        <span class="kv-v"><?= fmt_number((int)$t['v']) ?></span>
+        <span class="kv-b"><i class="c<?= (($i - 1) % 4) + 1 ?>"
+          style="height:<?= $mx > 0 ? round((int)$t['v'] / $mx * 100, 1) : 0 ?>%"></i></span>
+        <span class="kv-l"><?= h($t['t']) ?></span>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+    <div class="ka">
+      <?php if ($pmma_alertes): ?>
+      <div class="ka-h"><i class="ph-fill ph-warning" aria-hidden="true"></i> Sous le seuil d'alerte</div>
+      <?php foreach ($pmma_alertes as $a): ?>
+      <div class="ka-l"><b><?= h($a['t']) ?> · <?= h($a['site']) ?></b>
+        <span><?= fmt_number((int)$a['q']) ?> / <?= fmt_number((int)$a['seuil']) ?></span></div>
+      <?php endforeach; ?>
+      <?php else: ?>
+      <div class="ka-ok"><i class="ph-fill ph-check-circle" aria-hidden="true"></i>
+        Aucun type de PMMA sous son seuil.</div>
+      <?php endif; ?>
+    </div>
+  </section>
+
+  <!-- ══ RIVETS ══ -->
+  <section class="kp kp--riv" aria-labelledby="kp-riv">
+    <div class="kp-h">
+      <span class="kp-ic"><i class="ph ph-push-pin" aria-hidden="true"></i></span>
+      <h3 class="kp-t" id="kp-riv">Rivets<em>consommation de la période et stock disponible</em></h3>
+    </div>
+    <div class="kc-row">
+      <div class="kc">
+        <div class="kc-l">Consommés</div>
+        <div class="kc-v"><?= fmt_number($riv_conso) ?></div>
+        <?= kpi_delta(kpi_var($riv_conso, $riv_conso_p)) ?>
+        <div class="kc-n">vs <?= h($P['libelle_prec']) ?> (<?= fmt_number($riv_conso_p) ?>)</div>
+      </div>
+      <div class="kc">
+        <div class="kc-l">Stock disponible</div>
+        <div class="kc-v"><?= fmt_number($riv_stock) ?></div>
+        <div class="kc-n"><?= $riv_bas > 0
+            ? fmt_number($riv_bas) . ' site(s) sous le seuil'
+            : 'aucun site sous le seuil' ?></div>
+      </div>
+    </div>
+    <div class="ka">
+      <?php if ($riv_alertes): ?>
+      <div class="ka-h"><i class="ph-fill ph-warning" aria-hidden="true"></i> Sous le seuil d'alerte</div>
+      <?php foreach ($riv_alertes as $a): ?>
+      <div class="ka-l"><b><?= h($a['site']) ?> · <?= h($a['t']) ?></b>
+        <span><?= fmt_number((int)$a['q']) ?> / <?= fmt_number((int)$a['seuil']) ?></span></div>
+      <?php endforeach; ?>
+      <?php else: ?>
+      <div class="ka-ok"><i class="ph-fill ph-check-circle" aria-hidden="true"></i>
+        Tous les sites sont au-dessus de leur seuil.</div>
+      <?php endif; ?>
+    </div>
+  </section>
+
+  <!-- ══ COMMANDES ══ -->
+  <section class="kp kp--cmd" aria-labelledby="kp-cmd">
+    <div class="kp-h">
+      <span class="kp-ic"><i class="ph ph-clipboard-text" aria-hidden="true"></i></span>
+      <h3 class="kp-t" id="kp-cmd">Commandes<em>commandes créées sur la période</em></h3>
+    </div>
+    <div class="kc-row">
+      <div class="kc">
+        <div class="kc-l">Taux de satisfaction</div>
+        <div class="kc-v"><?= $cmd_total > 0 ? number_format($taux_service, 1, ',', ' ') . ' %' : '—' ?></div>
+        <div class="kc-n"><?= $cmd_total > 0
+            ? (int)$cmd['servies'] . ' servie(s) sur ' . $cmd_total
+            : 'aucune commande sur la période' ?></div>
+      </div>
+      <div class="kc">
+        <div class="kc-l">Délai moyen</div>
+        <div class="kc-v"><?= $cmd_total > 0 ? number_format((float)$cmd['delai'], 1, ',', ' ') . ' j' : '—' ?></div>
+        <div class="kc-n">de la création à la livraison</div>
+      </div>
+      <div class="kc">
+        <div class="kc-l">En attente</div>
+        <div class="kc-v"><?= fmt_number((int)($cmd['en_cours'] ?? 0)) ?></div>
+        <div class="kc-n">non encore livrées</div>
+      </div>
+    </div>
+    <div class="kp-sep"></div>
+    <div class="kp-st">Taux de satisfaction — six dernières périodes</div>
+    <?= kpi_courbe($cmd_hist_lbl, $cmd_hist, [], 'Taux de satisfaction', '', '%') ?>
+  </section>
+
+  <!-- ══ ÉQUIPEMENTS ══ -->
+  <section class="kp kp--eq" aria-labelledby="kp-eq">
+    <div class="kp-h">
+      <span class="kp-ic"><i class="ph ph-desktop" aria-hidden="true"></i></span>
+      <h3 class="kp-t" id="kp-eq">Équipements<em>parc actif — photo instantanée</em></h3>
+    </div>
+    <div class="kc-row">
+      <div class="kc">
+        <div class="kc-l">Disponibilité</div>
+        <div class="kc-v"><?= $eq_total > 0 ? number_format($dispo, 1, ',', ' ') . ' %' : '—' ?></div>
+        <div class="kc-n"><?= $eq_total > 0 ? fmt_number($eq_hs) . ' hors service' : 'aucun équipement actif' ?></div>
+      </div>
+      <div class="kc">
+        <div class="kc-l">Interventions</div>
+        <div class="kc-v"><?= fmt_number($interv_ouvertes) ?></div>
+        <div class="kc-n">non résolues à ce jour</div>
+      </div>
+    </div>
+    <?php if ($eq_total > 0): ?>
+    <div class="kp-sep"></div>
+    <div class="kp-ring">
+      <?= kpi_anneau([['Disponibles', $eq_ok, 's2'], ['Hors service', $eq_hs, 's4'],
+                      ['Maintenance', $eq_maint, 's3'], ['Autre état', $eq_autre, 's1']],
+                     fmt_number($eq_total), 'équipements',
+                     "Répartition du parc : $eq_ok disponibles, $eq_hs hors service, "
+                     . "$eq_maint en maintenance, $eq_autre autre état") ?>
+      <div class="kp-lg">
+        <div><u class="s2"></u>Disponibles<b><?= fmt_number($eq_ok) ?></b></div>
+        <div><u class="s4"></u>Hors service<b><?= fmt_number($eq_hs) ?></b></div>
+        <?php if ($eq_maint): ?>
+        <div><u class="s3"></u>Maintenance<b><?= fmt_number($eq_maint) ?></b></div>
+        <?php endif; ?>
+        <?php if ($eq_autre): ?>
+        <div><u class="s1"></u>Autre état<b><?= fmt_number($eq_autre) ?></b></div>
+        <?php endif; ?>
+      </div>
+    </div>
+    <?php endif; ?>
+  </section>
+
+  <!-- ══ SITES ══ -->
+  <?php if (!$site_id): ?>
+  <section class="kp kp--sites" aria-labelledby="kp-sites">
+    <div class="kp-h">
+      <span class="kp-ic"><i class="ph ph-map-pin" aria-hidden="true"></i></span>
+      <h3 class="kp-t" id="kp-sites">Sites<em>plaques posées — <?= h($P['libelle']) ?></em></h3>
+    </div>
+    <?php if (empty($classement)): ?>
+      <p class="kvide">Aucune production enregistrée sur cette période.</p>
+    <?php else: ?>
+    <div class="kp-2c">
+      <div>
+        <div class="kp-st">Production par site, comparée à <?= h($P['libelle_prec']) ?></div>
+        <?php if ($en_cours): ?>
+        <p class="kc-n" style="margin:-2px 0 4px"><?= h(ucfirst($en_cours)) ?>.</p>
+        <?php endif; ?>
+        <div class="kv">
+          <?php foreach (array_slice($classement, 0, 8) as $c): ?>
+          <div class="kv-c">
+            <span class="kv-v"><?= fmt_number((int)$c['plaques']) ?></span>
+            <span class="kv-b">
+              <i style="height:<?= $plaques_max > 0 ? round((int)$c['plaques'] / $plaques_max * 100, 1) : 0 ?>%"></i>
+              <i class="prec" style="height:<?= $plaques_max > 0 ? round((int)$c['plaques_p'] / $plaques_max * 100, 1) : 0 ?>%"></i>
+            </span>
+            <span class="kv-l" title="<?= h($c['nom']) ?>"><?= h($c['nom']) ?></span>
+          </div>
+          <?php endforeach; ?>
+        </div>
+        <p class="klg"><span class="kpt"></span>Période actuelle
+          <span class="kpt kpt-b" style="background:var(--border)"></span><?= h($P['libelle_prec']) ?></p>
+      </div>
+      <div>
+        <div class="kp-st">Classement productivité</div>
+        <?php $r = 0; foreach (array_slice($classement, 0, 6) as $c): $r++;
+          $vh = (float)$c['heures'] > 0 ? (float)$c['engins'] / (float)$c['heures'] : 0; ?>
+        <div class="kcl">
+          <span class="kcl-r"><?= $r ?></span>
+          <span class="kcl-n"><?= h($c['nom']) ?></span>
+          <span class="kcl-v"><?= fmt_number((int)$c['plaques']) ?></span>
+          <?= kpi_delta(kpi_var((float)$c['plaques'], (float)$c['plaques_p'])) ?>
+        </div>
+        <?php endforeach; ?>
+      </div>
+    </div>
+    <?php endif; ?>
+  </section>
+  <?php endif; ?>
+
 </div>
-<?php endif; ?>
+</div>
 
 <?php include __DIR__ . '/../templates/footer.php'; ?>
