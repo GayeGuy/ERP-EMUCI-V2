@@ -813,7 +813,7 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
 .ms.open .ms-b>.ph-caret-down{transform:rotate(180deg)}
 .ms-b>.ph-caret-down{color:var(--muted);transition:transform .15s;flex:none}
 .ms-t{display:flex;align-items:center;gap:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ms-p{display:none;position:absolute;z-index:40;right:0;top:calc(100% + 5px);min-width:250px;
+.ms-p{display:none;position:absolute;z-index:150;right:0;top:calc(100% + 5px);min-width:250px;
   max-height:340px;overflow-y:auto;background:var(--card,#fff);border:1.5px solid var(--primary-d);
   border-radius:var(--radius-sm,10px);box-shadow:0 12px 30px rgba(30,43,74,.16)}
 .ms.open .ms-p{display:block}
@@ -826,7 +826,7 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
 .ms-i{display:flex;align-items:center;gap:9px;padding:7px 12px;cursor:pointer;
   border-bottom:1px solid var(--border);font-size:0.8125rem;color:var(--navy)}
 .ms-i:hover{background:var(--lighter)}
-.ms-i input{flex:none;width:auto;margin:0}
+.ms-i input{flex:none;width:16px;height:16px;margin:0;accent-color:var(--primary-d)}
 .ms-i span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ms-f{display:flex;justify-content:flex-end;gap:7px;padding:9px 12px;background:var(--card,#fff);
   border-top:1px solid var(--border);position:sticky;bottom:0}

@@ -80,7 +80,13 @@ migration_achats_21_equipement_bon_livraison.sql
 migration_achats_22_commande_ligne_feb_ligne.sql
 migration_achats_23_commande_modification.sql
 migration_fix_fk_consommables_legacy.sql
+migration_achats_24_commande_compteurs.sql
 migration_correction_point_emuci.sql
+migration_permissions_groupes_nouveaux_modules.sql
+migration_tracabilite_endommagements.sql
+migration_observations_suivi.sql
+migration_referentiels_capacites.sql
+migration_preferences_affichage.sql
 "
 
 for f in $FICHIERS; do
