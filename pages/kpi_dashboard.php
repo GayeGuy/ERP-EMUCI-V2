@@ -638,11 +638,33 @@ include __DIR__ . '/../templates/header.php';
 @media (prefers-color-scheme: light){:root:not([data-theme="dark"]) .kpi{--k1:#3D4FD1;--k2:#0A7A52;--k3:#B45309;--k4:#7C3AED}}
 
 /* ── En-tete de page ─────────────────────────────────────────────── */
+/* Barre de filtres collante, meme comportement que .pdg-topbar sur
+   pages/pdg_overview.php (templates/dash_style.php) : elle reste
+   atteignable depuis n'importe quel panneau, sans remonter en haut de
+   page. Le fond reprend celui de la page pour rester opaque une fois
+   colle sous la topbar de l'appli. */
 .kpi-bar{display:flex;justify-content:space-between;align-items:flex-end;gap:14px;
-  flex-wrap:wrap;margin-bottom:18px}
+  flex-wrap:wrap;position:sticky;top:var(--topbar-h,64px);z-index:40;
+  background:var(--tertiary,#F0F4FF);margin:0 -10px 18px;padding:14px 10px 12px;
+  border-bottom:1px solid transparent;transition:border-color .18s,box-shadow .18s}
+body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
+  box-shadow:0 6px 14px -10px rgba(6,3,58,.35)}
+@media(max-width:700px){.kpi-bar{position:static;margin:0 0 18px;padding:0}}
 .kpi-bar h2{font-family:'Plus Jakarta Sans',sans-serif;font-size:1.125rem;font-weight:800;
   color:var(--navy);display:flex;align-items:center;gap:8px}
 .kpi-bar p{font-size:0.8125rem;color:var(--muted);margin-top:4px}
+
+/* ── Changement de filtre anime (templates/dash_anim.php) ──────────
+   Meme traitement que .pdg-bar/.pdg-busy sur pages/pdg_overview.php :
+   classes fixees par le script, pas de nom propre a cette page. */
+.pdg-bar{position:fixed;top:0;left:0;right:0;height:2px;z-index:9999;background:transparent;
+  opacity:0;transition:opacity .15s;pointer-events:none}
+.pdg-busy .pdg-bar{opacity:1}
+.pdg-bar::after{content:'';position:absolute;top:0;left:0;height:100%;width:38%;
+  background:var(--navy,#06033A);animation:pdg-slide 1.05s cubic-bezier(.65,0,.35,1) infinite}
+@keyframes pdg-slide{0%{left:-38%}100%{left:100%}}
+.pdg-busy .ms-b{cursor:progress}
+@media(prefers-reduced-motion:reduce){.pdg-bar::after{animation:none;width:100%}}
 
 /* ── Grille de panneaux ──────────────────────────────────────────── */
 .kpi-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
@@ -840,13 +862,20 @@ include __DIR__ . '/../templates/header.php';
     <p><?= h($P['libelle']) ?> · comparaison avec <?= h($P['libelle_prec']) ?>
       · <?= h($perimetre_lbl) ?><?= $memorise ? ' · filtres mémorisés' : '' ?></p>
   </div>
-  <form method="GET" id="kpiForm" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+  <?php /* data-dash-filtre : le changement de periode passe par l'echange
+           anime de templates/dash_anim.php (meme mecanisme que
+           pages/pdg_overview.php), au lieu d'un rechargement complet. Les
+           deux blocs a choix multiple (#msSites, #msVues) portent
+           data-dash-nofiltre : leurs propres cases/champs ne doivent pas
+           declencher l'echange a chaque interaction, seul le bouton
+           « Appliquer » le fait, explicitement, via window.dashFiltrer(). */ ?>
+  <form method="GET" id="kpiForm" data-dash-filtre style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
     <?php /* Le marqueur distingue une action de l'utilisateur d'un lien
              reçu : seule la première mémorise ses filtres. */ ?>
     <input type="hidden" name="<?= MARQUEUR_INTERACTION ?>" value="1">
 
     <?php if (!$is_coord): ?>
-    <div class="ms" id="msSites">
+    <div class="ms" id="msSites" data-dash-nofiltre>
       <button type="button" class="ms-b" onclick="msOuvrir(this)" aria-expanded="false">
         <span class="ms-t"></span><i class="ph ph-caret-down" aria-hidden="true"></i>
       </button>
@@ -873,7 +902,7 @@ include __DIR__ . '/../templates/header.php';
     <?= periode_selecteur($P) ?>
 
     <?php if ($vues || $peut_enregistrer): ?>
-    <div class="ms" id="msVues">
+    <div class="ms" id="msVues" data-dash-nofiltre>
       <button type="button" class="ms-b" onclick="msOuvrir(this)" aria-expanded="false"
               title="Vues enregistrées">
         <span class="ms-t"><i class="ph ph-bookmark-simple" aria-hidden="true"></i>
@@ -1234,7 +1263,11 @@ function msAnnuler(btn){
 
 function msValider(btn){
   msDd(btn).classList.remove('open');
-  document.getElementById('kpiForm').submit();
+  var form = document.getElementById('kpiForm');
+  // window.dashFiltrer (templates/dash_anim.php) echange le contenu sans
+  // rechargement, comme pages/pdg_overview.php ; repli sur l'envoi
+  // classique si le module n'est pas charge.
+  if (window.dashFiltrer) window.dashFiltrer(form); else form.submit();
 }
 
 document.addEventListener('click', function(e){
@@ -1286,4 +1319,10 @@ function vueSupprimer(id, btn){
 document.querySelectorAll('.ms').forEach(msTexte);
 </script>
 
-<?php include __DIR__ . '/../templates/footer.php'; ?>
+<?php
+// Meme moteur de rafraichissement que pages/pdg_overview.php : echange
+// anime du contenu au changement de filtre, sans rechargement de page
+// (cf. templates/dash_anim.php — RACINE y reconnait '.kpi').
+include __DIR__ . '/../templates/dash_anim.php';
+include __DIR__ . '/../templates/footer.php';
+?>
