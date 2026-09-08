@@ -121,6 +121,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         json_response(true, "Type « $code » créé.");
     }
 
+    // ── Defaut d'ouverture du dashboard KPI, par role
+    // Ce sur quoi un utilisateur tombe la premiere fois, avant d'avoir
+    // touche le moindre filtre. C'est la que se joue le « qu'est-ce qui
+    // me concerne » de PRODUCT.md : un coordinateur veut sa journee, la
+    // direction son mois.
+    if ($action === 'defaut_role') {
+        if (!$can_edit) json_response(false, 'Action réservée.');
+        $role_id = (int)($_POST['role_id'] ?? 0);
+        $cle     = trim($_POST['cle'] ?? '');
+        $valeur  = trim($_POST['valeur'] ?? '');
+        $connus  = ['kpi_dashboard.periode' =>
+                        ['journalier','hebdomadaire','mensuel','annuel']];
+        if (!isset($connus[$cle]))  json_response(false, 'Réglage inconnu.');
+        $r = db_fetch_one("SELECT nom FROM roles WHERE id = ?", [$role_id]);
+        if (!$r) json_response(false, 'Rôle introuvable.');
+
+        // Valeur vide = pas de defaut pour ce role : on supprime la ligne
+        // plutot que d'enregistrer une chaine vide, qui obligerait chaque
+        // lecture a distinguer « vide » de « absent ».
+        if ($valeur === '') {
+            db_query("DELETE FROM defauts_affichage WHERE role_id = ? AND cle = ?", [$role_id, $cle]);
+            audit_log($user['id'], 'DELETE', 'referentiels_operations', $role_id,
+                      "Défaut $cle retiré pour {$r['nom']}");
+            json_response(true, "{$r['nom']} : plus de défaut, l'écran ouvre sur sa valeur standard.");
+        }
+        if (!in_array($valeur, $connus[$cle], true)) json_response(false, 'Valeur non autorisée.');
+        db_query("INSERT INTO defauts_affichage (role_id, cle, valeur) VALUES (?,?,?)
+                  ON CONFLICT (role_id, cle)
+                  DO UPDATE SET valeur = EXCLUDED.valeur, updated_at = CURRENT_TIMESTAMP",
+            [$role_id, $cle, $valeur]);
+        audit_log($user['id'], 'UPDATE', 'referentiels_operations', $role_id,
+                  "Défaut $cle = $valeur pour {$r['nom']}");
+        json_response(true, "{$r['nom']} : ouverture en « $valeur ».");
+    }
+
     json_response(false, 'Action inconnue.');
 }
 
@@ -177,6 +212,20 @@ $orphelins = db_fetch_all(
       WHERE COALESCE(TRIM(type_pmma),'') <> ''
         AND TRIM(type_pmma) NOT IN (SELECT code FROM op_types_pmma)
       GROUP BY TRIM(type_pmma) ORDER BY 1");
+
+// ── Defauts d'ouverture par role
+$roles_defauts = [];
+try {
+    $roles_defauts = db_fetch_all(
+        "SELECT r.id, r.nom, r.slug,
+                (SELECT d.valeur FROM defauts_affichage d
+                  WHERE d.role_id = r.id AND d.cle = 'kpi_dashboard.periode') AS periode,
+                (SELECT COUNT(*) FROM users u WHERE u.role_id = r.id AND u.actif = 1) AS nb
+           FROM roles r ORDER BY r.nom");
+} catch (Throwable $e) {
+    // Migration des preferences pas encore passee : l'onglet reste vide
+    // plutot que de faire tomber les deux autres.
+}
 
 include __DIR__ . '/../../templates/header.php';
 ?>
@@ -242,6 +291,9 @@ table.ref-t td.n,table.ref-t th.n{text-align:right}
   </button>
   <button type="button" class="ref-onglet" data-vue="pm" onclick="refVue('pm')">
     <i class="ph ph-printer" aria-hidden="true"></i> PMMA — unités par carton
+  </button>
+  <button type="button" class="ref-onglet" data-vue="df" onclick="refVue('df')">
+    <i class="ph ph-eye" aria-hidden="true"></i> Affichage par défaut
   </button>
 </div>
 
@@ -401,12 +453,52 @@ table.ref-t td.n,table.ref-t th.n{text-align:right}
   <?php endif; ?>
 </div>
 
+<!-- ══ DÉFAUTS D'AFFICHAGE ══ -->
+<div id="vue-df" style="display:none">
+  <div class="ref-card">
+    <h4>Ouverture du Dashboard KPI</h4>
+    <div class="sub">Sur quelle granularité l'écran s'ouvre pour un utilisateur qui n'a encore
+      rien filtré. Dès qu'il choisit lui-même une période, c'est son choix qui est retenu la
+      fois suivante : ce réglage ne s'impose pas, il évite seulement de tomber sur une vue qui
+      ne concerne personne. Laisser « aucun » revient à ouvrir sur le mensuel.</div>
+    <?php if (empty($roles_defauts)): ?>
+      <div style="color:var(--muted);font-size:13.5px">Migration des préférences non appliquée.</div>
+    <?php else: ?>
+    <table class="ref-t">
+      <thead><tr><th>Rôle</th><th class="n">Utilisateurs</th><th>Ouvre sur</th><th></th></tr></thead>
+      <tbody>
+      <?php foreach ($roles_defauts as $r): $i = (int)$r['id']; ?>
+      <tr>
+        <td><strong><?= h($r['nom']) ?></strong></td>
+        <td class="n" style="color:var(--muted)"><?= (int)$r['nb'] ?></td>
+        <td>
+          <select class="ref-inp txt" id="dr-<?= $i ?>" <?= $can_edit ? '' : 'disabled' ?>>
+            <option value="">— aucun (mensuel) —</option>
+            <?php foreach (['journalier'=>'Journalier','hebdomadaire'=>'Hebdomadaire',
+                            'mensuel'=>'Mensuel','annuel'=>'Annuel'] as $k => $lbl): ?>
+            <option value="<?= $k ?>" <?= $r['periode'] === $k ? 'selected' : '' ?>><?= $lbl ?></option>
+            <?php endforeach; ?>
+          </select>
+        </td>
+        <td class="n"><?php if ($can_edit): ?>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="refDefaut(<?= $i ?>)">Enregistrer</button>
+        <?php endif; ?></td>
+      </tr>
+      <?php endforeach; ?>
+      </tbody>
+    </table>
+    <?php endif; ?>
+  </div>
+</div>
+
 <div class="ref-msg" id="refMsg"></div>
 
 <script>
 function refVue(v){
-  document.getElementById('vue-bob').style.display = (v === 'bob') ? '' : 'none';
-  document.getElementById('vue-pm').style.display  = (v === 'pm')  ? '' : 'none';
+  ['bob','pm','df'].forEach(function(k){
+    var e = document.getElementById('vue-' + k);
+    if (e) e.style.display = (k === v) ? '' : 'none';
+  });
   document.querySelectorAll('.ref-onglet').forEach(function(b){
     b.classList.toggle('on', b.dataset.vue === v);
   });
@@ -458,6 +550,10 @@ function refPmma(id){
            unites_par_carton: document.getElementById('pc-' + id).value,
            seuil_defaut:      document.getElementById('pq-' + id).value,
            actif: document.getElementById('pa-' + id).checked ? 1 : ''}, false);
+}
+function refDefaut(id){
+  refPost({action:'defaut_role', role_id:id, cle:'kpi_dashboard.periode',
+           valeur: document.getElementById('dr-' + id).value}, false);
 }
 function refCreer(){
   refPost({action:'creer_pmma',

@@ -40,6 +40,7 @@ require_once __DIR__ . '/../includes/notifications.php';
 require_once __DIR__ . '/../includes/periode.php';
 require_once __DIR__ . '/../includes/consommation.php';
 require_once __DIR__ . '/../includes/referentiels.php';
+require_once __DIR__ . '/../includes/preferences.php';
 
 require_auth();
 require_permission('kpi_dashboard', 'can_read');
@@ -49,19 +50,104 @@ $role_slug   = $user['role_slug'] ?? '';
 $page_title  = 'Dashboard KPI';
 $active_page = 'kpi_dashboard';
 
+// ── Vues enregistrees : actions AJAX, traitees avant tout calcul
+// d'indicateur. Repondre a un enregistrement ne demande pas de construire
+// les sept panneaux.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
+    header('Content-Type: application/json');
+    $action = $_POST['action'] ?? '';
+
+    if ($action === 'vue_creer') {
+        $nom = trim($_POST['nom'] ?? '');
+        $flt = trim($_POST['filtres'] ?? '');
+        if ($nom === '')            json_response(false, 'Donnez un nom à cette vue.');
+        if (mb_strlen($nom) > 80)   json_response(false, 'Nom trop long (80 caractères maximum).');
+        // Les filtres sont ceux de la page, pas une chaine libre : on les
+        // relit et on ne garde que les cles connues. Sans ce tri, une vue
+        // pourrait transporter n'importe quel parametre vers l'ecran.
+        parse_str($flt, $brut);
+        $garde = [];
+        foreach (['periode','mois','jour','annee'] as $k)
+            if (isset($brut[$k]) && is_scalar($brut[$k])) $garde[$k] = (string)$brut[$k];
+        if (isset($brut['sites']) && is_array($brut['sites']))
+            $garde['sites'] = array_values(array_filter(array_map('intval', $brut['sites'])));
+        try {
+            db_query("INSERT INTO vues_enregistrees (user_id, ecran, nom, filtres, partagee)
+                      VALUES (?,?,?,?,?)
+                      ON CONFLICT (user_id, ecran, nom)
+                      DO UPDATE SET filtres = EXCLUDED.filtres, partagee = EXCLUDED.partagee",
+                [(int)$user['id'], 'kpi_dashboard', $nom, http_build_query($garde),
+                 !empty($_POST['partagee']) ? 1 : 0]);
+        } catch (Throwable $e) {
+            json_response(false, 'Enregistrement impossible : la migration des vues n’est pas passée.');
+        }
+        audit_log($user['id'], 'CREATE', 'kpi_dashboard', 0, "Vue enregistrée « $nom »");
+        json_response(true, "Vue « $nom » enregistrée.");
+    }
+
+    if ($action === 'vue_supprimer') {
+        // Le filtre sur user_id est la seule autorisation qui compte : une
+        // vue partagee reste modifiable par son seul proprietaire.
+        try {
+            db_query("DELETE FROM vues_enregistrees WHERE id = ? AND user_id = ?",
+                     [(int)($_POST['id'] ?? 0), (int)$user['id']]);
+        } catch (Throwable $e) {
+            json_response(false, 'Suppression impossible.');
+        }
+        json_response(true, 'Vue supprimée.');
+    }
+
+    json_response(false, 'Action inconnue.');
+}
+
 $is_coord   = ($role_slug === 'coordinateur_site');
 $site_force = ($is_coord && $user['site_id']) ? (int)$user['site_id'] : 0;
-$site_id    = $site_force ?: (int)($_GET['site'] ?? 0);
+
+$sites_list = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom");
+$sites_ids  = array_map(fn($s) => (int)$s['id'], $sites_list);
+
+// ── Perimetre : une selection de sites, plus un site unique.
+// Un superviseur arbitre entre vingt et un sites mais n'en suit
+// generalement que quelques-uns ; le choix « un seul ou tous » l'obligeait
+// a repasser par la liste a chaque comparaison. Une selection vide vaut
+// « tout le perimetre » : c'est le sens qu'on donne a des cases toutes
+// decochees, et cela garde l'ecran utilisable au lieu de le vider.
+//
+// Le coordinateur reste force sur son site : c'est impose par son role,
+// pas choisi, et sa preference ne doit pas pouvoir l'elargir.
+$sites_sel = $site_force ? [$site_force] : pref_filtre(
+    'kpi_dashboard.sites',
+    $_GET['sites'] ?? null,
+    fn($v) => pref_liste_ids($v, $sites_ids),
+    []);
+
+// La granularite se memorise elle aussi : c'est le filtre le plus
+// souvent repose, et le seul dont PRODUCT.md donne un defaut par profil.
+if (!isset($_GET['periode'])) {
+    $memo = pref_toutes()['kpi_dashboard.periode']
+         ?? pref_defauts_role()['kpi_dashboard.periode'] ?? null;
+    if ($memo !== null && in_array($memo, ['journalier','hebdomadaire','mensuel','annuel'], true))
+        $_GET['periode'] = $memo;
+} elseif (pref_interaction()) {
+    pref_filtre('kpi_dashboard.periode', $_GET['periode'],
+        fn($v) => in_array($v, ['journalier','hebdomadaire','mensuel','annuel'], true) ? $v : null,
+        'mensuel');
+}
 
 $P   = periode_contexte();
 $fmt = $P['date_fmt'];
 $val = $P['val'];
 $prc = $P['val_prec'];
 
-// Filtres site — interpolation sure, $site_id est un entier.
-$sf_p = $site_id ? "AND p.site_id = $site_id" : "";
-$sf   = $site_id ? "AND site_id = $site_id"   : "";
-$sf_b = $site_id ? "AND b.site_id = $site_id" : "";
+// $site_id reste defini pour les usages ou un identifiant unique a du
+// sens (couverture de stock, classement mono-site).
+$site_id = count($sites_sel) === 1 ? $sites_sel[0] : 0;
+
+// Filtres site — les identifiants sont castes en entier par
+// pref_clause_in(), aucune valeur d'URL n'atteint la requete telle quelle.
+$sf_p = pref_clause_in('p.site_id', $sites_sel);
+$sf   = pref_clause_in('site_id',   $sites_sel);
+$sf_b = pref_clause_in('b.site_id', $sites_sel);
 
 /** Deux scalaires (periode courante / precedente) en une requete. */
 function kpi_paire(string $sql, array $params): array {
@@ -280,7 +366,7 @@ $pmma_stock = db_fetch_all(
     "SELECT sp.type_pmma, SUM(sp.quantite) AS qte,
             MIN(COALESCE(sp.seuil_alerte,10)) AS seuil,
             SUM(CASE WHEN sp.quantite < COALESCE(sp.seuil_alerte,10) THEN 1 ELSE 0 END) AS bas
-       FROM stock_pmma_site sp WHERE 1=1 " . ($site_id ? "AND sp.site_id = $site_id" : "") . "
+       FROM stock_pmma_site sp WHERE 1=1 " . pref_clause_in('sp.site_id', $sites_sel) . "
       GROUP BY sp.type_pmma ORDER BY sp.type_pmma");
 $pmma_bas = 0; $pmma_total = 0;
 foreach ($pmma_stock as $x) { $pmma_bas += (int)$x['bas']; $pmma_total += (int)$x['qte']; }
@@ -305,7 +391,7 @@ $pmma_alertes = db_fetch_all(
     "SELECT sp.type_pmma AS t, s.nom AS site, sp.quantite AS q, COALESCE(sp.seuil_alerte,10) AS seuil
        FROM stock_pmma_site sp JOIN sites s ON s.id = sp.site_id
       WHERE sp.quantite < COALESCE(sp.seuil_alerte,10)
-        " . ($site_id ? "AND sp.site_id = $site_id" : "") . "
+        " . pref_clause_in('sp.site_id', $sites_sel) . "
       ORDER BY sp.quantite ASC LIMIT 4");
 
 // ── RIVETS
@@ -321,7 +407,7 @@ $riv_alertes = db_fetch_all(
     "SELECT s.nom AS site, r.type_rivet AS t, r.quantite AS q, COALESCE(r.seuil_alerte,200) AS seuil
        FROM op_stock_rivets r JOIN sites s ON s.id = r.site_id
       WHERE r.quantite < COALESCE(r.seuil_alerte,200)
-        " . ($site_id ? "AND r.site_id = $site_id" : "") . "
+        " . pref_clause_in('r.site_id', $sites_sel) . "
       ORDER BY r.quantite ASC LIMIT 4");
 
 // ── COMMANDES
@@ -379,7 +465,7 @@ $eq_autre = max(0, $eq_total - $eq_ok - $eq_hs - $eq_maint);
 $dispo    = $eq_total > 0 ? $eq_ok / $eq_total * 100 : 0;
 $interv_ouvertes = (int) db_fetch_value(
     "SELECT COUNT(*) FROM interventions_maintenance
-      WHERE statut_apres <> 'resolu' " . ($site_id ? "AND site_id = $site_id" : ""));
+      WHERE statut_apres <> 'resolu' " . pref_clause_in('site_id', $sites_sel));
 
 // ── SITES — production comparee et classement
 $classement = db_fetch_all(
@@ -390,15 +476,13 @@ $classement = db_fetch_all(
             COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'$fmt')=? THEN p.nb_heures_travail END),0) AS heures
        FROM sites s
        LEFT JOIN op_points_journaliers p ON p.site_id = s.id AND p.statut <> 'brouillon'
-      WHERE s.actif = 1 " . ($site_id ? "AND s.id = $site_id" : "") . "
+      WHERE s.actif = 1 " . pref_clause_in('s.id', $sites_sel) . "
       GROUP BY s.id, s.nom
       HAVING COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'$fmt')=? THEN p.total_plaques END),0) > 0
       ORDER BY plaques DESC", [$val, $prc, $val, $val, $val]);
 $plaques_max = 0;
 foreach ($classement as $c)
     $plaques_max = max($plaques_max, (int)$c['plaques'], (int)$c['plaques_p']);
-
-$sites_list = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom");
 
 // Une periode en cours n'a pas la duree de celle a laquelle on la compare.
 // Sans le dire, une barre deux fois plus courte se lit comme une chute de
@@ -516,6 +600,30 @@ function kpi_anneau(array $segments, string $centre_v, string $centre_l, string 
     $o .= '<text class="kring-l" x="70" y="88" text-anchor="middle">' . h($centre_l) . '</text>';
     return $o . '</svg>';
 }
+
+// ── Libelles de la barre de filtres
+$noms_sites = [];
+foreach ($sites_list as $s) $noms_sites[(int)$s['id']] = $s['nom'];
+if (!$sites_sel) {
+    $perimetre_lbl = 'tous les sites';
+} elseif (count($sites_sel) === 1) {
+    $perimetre_lbl = $noms_sites[$sites_sel[0]] ?? 'un site';
+} elseif (count($sites_sel) <= 3) {
+    $perimetre_lbl = implode(', ', array_map(fn($i) => $noms_sites[$i] ?? '?', $sites_sel));
+} else {
+    $perimetre_lbl = count($sites_sel) . ' sites sur ' . count($sites_list);
+}
+
+// « Filtres memorises » n'est affiche que si la page a effectivement
+// repris une preference, et non a chaque fois qu'une preference existe :
+// annoncer une memorisation qui n'a pas servi induirait en erreur.
+$memorise = !isset($_GET['periode']) && !isset($_GET['sites'])
+         && (isset(pref_toutes()['kpi_dashboard.periode'])
+             || isset(pref_toutes()['kpi_dashboard.sites']));
+
+$vues            = vues_listees('kpi_dashboard');
+$vue_active      = trim($_GET['vue'] ?? '');
+$peut_enregistrer = !$is_coord;
 
 include __DIR__ . '/../templates/header.php';
 ?>
@@ -669,6 +777,59 @@ include __DIR__ . '/../templates/header.php';
 .kp-sep{height:1px;background:var(--border);margin:14px 0}
 .kp-st{font-size:0.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;
   letter-spacing:.04em;margin-bottom:6px}
+
+/* ── Sélecteur à choix multiple et vues enregistrées ─────────────
+   Vingt et un sites ne tiennent pas dans une rangée de pastilles : le
+   déroulant garde une hauteur fixe quel que soit leur nombre. */
+.ms{position:relative}
+.ms-b{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:170px;
+  padding:8px 11px;border:1.5px solid var(--border);border-radius:var(--radius-sm,10px);
+  background:var(--card,#fff);font-family:inherit;font-size:0.8125rem;font-weight:600;
+  color:var(--navy);cursor:pointer;text-align:left}
+.ms-b:hover{border-color:var(--primary-d)}
+.ms.open .ms-b{border-color:var(--primary-d)}
+.ms.open .ms-b>.ph-caret-down{transform:rotate(180deg)}
+.ms-b>.ph-caret-down{color:var(--muted);transition:transform .15s;flex:none}
+.ms-t{display:flex;align-items:center;gap:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ms-p{display:none;position:absolute;z-index:40;right:0;top:calc(100% + 5px);min-width:250px;
+  max-height:340px;overflow-y:auto;background:var(--card,#fff);border:1.5px solid var(--primary-d);
+  border-radius:var(--radius-sm,10px);box-shadow:0 12px 30px rgba(30,43,74,.16)}
+.ms.open .ms-p{display:block}
+.ms.haut .ms-p{top:auto;bottom:calc(100% + 5px)}
+.ms-h{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--lighter);
+  border-bottom:1px solid var(--border);position:sticky;top:0}
+.ms-h button{border:none;background:none;padding:0;font-family:inherit;font-size:0.75rem;
+  font-weight:700;color:var(--primary-d);cursor:pointer;text-decoration:underline}
+.ms-c{margin-left:auto;font-size:0.75rem;color:var(--muted)}
+.ms-i{display:flex;align-items:center;gap:9px;padding:7px 12px;cursor:pointer;
+  border-bottom:1px solid var(--border);font-size:0.8125rem;color:var(--navy)}
+.ms-i:hover{background:var(--lighter)}
+.ms-i input{flex:none;width:auto;margin:0}
+.ms-i span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ms-f{display:flex;justify-content:flex-end;gap:7px;padding:9px 12px;background:var(--card,#fff);
+  border-top:1px solid var(--border);position:sticky;bottom:0}
+.ms-f button,.ms-nv button{border:1.5px solid var(--border);background:var(--card,#fff);
+  border-radius:8px;padding:6px 13px;font-family:inherit;font-size:0.75rem;font-weight:700;
+  color:var(--navy);cursor:pointer}
+.ms-f button:not(.ms-ok):hover{background:var(--lighter)}
+.ms-ok{background:var(--primary-d);border-color:var(--primary-d);color:#fff}
+.ms-f button.ms-ok:hover,.ms-nv button.ms-ok:hover{background:var(--primary-d);filter:brightness(1.12)}
+.ms-p--vues{min-width:280px}
+.ms-v{display:flex;align-items:center;border-bottom:1px solid var(--border)}
+.ms-v a{flex:1;min-width:0;padding:9px 12px;font-size:0.8125rem;color:var(--navy);
+  text-decoration:none;font-weight:600}
+.ms-v a:hover{background:var(--lighter)}
+.ms-v em{display:block;font-style:normal;font-size:0.75rem;font-weight:500;color:var(--muted)}
+.ms-x{border:none;background:none;padding:8px 11px;color:var(--muted);cursor:pointer;font-size:0.9375rem}
+.ms-x:hover{color:var(--danger-d,#C0392B)}
+.ms-vide{padding:12px;font-size:0.8125rem;color:var(--muted);line-height:1.45}
+.ms-nv{display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:10px 12px;
+  border-top:1px solid var(--border);background:var(--lighter)}
+.ms-nv input[type=text]{flex:1;min-width:110px;padding:6px 9px;border:1.5px solid var(--border);
+  border-radius:8px;font-size:0.8125rem;font-family:inherit;box-sizing:border-box}
+.ms-part{display:flex;align-items:center;gap:5px;font-size:0.75rem;color:var(--muted);
+  white-space:nowrap;cursor:pointer}
+.ms-part input{width:auto;margin:0}
 </style>
 
 <div class="kpi">
@@ -677,18 +838,75 @@ include __DIR__ . '/../templates/header.php';
   <div>
     <h2><i class="ph ph-gauge" aria-hidden="true"></i> Indicateurs de performance</h2>
     <p><?= h($P['libelle']) ?> · comparaison avec <?= h($P['libelle_prec']) ?>
-      <?= $site_id ? ' · un seul site' : ' · tous les sites' ?></p>
+      · <?= h($perimetre_lbl) ?><?= $memorise ? ' · filtres mémorisés' : '' ?></p>
   </div>
-  <form method="GET" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-    <?php if(!$is_coord): ?>
-    <select name="site" class="month-inp" onchange="this.form.submit()" aria-label="Filtrer par site">
-      <option value="0">Tous les sites</option>
-      <?php foreach($sites_list as $s): ?>
-      <option value="<?= (int)$s['id'] ?>" <?= $site_id===(int)$s['id']?'selected':'' ?>><?= h($s['nom']) ?></option>
-      <?php endforeach; ?>
-    </select>
+  <form method="GET" id="kpiForm" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+    <?php /* Le marqueur distingue une action de l'utilisateur d'un lien
+             reçu : seule la première mémorise ses filtres. */ ?>
+    <input type="hidden" name="<?= MARQUEUR_INTERACTION ?>" value="1">
+
+    <?php if (!$is_coord): ?>
+    <div class="ms" id="msSites">
+      <button type="button" class="ms-b" onclick="msOuvrir(this)" aria-expanded="false">
+        <span class="ms-t"></span><i class="ph ph-caret-down" aria-hidden="true"></i>
+      </button>
+      <div class="ms-p">
+        <div class="ms-h">
+          <button type="button" onclick="msTout(this,0)">Tous les sites</button>
+          <span class="ms-c"><?= count($sites_list) ?> sites</span>
+        </div>
+        <?php foreach ($sites_list as $s): $i = (int)$s['id']; ?>
+        <label class="ms-i">
+          <input type="checkbox" name="sites[]" value="<?= $i ?>"
+                 <?= in_array($i, $sites_sel, true) ? 'checked' : '' ?> onchange="msMaj(this)">
+          <span><?= h($s['nom']) ?></span>
+        </label>
+        <?php endforeach; ?>
+        <div class="ms-f">
+          <button type="button" onclick="msAnnuler(this)">Annuler</button>
+          <button type="button" class="ms-ok" onclick="msValider(this)">Appliquer</button>
+        </div>
+      </div>
+    </div>
     <?php endif; ?>
-    <?= periode_selecteur($P, $site_id ? ['site'=>$site_id] : []) ?>
+
+    <?= periode_selecteur($P) ?>
+
+    <?php if ($vues || $peut_enregistrer): ?>
+    <div class="ms" id="msVues">
+      <button type="button" class="ms-b" onclick="msOuvrir(this)" aria-expanded="false"
+              title="Vues enregistrées">
+        <span class="ms-t"><i class="ph ph-bookmark-simple" aria-hidden="true"></i>
+          <?= $vue_active ? h($vue_active) : 'Vues' ?></span>
+        <i class="ph ph-caret-down" aria-hidden="true"></i>
+      </button>
+      <div class="ms-p ms-p--vues">
+        <?php if ($vues): foreach ($vues as $v): ?>
+        <div class="ms-v">
+          <a href="?<?= h($v['filtres']) ?>&amp;vue=<?= h($v['nom']) ?>"><?= h($v['nom']) ?>
+            <?php if (!$v['mienne']): ?><em>par <?= h($v['auteur'] ?: 'un collègue') ?></em><?php endif; ?>
+            <?php if ($v['partagee'] && $v['mienne']): ?><em>partagée</em><?php endif; ?>
+          </a>
+          <?php if ($v['mienne']): ?>
+          <button type="button" class="ms-x" title="Supprimer cette vue"
+                  onclick="vueSupprimer(<?= (int)$v['id'] ?>, this)">
+            <i class="ph ph-trash" aria-hidden="true"></i></button>
+          <?php endif; ?>
+        </div>
+        <?php endforeach; else: ?>
+        <p class="ms-vide">Aucune vue enregistrée. Réglez vos filtres, puis nommez-les ici.</p>
+        <?php endif; ?>
+        <?php if ($peut_enregistrer): ?>
+        <div class="ms-nv">
+          <input type="text" id="vueNom" maxlength="80" placeholder="Nom de la vue"
+                 aria-label="Nom de la vue à enregistrer">
+          <label class="ms-part"><input type="checkbox" id="vuePartage"> Partager</label>
+          <button type="button" class="ms-ok" onclick="vueEnregistrer()">Enregistrer</button>
+        </div>
+        <?php endif; ?>
+      </div>
+    </div>
+    <?php endif; ?>
   </form>
 </div>
 
@@ -905,7 +1123,7 @@ include __DIR__ . '/../templates/header.php';
   </section>
 
   <!-- ══ SITES ══ -->
-  <?php if (!$site_id): ?>
+  <?php if (count($sites_sel) !== 1): ?>
   <section class="kp kp--sites" aria-labelledby="kp-sites">
     <div class="kp-h">
       <span class="kp-ic"><i class="ph ph-map-pin" aria-hidden="true"></i></span>
@@ -954,5 +1172,118 @@ include __DIR__ . '/../templates/header.php';
 
 </div>
 </div>
+
+<script>var MARQUEUR_INTERACTION = '<?= MARQUEUR_INTERACTION ?>';</script>
+
+<script>
+// ── Selecteur a choix multiple
+// Le libelle du bouton doit dire le perimetre sans l'ouvrir : « Tous les
+// sites », le nom quand il n'y en a qu'un, un compte au-dela.
+function msDd(el){ return el.closest('.ms'); }
+
+function msTexte(dd){
+  var t = dd.querySelector('.ms-t'); if (!t || dd.id !== 'msSites') return;
+  var c = dd.querySelectorAll('input[type=checkbox]'), pris = [];
+  c.forEach(function(x){
+    if (x.checked) pris.push(x.parentElement.querySelector('span').textContent.trim());
+  });
+  t.textContent = pris.length === 0 ? 'Tous les sites'
+                : pris.length === 1 ? pris[0]
+                : pris.length + ' sites sur ' + c.length;
+}
+
+function msPhoto(dd){
+  dd._photo = Array.prototype.map.call(
+    dd.querySelectorAll('input[type=checkbox]'), function(c){ return c.checked; });
+}
+
+function msOuvrir(btn){
+  var dd = msDd(btn), ouvert = dd.classList.contains('open');
+  document.querySelectorAll('.ms.open').forEach(function(o){
+    o.classList.remove('open');
+    o.querySelector('.ms-b').setAttribute('aria-expanded', 'false');
+  });
+  if (ouvert) return;
+  msPhoto(dd);
+  dd.classList.add('open');
+  btn.setAttribute('aria-expanded', 'true');
+  // Panneau qui deborde en bas : on le retourne, sinon son pied — donc le
+  // bouton Appliquer — sort de l'ecran.
+  dd.classList.remove('haut');
+  var r = dd.querySelector('.ms-p').getBoundingClientRect();
+  if (r.bottom > window.innerHeight - 8 && btn.getBoundingClientRect().top > r.height + 8)
+    dd.classList.add('haut');
+}
+
+function msMaj(el){ msTexte(msDd(el)); }
+
+function msTout(btn, on){
+  var dd = msDd(btn);
+  dd.querySelectorAll('input[type=checkbox]').forEach(function(c){ c.checked = !!on; });
+  msTexte(dd);
+}
+
+function msAnnuler(btn){
+  var dd = msDd(btn);
+  if (dd._photo) dd.querySelectorAll('input[type=checkbox]').forEach(function(c, i){
+    c.checked = !!dd._photo[i];
+  });
+  msTexte(dd);
+  dd.classList.remove('open');
+}
+
+function msValider(btn){
+  msDd(btn).classList.remove('open');
+  document.getElementById('kpiForm').submit();
+}
+
+document.addEventListener('click', function(e){
+  if (e.target.closest('.ms')) return;
+  document.querySelectorAll('.ms.open').forEach(function(o){ o.classList.remove('open'); });
+});
+document.addEventListener('keydown', function(e){
+  if (e.key !== 'Escape') return;
+  document.querySelectorAll('.ms.open').forEach(function(o){
+    var b = o.querySelector('.ms-f button');
+    if (b) msAnnuler(b); else o.classList.remove('open');
+  });
+});
+
+// ── Vues enregistrees
+function vuePost(donnees, apres){
+  fetch(location.pathname, {
+    method: 'POST',
+    headers: {'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'XMLHttpRequest'},
+    body: new URLSearchParams(donnees).toString()
+  }).then(function(r){ return r.json(); })
+    .then(function(j){
+      if (typeof toast === 'function') toast(j.message, j.success ? 'success' : 'danger');
+      else alert(j.message);
+      if (j.success) apres();
+    })
+    .catch(function(){ alert('Erreur reseau.'); });
+}
+
+function vueEnregistrer(){
+  var champ = document.getElementById('vueNom');
+  var nom = champ.value.trim();
+  if (!nom) { champ.focus(); return; }
+  // On enregistre les filtres tels qu'affiches, marqueur d'interaction
+  // exclu : il n'a de sens que pour la memorisation automatique.
+  var d = new FormData(document.getElementById('kpiForm'));
+  d.delete(MARQUEUR_INTERACTION);
+  vuePost({ action: 'vue_creer', nom: nom,
+            filtres: new URLSearchParams(d).toString(),
+            partagee: document.getElementById('vuePartage').checked ? 1 : '' },
+          function(){ location.reload(); });
+}
+
+function vueSupprimer(id, btn){
+  vuePost({ action: 'vue_supprimer', id: id },
+          function(){ btn.closest('.ms-v').remove(); });
+}
+
+document.querySelectorAll('.ms').forEach(msTexte);
+</script>
 
 <?php include __DIR__ . '/../templates/footer.php'; ?>
