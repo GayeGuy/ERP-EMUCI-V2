@@ -647,6 +647,13 @@ include __DIR__ . '/../templates/header.php';
   flex-wrap:wrap;position:sticky;top:var(--topbar-h,64px);z-index:40;
   background:var(--tertiary,#F0F4FF);margin:0 -10px 18px;padding:14px 10px 12px;
   border-bottom:1px solid transparent;transition:border-color .18s,box-shadow .18s}
+/* margin-left:auto plutot que compter sur le seul justify-content:
+   space-between ne pousse a droite le formulaire de filtres que tant
+   qu'il partage sa ligne avec le titre. Des que la barre passe a la
+   ligne (fenetre etroite), le formulaire se retrouve seul sur la
+   sienne et repart a gauche -- margin-left:auto le maintient a droite
+   dans les deux cas. */
+.kpi-bar form{margin-left:auto}
 body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
   box-shadow:0 6px 14px -10px rgba(6,3,58,.35)}
 @media(max-width:700px){.kpi-bar{position:static;margin:0 0 18px;padding:0}}
