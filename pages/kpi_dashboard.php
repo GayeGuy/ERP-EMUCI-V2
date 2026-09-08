@@ -89,33 +89,71 @@ $prod_horaire = $heures > 0 ? $engins / $heures : 0;
 
 // ── PRODUCTION — les quatre echelles cote a cote
 // La maquette pose jour / semaine / mois / annee ensemble : c'est ce qui
-// permet de voir qu'une bonne journee tient dans un mauvais mois. Une
-// seule requete, huit agregats conditionnels, plutot que huit allers.
-$e_jour = date('Y-m-d');  $e_jour_p = date('Y-m-d', strtotime('-1 day'));
-$e_sem  = date('o-W');    $e_sem_p  = date('o-W', strtotime('-7 days'));
-$e_mois = date('Y-m');    $e_mois_p = date('Y-m', strtotime('first day of last month'));
-$e_an   = date('Y');      $e_an_p   = (string)((int)date('Y') - 1);
+// permet de voir qu'une bonne journee tient dans un mauvais mois.
+//
+// ── Comparaison A DATE, et non de periode entiere ──
+// Le premier jet comparait le mois courant au mois precedent complet. Le
+// 8 septembre, cela opposait 8 jours a 31 : la tuile annoncait -72,7 %
+// (2 070 contre 7 590) alors qu'a nombre de jours egal la production
+// etait stable (2 070 contre 2 080, soit -0,5 %). Le meme biais jouait a
+// l'envers sur l'annee, affichee en hausse de 75,5 % pour une raison
+// purement mecanique. Sur un ecran de direction, la fleche est le premier
+// element lu : elle ne peut pas mesurer le temps ecoule.
+//
+// Chaque echelle compare donc son cumul a date au cumul de la periode
+// precedente arrete au meme rang : lundi→aujourd'hui contre
+// lundi→meme jour la semaine passee, 1er→quantieme contre 1er→meme
+// quantieme, etc.
+$auj = date('Y-m-d');
 
-$ech = db_fetch_one(
-    "SELECT
-       COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'YYYY-MM-DD')=? THEN p.total_plaques END),0) AS j,
-       COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'YYYY-MM-DD')=? THEN p.total_plaques END),0) AS jp,
-       COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'IYYY-IW')=?   THEN p.total_plaques END),0) AS s,
-       COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'IYYY-IW')=?   THEN p.total_plaques END),0) AS sp,
-       COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'YYYY-MM')=?   THEN p.total_plaques END),0) AS m,
-       COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'YYYY-MM')=?   THEN p.total_plaques END),0) AS mp,
-       COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'YYYY')=?      THEN p.total_plaques END),0) AS a,
-       COALESCE(SUM(CASE WHEN TO_CHAR(p.date_point,'YYYY')=?      THEN p.total_plaques END),0) AS ap
-     FROM op_points_journaliers p
-     WHERE p.statut <> 'brouillon' $sf_p",
-    [$e_jour, $e_jour_p, $e_sem, $e_sem_p, $e_mois, $e_mois_p, $e_an, $e_an_p]) ?: [];
+/** Date sûre : un quantieme absent du mois vise est ramene a son dernier
+ *  jour. Sans ce garde-fou, le 31 mars compare au « 31 fevrier » que
+ *  strtotime deplace au 2 ou 3 mars, et le 29 fevrier bissextile glisse
+ *  au 1er mars de l'annee precedente. */
+function kpi_date_rang(int $an, int $mois, int $jour): string {
+    $fin = (int) date('t', mktime(0, 0, 0, $mois, 1, $an));
+    return sprintf('%04d-%02d-%02d', $an, $mois, min($jour, $fin));
+}
 
-$echelles = [
-    ['Jour',    (float)($ech['j'] ?? 0), (float)($ech['jp'] ?? 0), 'hier'],
-    ['Semaine', (float)($ech['s'] ?? 0), (float)($ech['sp'] ?? 0), 'sem. précédente'],
-    ['Mois',    (float)($ech['m'] ?? 0), (float)($ech['mp'] ?? 0), 'mois précédent'],
-    ['Année',   (float)($ech['a'] ?? 0), (float)($ech['ap'] ?? 0), 'année précédente'],
+$q  = (int) date('j');            // quantieme du jour
+$an = (int) date('Y');
+$mo = (int) date('n');
+
+$lundi   = date('Y-m-d', strtotime('monday this week'));
+$mois_du = date('Y-m-01');
+$mp      = strtotime($mois_du . ' -1 month');
+
+$bornes = [
+    // [libelle, debut courant, fin courante, debut precedent, fin precedente]
+    ['Jour',    $auj, $auj,
+                date('Y-m-d', strtotime('-1 day')), date('Y-m-d', strtotime('-1 day'))],
+    ['Semaine', $lundi, $auj,
+                date('Y-m-d', strtotime($lundi . ' -7 days')),
+                date('Y-m-d', strtotime($auj . ' -7 days'))],
+    ['Mois',    $mois_du, $auj,
+                date('Y-m-01', $mp),
+                kpi_date_rang((int)date('Y', $mp), (int)date('n', $mp), $q)],
+    ['Année',   date('Y-01-01'), $auj,
+                ($an - 1) . '-01-01', kpi_date_rang($an - 1, $mo, $q)],
 ];
+
+$sel = []; $par = [];
+foreach ($bornes as $i => [$lbl, $du, $au, $du_p, $au_p]) {
+    $sel[] = "COALESCE(SUM(p.total_plaques) FILTER (WHERE p.date_point BETWEEN ?::date AND ?::date),0) AS c$i,"
+           . "COALESCE(SUM(p.total_plaques) FILTER (WHERE p.date_point BETWEEN ?::date AND ?::date),0) AS p$i";
+    array_push($par, $du, $au, $du_p, $au_p);
+}
+$ech = db_fetch_one("SELECT " . implode(',', $sel)
+    . " FROM op_points_journaliers p WHERE p.statut <> 'brouillon' $sf_p", $par) ?: [];
+
+$echelles = [];
+foreach ($bornes as $i => [$lbl, $du, $au, $du_p, $au_p]) {
+    // La note porte l'intervalle exact compare : « vs mois precedent »
+    // laissait croire au mois entier, ce qui etait justement le probleme.
+    $note = 'vs ' . fmt_date($du_p, 'd/m')
+          . ($du_p === $au_p ? '' : ' – ' . fmt_date($au_p, 'd/m'));
+    $echelles[] = [$lbl, (float)($ech["c$i"] ?? 0), (float)($ech["p$i"] ?? 0), $note];
+}
 
 // ── PRODUCTION — courbe d'evolution
 // On compare les SOUS-periodes de la periode courante a celles de la
@@ -660,15 +698,15 @@ include __DIR__ . '/../templates/header.php';
   <section class="kp kp--prod" aria-labelledby="kp-prod">
     <div class="kp-h">
       <span class="kp-ic"><i class="ph ph-car" aria-hidden="true"></i></span>
-      <h3 class="kp-t" id="kp-prod">Production<em>plaques posées, toutes échelles de temps</em></h3>
+      <h3 class="kp-t" id="kp-prod">Production<em>plaques posées — comparaison à date, à nombre de jours égal</em></h3>
     </div>
     <div class="kc-row">
-      <?php foreach ($echelles as [$lbl, $v, $vp, $ref]): ?>
+      <?php foreach ($echelles as [$lbl, $v, $vp, $note]): ?>
       <div class="kc">
         <div class="kc-l"><?= h($lbl) ?></div>
         <div class="kc-v"><?= fmt_number((int)$v) ?></div>
         <?= kpi_delta(kpi_var($v, $vp)) ?>
-        <div class="kc-n">vs <?= h($ref) ?> (<?= fmt_number((int)$vp) ?>)</div>
+        <div class="kc-n"><?= h($note) ?> (<?= fmt_number((int)$vp) ?>)</div>
       </div>
       <?php endforeach; ?>
     </div>
