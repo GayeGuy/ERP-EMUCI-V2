@@ -500,6 +500,14 @@ $unread = count($notifs);
       /* Le rail est deja force a 68px ici : le bouton de reduction
          manuelle n'a rien a faire sur un ecran deja etroit. */
       .sidebar-toggle { display: none; }
+      /* .nav-item garde son padding:10px 16px (pense pour le libelle en
+         texte) : une fois celui-ci masque ci-dessus, il ne reste que
+         16px de large pour une icone de 34px — elle deborde du bouton
+         au lieu de s'y centrer. Meme correctif que la reduction
+         manuelle ci-dessous. */
+      .sidebar .nav-item { justify-content: center; padding-left: 0; padding-right: 0; }
+      .sidebar .nav-group-label { justify-content: center; padding-left: 0; padding-right: 0; }
+      .sidebar .nav-group-label span { display: none; }
     }
 
     /* ===== SIDEBAR — réduction manuelle =====
@@ -517,6 +525,13 @@ $unread = count($notifs);
     html.sidebar-collapsed .sidebar .sidebar-footer .logout-btn { display: none; }
     html.sidebar-collapsed .sidebar .sidebar-footer .user-card { padding: 0; justify-content: center; background: none; }
     html.sidebar-collapsed .sidebar .sidebar-footer .user-card-link { flex: 0 0 auto; padding: 0; margin: 0; }
+    /* Meme correctif que le rail force en dessous de 900px ci-dessus :
+       sans lui, l'icone (34px) deborde des 16px de contenu que laisse
+       le padding:10px 16px pense pour le libelle en texte, et se
+       retrouve decentree au lieu d'occuper le bouton. */
+    html.sidebar-collapsed .sidebar .nav-item { justify-content: center; padding-left: 0; padding-right: 0; }
+    html.sidebar-collapsed .sidebar .nav-group-label { justify-content: center; padding-left: 0; padding-right: 0; }
+    html.sidebar-collapsed .sidebar .nav-group-label span { display: none; }
 
     /* Poignée à cheval sur la bordure du rail. En dehors de .sidebar
        (qui a overflow-x:hidden) et positionnée en fixed sur --sidebar-w
