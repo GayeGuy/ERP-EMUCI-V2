@@ -314,11 +314,11 @@ function _groupes_def(): array {
                  'roles_exclude'=>['lecteur']],
                 ['label'=>'Nouvelle demande','icon'=>'ph-plus-circle',
                  'url'=>'pages/demandes_new.php','active_keys'=>['demandes_new'],
-                 'perm'=>['demandes','can_create'],
+                 'perm'=>['demandes_new','can_create'],
                  'roles_exclude'=>['lecteur']],
                 ['label'=>'À valider',       'icon'=>'ph-seal-check',
                  'url'=>'pages/demandes_a_valider.php','active_keys'=>['demandes_valider'],
-                 'perm'=>['demandes','can_read'],
+                 'perm'=>['demandes_valider','can_read'],
                  'roles_exclude'=>['coordinateur_site']],
                 // roles_include correspond exactement aux rôles ERP dont
                 // di_user_roles() inclut 'it' (includes/demandes.php) — accès
@@ -329,7 +329,7 @@ function _groupes_def(): array {
                 // du 2026-08-29).
                 ['label'=>'Traitements IT',  'icon'=>'ph-wrench',
                  'url'=>'pages/demandes_it.php','active_keys'=>['demandes_it'],
-                 'perm'=>['demandes','can_read'],
+                 'perm'=>['demandes_it','can_read'],
                  'roles_include'=>['admin','superadmin','support_it','superviseur_it','maintenance_info'],
                  'ou_departement_it'=>true],
                 ['label'=>'Types & circuits','icon'=>'ph-git-branch',

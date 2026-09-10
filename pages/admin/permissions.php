@@ -40,7 +40,7 @@ $module_groupes = [
     'BOBINES'        => ['<i class="ph ph-film-strip" aria-hidden="true"></i>', 'Bobines'],
     'INVENTAIRE'     => ['<i class="ph ph-clipboard-text" aria-hidden="true"></i>', 'Inventaire'],
     'OPERATIONS'     => ['<i class="ph ph-lightning" aria-hidden="true"></i>', 'Opérations'],
-    'INFORMATIQUE'   => ['<i class="ph ph-desktop-tower" aria-hidden="true"></i>', 'Matériel sur site'],
+    'INFORMATIQUE'   => ['<i class="ph ph-desktop-tower" aria-hidden="true"></i>', 'Informatique'],
     'RAPPORTS'       => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Rapports'],
     'DEMANDES'       => ['<i class="ph ph-file-text" aria-hidden="true"></i>', 'Demandes internes'],
     // Ajouté 2026-09-10 : le module Achats (4 droits) existe en base depuis
@@ -67,15 +67,30 @@ $modules = [
     'achats_dashboard'   => ['<i class="ph ph-gauge" aria-hidden="true"></i>', 'Dashboard Achats', 'ACHATS'],
     'achats_param'       => ['<i class="ph ph-sliders-horizontal" aria-hidden="true"></i>', 'Paramétrage achats', 'ACHATS'],
     'achats_suivi'       => ['<i class="ph ph-truck" aria-hidden="true"></i>', 'Suivi achats (DA/BC)', 'ACHATS'],
-    'affectations'       => ['<i class="ph ph-link" aria-hidden="true"></i>', 'Affectations', 'STOCK'],
-    'affectations_it'    => ['<i class="ph ph-headset" aria-hidden="true"></i>', 'Affectations support IT', 'INFORMATIQUE'],
-    'agents'             => ['<i class="ph ph-users" aria-hidden="true"></i>', 'Annuaire agents', 'DEMANDES'],
+    // Ordre + regroupement alignés sur le menu Informatique
+    // (includes/groupes_config.php) : Interventions, Rapport journalier,
+    // Affectations IT, Transfert équipement. 'affectations' gouverne aussi
+    // "Historique des mouvements" dans le menu Stock (can_read) : un seul
+    // onglet ne peut pas représenter les deux à la fois, priorité donnée
+    // ici à Informatique sur demande explicite.
+    'interventions'      => ['<i class="ph ph-wrench" aria-hidden="true"></i>', 'Interventions', 'INFORMATIQUE'],
+    'rapport_journalier' => ['<i class="ph ph-file-text" aria-hidden="true"></i>', 'Rapport journalier', 'INFORMATIQUE'],
+    'affectations_it'    => ['<i class="ph ph-headset" aria-hidden="true"></i>', 'Affectations IT', 'INFORMATIQUE'],
+    'affectations'       => ['<i class="ph ph-link" aria-hidden="true"></i>', 'Transfert équipement', 'INFORMATIQUE'],
     'bobines'            => ['<i class="ph ph-film-strip" aria-hidden="true"></i>', 'Bobines', 'STOCK'],
     'commandes'          => ['<i class="ph ph-storefront" aria-hidden="true"></i>', 'Commandes', 'STOCK'],
-    'commandes_bobines'  => ['<i class="ph ph-shopping-cart" aria-hidden="true"></i>', 'Commandes bobines', 'BOBINES'],
+    'commandes_bobines'  => ['<i class="ph ph-shopping-cart" aria-hidden="true"></i>', 'Commande bobines', 'BOBINES'],
     'consommables'       => ['<i class="ph ph-flask" aria-hidden="true"></i>', 'Consommables', 'STOCK'],
     'delegations'        => ['<i class="ph ph-handshake" aria-hidden="true"></i>', 'Délégations', 'ADMINISTRATION'],
-    'demandes'           => ['<i class="ph ph-note-pencil" aria-hidden="true"></i>', 'Demandes internes', 'DEMANDES'],
+    // Scission par écran (2026-09) : "demandes" ne gouverne plus que "Mes
+    // demandes" — cf. sql/migration_split_demandes_par_ecran.sql. "Types &
+    // circuits" et "Circuits avancés" restent réservés admin/superadmin en
+    // dur, hors table permissions : pas de module pour ces deux écrans.
+    'demandes'           => ['<i class="ph ph-note-pencil" aria-hidden="true"></i>', 'Mes demandes', 'DEMANDES'],
+    'demandes_new'       => ['<i class="ph ph-plus-circle" aria-hidden="true"></i>', 'Nouvelle demande', 'DEMANDES'],
+    'demandes_valider'   => ['<i class="ph ph-seal-check" aria-hidden="true"></i>', 'À valider', 'DEMANDES'],
+    'demandes_it'        => ['<i class="ph ph-wrench" aria-hidden="true"></i>', 'Traitements IT', 'DEMANDES'],
+    'agents'             => ['<i class="ph ph-users" aria-hidden="true"></i>', 'Annuaire agents', 'DEMANDES'],
     'departements'       => ['<i class="ph ph-buildings" aria-hidden="true"></i>', 'Départements', 'ADMINISTRATION'],
     'ecarts_bobines'     => ['<i class="ph ph-warning-diamond" aria-hidden="true"></i>', 'Écarts bobines', 'INVENTAIRE'],
     'ecarts_rivets'      => ['<i class="ph ph-warning-diamond" aria-hidden="true"></i>', 'Écarts rivets', 'INVENTAIRE'],
@@ -86,8 +101,13 @@ $modules = [
     // sql/migration_split_equipements_operationnel_vignette.sql.
     'equipements'        => ['<i class="ph ph-desktop" aria-hidden="true"></i>', 'Équipements Informatique', 'STOCK'],
     'equipements_operationnel' => ['<i class="ph ph-hard-hat" aria-hidden="true"></i>', 'Équipements Opérationnel', 'STOCK'],
+    // Ordre aligné sur le menu Opérations (includes/groupes_config.php) :
+    // Point journalier, Demande d'intervention, Suivi des observations,
+    // Point EMUCI, Import EMUCI.
+    'operations'         => ['<i class="ph ph-truck" aria-hidden="true"></i>', 'Points journaliers', 'OPERATIONS'],
+    'observations'       => ['<i class="ph ph-chat-dots" aria-hidden="true"></i>', 'Suivi des observations', 'OPERATIONS'],
+    'point_emuci'        => ['<i class="ph ph-magnifying-glass" aria-hidden="true"></i>', 'Point EMUCI', 'OPERATIONS'],
     'import_emuci'       => ['<i class="ph ph-download-simple" aria-hidden="true"></i>', 'Import EMUCI', 'OPERATIONS'],
-    'interventions'      => ['<i class="ph ph-wrench" aria-hidden="true"></i>', 'Interventions maintenance', 'OPERATIONS'],
     'inventaire'         => ['<i class="ph ph-clipboard-text" aria-hidden="true"></i>', 'Inventaire (accès module)', 'INVENTAIRE'],
     'inventaire_bobines' => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Inventaire bobines', 'INVENTAIRE'],
     'inventaire_rivets'  => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Inventaire rivets', 'INVENTAIRE'],
@@ -96,13 +116,9 @@ $modules = [
     'audit'              => ['<i class="ph ph-clipboard-text" aria-hidden="true"></i>', 'Journal d\'audit', 'ADMINISTRATION'],
     'kpi_dashboard'      => ['<i class="ph ph-gauge" aria-hidden="true"></i>', 'Dashboard KPI', 'DASHBOARD'],
     'nomenclatures'      => ['<i class="ph ph-tag" aria-hidden="true"></i>', 'Nomenclatures', 'ADMINISTRATION'],
-    'observations'       => ['<i class="ph ph-chat-dots" aria-hidden="true"></i>', 'Suivi des observations', 'OPERATIONS'],
     'pmma'               => ['<i class="ph ph-printer" aria-hidden="true"></i>', 'PMMA', 'STOCK'],
-    'point_emuci'        => ['<i class="ph ph-magnifying-glass" aria-hidden="true"></i>', 'Point EMUCI', 'OPERATIONS'],
-    'operations'         => ['<i class="ph ph-truck" aria-hidden="true"></i>', 'Points journaliers', 'OPERATIONS'],
-    'rapport_journalier' => ['<i class="ph ph-file-text" aria-hidden="true"></i>', 'Rapport journalier IT', 'INFORMATIQUE'],
     'rapports'           => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Rapports & Analyses', 'RAPPORTS'],
-    'rapports_gsb'       => ['<i class="ph ph-clipboard-text" aria-hidden="true"></i>', 'Rapports GSB', 'BOBINES'],
+    'rapports_gsb'       => ['<i class="ph ph-clipboard-text" aria-hidden="true"></i>', 'Rapports & Exports', 'BOBINES'],
     'receptions'         => ['<i class="ph ph-package" aria-hidden="true"></i>', 'Réceptions site', 'STOCK'],
     'resume_superviseur' => ['<i class="ph ph-chart-line-up" aria-hidden="true"></i>', 'Résumé superviseur', 'RAPPORTS'],
     'rivets'             => ['<i class="ph ph-wrench" aria-hidden="true"></i>', 'Rivets', 'STOCK'],
@@ -111,8 +127,8 @@ $modules = [
     'tracabilite_endommagements' => ['<i class="ph ph-first-aid-kit" aria-hidden="true"></i>', 'Traçabilité endommagements', 'BOBINES'],
     'referentiels_operations' => ['<i class="ph ph-sliders-horizontal" aria-hidden="true"></i>', 'Référentiels & capacités', 'ADMINISTRATION'],
     'users'              => ['<i class="ph ph-users" aria-hidden="true"></i>', 'Utilisateurs', 'ADMINISTRATION'],
-    'validation_stock'   => ['<i class="ph ph-check-circle" aria-hidden="true"></i>', 'Validation stock matin', 'BOBINES'],
-    'stock_bobines'      => ['<i class="ph ph-chart-line-up" aria-hidden="true"></i>', 'Vue stock bobines', 'BOBINES'],
+    'validation_stock'   => ['<i class="ph ph-check-circle" aria-hidden="true"></i>', 'Validation stock jour', 'BOBINES'],
+    'stock_bobines'      => ['<i class="ph ph-chart-line-up" aria-hidden="true"></i>', 'Vue stock par site', 'BOBINES'],
     // Scission Bobines/Vignette (2026-09) : module distinct de 'bobines' —
     // cf. sql/migration_split_equipements_operationnel_vignette.sql.
     'vignette'           => ['<i class="ph ph-sticker" aria-hidden="true"></i>', 'Vignette', 'STOCK'],
