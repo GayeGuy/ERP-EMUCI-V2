@@ -81,7 +81,11 @@ $modules = [
     'ecarts_rivets'      => ['<i class="ph ph-warning-diamond" aria-hidden="true"></i>', 'Écarts rivets', 'INVENTAIRE'],
     'ecarts_pmma'        => ['<i class="ph ph-warning-diamond" aria-hidden="true"></i>', 'Écarts PMMA', 'INVENTAIRE'],
     'ecarts_equipements' => ['<i class="ph ph-warning-diamond" aria-hidden="true"></i>', 'Écarts équipements', 'INVENTAIRE'],
-    'equipements'        => ['<i class="ph ph-desktop" aria-hidden="true"></i>', 'Équipements', 'STOCK'],
+    // Scission Informatique/Opérationnel (2026-09) : deux modules distincts
+    // au lieu d'un seul 'equipements' couvrant les deux catégories — cf.
+    // sql/migration_split_equipements_operationnel_vignette.sql.
+    'equipements'        => ['<i class="ph ph-desktop" aria-hidden="true"></i>', 'Équipements Informatique', 'STOCK'],
+    'equipements_operationnel' => ['<i class="ph ph-hard-hat" aria-hidden="true"></i>', 'Équipements Opérationnel', 'STOCK'],
     'import_emuci'       => ['<i class="ph ph-download-simple" aria-hidden="true"></i>', 'Import EMUCI', 'OPERATIONS'],
     'interventions'      => ['<i class="ph ph-wrench" aria-hidden="true"></i>', 'Interventions maintenance', 'OPERATIONS'],
     'inventaire'         => ['<i class="ph ph-clipboard-text" aria-hidden="true"></i>', 'Inventaire (accès module)', 'INVENTAIRE'],
@@ -109,6 +113,9 @@ $modules = [
     'users'              => ['<i class="ph ph-users" aria-hidden="true"></i>', 'Utilisateurs', 'ADMINISTRATION'],
     'validation_stock'   => ['<i class="ph ph-check-circle" aria-hidden="true"></i>', 'Validation stock matin', 'BOBINES'],
     'stock_bobines'      => ['<i class="ph ph-chart-line-up" aria-hidden="true"></i>', 'Vue stock bobines', 'BOBINES'],
+    // Scission Bobines/Vignette (2026-09) : module distinct de 'bobines' —
+    // cf. sql/migration_split_equipements_operationnel_vignette.sql.
+    'vignette'           => ['<i class="ph ph-sticker" aria-hidden="true"></i>', 'Vignette', 'STOCK'],
 ];
 
 // Modules indexés par groupe, pour le rendu des onglets. Construit depuis

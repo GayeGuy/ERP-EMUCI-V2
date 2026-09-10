@@ -55,10 +55,12 @@ function _groupes_def(): array {
                  'url'=>'pages/equipements.php?categorie=informatique',
                  'active_keys'=>['equipements','equipements_info'],
                  'perm'=>['equipements','can_read']],
+                // Module distinct depuis la scission Informatique/Opérationnel
+                // (2026-09) : ne dépend plus du seul droit 'equipements'.
                 ['label'=>'Équipements Opérationnel',   'icon'=>'ph-hard-hat',
                  'url'=>'pages/equipements.php?categorie=operationnel',
                  'active_keys'=>['equipements_op'],
-                 'perm'=>['equipements','can_read']],
+                 'perm'=>['equipements_operationnel','can_read']],
                 ['label'=>'Articles',      'icon'=>'ph-cube',
                  'url'=>'pages/articles.php','active_keys'=>['consommables'],
                  'perm'=>['consommables','can_read']],
@@ -78,11 +80,13 @@ function _groupes_def(): array {
                 ['label'=>'Bobines',   'icon'=>'ph-film-strip',
                  'url'=>'pages/operations/bobines.php','active_keys'=>['bobines'],
                  'perm'=>['bobines','can_read']],
-                // Meme page que "Bobines" (?categorie=vignette), meme droit —
-                // Reservoir/Pare-brise plutot que Auto/Carre/Moto/MotoII.
+                // Meme page que "Bobines" (?categorie=vignette) — Reservoir/
+                // Pare-brise plutot que Auto/Carre/Moto/MotoII. Module distinct
+                // depuis la scission Bobines/Vignette (2026-09) : ne dépend
+                // plus du seul droit 'bobines'.
                 ['label'=>'Vignette',  'icon'=>'ph-sticker',
                  'url'=>'pages/operations/bobines.php?categorie=vignette','active_keys'=>['bobines_vignette'],
-                 'perm'=>['bobines','can_read']],
+                 'perm'=>['vignette','can_read']],
                 ['label'=>'Rivets',    'icon'=>'ph-nut',
                  'url'=>'pages/operations/rivets.php','active_keys'=>['rivets'],
                  'perm'=>['rivets','can_read']],

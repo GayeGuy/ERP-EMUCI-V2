@@ -10,7 +10,17 @@ require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
 
 require_auth();
-require_permission('equipements', 'can_read');
+
+// Deux modules de permission distincts depuis la scission Informatique /
+// Opérationnel (2026-09) : chaque catégorie s'octroie indépendamment dans
+// Administration → Permissions. « equipements » reste le module de la
+// catégorie Informatique (nom historique, pas renommé pour ne pas perdre
+// les droits déjà accordés) ; « equipements_operationnel » est le nouveau
+// module, seedé depuis « equipements » par sql/migration_split_
+// equipements_operationnel_vignette.sql.
+$f_categorie  = trim($_GET['categorie'] ?? 'informatique');
+$perm_module  = $f_categorie === 'operationnel' ? 'equipements_operationnel' : 'equipements';
+require_permission($perm_module, 'can_read');
 
 $user      = current_user();
 $role_slug = $user['role_slug'] ?? '';
@@ -19,7 +29,6 @@ $site_force= ($is_coord && ($user['site_id'] ?? 0)) ? (int)$user['site_id'] : 0;
 
 $page_title  = 'Équipements';
 $active_page = isset($_GET['categorie']) && $_GET['categorie']==='operationnel' ? 'equipements_op' : 'equipements_info';
-$f_categorie = trim($_GET['categorie'] ?? 'informatique');
 $f_site      = $site_force ?: (int)($_GET['site'] ?? 0);
 $f_etat      = trim($_GET['etat'] ?? '');
 $f_type      = (int)($_GET['type'] ?? 0);
@@ -30,8 +39,8 @@ $f_fin_cycle    = !empty($_GET['fin_cycle']);
 $sites_list  = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom");
 $nomenclatures     = db_fetch_all("SELECT id,libelle,categorie,duree_vie_mois FROM nomenclatures WHERE categorie=? ORDER BY libelle", [$f_categorie]);
 $all_nomenclatures = db_fetch_all("SELECT id,libelle,categorie FROM nomenclatures ORDER BY categorie,libelle");
-$can_create  = can('equipements','can_create');
-$can_update  = can('equipements','can_update');
+$can_create  = can($perm_module,'can_create');
+$can_update  = can($perm_module,'can_update');
 
 // ── Amortissements OHADA (durées standard en mois)
 $ohada_durees = [
