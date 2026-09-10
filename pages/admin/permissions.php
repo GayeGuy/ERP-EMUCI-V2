@@ -43,6 +43,11 @@ $module_groupes = [
     'INFORMATIQUE'   => ['<i class="ph ph-desktop-tower" aria-hidden="true"></i>', 'Matériel sur site'],
     'RAPPORTS'       => ['<i class="ph ph-chart-bar" aria-hidden="true"></i>', 'Rapports'],
     'DEMANDES'       => ['<i class="ph ph-file-text" aria-hidden="true"></i>', 'Demandes internes'],
+    // Ajouté 2026-09-10 : le module Achats (4 droits) existe en base depuis
+    // sql/migration_achats_03_permissions.sql (2026-08) mais n'avait jamais
+    // été exposé ici — impossible d'ajuster ces droits sans repasser par une
+    // migration SQL. Même regroupement que includes/groupes_config.php.
+    'ACHATS'         => ['<i class="ph ph-shopping-cart" aria-hidden="true"></i>', 'Achats'],
     'ADMINISTRATION' => ['<i class="ph ph-shield-check" aria-hidden="true"></i>', 'Administration'],
 ];
 
@@ -57,6 +62,11 @@ $module_groupes = [
 // 3e élément = groupe d'onglet. Les déstructurations à 2 éléments
 // (foreach ... as [$mico,$mlbl]) restent valides : PHP ignore le surplus.
 $modules = [
+    // Module Achats — cf. note sur $module_groupes ci-dessus (2026-09-10).
+    'achats'             => ['<i class="ph ph-list-checks" aria-hidden="true"></i>', 'Achats (FEB)', 'ACHATS'],
+    'achats_dashboard'   => ['<i class="ph ph-gauge" aria-hidden="true"></i>', 'Dashboard Achats', 'ACHATS'],
+    'achats_param'       => ['<i class="ph ph-sliders-horizontal" aria-hidden="true"></i>', 'Paramétrage achats', 'ACHATS'],
+    'achats_suivi'       => ['<i class="ph ph-truck" aria-hidden="true"></i>', 'Suivi achats (DA/BC)', 'ACHATS'],
     'affectations'       => ['<i class="ph ph-link" aria-hidden="true"></i>', 'Affectations', 'STOCK'],
     'affectations_it'    => ['<i class="ph ph-headset" aria-hidden="true"></i>', 'Affectations support IT', 'INFORMATIQUE'],
     'agents'             => ['<i class="ph ph-users" aria-hidden="true"></i>', 'Annuaire agents', 'DEMANDES'],
