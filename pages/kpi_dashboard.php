@@ -177,69 +177,11 @@ $depuis_points = "FROM op_points_journaliers p WHERE p.statut <> 'brouillon' $sf
 $moy_j   = $C['jours_a'] > 0 ? $plaques   / $C['jours_a'] : null;
 $moy_j_p = $C['jours_b'] > 0 ? $plaques_p / $C['jours_b'] : null;
 
-// ── PRODUCTION — les quatre echelles cote a cote, « aujourd'hui »
-// La maquette pose jour / semaine / mois / annee ensemble : c'est ce qui
-// permet de voir qu'une bonne journee tient dans un mauvais mois.
-//
-// Ce bandeau est volontairement cale sur la date du jour, quelle que soit
-// la periode choisie dans la barre de filtres : c'est la lecture rapide de
-// la situation presente. L'ecran l'etiquette « Aujourd'hui » pour qu'il ne
-// soit pas pris pour la comparaison A / B, portee par la rangee du dessus.
-//
-// ── Comparaison A DATE, et non de periode entiere ──
-// Le premier jet comparait le mois courant au mois precedent complet. Le
-// 8 septembre, cela opposait 8 jours a 31 : la tuile annoncait -72,7 %
-// (2 070 contre 7 590) alors qu'a nombre de jours egal la production
-// etait stable (2 070 contre 2 080, soit -0,5 %). Le meme biais jouait a
-// l'envers sur l'annee, affichee en hausse de 75,5 % pour une raison
-// purement mecanique. Sur un ecran de direction, la fleche est le premier
-// element lu : elle ne peut pas mesurer le temps ecoule.
-//
-// Chaque echelle compare donc son cumul a date au cumul de la periode
-// precedente arrete au meme rang : lundi→aujourd'hui contre
-// lundi→meme jour la semaine passee, 1er→quantieme contre 1er→meme
-// quantieme, etc.
-$auj = date('Y-m-d');
-
-$q  = (int) date('j');            // quantieme du jour
-$an = (int) date('Y');
-$mo = (int) date('n');
-
-$lundi   = date('Y-m-d', strtotime('monday this week'));
-$mois_du = date('Y-m-01');
-$mp      = strtotime($mois_du . ' -1 month');
-
-$bornes = [
-    // [libelle, debut courant, fin courante, debut precedent, fin precedente]
-    ['Jour',    $auj, $auj,
-                date('Y-m-d', strtotime('-1 day')), date('Y-m-d', strtotime('-1 day'))],
-    ['Semaine', $lundi, $auj,
-                date('Y-m-d', strtotime($lundi . ' -7 days')),
-                date('Y-m-d', strtotime($auj . ' -7 days'))],
-    ['Mois',    $mois_du, $auj,
-                date('Y-m-01', $mp),
-                periode_date_rang((int)date('Y', $mp), (int)date('n', $mp), $q)],
-    ['Année',   date('Y-01-01'), $auj,
-                ($an - 1) . '-01-01', periode_date_rang($an - 1, $mo, $q)],
-];
-
-$sel = []; $par = [];
-foreach ($bornes as $i => [$lbl, $du, $au, $du_p, $au_p]) {
-    $sel[] = "COALESCE(SUM(p.total_plaques) FILTER (WHERE p.date_point BETWEEN ?::date AND ?::date),0) AS c$i,"
-           . "COALESCE(SUM(p.total_plaques) FILTER (WHERE p.date_point BETWEEN ?::date AND ?::date),0) AS p$i";
-    array_push($par, $du, $au, $du_p, $au_p);
-}
-$ech = db_fetch_one("SELECT " . implode(',', $sel)
-    . " FROM op_points_journaliers p WHERE p.statut <> 'brouillon' $sf_p", $par) ?: [];
-
-$echelles = [];
-foreach ($bornes as $i => [$lbl, $du, $au, $du_p, $au_p]) {
-    // La note porte l'intervalle exact compare : « vs mois precedent »
-    // laissait croire au mois entier, ce qui etait justement le probleme.
-    $note = 'vs ' . fmt_date($du_p, 'd/m')
-          . ($du_p === $au_p ? '' : ' – ' . fmt_date($au_p, 'd/m'));
-    $echelles[] = [$lbl, (float)($ech["c$i"] ?? 0), (float)($ech["p$i"] ?? 0), $note];
-}
+// Plus de bandeau Jour / Semaine / Mois / Annee cale sur la date du jour
+// (retire le 24/09/2026) : depuis le choix de la periode de comparaison, il
+// doublait la rangee A / B (le « Mois » y repetait « Plaques posees ») et
+// ignorait les filtres. Chaque echelle reste a un clic, par le type de
+// periode, avec la meme regle a date egale — cf. periode_comparaison().
 
 // ── PRODUCTION — courbe d'evolution
 // On compare les SOUS-periodes de A a celles de B, alignees par rang (jour
@@ -1019,21 +961,6 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
     <?php if ($en_cours): ?>
     <p class="kc-n" style="margin:6px 0 0"><?= h(ucfirst($en_cours)) ?>.</p>
     <?php endif; ?>
-    <div class="kp-sep"></div>
-    <?php /* Bandeau cale sur la date du jour, independant des filtres de
-             periode : il est etiquete pour ne pas etre lu comme la
-             comparaison A / B ci-dessus. */ ?>
-    <div class="kp-st">Aujourd'hui — cumul à date, à nombre de jours égal</div>
-    <div class="kc-row">
-      <?php foreach ($echelles as [$lbl, $v, $vp, $note]): ?>
-      <div class="kc">
-        <div class="kc-l"><?= h($lbl) ?></div>
-        <div class="kc-v"><?= fmt_number((int)$v) ?></div>
-        <?= kpi_delta(kpi_var($v, $vp)) ?>
-        <div class="kc-n"><?= h($note) ?> (<?= fmt_number((int)$vp) ?>)</div>
-      </div>
-      <?php endforeach; ?>
-    </div>
     <div class="kp-sep"></div>
     <div class="kp-st">Évolution — <?= h($serie_note) ?></div>
     <?= kpi_courbe($serie_lbl, $serie_a, $serie_b,
