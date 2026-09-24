@@ -998,12 +998,14 @@ En haut de l'écran, quatre réglages se suivent :
 2. **La période analysée** : le jour, la semaine, le mois ou l'année qui vous
    intéresse.
 3. **« Comparer à »** :
-   - **vs période précédente** — le réglage par défaut : septembre contre
-     août, la semaine 39 contre la semaine 38 ;
-   - **vs même période l'an dernier** — septembre 2026 contre septembre 2025
-     (non proposé en Annuel, où c'est la même chose que la période
-     précédente) ;
-   - **vs période choisie…** — fait apparaître un quatrième réglage.
+
+    - **vs période précédente** — le réglage par défaut : septembre contre
+      août, la semaine 39 contre la semaine 38 ;
+    - **vs même période l'an dernier** — septembre 2026 contre septembre 2025
+      (non proposé en Annuel, où c'est la même chose que la période
+      précédente) ;
+    - **vs période choisie…** — fait apparaître un quatrième réglage.
+
 4. **La période de comparaison**, si vous l'avez choisie librement : par
    exemple juin contre avril, ou la semaine 6 contre la semaine 12.
 

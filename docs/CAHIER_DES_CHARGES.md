@@ -479,6 +479,7 @@ La semaine se choisit dans une liste (« S38 · 14/09 → 20/09 »), et non par 
 champ date : le choix porte sur une semaine, pas sur un jour.
 
 **EF-KPI-10** — Règle de durée :
+
 - en comparaison automatique (période précédente), si A est en cours, B est
   arrêtée au même rang (1ᵉʳ → 24 août contre 1ᵉʳ → 24 septembre) ;
 - dès que l'utilisateur choisit lui-même B, les deux périodes sont comparées
