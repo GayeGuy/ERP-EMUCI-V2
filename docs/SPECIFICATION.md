@@ -1,8 +1,8 @@
 # Spécification fonctionnelle et technique — ERP EMUCI
 
 **Dépôt de référence** : GayeGuy/ERP-EMUCI-V2
-**Version du logiciel** : branche `main`, commit `59e3b0d` (24 septembre 2026)
-**Version de la spécification** : 4.1
+**Version du logiciel** : branche `main`, commit `ab9f7ff` (24 septembre 2026)
+**Version de la spécification** : 4.2
 **Objet** : décrire ce que le système est, comment il est construit, les
 règles qu'il applique et les limites qu'il porte.
 
@@ -1513,7 +1513,7 @@ courbe d'évolution.
 
 | Famille | Contenu |
 |---|---|
-| Production | Plaques, engins et plaques par jour écoulé sur A, comparés à B ; bandeau « Aujourd'hui » à quatre échelles (jour/semaine/mois/année), calé sur la date du jour et comparé à la période précédente **à date égale** ; courbe d'évolution A contre B |
+| Production | Plaques, engins et plaques par jour écoulé sur A, comparés à B ; courbe d'évolution A contre B |
 | Bobines | Actives, épuisées, retirées ; taux d'utilisation calculé sur le retiré (dotation − reliquat), pas sur un compteur alimenté par le seul point journalier ; détail par série — photo de l'instant |
 | PMMA | Consommation sur A comparée à B, consommation par type sur A ; stock par type et alertes de seuil à ce jour |
 | Rivets | Consommation sur A comparée à B ; stock global et sites sous seuil à ce jour |
@@ -1555,6 +1555,14 @@ en mode `choisie`, B. En hebdomadaire, une liste de semaines
 (« S38 · 14/09 → 20/09 ») remplace le champ date : `type=week` n'existe ni
 sous Firefox ni sous Safari. `periode_selecteur()`, utilisé par
 `pdg_overview.php`, est inchangé.
+
+> **Bandeau « Aujourd'hui » retiré (24 septembre 2026).** Quatre tuiles
+> Jour/Semaine/Mois/Année, calées sur la date du jour, figuraient sous la
+> comparaison. Depuis l'arrivée du choix de période, elles doublaient la
+> rangée A/B (la tuile « Mois » répétait « Plaques posées ») et ignoraient
+> les filtres : juin contre avril choisi, elles affichaient septembre. Chaque
+> échelle s'obtient désormais par le type de période, avec la même règle à
+> date égale.
 
 > **Portage MySQL.** Les nouvelles requêtes emploient `FILTER (WHERE …)` et
 > `::date`, propres à PostgreSQL. Leur report sur la branche `vps-mysql`
@@ -1683,3 +1691,4 @@ Protégé par le module `referentiels_operations`, `can_read`.
 | 3.0 | 2026-09-21 | `437102d` (RUTHAXELLE/stockapp) | Remise à niveau sur 29 commits. **Corrigé** : Render/Neon est la recette et non la production (6.1) ; Dompdf n'est plus la seule dépendance (2.1) ; 106 tables ; compteurs de lignes du métier ; statuts d'inventaire et de session (9.4). **Ajouté** : verrouillage après cinq échecs (5.1), en-têtes de sécurité et cookie `Secure` derrière proxy (5.2, 5.3), contrôle d'accès à l'action et les cinq failles corrigées (5.7), numérotation atomique des documents (4.2), limites de téléversement du serveur (6.2), intégration continue de sécurité (6.5), sous-rôles Support IT et exception `demandes` (7.4), cinq modules hors matrice et piège de la liste recopiée (7.1), réécriture complète des inventaires (9.4) |
 | 4.0 | 2026-09-24 | `6b268a6` (GayeGuy/ERP-EMUCI-V2) | **Corrigé le dépôt de référence** : la v3.0 avait été établie depuis RUTHAXELLE/stockapp, divergent depuis fin août 2026. **Ajouté** : suivi des observations (8.3), traçabilité des endommagements (9.5), simulation & projection de stocks (9.6), tableau de bord KPI (13.5), référentiels & capacités (13.6), outil d'inventaire des migrations (6.3). **Corrigé** : 114 tables (3), 57 identifiants de module dont 56 exposés dans la matrice — l'écart des quatre modules Achats hors matrice ne se vérifie pas sur ce dépôt (7.1, 14.2) |
 | 4.1 | 2026-09-24 | `59e3b0d` (GayeGuy/ERP-EMUCI-V2) | Tableau de bord KPI : période de comparaison choisie par l'utilisateur — précédente, l'an dernier ou libre —, règle de durée, calcul par intervalles de dates, moyenne par jour, brouillons exclus de PMMA/rivets, sélecteur hebdomadaire en liste (13.5). **Corrigé** : deux renvois au tableau de bord KPI pointaient vers un §8.4 inexistant (13.5). |
+| 4.2 | 2026-09-24 | `ab9f7ff` (GayeGuy/ERP-EMUCI-V2) | Tableau de bord KPI : bandeau « Aujourd'hui » retiré, il doublait la comparaison et ignorait les filtres (13.5). |

@@ -1,8 +1,8 @@
 # Cahier des charges — ERP EMUCI
 
 **Dépôt de référence** : GayeGuy/ERP-EMUCI-V2
-**Version du logiciel** : branche `main`, commit `59e3b0d` (24 septembre 2026)
-**Version du cahier des charges** : 2.1
+**Version du logiciel** : branche `main`, commit `ab9f7ff` (24 septembre 2026)
+**Version du cahier des charges** : 2.2
 **Objet** : établir ce que le système doit faire, pour qui, sous quelles
 contraintes, et à quoi se mesure qu'il le fait.
 
@@ -431,13 +431,13 @@ de tête, son détail et sa courbe d'évolution.
 **EF-KPI-1** — Les sept familles couvertes sont : Production, Bobines, PMMA,
 Rivets, Commandes, Équipements, Sites (production comparée et classement).
 
-**EF-KPI-2** — Un bandeau « Aujourd'hui » lit la production sur **quatre
-échelles simultanées** — jour, semaine, mois, année — chacune comparée à la
-période précédente **à date égale**, et non sur la période complète : comparer
-un mois en cours à un mois échu entier produit une variation mécaniquement
-faussée par le nombre de jours écoulés. Ce bandeau est calé sur la date du
-jour, **indépendamment de la période choisie** dans les filtres, et étiqueté
-comme tel pour ne pas être confondu avec la comparaison de l'EF-KPI-9.
+**EF-KPI-2** — La production se lit sur la période analysée, comparée à la
+période de comparaison (EF-KPI-9) : plaques posées, engins traités, plaques
+par jour écoulé, et courbe d'évolution des deux périodes superposées. Chaque
+échelle — jour, semaine, mois, année — s'obtient par le type de période.
+**Aucun chiffre de production n'est calé sur la date du jour indépendamment
+des filtres** : un bandeau de ce type, présent jusqu'au 24 septembre 2026,
+répétait la comparaison et ignorait la période choisie.
 
 **EF-KPI-3** — Le taux d'utilisation des bobines se calcule sur ce qui a
 **quitté** la bobine (différence entre dotation et reliquat), et non sur un
@@ -850,3 +850,4 @@ ajustées dans les écrans de paramétrage avant la mise en service.**
 | 1.0 | 21 septembre 2026 | Établissement initial, à partir du code au commit `437102d`. **Rédigé par erreur depuis le dépôt RUTHAXELLE/stockapp**, divergent de la référence depuis fin août 2026. Couvre les dix domaines, les seize rôles, les 106 tables et les quarante-deux identifiants de module contrôlés dans le code sur ce dépôt. |
 | 2.0 | 24 septembre 2026 | **Corrigé depuis le dépôt de référence GayeGuy/ERP-EMUCI-V2** (commit `6b268a6`). Ajout de cinq domaines fonctionnels absents de la v1.0 : tableau de bord KPI (§5.8), suivi des observations (§5.9), traçabilité des endommagements (§5.10), simulation & projection de stocks (§5.11), référentiels & capacités (§5.12). Volumétrie recalculée : 81 écrans, 114 tables, 57 identifiants de module. Écart EF-ADM-1 (modules Achats hors matrice) constaté résolu sur ce dépôt. |
 | 2.1 | 24 septembre 2026 | Tableau de bord KPI : comparaison de la période analysée à une période choisie — précédente, même période l'an dernier ou libre (EF-KPI-9) ; règle de durée à date égale en automatique, périodes entières au choix, moyenne par jour (EF-KPI-10) ; panneaux qui suivent la comparaison et photos de l'instant (EF-KPI-11) ; brouillons exclus des consommations PMMA/rivets, sites actifs sur B seulement conservés au classement (EF-KPI-12) ; bandeau « Aujourd'hui » (EF-KPI-2) ; critère CA-11 bis. |
+| 2.2 | 24 septembre 2026 | Tableau de bord KPI : bandeau « Aujourd'hui » retiré — il doublait la comparaison et ignorait les filtres (EF-KPI-2). |

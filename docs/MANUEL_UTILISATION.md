@@ -1,8 +1,8 @@
 # Manuel d'utilisation — ERP EMUCI
 
 **Dépôt de référence** : GayeGuy/ERP-EMUCI-V2
-**Version du logiciel** : branche `main`, commit `59e3b0d` (24 septembre 2026)
-**Version du manuel** : 4.1
+**Version du logiciel** : branche `main`, commit `ab9f7ff` (24 septembre 2026)
+**Version du manuel** : 4.2
 **Périmètre couvert** : 70 entrées de menu réparties sur 10 modules, les
 écrans hors menu, 16 rôles, 21 sites actifs
 
@@ -1042,11 +1042,10 @@ Avril 2026 ».
 > l'instant : l'application ne garde pas le stock de juin. Ils affichent donc
 > toujours la situation du jour, avec la mention « à ce jour ».
 
-> **Le bandeau « Aujourd'hui ».** Sous les chiffres de production, quatre
-> tuiles Jour, Semaine, Mois, Année donnent la situation **du jour même**,
-> quelle que soit la période choisie en haut : chacune compare son cumul à
-> date au même nombre de jours de la période précédente. C'est une lecture
-> rapide du présent, distincte de votre comparaison.
+> **Voir le jour, la semaine, le mois ou l'année en cours.** Choisissez le
+> type de période correspondant et laissez « vs période précédente » : la
+> journée est comparée à la veille, la semaine en cours aux mêmes jours de
+> la semaine passée, le mois et l'année à nombre de jours égal.
 
 > **Les brouillons ne comptent pas.** Les consommations de PMMA et de rivets,
 > comme la production, ne tiennent compte que des points journaliers soumis.
@@ -1338,6 +1337,7 @@ sensible des trois.
 | 3.0 | 2026-09-21 | `437102d` (RUTHAXELLE/stockapp) | Verrouillage du compte après cinq erreurs (2.2) ; inventaires réécrits — la session est ouverte par l'administration, un coordinateur ne crée plus son inventaire (7.5) ; conséquences visibles des correctifs de droits : brouillon imprimable par son seul auteur, import EMUCI et signalement de panne en droit de création, affectations IT en droit de modification, écrans Demandes réellement filtrés ; limite de téléversement portée à 50 Mo |
 | 4.0 | 2026-09-24 | `6b268a6` (GayeGuy/ERP-EMUCI-V2) | **Corrigé le dépôt de référence** : la v3.0 avait été rédigée depuis RUTHAXELLE/stockapp, qui n'était plus la référence de `main` depuis fin août 2026. **Ajouté** : Suivi des observations (5.5), Traçabilité endommagements (7.6), Simulation & projection de stocks (7.7), Dashboard KPI (11.4), Référentiels & capacités (12.8). 70 entrées de menu, 56 modules gérés depuis Admin → Permissions (contre 37 précédemment documentés) |
 | 4.1 | 2026-09-24 | `59e3b0d` (GayeGuy/ERP-EMUCI-V2) | Dashboard KPI : choix libre de la période de comparaison, règle « à date égale » ou « périodes entières », tuile « Plaques par jour », bandeau « Aujourd'hui », panneaux « à ce jour » (11.4) ; nouvelle question fréquente |
+| 4.2 | 2026-09-24 | `ab9f7ff` (GayeGuy/ERP-EMUCI-V2) | Dashboard KPI : bandeau « Aujourd'hui » retiré ; comment afficher le jour, la semaine, le mois ou l'année en cours (11.4) |
 
 > **Tenir ce manuel à jour.** Il décrit l'état du logiciel au commit
 > indiqué. À chaque évolution fonctionnelle notable, mettez à jour la
