@@ -657,19 +657,39 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
 @media(prefers-reduced-motion:reduce){.pdg-bar::after{animation:none;width:100%}}
 
 /* ── Grille de panneaux ──────────────────────────────────────────── */
-.kpi-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start}
+/* Panneaux etires a la hauteur de leur rangee : alignes en haut, des
+   panneaux de hauteurs inegales laissaient des trous sous les plus courts
+   (Rivets ~210 px a cote de Commandes ~330 px). L'ordre du document place
+   les panneaux de meme nature en colonne sur grand ecran : Commandes sous
+   Production (deux courbes), Equipements sous Bobines (deux anneaux),
+   Rivets sous PMMA (consommation, stock, seuils). */
+.kpi-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:stretch}
 .kp{grid-column:span 12;min-width:0;background:var(--card,#fff);border:1px solid var(--border);
   border-radius:var(--radius,16px);padding:18px 20px}
 @media(min-width:900px){
   .kp--prod{grid-column:span 7}.kp--bob{grid-column:span 5}
-  .kp--pmma{grid-column:span 5}.kp--riv{grid-column:span 7}
-  .kp--cmd{grid-column:span 7}.kp--eq{grid-column:span 5}
+  .kp--pmma{grid-column:span 5}.kp--cmd{grid-column:span 7}
+  .kp--eq{grid-column:span 5}.kp--riv{grid-column:span 7}
   .kp--sites{grid-column:span 12}
 }
 @media(min-width:1400px){
   .kp--prod{grid-column:span 5}.kp--bob{grid-column:span 4}.kp--pmma{grid-column:span 3}
-  .kp--riv{grid-column:span 3}.kp--cmd{grid-column:span 5}.kp--eq{grid-column:span 4}
+  .kp--cmd{grid-column:span 5}.kp--eq{grid-column:span 4}.kp--riv{grid-column:span 3}
 }
+/* Deux graphes surdimensionnes pour ce qu'ils portent : six points de taux
+   pour les commandes, une a quatre barres pour le PMMA. */
+.kp--cmd .kchart,.kp--cmd .kya{height:110px}
+/* Les panneaux courts etires occupent leur hauteur au lieu de laisser un
+   vide en bas : le graphe PMMA s'agrandit, l'anneau des equipements se
+   centre, l'encart d'alertes des rivets se cale en pied. Limite a ces trois
+   panneaux : en colonne flexible, les marges ne fusionnent plus, ce qui
+   ajoutait 6 px a Production et Commandes. */
+.kp--pmma,.kp--riv,.kp--eq{display:flex;flex-direction:column}
+.kp--pmma .kv{flex:1 1 auto;height:auto;min-height:118px}
+.kp--pmma:not(:has(.kv)) .ka{margin-top:auto}
+.kp--riv .kc-row{margin-bottom:12px}
+.kp--riv .ka{margin-top:auto}
+.kp--eq .kp-ring{flex:1 1 auto}
 
 /* ── En-tete de panneau ──────────────────────────────────────────── */
 .kp-h{display:flex;align-items:center;gap:10px;margin-bottom:14px}
@@ -1052,41 +1072,6 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
     </div>
   </section>
 
-  <!-- ══ RIVETS ══ -->
-  <section class="kp kp--riv" aria-labelledby="kp-riv">
-    <div class="kp-h">
-      <span class="kp-ic"><i class="ph ph-push-pin" aria-hidden="true"></i></span>
-      <h3 class="kp-t" id="kp-riv">Rivets<em>consommation de la période et stock disponible</em></h3>
-    </div>
-    <div class="kc-row">
-      <div class="kc">
-        <div class="kc-l">Consommés</div>
-        <div class="kc-v"><?= fmt_number($riv_conso) ?></div>
-        <?= kpi_delta(kpi_var($riv_conso, $riv_conso_p)) ?>
-        <div class="kc-n">vs <?= h($C['libelle_b']) ?> (<?= fmt_number($riv_conso_p) ?>)</div>
-      </div>
-      <div class="kc">
-        <div class="kc-l">Stock disponible</div>
-        <div class="kc-v"><?= fmt_number($riv_stock) ?></div>
-        <div class="kc-n">à ce jour · <?= $riv_bas > 0
-            ? fmt_number($riv_bas) . ' site(s) sous le seuil'
-            : 'aucun site sous le seuil' ?></div>
-      </div>
-    </div>
-    <div class="ka">
-      <?php if ($riv_alertes): ?>
-      <div class="ka-h"><i class="ph-fill ph-warning" aria-hidden="true"></i> Sous le seuil d'alerte</div>
-      <?php foreach ($riv_alertes as $a): ?>
-      <div class="ka-l"><b><?= h($a['site']) ?> · <?= h($a['t']) ?></b>
-        <span><?= fmt_number((int)$a['q']) ?> / <?= fmt_number((int)$a['seuil']) ?></span></div>
-      <?php endforeach; ?>
-      <?php else: ?>
-      <div class="ka-ok"><i class="ph-fill ph-check-circle" aria-hidden="true"></i>
-        Tous les sites sont au-dessus de leur seuil.</div>
-      <?php endif; ?>
-    </div>
-  </section>
-
   <!-- ══ COMMANDES ══ -->
   <section class="kp kp--cmd" aria-labelledby="kp-cmd">
     <div class="kp-h">
@@ -1159,6 +1144,41 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
       </div>
     </div>
     <?php endif; ?>
+  </section>
+
+  <!-- ══ RIVETS ══ -->
+  <section class="kp kp--riv" aria-labelledby="kp-riv">
+    <div class="kp-h">
+      <span class="kp-ic"><i class="ph ph-push-pin" aria-hidden="true"></i></span>
+      <h3 class="kp-t" id="kp-riv">Rivets<em>consommation de la période et stock disponible</em></h3>
+    </div>
+    <div class="kc-row">
+      <div class="kc">
+        <div class="kc-l">Consommés</div>
+        <div class="kc-v"><?= fmt_number($riv_conso) ?></div>
+        <?= kpi_delta(kpi_var($riv_conso, $riv_conso_p)) ?>
+        <div class="kc-n">vs <?= h($C['libelle_b']) ?> (<?= fmt_number($riv_conso_p) ?>)</div>
+      </div>
+      <div class="kc">
+        <div class="kc-l">Stock disponible</div>
+        <div class="kc-v"><?= fmt_number($riv_stock) ?></div>
+        <div class="kc-n">à ce jour · <?= $riv_bas > 0
+            ? fmt_number($riv_bas) . ' site(s) sous le seuil'
+            : 'aucun site sous le seuil' ?></div>
+      </div>
+    </div>
+    <div class="ka">
+      <?php if ($riv_alertes): ?>
+      <div class="ka-h"><i class="ph-fill ph-warning" aria-hidden="true"></i> Sous le seuil d'alerte</div>
+      <?php foreach ($riv_alertes as $a): ?>
+      <div class="ka-l"><b><?= h($a['site']) ?> · <?= h($a['t']) ?></b>
+        <span><?= fmt_number((int)$a['q']) ?> / <?= fmt_number((int)$a['seuil']) ?></span></div>
+      <?php endforeach; ?>
+      <?php else: ?>
+      <div class="ka-ok"><i class="ph-fill ph-check-circle" aria-hidden="true"></i>
+        Tous les sites sont au-dessus de leur seuil.</div>
+      <?php endif; ?>
+    </div>
   </section>
 
   <!-- ══ SITES ══ -->
