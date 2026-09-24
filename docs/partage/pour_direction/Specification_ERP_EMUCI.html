@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Spécification fonctionnelle et technique — ERP EMUCI</title>
-<meta name="description" content="Spécification fonctionnelle et technique de l'ERP EMUCI, arrêté au commit 1088c51">
+<meta name="description" content="Spécification fonctionnelle et technique de l'ERP EMUCI, arrêté au commit 2b27766">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
 <style>
+
 
 
 
@@ -226,6 +227,11 @@ h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
   color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
   border-bottom:2px solid var(--accent)}
 figure .mermaid{background:transparent}
+
+h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
+  border-bottom:2px solid var(--accent)}
+figure .mermaid{background:transparent}
 </style>
 </head>
 <body>
@@ -257,7 +263,7 @@ figure .mermaid{background:transparent}
 <p class="eyebrow">ERP EMUCI</p>
 <h1>Spécification fonctionnelle et technique — ERP EMUCI</h1>
 <p class="lede">Ce que le système est, les règles qu&#x27;il applique, et les limites qu&#x27;il porte.</p>
-<div class="meta"><span class="chip"><b>Version du logiciel</b> 24 septembre 2026</span><span class="chip"><b>Version de la spécification</b> 4.1</span><span class="chip"><b>Objet</b> décrire ce que le système est, comment il est construit, les</span></div>
+<div class="meta"><span class="chip"><b>Version du logiciel</b> 24 septembre 2026</span><span class="chip"><b>Version de la spécification</b> 4.2</span><span class="chip"><b>Objet</b> décrire ce que le système est, comment il est construit, les</span></div>
 </header>
 <div class="note note-info"><span class="note-t">Provenance</span><p> Établie par lecture du code source et interrogation de la
 base. Chaque chiffre et chaque règle cités sont vérifiables à l'endroit
@@ -2582,7 +2588,7 @@ courbe d'évolution.</p>
 <tbody>
 <tr>
 <td>Production</td>
-<td>Plaques, engins et plaques par jour écoulé sur A, comparés à B ; bandeau « Aujourd'hui » à quatre échelles (jour/semaine/mois/année), calé sur la date du jour et comparé à la période précédente <strong>à date égale</strong> ; courbe d'évolution A contre B</td>
+<td>Plaques, engins et plaques par jour écoulé sur A, comparés à B ; courbe d'évolution A contre B</td>
 </tr>
 <tr>
 <td>Bobines</td>
@@ -2658,7 +2664,14 @@ en mode <code>choisie</code>, B. En hebdomadaire, une liste de semaines
 (« S38 · 14/09 → 20/09 ») remplace le champ date : <code>type=week</code> n'existe ni
 sous Firefox ni sous Safari. <code>periode_selecteur()</code>, utilisé par
 <code>pdg_overview.php</code>, est inchangé.</p>
-<div class="note note-info"><span class="note-t">Portage MySQL</span><p> Les nouvelles requêtes emploient <code>FILTER (WHERE …)</code> et
+<div class="note note-info"><span class="note-t">Bandeau « Aujourd'hui » retiré (24 septembre 2026)</span><p> Quatre tuiles
+Jour/Semaine/Mois/Année, calées sur la date du jour, figuraient sous la
+comparaison. Depuis l'arrivée du choix de période, elles doublaient la
+rangée A/B (la tuile « Mois » répétait « Plaques posées ») et ignoraient
+les filtres : juin contre avril choisi, elles affichaient septembre. Chaque
+échelle s'obtient désormais par le type de période, avec la même règle à
+date égale.</p>
+<p><strong>Portage MySQL.</strong> Les nouvelles requêtes emploient <code>FILTER (WHERE …)</code> et
 <code>::date</code>, propres à PostgreSQL. Leur report sur la branche <code>vps-mysql</code>
 demande une traduction (<code>SUM(CASE WHEN … THEN … END)</code>, <code>CAST(… AS DATE)</code>).</p>
 <p><strong>Le biais de comparaison de périodes inégales, corrigé.</strong> Comparer un mois
@@ -2832,6 +2845,11 @@ l'interface au même titre que les cinquante-deux autres (7.1).</p>
 <td>2026-09-24</td>
 <td>Tableau de bord KPI : période de comparaison choisie par l'utilisateur — précédente, l'an dernier ou libre —, règle de durée, calcul par intervalles de dates, moyenne par jour, brouillons exclus de PMMA/rivets, sélecteur hebdomadaire en liste (13.5). <strong>Corrigé</strong> : deux renvois au tableau de bord KPI pointaient vers un §8.4 inexistant (13.5).</td>
 </tr>
+<tr>
+<td>4.2</td>
+<td>2026-09-24</td>
+<td>Tableau de bord KPI : bandeau « Aujourd'hui » retiré, il doublait la comparaison et ignorait les filtres (13.5).</td>
+</tr>
 </tbody>
 </table></div>
 </section>
@@ -2841,7 +2859,7 @@ l'interface au même titre que les cinquante-deux autres (7.1).</p>
 <div class="impr-pied" style="margin-top:10mm;padding-top:4mm;border-top:1px solid #c3ccdf;
      font-size:9pt;color:#4d5876">
   Spécification fonctionnelle et technique — ERP EMUCI — document interne. État du logiciel au commit
-  <code>1088c51</code>. Toute évolution fonctionnelle rend une section caduque :
+  <code>2b27766</code>. Toute évolution fonctionnelle rend une section caduque :
   vérifiez la version avant de vous y fier.
 </div>
 

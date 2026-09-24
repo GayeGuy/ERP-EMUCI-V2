@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Manuel d&#x27;utilisation — ERP EMUCI</title>
-<meta name="description" content="Manuel d&#x27;utilisation de l'ERP EMUCI, arrêté au commit 1088c51">
+<meta name="description" content="Manuel d&#x27;utilisation de l'ERP EMUCI, arrêté au commit 2b27766">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
 <style>
+
 
 
 
@@ -226,6 +227,11 @@ h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
   color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
   border-bottom:2px solid var(--accent)}
 figure .mermaid{background:transparent}
+
+h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
+  border-bottom:2px solid var(--accent)}
+figure .mermaid{background:transparent}
 </style>
 </head>
 <body>
@@ -257,7 +263,7 @@ figure .mermaid{background:transparent}
 <p class="eyebrow">ERP EMUCI</p>
 <h1>Manuel d&#x27;utilisation — ERP EMUCI</h1>
 <p class="lede">Comment se servir de l&#x27;application, écran par écran, selon son rôle.</p>
-<div class="meta"><span class="chip"><b>Version du logiciel</b> 24 septembre 2026</span><span class="chip"><b>Version du manuel</b> 4.1</span><span class="chip"><b>Périmètre couvert</b> 70 entrées de menu réparties sur 10 modules, les</span></div>
+<div class="meta"><span class="chip"><b>Version du logiciel</b> 24 septembre 2026</span><span class="chip"><b>Version du manuel</b> 4.2</span><span class="chip"><b>Périmètre couvert</b> 70 entrées de menu réparties sur 10 modules, les</span></div>
 </header>
 <div class="note note-info"><span class="note-t">Provenance de ce document</span><p> Il est établi à partir du code source, pas
 d'une session d'utilisation. La structure des menus, les rôles, les
@@ -1630,15 +1636,14 @@ pour comparer février (28 jours) à mars (31 jours).</p>
 </tr>
 </tbody>
 </table></div>
-<div class="note note-info"><span class="note-t">Pourquoi certains panneaux ne changent pas avec les périodes</span><p> Le parc
+<div class="note note-warn"><span class="note-t">Pourquoi certains panneaux ne changent pas avec les périodes</span><p> Le parc
 de bobines, les stocks disponibles et les équipements sont des photos de
 l'instant : l'application ne garde pas le stock de juin. Ils affichent donc
 toujours la situation du jour, avec la mention « à ce jour ».</p>
-<p><strong>Le bandeau « Aujourd'hui ».</strong> Sous les chiffres de production, quatre
-tuiles Jour, Semaine, Mois, Année donnent la situation <strong>du jour même</strong>,
-quelle que soit la période choisie en haut : chacune compare son cumul à
-date au même nombre de jours de la période précédente. C'est une lecture
-rapide du présent, distincte de votre comparaison.</p>
+<p><strong>Voir le jour, la semaine, le mois ou l'année en cours.</strong> Choisissez le
+type de période correspondant et laissez « vs période précédente » : la
+journée est comparée à la veille, la semaine en cours aux mêmes jours de
+la semaine passée, le mois et l'année à nombre de jours égal.</p>
 <p><strong>Les brouillons ne comptent pas.</strong> Les consommations de PMMA et de rivets,
 comme la production, ne tiennent compte que des points journaliers soumis.
 Un site qui n'a rien produit sur la période analysée mais avait produit sur
@@ -1957,6 +1962,11 @@ sensible des trois.</p>
 <td>2026-09-24</td>
 <td>Dashboard KPI : choix libre de la période de comparaison, règle « à date égale » ou « périodes entières », tuile « Plaques par jour », bandeau « Aujourd'hui », panneaux « à ce jour » (11.4) ; nouvelle question fréquente</td>
 </tr>
+<tr>
+<td>4.2</td>
+<td>2026-09-24</td>
+<td>Dashboard KPI : bandeau « Aujourd'hui » retiré ; comment afficher le jour, la semaine, le mois ou l'année en cours (11.4)</td>
+</tr>
 </tbody>
 </table></div>
 <div class="note note-info"><span class="note-t">Tenir ce manuel à jour</span><p> Il décrit l'état du logiciel à la date
@@ -1971,7 +1981,7 @@ ne dit pas sur quelle version il porte ne vaut rien.</p>
 <div class="impr-pied" style="margin-top:10mm;padding-top:4mm;border-top:1px solid #c3ccdf;
      font-size:9pt;color:#4d5876">
   Manuel d&#x27;utilisation — ERP EMUCI — document interne. État du logiciel au commit
-  <code>1088c51</code>. Toute évolution fonctionnelle rend une section caduque :
+  <code>2b27766</code>. Toute évolution fonctionnelle rend une section caduque :
   vérifiez la version avant de vous y fier.
 </div>
 
