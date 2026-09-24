@@ -4,11 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cahier des charges — ERP EMUCI</title>
-<meta name="description" content="Cahier des charges de l'ERP EMUCI, arrêté au commit d04ed07">
+<meta name="description" content="Cahier des charges de l'ERP EMUCI, arrêté au commit 1088c51">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
 <style>
+
+
+
 
 
 
@@ -208,6 +211,21 @@ h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
   color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
   border-bottom:2px solid var(--accent)}
 figure .mermaid{background:transparent}
+
+h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
+  border-bottom:2px solid var(--accent)}
+figure .mermaid{background:transparent}
+
+h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
+  border-bottom:2px solid var(--accent)}
+figure .mermaid{background:transparent}
+
+h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
+  border-bottom:2px solid var(--accent)}
+figure .mermaid{background:transparent}
 </style>
 </head>
 <body>
@@ -235,7 +253,7 @@ figure .mermaid{background:transparent}
 <p class="eyebrow">ERP EMUCI</p>
 <h1>Cahier des charges — ERP EMUCI</h1>
 <p class="lede">Ce que le système doit faire, pour qui, sous quelles contraintes, et à quoi se mesure qu&#x27;il le fait.</p>
-<div class="meta"><span class="chip"><b>Version du logiciel</b> 24 septembre 2026</span><span class="chip"><b>Version du cahier des charges</b> 2.0</span><span class="chip"><b>Objet</b> établir ce que le système doit faire, pour qui, sous quelles</span></div>
+<div class="meta"><span class="chip"><b>Version du logiciel</b> 24 septembre 2026</span><span class="chip"><b>Version du cahier des charges</b> 2.1</span><span class="chip"><b>Objet</b> établir ce que le système doit faire, pour qui, sous quelles</span></div>
 </header>
 <div class="note note-info"><span class="note-t">Provenance</span><p> Ce document est établi par lecture du code source, du
 schéma de base et de la configuration des menus. Il décrit le besoin <strong>tel
@@ -775,11 +793,13 @@ lecture visuelle de <strong>sept familles d'indicateurs</strong>, chacune avec s
 de tête, son détail et sa courbe d'évolution.</p>
 <p><strong>EF-KPI-1</strong> — Les sept familles couvertes sont : Production, Bobines, PMMA,
 Rivets, Commandes, Équipements, Sites (production comparée et classement).</p>
-<p><strong>EF-KPI-2</strong> — La production se lit sur <strong>quatre échelles simultanées</strong> — jour,
-semaine, mois, année — chacune comparée à la période précédente <strong>à date
-égale</strong>, et non sur la période complète : comparer un mois en cours à un mois
-échu entier produit une variation mécaniquement faussée par le nombre de jours
-écoulés.</p>
+<p><strong>EF-KPI-2</strong> — Un bandeau « Aujourd'hui » lit la production sur <strong>quatre
+échelles simultanées</strong> — jour, semaine, mois, année — chacune comparée à la
+période précédente <strong>à date égale</strong>, et non sur la période complète : comparer
+un mois en cours à un mois échu entier produit une variation mécaniquement
+faussée par le nombre de jours écoulés. Ce bandeau est calé sur la date du
+jour, <strong>indépendamment de la période choisie</strong> dans les filtres, et étiqueté
+comme tel pour ne pas être confondu avec la comparaison de l'EF-KPI-9.</p>
 <p><strong>EF-KPI-3</strong> — Le taux d'utilisation des bobines se calcule sur ce qui a
 <strong>quitté</strong> la bobine (différence entre dotation et reliquat), et non sur un
 compteur qui n'est alimenté que par le point journalier — un parc
@@ -797,9 +817,55 @@ ou site unique) et par granularité temporelle ; le coordinateur de site reste
 verrouillé sur son site. Une sélection de sites vide vaut « tout le
 périmètre ».</p>
 <p><strong>EF-KPI-7</strong> — Un utilisateur peut <strong>enregistrer une combinaison de filtres</strong>
-comme vue nommée, personnelle ou partagée, et la supprimer — seul son
-propriétaire peut supprimer une vue, y compris partagée.</p>
+— périmètre, période analysée et période de comparaison comprises — comme vue
+nommée, personnelle ou partagée, et la supprimer. Seul son propriétaire peut
+supprimer une vue, y compris partagée.</p>
 <p><strong>EF-KPI-8</strong> — L'écran est protégé par le module <code>kpi_dashboard</code>, <code>can_read</code>.</p>
+<p><strong>EF-KPI-9</strong> — L'utilisateur choisit la <strong>période analysée (A)</strong> et la
+<strong>période de comparaison (B)</strong>, de même granularité :</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Comparer à</th>
+<th>Période B</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Période précédente (défaut)</td>
+<td>La période juste avant A — sans aucun réglage</td>
+</tr>
+<tr>
+<td>Même période l'an dernier</td>
+<td>A décalée d'un an (sans objet en annuel, où elle se confond avec la précédente)</td>
+</tr>
+<tr>
+<td>Période choisie</td>
+<td>Un jour, une semaine, un mois ou une année libres</td>
+</tr>
+</tbody>
+</table></div>
+<p>La semaine se choisit dans une liste (« S38 · 14/09 → 20/09 »), et non par un
+champ date : le choix porte sur une semaine, pas sur un jour.</p>
+<p><strong>EF-KPI-10</strong> — Règle de durée :</p>
+<ul>
+<li>en comparaison automatique (période précédente), si A est en cours, B est
+  arrêtée au même rang (1ᵉʳ → 24 août contre 1ᵉʳ → 24 septembre) ;</li>
+<li>dès que l'utilisateur choisit lui-même B, les deux périodes sont comparées
+  <strong>entières</strong> ; si A est en cours, l'écran le signale ;</li>
+<li>dans tous les cas, une <strong>moyenne de plaques par jour écoulé</strong> est affichée,
+  seule mesure juste quand les deux périodes n'ont pas la même durée.</li>
+</ul>
+<p><strong>EF-KPI-11</strong> — Suivent la comparaison A/B : la production, les
+consommations de PMMA et de rivets, les commandes (taux de satisfaction et
+délai de B affichés), la courbe d'évolution et le classement des sites. Les
+stocks, le parc de bobines et les équipements restent des <strong>photos de
+l'instant</strong>, signalées « à ce jour » : la base ne conserve pas l'historique du
+stock.</p>
+<p><strong>EF-KPI-12</strong> — Les consommations de PMMA et de rivets excluent les points en
+brouillon, comme la production : deux panneaux voisins comptent sur la même
+base. Un site sans production sur A mais actif sur B reste affiché au
+classement — c'est précisément ce qu'une comparaison doit faire voir.</p>
 <h3>5.9 Suivi des observations</h3>
 <p><strong>EF-OBS-1</strong> — Chaque observation saisie dans un point journalier suit un
 cycle de vie propre : <code>en_attente</code> → <code>en_cours</code> → <code>traite</code> → <code>cloture</code>, avec
@@ -1167,6 +1233,11 @@ n'écrit dans les tables de stock.</p>
 <td>Un compte par rôle ayant accès au module <code>kpi_dashboard</code></td>
 </tr>
 <tr>
+<td><strong>CA-11 bis</strong></td>
+<td>Le tableau de bord KPI compare deux périodes choisies par l'utilisateur, dans les quatre granularités</td>
+<td>Un mois contre un mois non consécutif, une semaine contre une autre, et le rapprochement avec un calcul direct en base</td>
+</tr>
+<tr>
 <td><strong>CA-12</strong></td>
 <td>La simulation de stock répond aux deux cas d'usage du comité de pilotage sans écrire aucun stock réel</td>
 <td>Comparaison du stock avant/après simulation</td>
@@ -1307,6 +1378,11 @@ ajustées dans les écrans de paramétrage avant la mise en service.</strong></p
 <td>24 septembre 2026</td>
 <td>Ajout de cinq domaines fonctionnels absents de la v1.0 : tableau de bord KPI (§5.8), suivi des observations (§5.9), traçabilité des endommagements (§5.10), simulation &amp; projection de stocks (§5.11), référentiels &amp; capacités (§5.12). Volumétrie recalculée : 81 écrans, 114 tables, 57 identifiants de module. Écart EF-ADM-1 (modules Achats hors matrice) constaté résolu.</td>
 </tr>
+<tr>
+<td>2.1</td>
+<td>24 septembre 2026</td>
+<td>Tableau de bord KPI : comparaison de la période analysée à une période choisie — précédente, même période l'an dernier ou libre (EF-KPI-9) ; règle de durée à date égale en automatique, périodes entières au choix, moyenne par jour (EF-KPI-10) ; panneaux qui suivent la comparaison et photos de l'instant (EF-KPI-11) ; brouillons exclus des consommations PMMA/rivets, sites actifs sur B seulement conservés au classement (EF-KPI-12) ; bandeau « Aujourd'hui » (EF-KPI-2) ; critère CA-11 bis.</td>
+</tr>
 </tbody>
 </table></div>
 </section>
@@ -1316,7 +1392,7 @@ ajustées dans les écrans de paramétrage avant la mise en service.</strong></p
 <div class="impr-pied" style="margin-top:10mm;padding-top:4mm;border-top:1px solid #c3ccdf;
      font-size:9pt;color:#4d5876">
   Cahier des charges — ERP EMUCI — document interne. État du logiciel au commit
-  <code>d04ed07</code>. Toute évolution fonctionnelle rend une section caduque :
+  <code>1088c51</code>. Toute évolution fonctionnelle rend une section caduque :
   vérifiez la version avant de vous y fier.
 </div>
 

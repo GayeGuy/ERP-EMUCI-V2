@@ -4,11 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Spécification fonctionnelle et technique — ERP EMUCI</title>
-<meta name="description" content="Spécification fonctionnelle et technique de l'ERP EMUCI, arrêté au commit d04ed07">
+<meta name="description" content="Spécification fonctionnelle et technique de l'ERP EMUCI, arrêté au commit 1088c51">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
 <style>
+
+
+
 
 
 
@@ -208,6 +211,21 @@ h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
   color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
   border-bottom:2px solid var(--accent)}
 figure .mermaid{background:transparent}
+
+h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
+  border-bottom:2px solid var(--accent)}
+figure .mermaid{background:transparent}
+
+h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
+  border-bottom:2px solid var(--accent)}
+figure .mermaid{background:transparent}
+
+h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
+  border-bottom:2px solid var(--accent)}
+figure .mermaid{background:transparent}
 </style>
 </head>
 <body>
@@ -239,19 +257,14 @@ figure .mermaid{background:transparent}
 <p class="eyebrow">ERP EMUCI</p>
 <h1>Spécification fonctionnelle et technique — ERP EMUCI</h1>
 <p class="lede">Ce que le système est, les règles qu&#x27;il applique, et les limites qu&#x27;il porte.</p>
-<div class="meta"><span class="chip"><b>Version du logiciel</b> 24 septembre 2026</span><span class="chip"><b>Version de la spécification</b> 4.0</span><span class="chip"><b>Objet</b> décrire ce que le système est, comment il est construit, les</span></div>
+<div class="meta"><span class="chip"><b>Version du logiciel</b> 24 septembre 2026</span><span class="chip"><b>Version de la spécification</b> 4.1</span><span class="chip"><b>Objet</b> décrire ce que le système est, comment il est construit, les</span></div>
 </header>
 <div class="note note-info"><span class="note-t">Provenance</span><p> Établie par lecture du code source et interrogation de la
 base. Chaque chiffre et chaque règle cités sont vérifiables à l'endroit
 indiqué.</p>
 <p>Ce document décrit le <strong>comportement implémenté</strong>, qui n'est pas
 nécessairement le comportement voulu. Là où le code signale lui-même une
-valeur provisoire, la spécification le répercute.</p>
-<p><strong>Note sur cette version.</strong> Cette version 4.0 met à jour la volumétrie et
-documente deux domaines fonctionnels absents de la v3.0 : le tableau de
-bord KPI (§8.4) et l'outil de simulation &amp; projection de stocks (§9.6),
-ainsi que le suivi des observations (§8.3) et la traçabilité des
-endommagements (§9.5).</p></div>
+valeur provisoire, la spécification le répercute.</p></div>
 <h1 class="partie">Partie I — Technique</h1>
 <section id="s1"><h2><span class="n">1</span> Objet et périmètre</h2>
 <p>ERP EMUCI couvre la production de plaques d'immatriculation et la chaîne
@@ -442,7 +455,7 @@ site référençait une colonne inexistante : la page entière tombait.</p>
 composite — un tableau de bord fait de blocs — doit être enveloppé. Le
 registre du tableau de bord le fait, et journalise l'échec plutôt que de le
 laisser remonter. Le tableau de bord KPI applique le même principe : chaque
-panneau (§8.4) calcule ses propres indicateurs indépendamment des six autres.</p>
+panneau (§13.5) calcule ses propres indicateurs indépendamment des six autres.</p>
 <h3>2.4 Contrat des échanges dynamiques</h3>
 <p>Toutes les réponses AJAX ont la même forme, produite par <code>json_response()</code> :</p>
 <pre><code class="language-json">{ &quot;success&quot;: true, &quot;message&quot;: &quot;…&quot;, &quot;data&quot;: { } }
@@ -2569,40 +2582,92 @@ courbe d'évolution.</p>
 <tbody>
 <tr>
 <td>Production</td>
-<td>Quatre échelles simultanées (jour/semaine/mois/année), chacune comparée à la période précédente <strong>à date égale</strong></td>
+<td>Plaques, engins et plaques par jour écoulé sur A, comparés à B ; bandeau « Aujourd'hui » à quatre échelles (jour/semaine/mois/année), calé sur la date du jour et comparé à la période précédente <strong>à date égale</strong> ; courbe d'évolution A contre B</td>
 </tr>
 <tr>
 <td>Bobines</td>
-<td>Actives, épuisées, retirées ; taux d'utilisation calculé sur le retiré (dotation − reliquat), pas sur un compteur alimenté par le seul point journalier ; détail par série</td>
+<td>Actives, épuisées, retirées ; taux d'utilisation calculé sur le retiré (dotation − reliquat), pas sur un compteur alimenté par le seul point journalier ; détail par série — photo de l'instant</td>
 </tr>
 <tr>
 <td>PMMA</td>
-<td>Stock par type, consommation par type sur la période, alertes de seuil avec le site concerné</td>
+<td>Consommation sur A comparée à B, consommation par type sur A ; stock par type et alertes de seuil à ce jour</td>
 </tr>
 <tr>
 <td>Rivets</td>
-<td>Stock global, sites sous seuil, consommation comparée à la période précédente</td>
+<td>Consommation sur A comparée à B ; stock global et sites sous seuil à ce jour</td>
 </tr>
 <tr>
 <td>Commandes</td>
-<td>Total, servies, en cours ; taux de satisfaction sur les six dernières périodes</td>
+<td>Total, servies, en cours sur A ; taux de satisfaction et délai de B ; taux sur les six dernières périodes</td>
 </tr>
 <tr>
 <td>Équipements</td>
-<td>Disponibles (<code>ok</code>, <code>neuf</code>, <code>bon</code>, <code>usage</code>), hors service, en maintenance, affectés</td>
+<td>Disponibles (<code>ok</code>, <code>neuf</code>, <code>bon</code>, <code>usage</code>), hors service, en maintenance, affectés — photo de l'instant</td>
 </tr>
 <tr>
 <td>Sites</td>
-<td>Production comparée et classement, échelle ajustée à la durée réelle écoulée sur la période en cours</td>
+<td>Production par site sur A contre B et classement ; un site actif sur B seulement reste affiché</td>
 </tr>
 </tbody>
 </table></div>
-<div class="note note-info"><span class="note-t">Le biais de comparaison de périodes inégales, corrigé</span><p> Comparer un mois
+<h4>Période analysée (A) et période de comparaison (B)</h4>
+<p><code>periode_contexte()</code> fournit A (type et date choisis) ; <code>periode_comparaison()</code>
+(<code>includes/periode.php</code>) en dérive B selon le paramètre <code>cmp</code> :</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th><code>cmp</code></th>
+<th>Période B</th>
+<th>Durée comparée</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>precedente</code> (défaut)</td>
+<td>La période juste avant A</td>
+<td><strong>À date égale</strong> si A est en cours : B est arrêtée au même rang (1ᵉʳ → 24 août contre 1ᵉʳ → 24 septembre)</td>
+</tr>
+<tr>
+<td><code>an_prec</code></td>
+<td>A décalée d'un an — même semaine ISO l'année précédente, semaine 52 si la 53ᵉ n'existe pas ; le 29 février retombe au 28</td>
+<td>Périodes entières</td>
+</tr>
+<tr>
+<td><code>choisie</code></td>
+<td>Libre, de même granularité : <code>jour_b</code>, <code>mois_b</code>, <code>annee_b</code> (en hebdomadaire, <code>jour_b</code> porte le lundi de la semaine)</td>
+<td>Périodes entières</td>
+</tr>
+</tbody>
+</table></div>
+<p>Toute valeur de B invalide retombe sur la période précédente. En annuel,
+<code>an_prec</code> se confond avec <code>precedente</code> et n'est pas proposé.</p>
+<p>Les indicateurs sont calculés sur des <strong>intervalles de dates</strong>
+(<code>date_point BETWEEN du AND au</code>, agrégats <code>FILTER</code>) et non plus par égalité
+de format (<code>TO_CHAR(date_point, 'YYYY-MM') = ?</code>) : une période arrêtée à date
+ou choisie librement ne s'exprime pas par une égalité de format.</p>
+<p><strong>Durées inégales.</strong> Quand A et B n'ont pas la même durée — février contre
+mars, ou A en cours comparée entière — la tuile « plaques par jour » divise
+chaque total par ses <strong>jours réellement écoulés</strong> et reste comparable. En
+mensuel, l'axe de la courbe couvre le plus long des deux mois et chaque
+courbe s'arrête à son dernier jour.</p>
+<p><strong>Base de comptage commune.</strong> Production, PMMA et rivets excluent tous les
+points en brouillon. Jusqu'au 24 septembre 2026, PMMA et rivets les
+incluaient : deux panneaux voisins ne comptaient pas sur la même base.</p>
+<p><strong>Sélecteur.</strong> <code>periode_selecteur_comparaison()</code> rend le type, A, le mode et,
+en mode <code>choisie</code>, B. En hebdomadaire, une liste de semaines
+(« S38 · 14/09 → 20/09 ») remplace le champ date : <code>type=week</code> n'existe ni
+sous Firefox ni sous Safari. <code>periode_selecteur()</code>, utilisé par
+<code>pdg_overview.php</code>, est inchangé.</p>
+<div class="note note-info"><span class="note-t">Portage MySQL</span><p> Les nouvelles requêtes emploient <code>FILTER (WHERE …)</code> et
+<code>::date</code>, propres à PostgreSQL. Leur report sur la branche <code>vps-mysql</code>
+demande une traduction (<code>SUM(CASE WHEN … THEN … END)</code>, <code>CAST(… AS DATE)</code>).</p>
+<p><strong>Le biais de comparaison de périodes inégales, corrigé.</strong> Comparer un mois
 en cours (8 jours écoulés) à un mois précédent complet (31 jours) affichait
 une variation de -72,7 % (2 070 contre 7 590) purement mécanique, alors
-qu'à nombre de jours égal la production était stable (-0,5 %). Chaque
-échelle compare désormais son cumul à date au cumul de la période
-précédente arrêté au même rang.</p>
+qu'à nombre de jours égal la production était stable (-0,5 %). La
+comparaison automatique compare désormais le cumul à date de A au cumul de
+la période précédente arrêté au même rang ; une période choisie par
+l'utilisateur est comparée entière, avec mention et moyenne par jour.</p>
 <p><strong>Le taux de disponibilité des équipements, corrigé.</strong> Ne compter comme
 disponible que l'état <code>etat = 'ok'</code> affichait 0,0 % de disponibilité sur un
 parc pourtant actif, l'essentiel étant saisi en <code>neuf</code> ou <code>bon</code>. Les quatre
@@ -2613,7 +2678,8 @@ rester visible sans gonfler le taux.</p>
 <p><strong>Périmètre et vues enregistrées.</strong> Le filtre de sites accepte une sélection
 multiple, une sélection vide valant « tout le périmètre » ; le coordinateur
 de site reste verrouillé sur le sien. Un utilisateur peut enregistrer une
-combinaison de filtres comme <strong>vue nommée</strong> (table <code>vues_enregistrees</code>),
+combinaison de filtres — périodes A et B comprises — comme <strong>vue nommée</strong>
+(table <code>vues_enregistrees</code>),
 personnelle ou partagée ; seul son propriétaire peut la supprimer, même
 partagée. Le rafraîchissement au changement de filtre est animé, sans
 rechargement de page — le même moteur que <code>pdg_overview.php</code>.</p>
@@ -2761,6 +2827,11 @@ l'interface au même titre que les cinquante-deux autres (7.1).</p>
 <td>2026-09-24</td>
 <td><strong>Ajouté</strong> : suivi des observations (8.3), traçabilité des endommagements (9.5), simulation &amp; projection de stocks (9.6), tableau de bord KPI (13.5), référentiels &amp; capacités (13.6), outil d'inventaire des migrations (6.3). <strong>Corrigé</strong> : 114 tables (3), 57 identifiants de module dont 56 exposés dans la matrice — l'écart des quatre modules Achats hors matrice ne se vérifie plus (7.1, 14.2)</td>
 </tr>
+<tr>
+<td>4.1</td>
+<td>2026-09-24</td>
+<td>Tableau de bord KPI : période de comparaison choisie par l'utilisateur — précédente, l'an dernier ou libre —, règle de durée, calcul par intervalles de dates, moyenne par jour, brouillons exclus de PMMA/rivets, sélecteur hebdomadaire en liste (13.5). <strong>Corrigé</strong> : deux renvois au tableau de bord KPI pointaient vers un §8.4 inexistant (13.5).</td>
+</tr>
 </tbody>
 </table></div>
 </section>
@@ -2770,7 +2841,7 @@ l'interface au même titre que les cinquante-deux autres (7.1).</p>
 <div class="impr-pied" style="margin-top:10mm;padding-top:4mm;border-top:1px solid #c3ccdf;
      font-size:9pt;color:#4d5876">
   Spécification fonctionnelle et technique — ERP EMUCI — document interne. État du logiciel au commit
-  <code>d04ed07</code>. Toute évolution fonctionnelle rend une section caduque :
+  <code>1088c51</code>. Toute évolution fonctionnelle rend une section caduque :
   vérifiez la version avant de vous y fier.
 </div>
 
