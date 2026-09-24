@@ -284,6 +284,7 @@ $bob = db_fetch_one(
             COUNT(*) FILTER (WHERE b.statut = 'epuisee')                      AS epuisees,
             COUNT(*) FILTER (WHERE b.statut = 'retiree')                      AS retirees,
             COALESCE(SUM(b.films_restants),0)                                 AS restants,
+            COALESCE(SUM(b.films_restants) FILTER (WHERE b.statut IN ('en_cours','en_stock')),0) AS restants_actifs,
             COALESCE(SUM(b.films_utilises),0)                                 AS utilises,
             COALESCE(SUM(b.films_endommages),0)                               AS endommages,
             COALESCE(SUM(b.qte_initiale),0)                                   AS initial
@@ -302,8 +303,24 @@ $b_endo  = (float)($bob['endommages'] ?? 0);
 $b_sorti = max(0.0, $b_init - $b_rest);
 $taux_util  = $b_init  > 0 ? $b_sorti / $b_init  * 100 : 0;
 $taux_perte = $b_sorti > 0 ? $b_endo  / $b_sorti * 100 : 0;
-$conso_jour = conso_moy_site($site_id, 30);
-$couverture = $conso_jour > 0 ? (int) floor((float)($bob['restants'] ?? 0) / $conso_jour) : null;
+// Couverture : combien de jours le stock des bobines actives tient au
+// rythme des 30 derniers jours, sur la selection de sites (et non plus sur
+// tous les sites des qu'il y en a plus d'un). Les bobines retirees sont
+// hors circuit : leurs films ne couvrent rien.
+// La consommation lit les points journaliers ET la saisie manuelle
+// (conso_source_bobines) : ne lire que la seconde affichait « aucune
+// consommation » sur un parc gere par points journaliers.
+$conso_jour = conso_moy_site($sites_sel, 30);
+$couverture = $conso_jour > 0 ? (int) floor((float)($bob['restants_actifs'] ?? 0) / $conso_jour) : null;
+
+// Un format ne remplace pas un autre : la couverture globale peut annoncer
+// des semaines alors qu'un format sera a sec bien avant. On nomme donc le
+// premier format a s'epuiser quand il arrive plus tot que la moyenne.
+$format_critique = null;
+foreach (conso_stock_par_format($sites_sel, 30) as $f) {
+    if ($f['jours'] === null) continue;
+    if ($format_critique === null || $f['jours'] < $format_critique['jours']) $format_critique = $f;
+}
 
 // Detail par serie : le taux global masque qu'une serie peut etre a bout
 // quand une autre est neuve. La serie porte le format lisible, pas le code.
@@ -1009,8 +1026,12 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
     </div>
     <p class="kc-n" style="margin-top:10px">
       <?= $couverture !== null
-          ? 'Couverture : ' . fmt_number($couverture) . ' jours au rythme observé sur 30 jours.'
-          : 'Aucune consommation observée sur 30 jours : la couverture ne peut pas être calculée.' ?>
+          ? 'Couverture : ' . fmt_number($couverture) . ' jours de stock au rythme des 30 derniers jours.'
+          : 'Aucune consommation de films sur les 30 derniers jours : la couverture ne peut pas être calculée.' ?>
+      <?php if ($format_critique && $couverture !== null && $format_critique['jours'] < $couverture): ?>
+      Premier format épuisé : <?= h($format_critique['format']) ?>, dans
+      <?= fmt_number($format_critique['jours']) ?> jour(s).
+      <?php endif; ?>
       Perte : <?= number_format($taux_perte, 2, ',', ' ') ?> % des films sortis.
     </p>
     <?php if ($bob_series): ?>
