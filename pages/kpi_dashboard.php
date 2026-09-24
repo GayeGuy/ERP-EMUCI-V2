@@ -962,7 +962,9 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
     <p class="kc-n" style="margin:6px 0 0"><?= h(ucfirst($en_cours)) ?>.</p>
     <?php endif; ?>
     <div class="kp-sep"></div>
-    <div class="kp-st">Évolution — <?= h($serie_note) ?></div>
+    <?php /* Le titre dit la donnee tracee ; les periodes comparees sont dans
+             la legende, et le detail (jours ecoules) au survol. */ ?>
+    <div class="kp-st" title="<?= h(ucfirst($serie_note)) ?>">Évolution nombre de plaques posées</div>
     <?= kpi_courbe($serie_lbl, $serie_a, $serie_b,
                    $P['libelle'], $serie_b ? $C['libelle_b_long'] : '', 'plaques',
                    $serie_borne, $serie_borne_b) ?>
