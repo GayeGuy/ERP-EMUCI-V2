@@ -1,8 +1,8 @@
 # Cahier des charges — ERP EMUCI
 
 **Dépôt de référence** : GayeGuy/ERP-EMUCI-V2
-**Version du logiciel** : branche `main`, commit `6b268a6` (11 septembre 2026)
-**Version du cahier des charges** : 2.0
+**Version du logiciel** : branche `main`, commit `59e3b0d` (24 septembre 2026)
+**Version du cahier des charges** : 2.1
 **Objet** : établir ce que le système doit faire, pour qui, sous quelles
 contraintes, et à quoi se mesure qu'il le fait.
 
@@ -431,11 +431,13 @@ de tête, son détail et sa courbe d'évolution.
 **EF-KPI-1** — Les sept familles couvertes sont : Production, Bobines, PMMA,
 Rivets, Commandes, Équipements, Sites (production comparée et classement).
 
-**EF-KPI-2** — La production se lit sur **quatre échelles simultanées** — jour,
-semaine, mois, année — chacune comparée à la période précédente **à date
-égale**, et non sur la période complète : comparer un mois en cours à un mois
-échu entier produit une variation mécaniquement faussée par le nombre de jours
-écoulés.
+**EF-KPI-2** — Un bandeau « Aujourd'hui » lit la production sur **quatre
+échelles simultanées** — jour, semaine, mois, année — chacune comparée à la
+période précédente **à date égale**, et non sur la période complète : comparer
+un mois en cours à un mois échu entier produit une variation mécaniquement
+faussée par le nombre de jours écoulés. Ce bandeau est calé sur la date du
+jour, **indépendamment de la période choisie** dans les filtres, et étiqueté
+comme tel pour ne pas être confondu avec la comparaison de l'EF-KPI-9.
 
 **EF-KPI-3** — Le taux d'utilisation des bobines se calcule sur ce qui a
 **quitté** la bobine (différence entre dotation et reliquat), et non sur un
@@ -458,10 +460,43 @@ verrouillé sur son site. Une sélection de sites vide vaut « tout le
 périmètre ».
 
 **EF-KPI-7** — Un utilisateur peut **enregistrer une combinaison de filtres**
-comme vue nommée, personnelle ou partagée, et la supprimer — seul son
-propriétaire peut supprimer une vue, y compris partagée.
+— périmètre, période analysée et période de comparaison comprises — comme vue
+nommée, personnelle ou partagée, et la supprimer. Seul son propriétaire peut
+supprimer une vue, y compris partagée.
 
 **EF-KPI-8** — L'écran est protégé par le module `kpi_dashboard`, `can_read`.
+
+**EF-KPI-9** — L'utilisateur choisit la **période analysée (A)** et la
+**période de comparaison (B)**, de même granularité :
+
+| Comparer à | Période B |
+|---|---|
+| Période précédente (défaut) | La période juste avant A — sans aucun réglage |
+| Même période l'an dernier | A décalée d'un an (sans objet en annuel, où elle se confond avec la précédente) |
+| Période choisie | Un jour, une semaine, un mois ou une année libres |
+
+La semaine se choisit dans une liste (« S38 · 14/09 → 20/09 »), et non par un
+champ date : le choix porte sur une semaine, pas sur un jour.
+
+**EF-KPI-10** — Règle de durée :
+- en comparaison automatique (période précédente), si A est en cours, B est
+  arrêtée au même rang (1ᵉʳ → 24 août contre 1ᵉʳ → 24 septembre) ;
+- dès que l'utilisateur choisit lui-même B, les deux périodes sont comparées
+  **entières** ; si A est en cours, l'écran le signale ;
+- dans tous les cas, une **moyenne de plaques par jour écoulé** est affichée,
+  seule mesure juste quand les deux périodes n'ont pas la même durée.
+
+**EF-KPI-11** — Suivent la comparaison A/B : la production, les
+consommations de PMMA et de rivets, les commandes (taux de satisfaction et
+délai de B affichés), la courbe d'évolution et le classement des sites. Les
+stocks, le parc de bobines et les équipements restent des **photos de
+l'instant**, signalées « à ce jour » : la base ne conserve pas l'historique du
+stock.
+
+**EF-KPI-12** — Les consommations de PMMA et de rivets excluent les points en
+brouillon, comme la production : deux panneaux voisins comptent sur la même
+base. Un site sans production sur A mais actif sur B reste affiché au
+classement — c'est précisément ce qu'une comparaison doit faire voir.
 
 ### 5.9 Suivi des observations
 
@@ -753,6 +788,7 @@ La mise en service est acceptée lorsque les conditions suivantes sont réunies.
 | **CA-9** | La saisie du point journalier est utilisable sur téléphone | Parcours complet à 375 px |
 | **CA-10** | Chaque parcours est signé par un utilisateur de son métier | Quatre signataires désignés nominativement |
 | **CA-11** | Le tableau de bord KPI ouvre ses sept familles sans erreur, quel que soit le périmètre filtré | Un compte par rôle ayant accès au module `kpi_dashboard` |
+| **CA-11 bis** | Le tableau de bord KPI compare deux périodes choisies par l'utilisateur, dans les quatre granularités | Un mois contre un mois non consécutif, une semaine contre une autre, et le rapprochement avec un calcul direct en base |
 | **CA-12** | La simulation de stock répond aux deux cas d'usage du comité de pilotage sans écrire aucun stock réel | Comparaison du stock avant/après simulation |
 
 ---
@@ -812,3 +848,4 @@ ajustées dans les écrans de paramétrage avant la mise en service.**
 |---|---|---|
 | 1.0 | 21 septembre 2026 | Établissement initial, à partir du code au commit `437102d`. **Rédigé par erreur depuis le dépôt RUTHAXELLE/stockapp**, divergent de la référence depuis fin août 2026. Couvre les dix domaines, les seize rôles, les 106 tables et les quarante-deux identifiants de module contrôlés dans le code sur ce dépôt. |
 | 2.0 | 24 septembre 2026 | **Corrigé depuis le dépôt de référence GayeGuy/ERP-EMUCI-V2** (commit `6b268a6`). Ajout de cinq domaines fonctionnels absents de la v1.0 : tableau de bord KPI (§5.8), suivi des observations (§5.9), traçabilité des endommagements (§5.10), simulation & projection de stocks (§5.11), référentiels & capacités (§5.12). Volumétrie recalculée : 81 écrans, 114 tables, 57 identifiants de module. Écart EF-ADM-1 (modules Achats hors matrice) constaté résolu sur ce dépôt. |
+| 2.1 | 24 septembre 2026 | Tableau de bord KPI : comparaison de la période analysée à une période choisie — précédente, même période l'an dernier ou libre (EF-KPI-9) ; règle de durée à date égale en automatique, périodes entières au choix, moyenne par jour (EF-KPI-10) ; panneaux qui suivent la comparaison et photos de l'instant (EF-KPI-11) ; brouillons exclus des consommations PMMA/rivets, sites actifs sur B seulement conservés au classement (EF-KPI-12) ; bandeau « Aujourd'hui » (EF-KPI-2) ; critère CA-11 bis. |

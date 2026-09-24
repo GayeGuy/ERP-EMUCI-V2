@@ -1,8 +1,8 @@
 # Spécification fonctionnelle et technique — ERP EMUCI
 
 **Dépôt de référence** : GayeGuy/ERP-EMUCI-V2
-**Version du logiciel** : branche `main`, commit `6b268a6` (11 septembre 2026)
-**Version de la spécification** : 4.0
+**Version du logiciel** : branche `main`, commit `59e3b0d` (24 septembre 2026)
+**Version de la spécification** : 4.1
 **Objet** : décrire ce que le système est, comment il est construit, les
 règles qu'il applique et les limites qu'il porte.
 
@@ -21,7 +21,7 @@ règles qu'il applique et les limites qu'il porte.
 > exacte — ils sont partagés à l'identique entre les deux dépôts jusqu'à la
 > séparation. Cette version 4.0 corrige le dépôt de référence, met à jour la
 > volumétrie, et documente deux domaines propres à GayeGuy absents de la
-> v3.0 : le tableau de bord KPI (§8.4) et l'outil de simulation & projection
+> v3.0 : le tableau de bord KPI (§13.5) et l'outil de simulation & projection
 > de stocks (§9.6), ainsi que le suivi des observations (§8.3) et la
 > traçabilité des endommagements (§9.5).
 
@@ -149,7 +149,7 @@ site référençait une colonne inexistante : la page entière tombait.
 composite — un tableau de bord fait de blocs — doit être enveloppé. Le
 registre du tableau de bord le fait, et journalise l'échec plutôt que de le
 laisser remonter. Le tableau de bord KPI applique le même principe : chaque
-panneau (§8.4) calcule ses propres indicateurs indépendamment des six autres.
+panneau (§13.5) calcule ses propres indicateurs indépendamment des six autres.
 
 ### 2.4 Contrat des échanges dynamiques
 
@@ -1513,20 +1513,60 @@ courbe d'évolution.
 
 | Famille | Contenu |
 |---|---|
-| Production | Quatre échelles simultanées (jour/semaine/mois/année), chacune comparée à la période précédente **à date égale** |
-| Bobines | Actives, épuisées, retirées ; taux d'utilisation calculé sur le retiré (dotation − reliquat), pas sur un compteur alimenté par le seul point journalier ; détail par série |
-| PMMA | Stock par type, consommation par type sur la période, alertes de seuil avec le site concerné |
-| Rivets | Stock global, sites sous seuil, consommation comparée à la période précédente |
-| Commandes | Total, servies, en cours ; taux de satisfaction sur les six dernières périodes |
-| Équipements | Disponibles (`ok`, `neuf`, `bon`, `usage`), hors service, en maintenance, affectés |
-| Sites | Production comparée et classement, échelle ajustée à la durée réelle écoulée sur la période en cours |
+| Production | Plaques, engins et plaques par jour écoulé sur A, comparés à B ; bandeau « Aujourd'hui » à quatre échelles (jour/semaine/mois/année), calé sur la date du jour et comparé à la période précédente **à date égale** ; courbe d'évolution A contre B |
+| Bobines | Actives, épuisées, retirées ; taux d'utilisation calculé sur le retiré (dotation − reliquat), pas sur un compteur alimenté par le seul point journalier ; détail par série — photo de l'instant |
+| PMMA | Consommation sur A comparée à B, consommation par type sur A ; stock par type et alertes de seuil à ce jour |
+| Rivets | Consommation sur A comparée à B ; stock global et sites sous seuil à ce jour |
+| Commandes | Total, servies, en cours sur A ; taux de satisfaction et délai de B ; taux sur les six dernières périodes |
+| Équipements | Disponibles (`ok`, `neuf`, `bon`, `usage`), hors service, en maintenance, affectés — photo de l'instant |
+| Sites | Production par site sur A contre B et classement ; un site actif sur B seulement reste affiché |
+
+#### Période analysée (A) et période de comparaison (B)
+
+`periode_contexte()` fournit A (type et date choisis) ; `periode_comparaison()`
+(`includes/periode.php`) en dérive B selon le paramètre `cmp` :
+
+| `cmp` | Période B | Durée comparée |
+|---|---|---|
+| `precedente` (défaut) | La période juste avant A | **À date égale** si A est en cours : B est arrêtée au même rang (1ᵉʳ → 24 août contre 1ᵉʳ → 24 septembre) |
+| `an_prec` | A décalée d'un an — même semaine ISO l'année précédente, semaine 52 si la 53ᵉ n'existe pas ; le 29 février retombe au 28 | Périodes entières |
+| `choisie` | Libre, de même granularité : `jour_b`, `mois_b`, `annee_b` (en hebdomadaire, `jour_b` porte le lundi de la semaine) | Périodes entières |
+
+Toute valeur de B invalide retombe sur la période précédente. En annuel,
+`an_prec` se confond avec `precedente` et n'est pas proposé.
+
+Les indicateurs sont calculés sur des **intervalles de dates**
+(`date_point BETWEEN du AND au`, agrégats `FILTER`) et non plus par égalité
+de format (`TO_CHAR(date_point, 'YYYY-MM') = ?`) : une période arrêtée à date
+ou choisie librement ne s'exprime pas par une égalité de format.
+
+**Durées inégales.** Quand A et B n'ont pas la même durée — février contre
+mars, ou A en cours comparée entière — la tuile « plaques par jour » divise
+chaque total par ses **jours réellement écoulés** et reste comparable. En
+mensuel, l'axe de la courbe couvre le plus long des deux mois et chaque
+courbe s'arrête à son dernier jour.
+
+**Base de comptage commune.** Production, PMMA et rivets excluent tous les
+points en brouillon. Jusqu'au 24 septembre 2026, PMMA et rivets les
+incluaient : deux panneaux voisins ne comptaient pas sur la même base.
+
+**Sélecteur.** `periode_selecteur_comparaison()` rend le type, A, le mode et,
+en mode `choisie`, B. En hebdomadaire, une liste de semaines
+(« S38 · 14/09 → 20/09 ») remplace le champ date : `type=week` n'existe ni
+sous Firefox ni sous Safari. `periode_selecteur()`, utilisé par
+`pdg_overview.php`, est inchangé.
+
+> **Portage MySQL.** Les nouvelles requêtes emploient `FILTER (WHERE …)` et
+> `::date`, propres à PostgreSQL. Leur report sur la branche `vps-mysql`
+> demande une traduction (`SUM(CASE WHEN … THEN … END)`, `CAST(… AS DATE)`).
 
 > **Le biais de comparaison de périodes inégales, corrigé.** Comparer un mois
 > en cours (8 jours écoulés) à un mois précédent complet (31 jours) affichait
 > une variation de -72,7 % (2 070 contre 7 590) purement mécanique, alors
-> qu'à nombre de jours égal la production était stable (-0,5 %). Chaque
-> échelle compare désormais son cumul à date au cumul de la période
-> précédente arrêté au même rang.
+> qu'à nombre de jours égal la production était stable (-0,5 %). La
+> comparaison automatique compare désormais le cumul à date de A au cumul de
+> la période précédente arrêté au même rang ; une période choisie par
+> l'utilisateur est comparée entière, avec mention et moyenne par jour.
 
 > **Le taux de disponibilité des équipements, corrigé.** Ne compter comme
 > disponible que l'état `etat = 'ok'` affichait 0,0 % de disponibilité sur un
@@ -1538,7 +1578,8 @@ courbe d'évolution.
 **Périmètre et vues enregistrées.** Le filtre de sites accepte une sélection
 multiple, une sélection vide valant « tout le périmètre » ; le coordinateur
 de site reste verrouillé sur le sien. Un utilisateur peut enregistrer une
-combinaison de filtres comme **vue nommée** (table `vues_enregistrees`),
+combinaison de filtres — périodes A et B comprises — comme **vue nommée**
+(table `vues_enregistrees`),
 personnelle ou partagée ; seul son propriétaire peut la supprimer, même
 partagée. Le rafraîchissement au changement de filtre est animé, sans
 rechargement de page — le même moteur que `pdg_overview.php`.
@@ -1641,3 +1682,4 @@ Protégé par le module `referentiels_operations`, `can_read`.
 | 2.1 | 2026-08-30 | `5ecb558` | Dictionnaire des tables centrales ; schémas en SVG plutôt qu'en mermaid sur la page publiée |
 | 3.0 | 2026-09-21 | `437102d` (RUTHAXELLE/stockapp) | Remise à niveau sur 29 commits. **Corrigé** : Render/Neon est la recette et non la production (6.1) ; Dompdf n'est plus la seule dépendance (2.1) ; 106 tables ; compteurs de lignes du métier ; statuts d'inventaire et de session (9.4). **Ajouté** : verrouillage après cinq échecs (5.1), en-têtes de sécurité et cookie `Secure` derrière proxy (5.2, 5.3), contrôle d'accès à l'action et les cinq failles corrigées (5.7), numérotation atomique des documents (4.2), limites de téléversement du serveur (6.2), intégration continue de sécurité (6.5), sous-rôles Support IT et exception `demandes` (7.4), cinq modules hors matrice et piège de la liste recopiée (7.1), réécriture complète des inventaires (9.4) |
 | 4.0 | 2026-09-24 | `6b268a6` (GayeGuy/ERP-EMUCI-V2) | **Corrigé le dépôt de référence** : la v3.0 avait été établie depuis RUTHAXELLE/stockapp, divergent depuis fin août 2026. **Ajouté** : suivi des observations (8.3), traçabilité des endommagements (9.5), simulation & projection de stocks (9.6), tableau de bord KPI (13.5), référentiels & capacités (13.6), outil d'inventaire des migrations (6.3). **Corrigé** : 114 tables (3), 57 identifiants de module dont 56 exposés dans la matrice — l'écart des quatre modules Achats hors matrice ne se vérifie pas sur ce dépôt (7.1, 14.2) |
+| 4.1 | 2026-09-24 | `59e3b0d` (GayeGuy/ERP-EMUCI-V2) | Tableau de bord KPI : période de comparaison choisie par l'utilisateur — précédente, l'an dernier ou libre —, règle de durée, calcul par intervalles de dates, moyenne par jour, brouillons exclus de PMMA/rivets, sélecteur hebdomadaire en liste (13.5). **Corrigé** : deux renvois au tableau de bord KPI pointaient vers un §8.4 inexistant (13.5). |

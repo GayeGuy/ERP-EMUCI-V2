@@ -1,8 +1,8 @@
 # Manuel d'utilisation — ERP EMUCI
 
 **Dépôt de référence** : GayeGuy/ERP-EMUCI-V2
-**Version du logiciel** : branche `main`, commit `6b268a6` (11 septembre 2026)
-**Version du manuel** : 4.0
+**Version du logiciel** : branche `main`, commit `59e3b0d` (24 septembre 2026)
+**Version du manuel** : 4.1
 **Périmètre couvert** : 70 entrées de menu réparties sur 10 modules, les
 écrans hors menu, 16 rôles, 21 sites actifs
 
@@ -990,28 +990,73 @@ du tableau de bord du jour (11.1) et de la vue exécutive (11.2) : une lecture
 visuelle de **sept familles d'indicateurs**, chacune avec son chiffre de
 tête, son détail et sa courbe d'évolution.
 
+#### Choisir les deux périodes à comparer
+
+En haut de l'écran, quatre réglages se suivent :
+
+1. **Le type** : Journalier, Hebdomadaire, Mensuel ou Annuel.
+2. **La période analysée** : le jour, la semaine, le mois ou l'année qui vous
+   intéresse.
+3. **« Comparer à »** :
+   - **vs période précédente** — le réglage par défaut : septembre contre
+     août, la semaine 39 contre la semaine 38 ;
+   - **vs même période l'an dernier** — septembre 2026 contre septembre 2025
+     (non proposé en Annuel, où c'est la même chose que la période
+     précédente) ;
+   - **vs période choisie…** — fait apparaître un quatrième réglage.
+4. **La période de comparaison**, si vous l'avez choisie librement : par
+   exemple juin contre avril, ou la semaine 6 contre la semaine 12.
+
+Les semaines se choisissent dans une liste qui donne leurs dates
+(« S38 · 14/09 → 20/09 »).
+
+L'en-tête rappelle en permanence ce qui est comparé : « Juin 2026 · comparé à
+Avril 2026 ».
+
+> **Quand la période analysée n'est pas terminée.** Avec **« vs période
+> précédente »**, l'écran compare à nombre de jours égal : le 24 septembre,
+> septembre (24 jours) est comparé au 1ᵉʳ → 24 août, et l'en-tête l'indique.
+> Dès que vous choisissez vous-même la période de comparaison, les deux
+> périodes sont comparées **entières** : un message vous le rappelle, car une
+> période à moitié écoulée paraît forcément en baisse. Fiez-vous alors à la
+> tuile **« Plaques par jour »**, qui divise chaque total par ses jours
+> réellement écoulés et reste comparable — c'est aussi elle qu'il faut lire
+> pour comparer février (28 jours) à mars (31 jours).
+
+#### Ce que montre chaque famille
+
 | Famille | Ce qu'elle montre |
 |---|---|
-| **Production** | Jour, semaine, mois, année, côte à côte — chacune comparée à la même période l'échéance précédente, à date égale |
-| **Bobines** | Actives, épuisées, retirées ; taux d'utilisation réel ; détail par série |
-| **PMMA** | Stock par type, consommation, alertes de seuil avec le site concerné |
-| **Rivets** | Stock global, sites sous seuil, consommation comparée |
-| **Commandes** | Total, servies, en cours, taux de satisfaction sur six périodes |
-| **Équipements** | Disponibles, hors service, en maintenance, affectés |
-| **Sites** | Production comparée et classement |
+| **Production** | Plaques posées, engins traités et plaques par jour sur la période analysée, comparés à la période de comparaison ; courbe des deux périodes superposées |
+| **Bobines** | Actives, épuisées, retirées ; taux d'utilisation réel ; détail par série — **état à ce jour** |
+| **PMMA** | Consommation comparée entre les deux périodes, consommation par type ; stock et alertes de seuil **à ce jour** |
+| **Rivets** | Consommation comparée entre les deux périodes ; stock et sites sous seuil **à ce jour** |
+| **Commandes** | Total, servies, en cours ; taux de satisfaction et délai de la période de comparaison ; taux sur six périodes |
+| **Équipements** | Disponibles, hors service, en maintenance, affectés — **état à ce jour** |
+| **Sites** | Production par site sur les deux périodes, et classement |
 
-> **Pourquoi les comparaisons ne portent que sur la même durée écoulée.** Un
-> 8 septembre, comparer le mois en cours (8 jours) au mois précédent
-> complet (31 jours) affiche une chute de production qui n'existe pas : à
-> nombre de jours égal, la production est stable. Chaque échelle de temps
-> compare donc son cumul à date au cumul de la même période précédente,
-> arrêté au même jour.
+> **Pourquoi certains panneaux ne changent pas avec les périodes.** Le parc
+> de bobines, les stocks disponibles et les équipements sont des photos de
+> l'instant : l'application ne garde pas le stock de juin. Ils affichent donc
+> toujours la situation du jour, avec la mention « à ce jour ».
+
+> **Le bandeau « Aujourd'hui ».** Sous les chiffres de production, quatre
+> tuiles Jour, Semaine, Mois, Année donnent la situation **du jour même**,
+> quelle que soit la période choisie en haut : chacune compare son cumul à
+> date au même nombre de jours de la période précédente. C'est une lecture
+> rapide du présent, distincte de votre comparaison.
+
+> **Les brouillons ne comptent pas.** Les consommations de PMMA et de rivets,
+> comme la production, ne tiennent compte que des points journaliers soumis.
+> Un site qui n'a rien produit sur la période analysée mais avait produit sur
+> la période de comparaison reste au classement : c'est justement ce qu'une
+> comparaison doit faire voir.
 
 **Filtrer et enregistrer une vue.** Vous pouvez sélectionner un ou plusieurs
-sites (aucune sélection = tout votre périmètre) et la granularité
-temporelle, puis **enregistrer cette combinaison comme vue** — personnelle ou
-partagée avec d'autres. Seul vous pouvez supprimer une vue que vous avez
-créée, même partagée.
+sites (aucune sélection = tout votre périmètre) et les périodes, puis
+**enregistrer cette combinaison comme vue** — personnelle ou partagée avec
+d'autres. La vue retient aussi la période de comparaison. Seul vous pouvez
+supprimer une vue que vous avez créée, même partagée.
 
 Le coordinateur de site reste verrouillé sur son site, comme partout
 ailleurs.
@@ -1234,6 +1279,12 @@ Au bout de trois relances, elle passe au statut Escaladée, ce qui la rend
 plus visible pour le superviseur — mais c'est toujours lui qui doit la
 prendre en charge. Voir section 5.5.
 
+**Sur le Dashboard KPI, ma période en cours paraît en forte baisse.**
+Vous comparez probablement à une période choisie, donc entière : une période
+à moitié écoulée paraît forcément en baisse. Regardez la tuile « Plaques par
+jour », ou revenez à « vs période précédente », qui compare à nombre de
+jours égal. Voir section 11.4.
+
 **La simulation de stock affiche un résultat différent de ce que j'attendais.**
 Vérifiez d'abord les capacités de conditionnement dans Référentiels &
 capacités (section 12.8) : une capacité mal renseignée pour un format fausse
@@ -1284,6 +1335,7 @@ sensible des trois.
 | 2.4 | 2026-08-29 | `5ecb558` | Point journalier : quatre statuts, non deux — « en attente de validation » et « rejeté » manquaient |
 | 3.0 | 2026-09-21 | `437102d` (RUTHAXELLE/stockapp) | Verrouillage du compte après cinq erreurs (2.2) ; inventaires réécrits — la session est ouverte par l'administration, un coordinateur ne crée plus son inventaire (7.5) ; conséquences visibles des correctifs de droits : brouillon imprimable par son seul auteur, import EMUCI et signalement de panne en droit de création, affectations IT en droit de modification, écrans Demandes réellement filtrés ; limite de téléversement portée à 50 Mo |
 | 4.0 | 2026-09-24 | `6b268a6` (GayeGuy/ERP-EMUCI-V2) | **Corrigé le dépôt de référence** : la v3.0 avait été rédigée depuis RUTHAXELLE/stockapp, qui n'était plus la référence de `main` depuis fin août 2026. **Ajouté** : Suivi des observations (5.5), Traçabilité endommagements (7.6), Simulation & projection de stocks (7.7), Dashboard KPI (11.4), Référentiels & capacités (12.8). 70 entrées de menu, 56 modules gérés depuis Admin → Permissions (contre 37 précédemment documentés) |
+| 4.1 | 2026-09-24 | `59e3b0d` (GayeGuy/ERP-EMUCI-V2) | Dashboard KPI : choix libre de la période de comparaison, règle « à date égale » ou « périodes entières », tuile « Plaques par jour », bandeau « Aujourd'hui », panneaux « à ce jour » (11.4) ; nouvelle question fréquente |
 
 > **Tenir ce manuel à jour.** Il décrit l'état du logiciel au commit
 > indiqué. À chaque évolution fonctionnelle notable, mettez à jour la
