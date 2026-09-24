@@ -1,8 +1,8 @@
 # Spécification fonctionnelle et technique — ERP EMUCI
 
 **Dépôt de référence** : GayeGuy/ERP-EMUCI-V2
-**Version du logiciel** : branche `main`, commit `ab9f7ff` (24 septembre 2026)
-**Version de la spécification** : 4.2
+**Version du logiciel** : branche `main`, commit `2d9e32f` (24 septembre 2026)
+**Version de la spécification** : 4.3
 **Objet** : décrire ce que le système est, comment il est construit, les
 règles qu'il applique et les limites qu'il porte.
 
@@ -1101,6 +1101,24 @@ un zéro par défaut rendrait l'ouverture faussement indolore dans la
 simulation. La consommation de PMMA d'un nouveau site est projetée du même
 principe.
 
+#### Source de la consommation observée
+
+La consommation de films — moyenne globale, par site et par format — est
+calculée par `includes/consommation.php` sur `conso_source_bobines()`, qui
+additionne les deux chemins par lesquels des films quittent une bobine :
+
+| Chemin | Table | Films comptés |
+|---|---|---|
+| Point journalier, points soumis | `op_films_utilises` | Utilisés + endommagés |
+| Saisie manuelle (Opérations → Bobines) | `consommations_bobines` | Quantité saisie |
+
+Chaque chemin décrémente `films_restants` : leur somme ne compte rien deux
+fois. Jusqu'au 24 septembre 2026, seule la saisie manuelle était lue ; le
+point journalier n'y écrivant rien, la consommation observée valait zéro sur
+un parc géré par points journaliers et l'autonomie était surestimée.
+`conso_moy_bobine()`, qui alimente les jours restants des inventaires, lit
+encore la seule saisie manuelle.
+
 #### État de la page
 
 Tous les paramètres de simulation sont portés par les paramètres de l'URL :
@@ -1514,7 +1532,7 @@ courbe d'évolution.
 | Famille | Contenu |
 |---|---|
 | Production | Plaques, engins et plaques par jour écoulé sur A, comparés à B ; courbe d'évolution A contre B |
-| Bobines | Actives, épuisées, retirées ; taux d'utilisation calculé sur le retiré (dotation − reliquat), pas sur un compteur alimenté par le seul point journalier ; détail par série — photo de l'instant |
+| Bobines | Actives, épuisées, retirées ; taux d'utilisation calculé sur le retiré (dotation − reliquat), pas sur un compteur alimenté par le seul point journalier ; détail par série ; couverture en jours des bobines actives au rythme des 30 derniers jours, sur la sélection de sites, avec le premier format épuisé (consommation : voir 9.6) — photo de l'instant |
 | PMMA | Consommation sur A comparée à B, consommation par type sur A ; stock par type et alertes de seuil à ce jour |
 | Rivets | Consommation sur A comparée à B ; stock global et sites sous seuil à ce jour |
 | Commandes | Total, servies, en cours sur A ; taux de satisfaction et délai de B ; taux sur les six dernières périodes |
@@ -1692,3 +1710,4 @@ Protégé par le module `referentiels_operations`, `can_read`.
 | 4.0 | 2026-09-24 | `6b268a6` (GayeGuy/ERP-EMUCI-V2) | **Corrigé le dépôt de référence** : la v3.0 avait été établie depuis RUTHAXELLE/stockapp, divergent depuis fin août 2026. **Ajouté** : suivi des observations (8.3), traçabilité des endommagements (9.5), simulation & projection de stocks (9.6), tableau de bord KPI (13.5), référentiels & capacités (13.6), outil d'inventaire des migrations (6.3). **Corrigé** : 114 tables (3), 57 identifiants de module dont 56 exposés dans la matrice — l'écart des quatre modules Achats hors matrice ne se vérifie pas sur ce dépôt (7.1, 14.2) |
 | 4.1 | 2026-09-24 | `59e3b0d` (GayeGuy/ERP-EMUCI-V2) | Tableau de bord KPI : période de comparaison choisie par l'utilisateur — précédente, l'an dernier ou libre —, règle de durée, calcul par intervalles de dates, moyenne par jour, brouillons exclus de PMMA/rivets, sélecteur hebdomadaire en liste (13.5). **Corrigé** : deux renvois au tableau de bord KPI pointaient vers un §8.4 inexistant (13.5). |
 | 4.2 | 2026-09-24 | `ab9f7ff` (GayeGuy/ERP-EMUCI-V2) | Tableau de bord KPI : bandeau « Aujourd'hui » retiré, il doublait la comparaison et ignorait les filtres (13.5). |
+| 4.3 | 2026-09-24 | `2d9e32f` (GayeGuy/ERP-EMUCI-V2) | Consommation de films : points journaliers et saisie manuelle additionnés (9.6) ; couverture du tableau de bord KPI sur la sélection de sites, les bobines actives et le premier format épuisé (13.5). |

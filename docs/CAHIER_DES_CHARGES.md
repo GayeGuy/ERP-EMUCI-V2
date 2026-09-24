@@ -1,8 +1,8 @@
 # Cahier des charges — ERP EMUCI
 
 **Dépôt de référence** : GayeGuy/ERP-EMUCI-V2
-**Version du logiciel** : branche `main`, commit `ab9f7ff` (24 septembre 2026)
-**Version du cahier des charges** : 2.2
+**Version du logiciel** : branche `main`, commit `2d9e32f` (24 septembre 2026)
+**Version du cahier des charges** : 2.3
 **Objet** : établir ce que le système doit faire, pour qui, sous quelles
 contraintes, et à quoi se mesure qu'il le fait.
 
@@ -444,6 +444,12 @@ répétait la comparaison et ignorait la période choisie.
 compteur qui n'est alimenté que par le point journalier — un parc
 majoritairement issu d'import resterait sinon affiché à un taux proche de zéro.
 
+**EF-KPI-3 bis** — La **couverture** indique combien de jours le stock des
+bobines actives (les retirées exclues) tient au rythme des 30 derniers jours,
+sur la sélection de sites. Quand un format s'épuise avant la moyenne, il est
+nommé avec son échéance : un format ne remplace pas un autre. La consommation
+suit la règle RG-8.
+
 **EF-KPI-4** — Le taux de disponibilité du parc équipements compte comme
 disponibles les états `ok`, `neuf`, `bon` et `usage` — pas `ok` seul, qui sous-
 évaluait fortement un parc saisi en langage courant plutôt qu'en état
@@ -575,6 +581,9 @@ rendrait l'ouverture indolore dans la simulation.
 
 **EF-SIM-6** — Les paramètres de simulation sont portés par l'URL : la page
 est rejouable et partageable par lien, sans état à enregistrer.
+
+**EF-SIM-6 bis** — La consommation observée, globale comme par format, suit
+la règle RG-8 : points journaliers soumis et saisie manuelle.
 
 **EF-SIM-7** — L'écran est protégé par le module `simulation_stocks`,
 `can_read`.
@@ -770,6 +779,12 @@ un droit sans jamais en retirer, sauf intention explicite et documentée.
 projection (§5.11) est un calcul en lecture seule ; aucune de ses actions
 n'écrit dans les tables de stock.
 
+**RG-8 — La consommation de films compte toutes les sorties.** Les films
+quittent une bobine par le point journalier (films utilisés et endommagés,
+points soumis) ou par la saisie manuelle de consommation ; les deux
+décrémentent le stock et sont additionnés. La couverture du tableau de bord
+KPI et la simulation de stocks reposent sur cette consommation.
+
 ---
 
 ## 10. Critères d'acceptation
@@ -851,3 +866,4 @@ ajustées dans les écrans de paramétrage avant la mise en service.**
 | 2.0 | 24 septembre 2026 | **Corrigé depuis le dépôt de référence GayeGuy/ERP-EMUCI-V2** (commit `6b268a6`). Ajout de cinq domaines fonctionnels absents de la v1.0 : tableau de bord KPI (§5.8), suivi des observations (§5.9), traçabilité des endommagements (§5.10), simulation & projection de stocks (§5.11), référentiels & capacités (§5.12). Volumétrie recalculée : 81 écrans, 114 tables, 57 identifiants de module. Écart EF-ADM-1 (modules Achats hors matrice) constaté résolu sur ce dépôt. |
 | 2.1 | 24 septembre 2026 | Tableau de bord KPI : comparaison de la période analysée à une période choisie — précédente, même période l'an dernier ou libre (EF-KPI-9) ; règle de durée à date égale en automatique, périodes entières au choix, moyenne par jour (EF-KPI-10) ; panneaux qui suivent la comparaison et photos de l'instant (EF-KPI-11) ; brouillons exclus des consommations PMMA/rivets, sites actifs sur B seulement conservés au classement (EF-KPI-12) ; bandeau « Aujourd'hui » (EF-KPI-2) ; critère CA-11 bis. |
 | 2.2 | 24 septembre 2026 | Tableau de bord KPI : bandeau « Aujourd'hui » retiré — il doublait la comparaison et ignorait les filtres (EF-KPI-2). |
+| 2.3 | 24 septembre 2026 | Consommation de films calculée sur toutes les sorties, points journaliers compris (RG-8) : couverture du tableau de bord KPI (EF-KPI-3 bis) et simulation (EF-SIM-6 bis). Seule la saisie manuelle était lue jusque-là : la couverture restait incalculable sur un parc géré par points journaliers. |

@@ -1,8 +1,8 @@
 # Manuel d'utilisation — ERP EMUCI
 
 **Dépôt de référence** : GayeGuy/ERP-EMUCI-V2
-**Version du logiciel** : branche `main`, commit `ab9f7ff` (24 septembre 2026)
-**Version du manuel** : 4.2
+**Version du logiciel** : branche `main`, commit `2d9e32f` (24 septembre 2026)
+**Version du manuel** : 4.3
 **Périmètre couvert** : 70 entrées de menu réparties sur 10 modules, les
 écrans hors menu, 16 rôles, 21 sites actifs
 
@@ -535,6 +535,11 @@ Deux questions, choisies explicitement en haut de l'écran :
   d'un site existant, plutôt qu'un zéro qui rendrait l'ouverture faussement
   sans effet sur le stock.
 
+> **D'où vient la consommation observée.** Des films déclarés dans les
+> points journaliers soumis (utilisés et endommagés), plus les
+> consommations saisies à la main dans Opérations → Bobines. Un point resté
+> en brouillon ne compte pas.
+
 > **Le lien de la simulation se partage.** Tous les paramètres sont dans
 > l'adresse de la page : vous pouvez l'enregistrer ou l'envoyer à un
 > collègue, il retrouvera exactement le même scénario.
@@ -1030,7 +1035,7 @@ Avril 2026 ».
 | Famille | Ce qu'elle montre |
 |---|---|
 | **Production** | Plaques posées, engins traités et plaques par jour sur la période analysée, comparés à la période de comparaison ; courbe des deux périodes superposées |
-| **Bobines** | Actives, épuisées, retirées ; taux d'utilisation réel ; détail par série — **état à ce jour** |
+| **Bobines** | Actives, épuisées, retirées ; taux d'utilisation réel ; détail par série ; **couverture** : combien de jours le stock tient au rythme des 30 derniers jours, et le premier format qui s'épuisera — **état à ce jour** |
 | **PMMA** | Consommation comparée entre les deux périodes, consommation par type ; stock et alertes de seuil **à ce jour** |
 | **Rivets** | Consommation comparée entre les deux périodes ; stock et sites sous seuil **à ce jour** |
 | **Commandes** | Total, servies, en cours ; taux de satisfaction et délai de la période de comparaison ; taux sur six périodes |
@@ -1338,6 +1343,7 @@ sensible des trois.
 | 4.0 | 2026-09-24 | `6b268a6` (GayeGuy/ERP-EMUCI-V2) | **Corrigé le dépôt de référence** : la v3.0 avait été rédigée depuis RUTHAXELLE/stockapp, qui n'était plus la référence de `main` depuis fin août 2026. **Ajouté** : Suivi des observations (5.5), Traçabilité endommagements (7.6), Simulation & projection de stocks (7.7), Dashboard KPI (11.4), Référentiels & capacités (12.8). 70 entrées de menu, 56 modules gérés depuis Admin → Permissions (contre 37 précédemment documentés) |
 | 4.1 | 2026-09-24 | `59e3b0d` (GayeGuy/ERP-EMUCI-V2) | Dashboard KPI : choix libre de la période de comparaison, règle « à date égale » ou « périodes entières », tuile « Plaques par jour », bandeau « Aujourd'hui », panneaux « à ce jour » (11.4) ; nouvelle question fréquente |
 | 4.2 | 2026-09-24 | `ab9f7ff` (GayeGuy/ERP-EMUCI-V2) | Dashboard KPI : bandeau « Aujourd'hui » retiré ; comment afficher le jour, la semaine, le mois ou l'année en cours (11.4) |
+| 4.3 | 2026-09-24 | `2d9e32f` (GayeGuy/ERP-EMUCI-V2) | Couverture du panneau Bobines (11.4) et consommation observée de la simulation (7.7) calculées sur les points journaliers |
 
 > **Tenir ce manuel à jour.** Il décrit l'état du logiciel au commit
 > indiqué. À chaque évolution fonctionnelle notable, mettez à jour la
