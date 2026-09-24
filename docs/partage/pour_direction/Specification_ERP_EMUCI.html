@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Spécification fonctionnelle et technique — ERP EMUCI</title>
-<meta name="description" content="Spécification fonctionnelle et technique de l'ERP EMUCI, arrêté au commit 2b27766">
+<meta name="description" content="Spécification fonctionnelle et technique de l'ERP EMUCI, arrêté au commit ff9fc2c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
 <style>
+
 
 
 
@@ -232,6 +233,11 @@ h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
   color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
   border-bottom:2px solid var(--accent)}
 figure .mermaid{background:transparent}
+
+h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
+  border-bottom:2px solid var(--accent)}
+figure .mermaid{background:transparent}
 </style>
 </head>
 <body>
@@ -263,7 +269,7 @@ figure .mermaid{background:transparent}
 <p class="eyebrow">ERP EMUCI</p>
 <h1>Spécification fonctionnelle et technique — ERP EMUCI</h1>
 <p class="lede">Ce que le système est, les règles qu&#x27;il applique, et les limites qu&#x27;il porte.</p>
-<div class="meta"><span class="chip"><b>Version du logiciel</b> 24 septembre 2026</span><span class="chip"><b>Version de la spécification</b> 4.2</span><span class="chip"><b>Objet</b> décrire ce que le système est, comment il est construit, les</span></div>
+<div class="meta"><span class="chip"><b>Version du logiciel</b> 24 septembre 2026</span><span class="chip"><b>Version de la spécification</b> 4.3</span><span class="chip"><b>Objet</b> décrire ce que le système est, comment il est construit, les</span></div>
 </header>
 <div class="note note-info"><span class="note-t">Provenance</span><p> Établie par lecture du code source et interrogation de la
 base. Chaque chiffre et chaque règle cités sont vérifiables à l'endroit
@@ -1966,6 +1972,37 @@ site, la consommation moyenne d'un site existant est retenue par défaut :
 un zéro par défaut rendrait l'ouverture faussement indolore dans la
 simulation. La consommation de PMMA d'un nouveau site est projetée du même
 principe.</p>
+<h4>Source de la consommation observée</h4>
+<p>La consommation de films — moyenne globale, par site et par format — est
+calculée par <code>includes/consommation.php</code> sur <code>conso_source_bobines()</code>, qui
+additionne les deux chemins par lesquels des films quittent une bobine :</p>
+<div class="tw"><table>
+<thead>
+<tr>
+<th>Chemin</th>
+<th>Table</th>
+<th>Films comptés</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Point journalier, points soumis</td>
+<td><code>op_films_utilises</code></td>
+<td>Utilisés + endommagés</td>
+</tr>
+<tr>
+<td>Saisie manuelle (Opérations → Bobines)</td>
+<td><code>consommations_bobines</code></td>
+<td>Quantité saisie</td>
+</tr>
+</tbody>
+</table></div>
+<p>Chaque chemin décrémente <code>films_restants</code> : leur somme ne compte rien deux
+fois. Jusqu'au 24 septembre 2026, seule la saisie manuelle était lue ; le
+point journalier n'y écrivant rien, la consommation observée valait zéro sur
+un parc géré par points journaliers et l'autonomie était surestimée.
+<code>conso_moy_bobine()</code>, qui alimente les jours restants des inventaires, lit
+encore la seule saisie manuelle.</p>
 <h4>État de la page</h4>
 <p>Tous les paramètres de simulation sont portés par les paramètres de l'URL :
 la page est intégralement rejouable et partageable par lien, sans aucun état
@@ -2592,7 +2629,7 @@ courbe d'évolution.</p>
 </tr>
 <tr>
 <td>Bobines</td>
-<td>Actives, épuisées, retirées ; taux d'utilisation calculé sur le retiré (dotation − reliquat), pas sur un compteur alimenté par le seul point journalier ; détail par série — photo de l'instant</td>
+<td>Actives, épuisées, retirées ; taux d'utilisation calculé sur le retiré (dotation − reliquat), pas sur un compteur alimenté par le seul point journalier ; détail par série ; couverture en jours des bobines actives au rythme des 30 derniers jours, sur la sélection de sites, avec le premier format épuisé (consommation : voir 9.6) — photo de l'instant</td>
 </tr>
 <tr>
 <td>PMMA</td>
@@ -2850,6 +2887,11 @@ l'interface au même titre que les cinquante-deux autres (7.1).</p>
 <td>2026-09-24</td>
 <td>Tableau de bord KPI : bandeau « Aujourd'hui » retiré, il doublait la comparaison et ignorait les filtres (13.5).</td>
 </tr>
+<tr>
+<td>4.3</td>
+<td>2026-09-24</td>
+<td>Consommation de films : points journaliers et saisie manuelle additionnés (9.6) ; couverture du tableau de bord KPI sur la sélection de sites, les bobines actives et le premier format épuisé (13.5).</td>
+</tr>
 </tbody>
 </table></div>
 </section>
@@ -2859,7 +2901,7 @@ l'interface au même titre que les cinquante-deux autres (7.1).</p>
 <div class="impr-pied" style="margin-top:10mm;padding-top:4mm;border-top:1px solid #c3ccdf;
      font-size:9pt;color:#4d5876">
   Spécification fonctionnelle et technique — ERP EMUCI — document interne. État du logiciel au commit
-  <code>2b27766</code>. Toute évolution fonctionnelle rend une section caduque :
+  <code>ff9fc2c</code>. Toute évolution fonctionnelle rend une section caduque :
   vérifiez la version avant de vous y fier.
 </div>
 

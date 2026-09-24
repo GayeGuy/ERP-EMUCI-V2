@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cahier des charges — ERP EMUCI</title>
-<meta name="description" content="Cahier des charges de l'ERP EMUCI, arrêté au commit 2b27766">
+<meta name="description" content="Cahier des charges de l'ERP EMUCI, arrêté au commit ff9fc2c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
 <style>
+
 
 
 
@@ -232,6 +233,11 @@ h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
   color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
   border-bottom:2px solid var(--accent)}
 figure .mermaid{background:transparent}
+
+h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
+  border-bottom:2px solid var(--accent)}
+figure .mermaid{background:transparent}
 </style>
 </head>
 <body>
@@ -259,7 +265,7 @@ figure .mermaid{background:transparent}
 <p class="eyebrow">ERP EMUCI</p>
 <h1>Cahier des charges — ERP EMUCI</h1>
 <p class="lede">Ce que le système doit faire, pour qui, sous quelles contraintes, et à quoi se mesure qu&#x27;il le fait.</p>
-<div class="meta"><span class="chip"><b>Version du logiciel</b> 24 septembre 2026</span><span class="chip"><b>Version du cahier des charges</b> 2.2</span><span class="chip"><b>Objet</b> établir ce que le système doit faire, pour qui, sous quelles</span></div>
+<div class="meta"><span class="chip"><b>Version du logiciel</b> 24 septembre 2026</span><span class="chip"><b>Version du cahier des charges</b> 2.3</span><span class="chip"><b>Objet</b> établir ce que le système doit faire, pour qui, sous quelles</span></div>
 </header>
 <div class="note note-info"><span class="note-t">Provenance</span><p> Ce document est établi par lecture du code source, du
 schéma de base et de la configuration des menus. Il décrit le besoin <strong>tel
@@ -810,6 +816,11 @@ répétait la comparaison et ignorait la période choisie.</p>
 <strong>quitté</strong> la bobine (différence entre dotation et reliquat), et non sur un
 compteur qui n'est alimenté que par le point journalier — un parc
 majoritairement issu d'import resterait sinon affiché à un taux proche de zéro.</p>
+<p><strong>EF-KPI-3 bis</strong> — La <strong>couverture</strong> indique combien de jours le stock des
+bobines actives (les retirées exclues) tient au rythme des 30 derniers jours,
+sur la sélection de sites. Quand un format s'épuise avant la moyenne, il est
+nommé avec son échéance : un format ne remplace pas un autre. La consommation
+suit la règle RG-8.</p>
 <p><strong>EF-KPI-4</strong> — Le taux de disponibilité du parc équipements compte comme
 disponibles les états <code>ok</code>, <code>neuf</code>, <code>bon</code> et <code>usage</code> — pas <code>ok</code> seul, qui sous-
 évaluait fortement un parc saisi en langage courant plutôt qu'en état
@@ -945,6 +956,8 @@ moyenne d'un site existant est retenue par défaut, plutôt qu'un zéro qui
 rendrait l'ouverture indolore dans la simulation.</p>
 <p><strong>EF-SIM-6</strong> — Les paramètres de simulation sont portés par l'URL : la page
 est rejouable et partageable par lien, sans état à enregistrer.</p>
+<p><strong>EF-SIM-6 bis</strong> — La consommation observée, globale comme par format, suit
+la règle RG-8 : points journaliers soumis et saisie manuelle.</p>
 <p><strong>EF-SIM-7</strong> — L'écran est protégé par le module <code>simulation_stocks</code>,
 <code>can_read</code>.</p>
 <h3>5.12 Référentiels &amp; capacités</h3>
@@ -1170,6 +1183,11 @@ un droit sans jamais en retirer, sauf intention explicite et documentée.</p>
 <p><strong>RG-7 — Un outil de simulation ne modifie jamais un stock réel.</strong> La
 projection (§5.11) est un calcul en lecture seule ; aucune de ses actions
 n'écrit dans les tables de stock.</p>
+<p><strong>RG-8 — La consommation de films compte toutes les sorties.</strong> Les films
+quittent une bobine par le point journalier (films utilisés et endommagés,
+points soumis) ou par la saisie manuelle de consommation ; les deux
+décrémentent le stock et sont additionnés. La couverture du tableau de bord
+KPI et la simulation de stocks reposent sur cette consommation.</p>
 <hr>
 </section>
 <section id="s10"><h2><span class="n">10</span> Critères d&#x27;acceptation</h2>
@@ -1394,6 +1412,11 @@ ajustées dans les écrans de paramétrage avant la mise en service.</strong></p
 <td>24 septembre 2026</td>
 <td>Tableau de bord KPI : bandeau « Aujourd'hui » retiré — il doublait la comparaison et ignorait les filtres (EF-KPI-2).</td>
 </tr>
+<tr>
+<td>2.3</td>
+<td>24 septembre 2026</td>
+<td>Consommation de films calculée sur toutes les sorties, points journaliers compris (RG-8) : couverture du tableau de bord KPI (EF-KPI-3 bis) et simulation (EF-SIM-6 bis). Seule la saisie manuelle était lue jusque-là : la couverture restait incalculable sur un parc géré par points journaliers.</td>
+</tr>
 </tbody>
 </table></div>
 </section>
@@ -1403,7 +1426,7 @@ ajustées dans les écrans de paramétrage avant la mise en service.</strong></p
 <div class="impr-pied" style="margin-top:10mm;padding-top:4mm;border-top:1px solid #c3ccdf;
      font-size:9pt;color:#4d5876">
   Cahier des charges — ERP EMUCI — document interne. État du logiciel au commit
-  <code>2b27766</code>. Toute évolution fonctionnelle rend une section caduque :
+  <code>ff9fc2c</code>. Toute évolution fonctionnelle rend une section caduque :
   vérifiez la version avant de vous y fier.
 </div>
 

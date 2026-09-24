@@ -4,11 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Manuel d&#x27;utilisation — ERP EMUCI</title>
-<meta name="description" content="Manuel d&#x27;utilisation de l'ERP EMUCI, arrêté au commit 2b27766">
+<meta name="description" content="Manuel d&#x27;utilisation de l'ERP EMUCI, arrêté au commit ff9fc2c">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
 <style>
+
 
 
 
@@ -232,6 +233,11 @@ h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
   color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
   border-bottom:2px solid var(--accent)}
 figure .mermaid{background:transparent}
+
+h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
+  border-bottom:2px solid var(--accent)}
+figure .mermaid{background:transparent}
 </style>
 </head>
 <body>
@@ -263,7 +269,7 @@ figure .mermaid{background:transparent}
 <p class="eyebrow">ERP EMUCI</p>
 <h1>Manuel d&#x27;utilisation — ERP EMUCI</h1>
 <p class="lede">Comment se servir de l&#x27;application, écran par écran, selon son rôle.</p>
-<div class="meta"><span class="chip"><b>Version du logiciel</b> 24 septembre 2026</span><span class="chip"><b>Version du manuel</b> 4.2</span><span class="chip"><b>Périmètre couvert</b> 70 entrées de menu réparties sur 10 modules, les</span></div>
+<div class="meta"><span class="chip"><b>Version du logiciel</b> 24 septembre 2026</span><span class="chip"><b>Version du manuel</b> 4.3</span><span class="chip"><b>Périmètre couvert</b> 70 entrées de menu réparties sur 10 modules, les</span></div>
 </header>
 <div class="note note-info"><span class="note-t">Provenance de ce document</span><p> Il est établi à partir du code source, pas
 d'une session d'utilisation. La structure des menus, les rôles, les
@@ -903,7 +909,11 @@ filtrent librement par site, par période ou par cause.</p>
   d'un site existant, plutôt qu'un zéro qui rendrait l'ouverture faussement
   sans effet sur le stock.</li>
 </ul>
-<div class="note note-info"><span class="note-t">Le lien de la simulation se partage</span><p> Tous les paramètres sont dans
+<div class="note note-info"><span class="note-t">D'où vient la consommation observée</span><p> Des films déclarés dans les
+points journaliers soumis (utilisés et endommagés), plus les
+consommations saisies à la main dans Opérations → Bobines. Un point resté
+en brouillon ne compte pas.</p>
+<p><strong>Le lien de la simulation se partage.</strong> Tous les paramètres sont dans
 l'adresse de la page : vous pouvez l'enregistrer ou l'envoyer à un
 collègue, il retrouvera exactement le même scénario.</p>
 </div>
@@ -1612,7 +1622,7 @@ pour comparer février (28 jours) à mars (31 jours).</p>
 </tr>
 <tr>
 <td><strong>Bobines</strong></td>
-<td>Actives, épuisées, retirées ; taux d'utilisation réel ; détail par série — <strong>état à ce jour</strong></td>
+<td>Actives, épuisées, retirées ; taux d'utilisation réel ; détail par série ; <strong>couverture</strong> : combien de jours le stock tient au rythme des 30 derniers jours, et le premier format qui s'épuisera — <strong>état à ce jour</strong></td>
 </tr>
 <tr>
 <td><strong>PMMA</strong></td>
@@ -1967,6 +1977,11 @@ sensible des trois.</p>
 <td>2026-09-24</td>
 <td>Dashboard KPI : bandeau « Aujourd'hui » retiré ; comment afficher le jour, la semaine, le mois ou l'année en cours (11.4)</td>
 </tr>
+<tr>
+<td>4.3</td>
+<td>2026-09-24</td>
+<td>Couverture du panneau Bobines (11.4) et consommation observée de la simulation (7.7) calculées sur les points journaliers</td>
+</tr>
 </tbody>
 </table></div>
 <div class="note note-info"><span class="note-t">Tenir ce manuel à jour</span><p> Il décrit l'état du logiciel à la date
@@ -1981,7 +1996,7 @@ ne dit pas sur quelle version il porte ne vaut rien.</p>
 <div class="impr-pied" style="margin-top:10mm;padding-top:4mm;border-top:1px solid #c3ccdf;
      font-size:9pt;color:#4d5876">
   Manuel d&#x27;utilisation — ERP EMUCI — document interne. État du logiciel au commit
-  <code>2b27766</code>. Toute évolution fonctionnelle rend une section caduque :
+  <code>ff9fc2c</code>. Toute évolution fonctionnelle rend une section caduque :
   vérifiez la version avant de vous y fier.
 </div>
 
