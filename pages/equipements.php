@@ -409,7 +409,7 @@ include __DIR__ . '/../templates/header.php';
         $days_left = $e['date_fin_cycle'] ? (int)round((strtotime($e['date_fin_cycle'])-time())/86400) : null;
       ?>
         <tr style="<?= $e['etat']==='hs'?'background:#fff5f5':'' ?>">
-          <td style="font-weight:600;color:var(--navy)"><?= h(($e['numero_serie_interne']??'—') . (($e['marque']??'') ? ' — '.($e['marque']??'').' '.($e['modele']??'') : '')) ?></td>
+          <td style="font-weight:600;color:var(--navy)"><?= h($e['numero_serie_interne']??'—') ?></td>
           <td style="font-size:12px"><?= h($e['type_nom']??'—') ?></td>
           <td style="font-family:monospace;font-size:12px"><?= h($e['numero_serie_interne']??'—') ?></td>
           <td><?= h($e['site_nom']??'Non affecté') ?><?php if(!empty($e['emplacement'])): ?><div style="font-size:12px;color:var(--muted)"><?= h($e['emplacement']) ?></div><?php endif; ?></td>
