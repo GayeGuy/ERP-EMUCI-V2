@@ -491,6 +491,149 @@ $plaques_max = 0;
 foreach ($classement as $c)
     $plaques_max = max($plaques_max, (int)$c['plaques'], (int)$c['plaques_p']);
 
+// ── FIABILITÉ & PERTES — peut-on croire les autres panneaux ?
+// Tous reposent sur le point journalier : un site qui ne le soumet pas, ou
+// qui déclare autre chose que ce qu'enregistre la plateforme nationale,
+// fausse ses chiffres sans que rien ne le signale. Trois contrôles, chacun
+// repris de l'écran qui fait déjà foi pour lui.
+
+// 1. Sites sans point soumis au jour de référence.
+// Sites attendus : actifs, dans le périmètre, en mission ce jour-là et
+// détenant au moins une bobine active — la règle de
+// validation_stock_matin.php, pour que les deux écrans désignent les mêmes
+// sites. Le jour est celui de la vue journalière, aujourd'hui si la période
+// est en cours, sinon son dernier jour. Un point est « soumis » dès qu'il
+// n'est ni brouillon ni rejeté : un rejet est à reprendre, il ne compte pas.
+$jour_ref = $periode === 'journalier' ? $C['du_a']
+          : ($C['a_en_cours'] ? date('Y-m-d') : $C['au_a']);
+$saisie_sites = db_fetch_all(
+    "SELECT s.nom,
+            COUNT(p.id) FILTER (WHERE p.statut NOT IN ('brouillon','rejete'))  AS soumis,
+            COUNT(p.id) FILTER (WHERE p.statut = 'en_attente_validation')      AS attente,
+            COUNT(p.id) FILTER (WHERE p.statut = 'brouillon')                  AS brouillon,
+            COUNT(p.id) FILTER (WHERE p.statut = 'rejete')                     AS rejete
+       FROM sites s
+       LEFT JOIN op_points_journaliers p ON p.site_id = s.id AND p.date_point = ?::date
+      WHERE s.actif = 1 " . pref_clause_in('s.id', $sites_sel) . "
+        AND (s.date_debut_mission IS NULL OR s.date_debut_mission <= ?::date)
+        AND (s.date_fin_mission   IS NULL OR s.date_fin_mission   >= ?::date)
+        AND EXISTS (SELECT 1 FROM op_bobines b
+                     WHERE b.site_id = s.id AND b.statut IN ('en_cours','en_stock'))
+      GROUP BY s.id, s.nom
+      ORDER BY s.nom", [$jour_ref, $jour_ref, $jour_ref]);
+$saisie_attendus = count($saisie_sites);
+$saisie_manquants = [];
+$saisie_attente = 0;
+foreach ($saisie_sites as $s) {
+    $saisie_attente += (int)$s['attente'];
+    if ((int)$s['soumis'] > 0) continue;
+    $saisie_manquants[] = ['nom' => $s['nom'],
+        'etat' => (int)$s['rejete'] > 0 ? 'rejeté, à reprendre'
+                : ((int)$s['brouillon'] > 0 ? 'brouillon non soumis' : 'rien saisi')];
+}
+
+// 2. Rapprochement avec la plateforme nationale (EMUCI).
+// Même règle que pages/point_emuci.php : plaques « in_use » d'OptoPlate,
+// datées par leur jour d'installation, contre les plaques déclarées
+// (correction du gestionnaire comprise). La comparaison ne porte que sur
+// les jours couverts par un import : un jour sans import ferait passer
+// toute la production du site pour « non remontée ». Un site présent d'un
+// seul côté reste affiché — plaques déclarées mais absentes d'EMUCI, ou
+// l'inverse : c'est précisément l'écart à voir.
+$emuci_jours = (int) db_fetch_value(
+    "SELECT COUNT(DISTINCT date_installation::date) FROM import_optoplate
+      WHERE date_installation::date BETWEEN ?::date AND ?::date", [$C['du_a'], $C['au_a']]);
+$emuci_sites = [];
+$emuci_tot = 0; $emuci_decl = 0;
+if ($emuci_jours > 0) {
+    $emuci_sites = db_fetch_all(
+        "WITH j AS (SELECT DISTINCT date_installation::date AS d FROM import_optoplate
+                     WHERE date_installation::date BETWEEN ?::date AND ?::date),
+              e AS (SELECT o.site_id, COUNT(*) AS n FROM import_optoplate o
+                     WHERE o.statut_plaque = 'in_use' AND o.site_id IS NOT NULL
+                       AND o.date_installation::date IN (SELECT d FROM j)
+                     GROUP BY o.site_id),
+              d AS (SELECT p.site_id, SUM(COALESCE(p.correction_gp, p.total_plaques)) AS n
+                      FROM op_points_journaliers p
+                     WHERE p.statut <> 'brouillon' AND p.date_point IN (SELECT d FROM j)
+                     GROUP BY p.site_id)
+         SELECT s.nom, COALESCE(e.n,0) AS emuci, COALESCE(d.n,0) AS declare
+           FROM sites s
+           LEFT JOIN e ON e.site_id = s.id
+           LEFT JOIN d ON d.site_id = s.id
+          WHERE s.actif = 1 " . pref_clause_in('s.id', $sites_sel) . "
+            AND (e.n IS NOT NULL OR d.n IS NOT NULL)
+          ORDER BY ABS(COALESCE(e.n,0) - COALESCE(d.n,0)) DESC, s.nom",
+        [$C['du_a'], $C['au_a']]);
+    foreach ($emuci_sites as $r) { $emuci_tot += (int)$r['emuci']; $emuci_decl += (int)$r['declare']; }
+}
+$emuci_ecart = $emuci_tot - $emuci_decl;
+$emuci_en_ecart = array_values(array_filter($emuci_sites, fn($r) => (int)$r['emuci'] !== (int)$r['declare']));
+
+// 3. Films endommagés, rapportés aux films sortis.
+// Le taux global du panneau Bobines porte sur tout l'historique du parc et
+// masque qu'un site peut être à 2 % quand la moyenne est à 0,02 %. Ici :
+// la période, site par site. Sorties = conso_source_bobines() (point
+// journalier et saisie manuelle), pour compter sur la même base que la
+// couverture de stock ; endommagés = films déclarés au point journalier.
+function kpi_endommagements(string $du, string $au, array $sites_sel): array {
+    return db_fetch_all(
+        "SELECT s.nom, COALESCE(x.sortis,0) AS sortis, COALESCE(y.endo,0) AS endo
+           FROM sites s
+           LEFT JOIN (SELECT c.site_id, SUM(c.quantite) AS sortis
+                        FROM " . conso_source_bobines() . " c
+                       WHERE c.date_conso BETWEEN ?::date AND ?::date
+                       GROUP BY c.site_id) x ON x.site_id = s.id
+           LEFT JOIN (SELECT p.site_id, SUM(fu.films_endommages) AS endo
+                        FROM op_films_utilises fu
+                        JOIN op_points_journaliers p ON p.id = fu.point_id
+                       WHERE p.statut <> 'brouillon' AND p.date_point BETWEEN ?::date AND ?::date
+                       GROUP BY p.site_id) y ON y.site_id = s.id
+          WHERE s.actif = 1 " . pref_clause_in('s.id', $sites_sel) . "
+            AND (x.sortis IS NOT NULL OR y.endo IS NOT NULL)",
+        [$du, $au, $du, $au]);
+}
+$endo_sites = kpi_endommagements($C['du_a'], $C['au_a'], $sites_sel);
+$endo_n = 0; $endo_sortis = 0;
+foreach ($endo_sites as $r) { $endo_n += (int)$r['endo']; $endo_sortis += (int)$r['sortis']; }
+$endo_n_b = 0; $endo_sortis_b = 0;
+foreach (kpi_endommagements($C['du_b'], $C['au_b'], $sites_sel) as $r) {
+    $endo_n_b += (int)$r['endo']; $endo_sortis_b += (int)$r['sortis'];
+}
+$endo_taux   = $endo_sortis   > 0 ? $endo_n   / $endo_sortis   * 100 : null;
+$endo_taux_b = $endo_sortis_b > 0 ? $endo_n_b / $endo_sortis_b * 100 : null;
+// Sites les plus touchés, au taux et non au nombre : un gros site
+// endommage plus de films sans en perdre davantage en proportion.
+$endo_top = array_values(array_filter($endo_sites, fn($r) => (int)$r['endo'] > 0));
+usort($endo_top, function ($a, $b) {
+    $ta = (int)$a['sortis'] > 0 ? (int)$a['endo'] / (int)$a['sortis'] : INF;
+    $tb = (int)$b['sortis'] > 0 ? (int)$b['endo'] / (int)$b['sortis'] : INF;
+    return $tb <=> $ta ?: (int)$b['endo'] <=> (int)$a['endo'];
+});
+
+// Causes : la déclaration film par film (op_endommagements), saisie dans
+// le pop-up du point journalier. Mêmes libellés que
+// pages/tracabilite_endommagements.php. Tous les films endommagés ne sont
+// pas détaillés : la part restante est dite plutôt que tue.
+$ENDO_CAUSES = ['manipulation' => 'Manipulation incorrecte', 'defaut_materiel' => 'Défaut matériel',
+                'incident_externe' => 'Incident externe', 'autre' => 'Autre'];
+$ENDO_ETAPES = ['pose' => 'à la pose', 'impression' => "à l'impression", 'transport' => 'au transport',
+                'stockage' => 'au stockage', 'autre' => 'autre étape'];
+$endo_causes = []; $endo_etapes = []; $endo_detailles = 0;
+foreach (db_fetch_all(
+    "SELECT e.cause, e.etape, COUNT(*) AS n
+       FROM op_endommagements e
+       JOIN op_points_journaliers p ON p.id = e.point_id
+      WHERE p.statut <> 'brouillon' AND p.date_point BETWEEN ?::date AND ?::date
+        " . pref_clause_in('e.site_id', $sites_sel) . "
+      GROUP BY e.cause, e.etape", [$C['du_a'], $C['au_a']]) as $r) {
+    $endo_causes[$r['cause']] = ($endo_causes[$r['cause']] ?? 0) + (int)$r['n'];
+    $endo_etapes[$r['etape']] = ($endo_etapes[$r['etape']] ?? 0) + (int)$r['n'];
+    $endo_detailles += (int)$r['n'];
+}
+arsort($endo_causes); arsort($endo_etapes);
+$endo_non_detailles = max(0, $endo_n - $endo_detailles);
+
 // Ce que compare exactement l'ecran, dit une fois pour toutes les tuiles.
 // A date : B est arretee au meme rang que A, la mention le precise.
 // Entiere avec A en cours : A n'a pas la duree de B ; sans le dire, une
@@ -523,6 +666,11 @@ function kpi_var(float $c, float $p): ?float { return $p > 0 ? ($c - $p) / $p * 
 function kpi_pct(float $v): string {
     if ($v != 0 && abs($v) < 0.5) return '< 1 %';
     return number_format($v, 0, ',', ' ') . ' %';
+}
+
+/** Entier signé : « +12 », « −5 », « 0 ». Texte brut. */
+function kpi_signe(int $v): string {
+    return ($v > 0 ? '+' : ($v < 0 ? '−' : '')) . fmt_number(abs($v));
 }
 
 /**
@@ -859,6 +1007,31 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
 .kp-sep{height:1px;background:var(--border);margin:14px 0}
 .kp-st{font-size:0.75rem;font-weight:700;color:var(--muted);text-transform:uppercase;
   letter-spacing:.04em;margin-bottom:6px}
+
+/* ── Fiabilité & pertes ──────────────────────────────────────────
+   Pleine largeur, trois colonnes séparées d'un filet : trois contrôles
+   indépendants, lus côte à côte plutôt qu'empilés dans trois panneaux. */
+.kp--fia{grid-column:span 12}
+.kp-3c{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0}
+.kp-3c>div{padding:0 20px;min-width:0;display:flex;flex-direction:column}
+.kp-3c>div:first-child{padding-left:0}
+.kp-3c>div:last-child{padding-right:0}
+.kp-3c>div+div{border-left:1px solid var(--border)}
+@media(max-width:1000px){
+  .kp-3c{grid-template-columns:minmax(0,1fr)}
+  .kp-3c>div{padding:0}
+  .kp-3c>div+div{border-left:none;border-top:1px solid var(--border);padding-top:16px;margin-top:16px}
+}
+.kp-3c .ka{margin-top:auto}
+/* Libellés de causes longs et de longueurs inégales : une colonne fixe
+   aligne le départ des barres, que la colonne auto décalait d'une ligne à
+   l'autre. */
+.kp--fia .kb{grid-template-columns:minmax(0,150px) 1fr 36px}
+.kp-3c .kc-row{margin-bottom:12px}
+.kc-v small{font-size:0.875rem;font-weight:700;color:var(--muted);margin-left:2px}
+.ka-l span.neutre{color:var(--muted);font-weight:600}
+.kp-lien{font-size:0.75rem;font-weight:700;color:var(--primary-d);text-decoration:none;margin-top:8px}
+.kp-lien:hover{text-decoration:underline}
 
 /* ── Sélecteur à choix multiple et vues enregistrées ─────────────
    Vingt et un sites ne tiennent pas dans une rangée de pastilles : le
@@ -1238,6 +1411,146 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
       <div class="ka-ok"><i class="ph-fill ph-check-circle" aria-hidden="true"></i>
         Tous les sites sont au-dessus de leur seuil.</div>
       <?php endif; ?>
+    </div>
+  </section>
+
+  <!-- ══ FIABILITÉ & PERTES ══ -->
+  <section class="kp kp--fia" aria-labelledby="kp-fia">
+    <div class="kp-h">
+      <span class="kp-ic"><i class="ph ph-shield-check" aria-hidden="true"></i></span>
+      <h3 class="kp-t" id="kp-fia">Fiabilité &amp; pertes<em>saisie terrain, rapprochement EMUCI et films endommagés</em></h3>
+    </div>
+    <div class="kp-3c">
+
+      <?php /* ── 1. Saisie du point journalier ── */ ?>
+      <div>
+        <div class="kp-st">Saisie du point journalier</div>
+        <div class="kc-row">
+          <div class="kc">
+            <div class="kc-l">Sites sans point soumis</div>
+            <div class="kc-v"><?= count($saisie_manquants) ?><small>/ <?= $saisie_attendus ?></small></div>
+            <div class="kc-n"><?= $jour_ref === date('Y-m-d')
+                ? "aujourd'hui, à " . date('H\hi')
+                : 'le ' . h(fmt_date($jour_ref)) ?></div>
+          </div>
+          <div class="kc">
+            <div class="kc-l">À valider</div>
+            <div class="kc-v"><?= fmt_number($saisie_attente) ?></div>
+            <div class="kc-n">point(s) soumis, en attente du superviseur</div>
+          </div>
+        </div>
+        <div class="ka">
+          <?php if ($saisie_attendus === 0): ?>
+          <p class="kc-n" style="margin:0">Aucun site attendu ce jour-là : aucun site du périmètre ne détient de bobine active.</p>
+          <?php elseif ($saisie_manquants): ?>
+          <div class="ka-h"><i class="ph-fill ph-warning" aria-hidden="true"></i> À relancer</div>
+          <?php foreach (array_slice($saisie_manquants, 0, 6) as $m): ?>
+          <div class="ka-l"><b title="<?= h($m['nom']) ?>"><?= h($m['nom']) ?></b><span><?= h($m['etat']) ?></span></div>
+          <?php endforeach; ?>
+          <?php if (count($saisie_manquants) > 6): ?>
+          <div class="ka-l"><b>et <?= count($saisie_manquants) - 6 ?> autre(s)</b><span></span></div>
+          <?php endif; ?>
+          <?php else: ?>
+          <div class="ka-ok"><i class="ph-fill ph-check-circle" aria-hidden="true"></i>
+            Tous les sites attendus ont soumis leur point.</div>
+          <?php endif; ?>
+        </div>
+        <p class="kc-n" style="margin:6px 0 0">Sites attendus : en mission et détenant au moins une bobine active.</p>
+      </div>
+
+      <?php /* ── 2. Rapprochement EMUCI ── */ ?>
+      <div>
+        <div class="kp-st">Rapprochement EMUCI</div>
+        <?php if ($emuci_jours === 0): ?>
+        <p class="kvide" style="margin-top:0">Aucun import OptoPlate sur la période
+          (<?= h(mb_strtolower($P['libelle'])) ?>) : pas de rapprochement possible.</p>
+        <?php else: ?>
+        <div class="kc-row">
+          <div class="kc">
+            <div class="kc-l">Écart EMUCI − déclaré</div>
+            <div class="kc-v"><?= h(kpi_signe($emuci_ecart)) ?></div>
+            <div class="kc-n"><?= $emuci_tot > 0
+                ? h(kpi_pct(abs($emuci_ecart) / $emuci_tot * 100)) . ' des plaques EMUCI'
+                : 'aucune plaque EMUCI' ?></div>
+          </div>
+          <div class="kc">
+            <div class="kc-l" title="Plaques EMUCI / plaques déclarées">EMUCI / déclarées</div>
+            <div class="kc-v sm"><?= fmt_number($emuci_tot) ?><small>/ <?= fmt_number($emuci_decl) ?></small></div>
+            <div class="kc-n">sur <?= $emuci_jours ?> jour(s) couvert(s) par un import</div>
+          </div>
+        </div>
+        <div class="ka">
+          <?php if ($emuci_en_ecart): ?>
+          <div class="ka-h"><i class="ph-fill ph-warning" aria-hidden="true"></i>
+            <?= count($emuci_en_ecart) ?> site(s) en écart</div>
+          <?php foreach (array_slice($emuci_en_ecart, 0, 5) as $r): $d = (int)$r['emuci'] - (int)$r['declare']; ?>
+          <div class="ka-l" title="EMUCI <?= (int)$r['emuci'] ?> · déclaré <?= (int)$r['declare'] ?>">
+            <b><?= h($r['nom']) ?></b><span><?= h(kpi_signe($d)) ?></span></div>
+          <?php endforeach; ?>
+          <?php if (count($emuci_en_ecart) > 5): ?>
+          <div class="ka-l"><b>et <?= count($emuci_en_ecart) - 5 ?> autre(s)</b><span></span></div>
+          <?php endif; ?>
+          <?php else: ?>
+          <div class="ka-ok"><i class="ph-fill ph-check-circle" aria-hidden="true"></i>
+            Déclarations conformes à EMUCI sur les jours couverts.</div>
+          <?php endif; ?>
+        </div>
+        <p class="kc-n" style="margin:6px 0 0">« + » : plaques posées selon EMUCI mais non déclarées ;
+          « − » : déclarées mais absentes d'EMUCI.</p>
+        <?php endif; ?>
+        <?php if (can('point_emuci', 'can_read')): ?>
+        <a class="kp-lien" href="point_emuci.php">Détail jour par jour →</a>
+        <?php endif; ?>
+      </div>
+
+      <?php /* ── 3. Films endommagés ── */ ?>
+      <div>
+        <div class="kp-st">Films endommagés</div>
+        <div class="kc-row">
+          <div class="kc">
+            <div class="kc-l">Taux d'endommagement</div>
+            <div class="kc-v"><?= $endo_taux !== null ? h(kpi_pct($endo_taux)) : '—' ?></div>
+            <?= ($endo_taux !== null && $endo_taux_b !== null) ? kpi_delta(kpi_var($endo_taux, $endo_taux_b), 'bas') : '' ?>
+            <div class="kc-n"><?= fmt_number($endo_n) ?> film(s) sur <?= fmt_number($endo_sortis) ?> sorti(s)
+              · vs <?= h($C['libelle_b']) ?> : <?= $endo_taux_b !== null ? h(kpi_pct($endo_taux_b)) : '—' ?></div>
+          </div>
+        </div>
+        <?php if ($endo_causes): $mx = max($endo_causes); ?>
+        <div class="kp-st">Causes déclarées</div>
+        <?php $i = 0; foreach ($endo_causes as $cause => $n): $i++; ?>
+        <div class="kb">
+          <span class="kb-n"><?= h($ENDO_CAUSES[$cause] ?? $cause) ?></span>
+          <span class="kb-t"><i class="c<?= (($i - 1) % 4) + 1 ?>" style="width:<?= round($n / $mx * 100, 1) ?>%"></i></span>
+          <span class="kb-v"><?= fmt_number($n) ?></span>
+        </div>
+        <?php endforeach; ?>
+        <p class="kc-n" style="margin:4px 0 0">
+          Le plus souvent <?= h($ENDO_ETAPES[array_key_first($endo_etapes)] ?? array_key_first($endo_etapes)) ?>.
+          <?= $endo_non_detailles > 0 ? fmt_number($endo_non_detailles) . ' film(s) déclaré(s) sans détail de cause.' : '' ?>
+        </p>
+        <?php elseif ($endo_n > 0): ?>
+        <p class="kc-n" style="margin:0">Aucune cause détaillée pour ces <?= fmt_number($endo_n) ?> film(s).</p>
+        <?php endif; ?>
+        <div class="ka">
+          <?php if ($endo_top): ?>
+          <div class="ka-h"><i class="ph-fill ph-warning" aria-hidden="true"></i> Sites les plus touchés</div>
+          <?php foreach (array_slice($endo_top, 0, 4) as $r): ?>
+          <div class="ka-l" title="<?= (int)$r['endo'] ?> film(s) endommagé(s) sur <?= (int)$r['sortis'] ?> sorti(s)">
+            <b><?= h($r['nom']) ?></b>
+            <span><?= (int)$r['sortis'] > 0
+                ? h(kpi_pct((int)$r['endo'] / (int)$r['sortis'] * 100)) . ' · ' . fmt_number((int)$r['endo'])
+                : fmt_number((int)$r['endo']) . ' film(s)' ?></span></div>
+          <?php endforeach; ?>
+          <?php else: ?>
+          <div class="ka-ok"><i class="ph-fill ph-check-circle" aria-hidden="true"></i>
+            Aucun film endommagé sur la période.</div>
+          <?php endif; ?>
+        </div>
+        <?php if (can('tracabilite_endommagements', 'can_read')): ?>
+        <a class="kp-lien" href="tracabilite_endommagements.php?du=<?= h($C['du_a']) ?>&amp;au=<?= h($C['au_a']) ?>">Traçabilité film par film →</a>
+        <?php endif; ?>
+      </div>
+
     </div>
   </section>
 
