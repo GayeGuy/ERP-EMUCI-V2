@@ -515,6 +515,17 @@ if ($C['a_date']) {
 function kpi_var(float $c, float $p): ?float { return $p > 0 ? ($c - $p) / $p * 100 : null; }
 
 /**
+ * Pourcentage affiché en entier, sans virgule (demande métier). Une valeur
+ * non nulle qui s'arrondirait à 0 s'écrit « < 1 % » : une perte de 0,02 %
+ * affichée « 0 % » laisserait croire qu'il n'y en a aucune.
+ * Renvoie du texte brut : l'échapper avec h() à l'affichage.
+ */
+function kpi_pct(float $v): string {
+    if ($v != 0 && abs($v) < 0.5) return '< 1 %';
+    return number_format($v, 0, ',', ' ') . ' %';
+}
+
+/**
  * Delta signe. $sens = 'haut' quand une hausse est favorable, 'bas'
  * quand c'est une baisse qui l'est (pertes, pannes, delais) : sans cela
  * une fleche verte signalerait une degradation.
@@ -525,8 +536,9 @@ function kpi_delta(?float $var, string $sens = 'haut'): string {
     $bon = $hausse ? ($sens === 'haut') : ($baisse ? ($sens === 'bas') : null);
     $cls = $bon === null ? 'neutre' : ($bon ? 'bon' : 'mauvais');
     $fl  = $hausse ? '&#9650;' : ($baisse ? '&#9660;' : '=');
+    // Sans hausse ni baisse significative, « = 0 % » plutôt que « = < 1 % ».
     return '<span class="kd ' . $cls . '">' . $fl . ' '
-         . number_format(abs($var), 1, ',', ' ') . ' %</span>';
+         . (($hausse || $baisse) ? h(kpi_pct(abs($var))) : '0 %') . '</span>';
 }
 
 /**
@@ -627,6 +639,13 @@ if (!$sites_sel) {
 } else {
     $perimetre_lbl = count($sites_sel) . ' sites sur ' . count($sites_list);
 }
+// Libellé du bouton de sélection, mêmes règles que msTexte() côté JS. Écrit
+// par le serveur : après « Appliquer », la barre est remplacée sans
+// rechargement (templates/dash_anim.php) et le script d'initialisation ne
+// repasse pas — le bouton restait vide.
+$sites_btn_lbl = (!$sites_sel || count($sites_sel) === count($sites_list)) ? 'Tous les sites'
+               : (count($sites_sel) === 1 ? ($noms_sites[$sites_sel[0]] ?? 'un site')
+               : count($sites_sel) . ' sites sur ' . count($sites_list));
 
 // « Filtres memorises » n'est affiche que si la page a effectivement
 // repris une preference, et non a chaque fois qu'une preference existe :
@@ -918,7 +937,7 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
     <?php if (!$is_coord): ?>
     <div class="ms" id="msSites" data-dash-nofiltre>
       <button type="button" class="ms-b" onclick="msOuvrir(this)" aria-expanded="false">
-        <span class="ms-t"></span><i class="ph ph-caret-down" aria-hidden="true"></i>
+        <span class="ms-t"><?= h($sites_btn_lbl) ?></span><i class="ph ph-caret-down" aria-hidden="true"></i>
       </button>
       <div class="ms-p">
         <div class="ms-h">
@@ -1035,8 +1054,8 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
     </div>
     <div class="kp-ring">
       <?= kpi_anneau([['Utilisé', $taux_util, 's1'], ['Restant', 100 - $taux_util, '']],
-                     number_format($taux_util, 1, ',', ' ') . ' %', "d'utilisation",
-                     'Taux d\'utilisation ' . number_format($taux_util, 1, ',', ' ') . ' %') ?>
+                     kpi_pct($taux_util), "d'utilisation",
+                     'Taux d\'utilisation ' . kpi_pct($taux_util)) ?>
       <div class="kp-lg">
         <div><u class="s1"></u>Actives<b><?= fmt_number((int)($bob['actives'] ?? 0)) ?></b></div>
         <div><u class="s3"></u>Épuisées<b><?= fmt_number((int)($bob['epuisees'] ?? 0)) ?></b></div>
@@ -1052,7 +1071,7 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
       Premier format épuisé : <?= h($format_critique['format']) ?>, dans
       <?= fmt_number($format_critique['jours']) ?> jour(s).
       <?php endif; ?>
-      Perte : <?= number_format($taux_perte, 2, ',', ' ') ?> % des films sortis.
+      Perte : <?= h(kpi_pct($taux_perte)) ?> des films sortis.
     </p>
     <?php if ($bob_series): ?>
     <div class="kp-sep"></div>
@@ -1122,12 +1141,12 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
     <div class="kc-row">
       <div class="kc">
         <div class="kc-l">Taux de satisfaction</div>
-        <div class="kc-v"><?= $cmd_total > 0 ? number_format($taux_service, 1, ',', ' ') . ' %' : '—' ?></div>
+        <div class="kc-v"><?= $cmd_total > 0 ? h(kpi_pct($taux_service)) : '—' ?></div>
         <div class="kc-n"><?= $cmd_total > 0
             ? (int)$cmd['servies'] . ' servie(s) sur ' . $cmd_total
             : 'aucune commande sur la période' ?>
           · vs <?= h($C['libelle_b']) ?> : <?= $taux_service_b !== null
-            ? number_format($taux_service_b, 1, ',', ' ') . ' %' : '—' ?></div>
+            ? h(kpi_pct($taux_service_b)) : '—' ?></div>
       </div>
       <div class="kc">
         <div class="kc-l">Délai moyen</div>
@@ -1156,7 +1175,7 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
     <div class="kc-row">
       <div class="kc">
         <div class="kc-l">Disponibilité</div>
-        <div class="kc-v"><?= $eq_total > 0 ? number_format($dispo, 1, ',', ' ') . ' %' : '—' ?></div>
+        <div class="kc-v"><?= $eq_total > 0 ? h(kpi_pct($dispo)) : '—' ?></div>
         <div class="kc-n"><?= $eq_total > 0 ? fmt_number($eq_hs) . ' hors service' : 'aucun équipement actif' ?></div>
       </div>
       <div class="kc">
