@@ -69,8 +69,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $garde = [];
         foreach (['periode','mois','jour','annee','cmp','mois_b','jour_b','annee_b'] as $k)
             if (isset($brut[$k]) && is_scalar($brut[$k])) $garde[$k] = (string)$brut[$k];
+        // Une liste vide se garde comme sites[]=0 : absente de l'URL, elle
+        // laisserait la sélection mémorisée s'appliquer à l'ouverture de la vue.
         if (isset($brut['sites']) && is_array($brut['sites']))
-            $garde['sites'] = array_values(array_filter(array_map('intval', $brut['sites'])));
+            $garde['sites'] = array_values(array_filter(array_map('intval', $brut['sites']))) ?: [0];
         try {
             db_query("INSERT INTO vues_enregistrees (user_id, ecran, nom, filtres, partagee)
                       VALUES (?,?,?,?,?)
@@ -115,9 +117,21 @@ $sites_ids  = array_map(fn($s) => (int)$s['id'], $sites_list);
 //
 // Le coordinateur reste force sur son site : c'est impose par son role,
 // pas choisi, et sa preference ne doit pas pouvoir l'elargir.
+//
+// « Tous les sites » doit pouvoir se choisir explicitement. Sans valeur dans
+// l'URL, pref_filtre() retombe sur la sélection mémorisée : décocher toutes
+// les cases ramenait donc les sites choisis la fois précédente. Le
+// formulaire envoie toujours sites[]=0 (ignoré par pref_liste_ids) pour que
+// la liste ne soit jamais absente, et une liste complète vaut « tous » :
+// un site ouvert plus tard y entrera sans resaisie.
+$sites_url = $_GET['sites'] ?? null;
+if (is_array($sites_url)) {
+    $ids_url = pref_liste_ids($sites_url, $sites_ids);
+    if ($ids_url !== null && count($ids_url) === count($sites_ids)) $sites_url = [0];
+}
 $sites_sel = $site_force ? [$site_force] : pref_filtre(
     'kpi_dashboard.sites',
-    $_GET['sites'] ?? null,
+    $sites_url,
     fn($v) => pref_liste_ids($v, $sites_ids),
     []);
 
@@ -908,13 +922,19 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
       </button>
       <div class="ms-p">
         <div class="ms-h">
-          <button type="button" onclick="msTout(this,0)">Tous les sites</button>
+          <button type="button" onclick="msTout(this,1)">Tous les sites</button>
+          <button type="button" onclick="msTout(this,0)">Aucun</button>
           <span class="ms-c"><?= count($sites_list) ?> sites</span>
         </div>
+        <?php /* Toujours envoyé : sans lui, « aucune case » n'apporte rien
+                 dans l'URL et la sélection mémorisée reprend la main. */ ?>
+        <input type="hidden" name="sites[]" value="0">
         <?php foreach ($sites_list as $s): $i = (int)$s['id']; ?>
         <label class="ms-i">
+          <?php /* Tout le périmètre s'affiche tout coché : c'est ce qu'il
+                   veut dire, et une liste vide laissait croire à un bug. */ ?>
           <input type="checkbox" name="sites[]" value="<?= $i ?>"
-                 <?= in_array($i, $sites_sel, true) ? 'checked' : '' ?> onchange="msMaj(this)">
+                 <?= (!$sites_sel || in_array($i, $sites_sel, true)) ? 'checked' : '' ?> onchange="msMaj(this)">
           <span><?= h($s['nom']) ?></span>
         </label>
         <?php endforeach; ?>
@@ -1267,7 +1287,8 @@ function msTexte(dd){
   c.forEach(function(x){
     if (x.checked) pris.push(x.parentElement.querySelector('span').textContent.trim());
   });
-  t.textContent = pris.length === 0 ? 'Tous les sites'
+  // Aucune case et toutes les cases veulent dire la même chose.
+  t.textContent = (pris.length === 0 || pris.length === c.length) ? 'Tous les sites'
                 : pris.length === 1 ? pris[0]
                 : pris.length + ' sites sur ' + c.length;
 }
@@ -1356,6 +1377,14 @@ function vueEnregistrer(){
   // exclu : il n'a de sens que pour la memorisation automatique.
   var d = new FormData(document.getElementById('kpiForm'));
   d.delete(MARQUEUR_INTERACTION);
+  // Tout le périmètre s'enregistre comme tel (sites[]=0), pas comme la liste
+  // des sites du jour : la vue suivra les ouvertures de sites.
+  var cases = document.querySelectorAll('#msSites input[type=checkbox]');
+  var prises = document.querySelectorAll('#msSites input[type=checkbox]:checked');
+  if (cases.length && (prises.length === 0 || prises.length === cases.length)) {
+    d.delete('sites[]');
+    d.append('sites[]', '0');
+  }
   vuePost({ action: 'vue_creer', nom: nom,
             filtres: new URLSearchParams(d).toString(),
             partagee: document.getElementById('vuePartage').checked ? 1 : '' },
