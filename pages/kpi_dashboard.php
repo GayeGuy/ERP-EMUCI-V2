@@ -1106,6 +1106,10 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
     <?php /* Le marqueur distingue une action de l'utilisateur d'un lien
              reçu : seule la première mémorise ses filtres. */ ?>
     <input type="hidden" name="<?= MARQUEUR_INTERACTION ?>" value="1">
+    <?php /* Toucher un filtre fait sortir de la vue enregistrée : sans ce champ
+             vide, ?vue=… restait dans l'adresse et le bouton « Vues » gardait
+             le nom d'une vue dont les filtres n'étaient plus ceux affichés. */ ?>
+    <input type="hidden" name="vue" value="">
 
     <?php if (!$is_coord): ?>
     <div class="ms" id="msSites" data-dash-nofiltre>
