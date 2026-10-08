@@ -218,6 +218,15 @@ function can(string $module, string $droit = 'can_read'): bool {
         if ($droit !== 'can_read') return false;
     }
 
+    // Surcharge individuelle (Admin → Permissions compte) : ne s'applique
+    // qu'au fallback générique role→permissions ci-dessous. Les branches
+    // spéciales au-dessus (inventaire_sessions, N+1, support_it,
+    // gestionnaire_operation) retournent déjà leur propre résultat avant
+    // d'arriver ici et ne doivent jamais être court-circuitées par une
+    // exception de compte.
+    $override = _user_permission_override((int)$user['id'], $module, $droit);
+    if ($override !== null) return $override;
+
     return _check_permission_db($user['role_id'], $module, $droit);
 }
 
@@ -271,6 +280,31 @@ function _check_permission_db(int $role_id, string $module, string $droit): bool
             "SELECT $droit FROM permissions WHERE role_id=? AND module=?",
             [$role_id, $module]
         );
+    }
+    return $cache[$key];
+}
+
+/**
+ * Surcharge de permission posee sur le compte individuel (table
+ * user_permissions), au-dela du role. Retourne null si aucune ligne
+ * n'existe pour ce module ou si la colonne est NULL (= pas de surcharge,
+ * le droit du role s'applique tel quel) ; sinon true/false, qui prime sur
+ * _check_permission_db().
+ */
+function _user_permission_override(int $user_id, string $module, string $droit): ?bool {
+    static $allowed = ['can_read','can_create','can_update','can_delete','can_export'];
+    static $cache   = [];
+    if (!in_array($droit, $allowed, true)) return null;
+    $key = "$user_id:$module:$droit";
+    if (!array_key_exists($key, $cache)) {
+        $val = db_fetch_value(
+            "SELECT $droit FROM user_permissions WHERE user_id=? AND module=?",
+            [$user_id, $module]
+        );
+        // db_fetch_value (includes/db.php) renvoie null aussi bien si aucune
+        // ligne n'existe que si la colonne vaut NULL — les deux cas
+        // signifient "pas de surcharge, hérite du rôle", un seul test suffit.
+        $cache[$key] = $val === null ? null : (bool)$val;
     }
     return $cache[$key];
 }
