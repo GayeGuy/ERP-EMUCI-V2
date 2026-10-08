@@ -302,7 +302,7 @@ $role_palette = ['#1B75BC','#E67E22','#27AE60','#8E44AD','#C0392B','#16A085','#B
             <button class="btn btn-secondary btn-sm" onclick="editU(<?= $r['id'] ?>)" title="Modifier"><i class="ph ph-pencil-simple" aria-hidden="true"></i></button>
             <button class="btn btn-secondary btn-sm" onclick="resetPwd(<?= $r['id'] ?>,'<?= h($r['prenom'].' '.$r['nom']) ?>')" title="Reset MDP"><i class="ph ph-key" aria-hidden="true"></i></button>
             <?php if($user['role_slug']==='superadmin' && !in_array($r['role_slug'], ['admin','superadmin'])): ?>
-            <a class="btn btn-secondary btn-sm" href="user_permissions.php?user_id=<?= $r['id'] ?>" title="Permissions spécifiques"><i class="ph ph-shield-star" aria-hidden="true"></i></a>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="location.href='user_permissions.php?user_id=<?= $r['id'] ?>'" title="Permissions spécifiques"><i class="ph ph-shield-star" aria-hidden="true"></i></button>
             <?php endif; ?>
             <?php if($r['id']!==$user['id']): ?>
             <button class="btn <?= $r['actif']?'btn-danger':'btn-success' ?> btn-sm"
