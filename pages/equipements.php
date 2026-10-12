@@ -37,7 +37,7 @@ $f_statut_stock = trim($_GET['statut_stock'] ?? '');
 $f_fin_cycle    = !empty($_GET['fin_cycle']);
 
 $sites_list  = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom");
-$nomenclatures     = db_fetch_all("SELECT id,libelle,categorie,duree_vie_mois FROM nomenclatures WHERE categorie=? ORDER BY libelle", [$f_categorie]);
+$nomenclatures     = db_fetch_all("SELECT id,code,libelle,categorie,duree_vie_mois FROM nomenclatures WHERE categorie=? ORDER BY libelle", [$f_categorie]);
 $all_nomenclatures = db_fetch_all("SELECT id,libelle,categorie FROM nomenclatures ORDER BY categorie,libelle");
 $can_create  = can($perm_module,'can_create');
 $can_update  = can($perm_module,'can_update');
@@ -67,6 +67,143 @@ function _prochain_numero_serie(int $nomenclature_id): string {
         [$nomenclature_id, $code]
     );
     return $code . '-EMUCI-' . str_pad((string)$seq, 4, '0', STR_PAD_LEFT);
+}
+
+// ── IMPORT EN MASSE (Excel/CSV) — bouton "Importer" à côté de "Ajouter".
+// Form classique (pas AJAX) pour l'upload de fichier, comme
+// pages/import_emuci.php : plus simple qu'un fetch+FormData+JSON pour un
+// fichier, et permet d'afficher un rapport d'erreurs détaillé après
+// rechargement plutôt qu'un toast.
+require_once __DIR__ . '/../includes/import_helpers.php';
+
+if (($_GET['modele'] ?? '') === '1') {
+    require_once __DIR__ . '/../vendor/autoload.php';
+    import_generer_modele(
+        ['Marque','Modèle','Type','N° Série externe','Site','État','Date acquisition','Prix achat','Emplacement'],
+        ['HP','LaserJet Pro','', 'SN123456', $sites_list[0]['nom'] ?? '', 'neuf', date('d/m/Y'), '150000', 'Bureau RH, 2e étage'],
+        'modele_equipements_' . $f_categorie . '.xlsx'
+    );
+}
+
+$import_result = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !is_ajax() && isset($_FILES['fichier_import'])) {
+    if (!$can_create) {
+        $import_result = ['ok' => false, 'erreur' => 'Accès refusé.'];
+    } else {
+        $ext = strtolower(pathinfo($_FILES['fichier_import']['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, ['xlsx','xls','csv'], true)) {
+            $import_result = ['ok' => false, 'erreur' => 'Format invalide. Utilisez .xlsx, .xls ou .csv.'];
+        } else {
+            require_once __DIR__ . '/../vendor/autoload.php';
+            try {
+                $rows = import_lire_fichier($_FILES['fichier_import']['tmp_name']);
+                if (empty($rows)) throw new Exception('Fichier vide.');
+
+                $headers = array_map('trim', $rows[0]);
+                $col = array_flip($headers);
+                if (!isset($col['Marque']) && !isset($col['Modèle']))
+                    throw new Exception('Colonnes manquantes : au moins "Marque" ou "Modèle". Colonnes détectées : ' . implode(', ', array_filter($headers)));
+
+                $get = fn(array $row, string $k): string => isset($col[$k]) ? trim((string)($row[$col[$k]] ?? '')) : '';
+
+                $nom_par_libelle = [];
+                foreach ($nomenclatures as $n) $nom_par_libelle[mb_strtolower(trim($n['libelle']))] = $n;
+
+                // Compteurs lus une fois puis incrémentés en mémoire — pas une
+                // requête par ligne, indispensable pour un fichier de plusieurs
+                // milliers de lignes.
+                $numero_chrono_next = (int)db_fetch_value("SELECT COALESCE(MAX(numero_chrono),0) FROM equipements");
+                $seq_par_code = [];
+                $prochain_numero = function (string $code) use (&$seq_par_code): string {
+                    if (!isset($seq_par_code[$code])) {
+                        $seq_par_code[$code] = (int)db_fetch_value(
+                            "SELECT COALESCE(MAX((regexp_replace(numero_serie_interne,'.*-',''))::int),0)
+                             FROM equipements
+                             WHERE numero_serie_interne ~ ('^' || ? || '-[A-Z]+-[0-9]+$')",
+                            [$code]
+                        );
+                    }
+                    $seq_par_code[$code]++;
+                    return $code . '-EMUCI-' . str_pad((string)$seq_par_code[$code], 4, '0', STR_PAD_LEFT);
+                };
+
+                $duree_mois_cat = $ohada_durees[$f_categorie] ?? $ohada_durees['default'];
+                $etats_valides  = ['neuf','bon','usage','endommage','hs'];
+
+                $nb_ok = 0; $erreurs = [];
+                db_begin();
+                try {
+                    for ($i = 1; $i < count($rows); $i++) {
+                        $row = $rows[$i];
+                        if (!array_filter($row, fn($v) => trim((string)$v) !== '')) continue;
+                        $ln = $i + 1;
+
+                        $marque = $get($row, 'Marque');
+                        $modele = $get($row, 'Modèle');
+                        if (!$marque && !$modele) { $erreurs[] = "Ligne $ln : Marque ou Modèle obligatoire."; continue; }
+
+                        $type_lib = $get($row, 'Type');
+                        $nom_id = null; $code_nom = 'EQP';
+                        if ($type_lib !== '') {
+                            $n = $nom_par_libelle[mb_strtolower($type_lib)] ?? null;
+                            if (!$n) { $erreurs[] = "Ligne $ln : type \"$type_lib\" introuvable au catalogue."; continue; }
+                            $nom_id = (int)$n['id'];
+                            $code_nom = $n['code'] ?: 'EQP';
+                        }
+
+                        $site_nom = $get($row, 'Site');
+                        $site_id = null;
+                        if ($site_nom !== '') {
+                            $site_id = import_resoudre_site($site_nom, $sites_list);
+                            if (!$site_id) { $erreurs[] = "Ligne $ln : site \"$site_nom\" introuvable."; continue; }
+                        }
+
+                        $etat = strtolower($get($row, 'État')) ?: 'neuf';
+                        if (!in_array($etat, $etats_valides, true)) {
+                            $erreurs[] = "Ligne $ln : état \"$etat\" invalide (neuf/bon/usage/endommage/hs)."; continue;
+                        }
+
+                        $date_raw = $get($row, 'Date acquisition');
+                        $date_achat = null;
+                        if ($date_raw !== '') {
+                            $dt = DateTime::createFromFormat('d/m/Y', $date_raw) ?: DateTime::createFromFormat('Y-m-d', $date_raw);
+                            if (!$dt) { $erreurs[] = "Ligne $ln : date \"$date_raw\" invalide (attendu JJ/MM/AAAA)."; continue; }
+                            $date_achat = $dt->format('Y-m-d');
+                        }
+
+                        $nse         = $get($row, 'N° Série externe');
+                        $emplacement = $get($row, 'Emplacement');
+                        $prix_achat  = (float)str_replace([' ', ','], ['', '.'], $get($row, 'Prix achat') ?: '0');
+
+                        $statut_stock   = $etat === 'hs' ? 'hs' : (!$site_id ? 'en_stock' : 'affecte');
+                        $date_fin_cycle = $date_achat ? date('Y-m-d', strtotime($date_achat . " +{$duree_mois_cat} months")) : null;
+
+                        $numero_chrono_next++;
+                        $nsi = $prochain_numero($code_nom);
+
+                        db_query(
+                            "INSERT INTO equipements
+                             (marque,modele,categorie,nomenclature_id,numero_serie_interne,numero_chrono,numero_serie_origine,
+                              site_id,emplacement,etat,statut_stock,date_acquisition,prix_achat,date_fin_cycle,duree_amortissement_mois,actif)
+                             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)",
+                            [$marque,$modele,$f_categorie,$nom_id,$nsi,$numero_chrono_next,$nse ?: null,
+                             $site_id,$emplacement ?: null,$etat,$statut_stock,$date_achat,$prix_achat,$date_fin_cycle,$duree_mois_cat]
+                        );
+                        $nb_ok++;
+                    }
+                    audit_log($user['id'], 'CREATE', 'equipements', null,
+                        "Import en masse ($f_categorie) : $nb_ok créés, " . count($erreurs) . ' erreurs');
+                    db_commit();
+                    $import_result = ['ok' => true, 'nb_ok' => $nb_ok, 'erreurs' => array_slice($erreurs, 0, 50), 'nb_err' => count($erreurs)];
+                } catch (Exception $e) {
+                    db_rollback();
+                    throw $e;
+                }
+            } catch (Exception $e) {
+                $import_result = ['ok' => false, 'erreur' => $e->getMessage()];
+            }
+        }
+    }
 }
 
 // ── AJAX
@@ -306,12 +443,58 @@ include __DIR__ . '/../templates/header.php';
 .taux-ok{color:var(--success-d);font-weight:700} .taux-warn{color:#f39c12;font-weight:700} .taux-danger{color:var(--danger-d);font-weight:700}
 </style>
 
+<?php if($import_result): ?>
+<div class="alert alert-<?= $import_result['ok'] ? ($import_result['nb_err'] ? 'warning' : 'success') : 'danger' ?>" style="margin-bottom:16px">
+  <?php if(!$import_result['ok']): ?>
+    <i class="ph ph-x-circle" aria-hidden="true"></i> Import échoué : <?= h($import_result['erreur']) ?>
+  <?php else: ?>
+    <i class="ph ph-check-circle" aria-hidden="true"></i> Import terminé : <strong><?= $import_result['nb_ok'] ?></strong> équipement(s) créé(s).
+    <?php if($import_result['nb_err']): ?>
+      <strong><?= $import_result['nb_err'] ?></strong> ligne(s) ignorée(s) :
+      <ul style="margin:8px 0 0;padding-left:20px">
+        <?php foreach($import_result['erreurs'] as $err): ?><li><?= h($err) ?></li><?php endforeach; ?>
+      </ul>
+      <?php if($import_result['nb_err'] > count($import_result['erreurs'])): ?>
+        <div style="margin-top:4px">… et <?= $import_result['nb_err'] - count($import_result['erreurs']) ?> autre(s).</div>
+      <?php endif; ?>
+    <?php endif; ?>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+
 <?php if($can_create): ?>
-<!-- ── LIGNE 1 : bouton Ajouter ── -->
+<!-- ── LIGNE 1 : boutons Ajouter / Importer ── -->
 <div style="display:flex;align-items:center;gap:8px;margin-bottom:20px;flex-wrap:wrap">
   <button type="button" class="btn btn-primary" onclick="ouvrirCreation()">
     <i class="ph-duotone ph-plus"></i> Ajouter
   </button>
+  <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalImport').style.display='flex'">
+    <i class="ph-duotone ph-upload-simple"></i> Importer
+  </button>
+  <a class="btn btn-secondary" href="?categorie=<?= h($f_categorie) ?>&modele=1">
+    <i class="ph-duotone ph-download-simple"></i> Télécharger le modèle
+  </a>
+</div>
+
+<!-- MODAL IMPORT -->
+<div id="modalImport" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;overflow-y:auto;padding:20px">
+  <div style="background:white;border-radius:20px;padding:28px;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)">Importer des équipements</h3>
+      <button onclick="document.getElementById('modalImport').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
+    </div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+      Fichier Excel (.xlsx/.xls) ou CSV. Colonnes attendues : Marque, Modèle, Type, N° Série externe, Site, État, Date acquisition, Prix achat, Emplacement — téléchargez le modèle pour les exemples.
+      Le numéro de série interne est généré automatiquement.
+    </p>
+    <form method="POST" enctype="multipart/form-data">
+      <input type="file" name="fichier_import" accept=".xlsx,.xls,.csv" required class="form-control" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:flex-end;gap:10px">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalImport').style.display='none'">Annuler</button>
+        <button type="submit" class="btn btn-primary"><i class="ph ph-upload-simple" aria-hidden="true"></i> Importer</button>
+      </div>
+    </form>
+  </div>
 </div>
 <?php endif; ?>
 

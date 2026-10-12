@@ -49,6 +49,101 @@ sort($types_connus);
 $type_capacites = [];
 foreach ($types_connus as $t) $type_capacites[$t] = capacite_carton_pmma($t);
 
+// ── IMPORT EN MASSE (Excel/CSV) — remplace le stock (photo exacte), pas
+// une addition : un réimport (fichier corrigé) ne double jamais le stock.
+// Form classique (pas AJAX), même principe que pages/equipements.php.
+require_once __DIR__ . '/../includes/import_helpers.php';
+
+if (($_GET['modele'] ?? '') === '1') {
+    import_generer_modele(
+        ['Site', 'Type PMMA', 'Quantité (unités)'],
+        [$sites_list[0]['nom'] ?? '', $types_connus[0] ?? 'Type D', 250],
+        'modele_pmma.xlsx'
+    );
+}
+
+$import_result = null;
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !is_ajax() && isset($_FILES['fichier_import'])) {
+    if (!$can_saisie) {
+        $import_result = ['ok' => false, 'erreur' => 'Accès refusé.'];
+    } else {
+        $ext = strtolower(pathinfo($_FILES['fichier_import']['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, ['xlsx','xls','csv'], true)) {
+            $import_result = ['ok' => false, 'erreur' => 'Format invalide. Utilisez .xlsx, .xls ou .csv.'];
+        } else {
+            try {
+                $rows = import_lire_fichier($_FILES['fichier_import']['tmp_name']);
+                if (empty($rows)) throw new Exception('Fichier vide.');
+
+                $headers = array_map('trim', $rows[0]);
+                $col = array_flip($headers);
+                $required = ['Site', 'Type PMMA', 'Quantité (unités)'];
+                $missing  = array_filter($required, fn($r) => !isset($col[$r]));
+                if ($missing) throw new Exception('Colonnes manquantes : ' . implode(', ', $missing) . '. Colonnes détectées : ' . implode(', ', array_filter($headers)));
+
+                $get = fn(array $row, string $k): string => isset($col[$k]) ? trim((string)($row[$col[$k]] ?? '')) : '';
+
+                // Correspondance insensible à la casse vers la forme canonique
+                // du type (évite de créer "type d" à côté de "Type D").
+                $types_lookup = [];
+                foreach ($types_connus as $t) $types_lookup[mb_strtolower(trim($t))] = $t;
+
+                $nb_ok = 0; $erreurs = [];
+                db_begin();
+                try {
+                    for ($i = 1; $i < count($rows); $i++) {
+                        $row = $rows[$i];
+                        if (!array_filter($row, fn($v) => trim((string)$v) !== '')) continue;
+                        $ln = $i + 1;
+
+                        $site_nom = $get($row, 'Site');
+                        $site_id  = $site_nom !== '' ? import_resoudre_site($site_nom, $sites_list) : null;
+                        if (!$site_id) { $erreurs[] = "Ligne $ln : site \"$site_nom\" introuvable."; continue; }
+
+                        $type_raw = $get($row, 'Type PMMA');
+                        $type = $types_lookup[mb_strtolower(trim($type_raw))] ?? null;
+                        if (!$type) { $erreurs[] = "Ligne $ln : type PMMA \"$type_raw\" inconnu au catalogue."; continue; }
+
+                        $qte_raw = $get($row, 'Quantité (unités)');
+                        if ($qte_raw === '' || !is_numeric($qte_raw) || (int)$qte_raw < 0) {
+                            $erreurs[] = "Ligne $ln : quantité \"$qte_raw\" invalide."; continue;
+                        }
+                        $qte_new = (int)$qte_raw;
+
+                        $qte_old = (int)(db_fetch_value(
+                            "SELECT quantite FROM stock_pmma_site WHERE site_id=? AND type_pmma=?", [$site_id, $type]
+                        ) ?? 0);
+                        $delta = $qte_new - $qte_old;
+
+                        db_query(
+                            "INSERT INTO stock_pmma_site (site_id,type_pmma,quantite,seuil_alerte)
+                             VALUES (?,?,?,?)
+                             ON CONFLICT (site_id,type_pmma) DO UPDATE SET quantite=EXCLUDED.quantite, updated_at=CURRENT_TIMESTAMP",
+                            [$site_id, $type, $qte_new, $catalogue_pmma[$type]['seuil_defaut'] ?? 10]
+                        );
+                        if ($delta !== 0) {
+                            db_query(
+                                "INSERT INTO stock_pmma (site_id,type_pmma,quantite,type_mouvement,notes,created_by) VALUES (?,?,?,?,?,?)",
+                                [$site_id, $type, abs($delta), $delta > 0 ? 'entree' : 'sortie', 'Import stock', $user['id']]
+                            );
+                        }
+                        $nb_ok++;
+                    }
+                    audit_log($user['id'], 'UPDATE', 'pmma', null,
+                        "Import en masse PMMA : $nb_ok ligne(s), " . count($erreurs) . ' erreur(s)');
+                    db_commit();
+                    $import_result = ['ok' => true, 'nb_ok' => $nb_ok, 'erreurs' => array_slice($erreurs, 0, 50), 'nb_err' => count($erreurs)];
+                } catch (Exception $e) {
+                    db_rollback();
+                    throw $e;
+                }
+            } catch (Exception $e) {
+                $import_result = ['ok' => false, 'erreur' => $e->getMessage()];
+            }
+        }
+    }
+}
+
 // ── AJAX (Entrée/Sortie manuelle — GSB/admin uniquement)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     header('Content-Type: application/json');
@@ -519,9 +614,57 @@ include __DIR__ . '/../templates/header.php';
       style="background:#e8f4f9;color:var(--blue);border:1.5px solid var(--blue);font-size:13px">
       <i class="ph-duotone ph-upload-simple"></i> Sortie PMMA
     </button>
+    <button class="btn btn-secondary" style="font-size:13px" onclick="document.getElementById('modalImportPmma').style.display='flex'">
+      <i class="ph-duotone ph-upload-simple"></i> Importer
+    </button>
+    <a href="?modele=1" class="btn btn-secondary" style="font-size:13px;display:flex;align-items:center;gap:6px">
+      <i class="ph-duotone ph-download-simple"></i> Modèle
+    </a>
     <?php endif; ?>
   </div>
 </div>
+
+<?php if($import_result): ?>
+<div class="alert alert-<?= $import_result['ok'] ? ($import_result['nb_err'] ? 'warning' : 'success') : 'danger' ?>" style="margin-bottom:16px">
+  <?php if(!$import_result['ok']): ?>
+    <i class="ph ph-x-circle" aria-hidden="true"></i> Import échoué : <?= h($import_result['erreur']) ?>
+  <?php else: ?>
+    <i class="ph ph-check-circle" aria-hidden="true"></i> Import terminé : <strong><?= $import_result['nb_ok'] ?></strong> ligne(s) de stock mise(s) à jour.
+    <?php if($import_result['nb_err']): ?>
+      <strong><?= $import_result['nb_err'] ?></strong> ligne(s) ignorée(s) :
+      <ul style="margin:8px 0 0;padding-left:20px">
+        <?php foreach($import_result['erreurs'] as $err): ?><li><?= h($err) ?></li><?php endforeach; ?>
+      </ul>
+      <?php if($import_result['nb_err'] > count($import_result['erreurs'])): ?>
+        <div style="margin-top:4px">… et <?= $import_result['nb_err'] - count($import_result['erreurs']) ?> autre(s).</div>
+      <?php endif; ?>
+    <?php endif; ?>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
+
+<?php if($can_saisie): ?>
+<!-- MODAL IMPORT PMMA -->
+<div id="modalImportPmma" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;overflow-y:auto;padding:20px">
+  <div style="background:white;border-radius:20px;padding:28px;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)">Importer le stock PMMA</h3>
+      <button onclick="document.getElementById('modalImportPmma').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
+    </div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
+      Fichier Excel (.xlsx/.xls) ou CSV. Colonnes : Site, Type PMMA, Quantité (unités) — téléchargez le modèle pour les exemples.
+      <strong>Chaque ligne remplace le stock actuel</strong> du site+type (ce n'est pas un ajout).
+    </p>
+    <form method="POST" enctype="multipart/form-data">
+      <input type="file" name="fichier_import" accept=".xlsx,.xls,.csv" required class="form-control" style="margin-bottom:16px">
+      <div style="display:flex;justify-content:flex-end;gap:10px">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('modalImportPmma').style.display='none'">Annuler</button>
+        <button type="submit" class="btn btn-primary"><i class="ph ph-upload-simple" aria-hidden="true"></i> Importer</button>
+      </div>
+    </form>
+  </div>
+</div>
+<?php endif; ?>
 
 <!-- FILTRE BAR -->
 <div class="filter-bar">
