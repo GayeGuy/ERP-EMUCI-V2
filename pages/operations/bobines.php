@@ -127,11 +127,11 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
     }
 
     // ── CORRIGER LA QUANTITÉ INITIALE — bobine livrée avec moins (ou plus)
-    // de films que la capacité du catalogue (ex : 499 au lieu de 500). La
-    // différence est reportée sur le stock restant (les films consommés ne
-    // changent pas) et tracée par un mouvement 'correction_qte_initiale'
-    // dont la quantité signée est rajoutée à qte_livree dans les requêtes
-    // de liste (sinon la barre de % garderait l'ancienne quantité livrée).
+    // de films que la capacité du catalogue (ex : 499 au lieu de 500). Seule
+    // qte_initiale change : le stock restant (stock_systeme/films_restants)
+    // n'est PAS touché, c'est le « consommé » (initiale − restant) qui
+    // s'ajuste. Tracé par un mouvement 'correction_qte_initiale' de quantité
+    // 0 (aucun film n'entre ni ne sort) + audit.
     if ($action==='modifier_qte_initiale') {
         require_permission($perm_module_bob,'can_update');
         if ($is_coord) json_response(false,'Accès refusé.');
@@ -144,28 +144,22 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
             $bob = db_fetch_one("SELECT * FROM op_bobines WHERE id=? FOR UPDATE",[$id]);
             if (!$bob) { db_rollback(); json_response(false,'Bobine introuvable.'); }
             $ancienne = (int)$bob['qte_initiale'];
-            $delta    = $qte - $ancienne;
-            if ($delta === 0) { db_rollback(); json_response(false,"La quantité initiale est déjà de $qte."); }
-            $stock_avant = (int)$bob['stock_systeme'];
-            $stock_apres = $stock_avant + $delta;
-            if ($stock_apres < 0) {
+            if ($qte === $ancienne) { db_rollback(); json_response(false,"La quantité initiale est déjà de $qte."); }
+            $stock = (int)$bob['stock_systeme'];
+            if ($qte < $stock) {
                 db_rollback();
-                json_response(false,"Impossible : ".($ancienne - $stock_avant)." films ont déjà été consommés/sortis, la quantité initiale ne peut pas être inférieure à ".($ancienne - $stock_avant).".");
+                json_response(false,"Impossible : la bobine a encore $stock films en stock, la quantité initiale ne peut pas être inférieure à $stock.");
             }
-            $statut = $bob['statut'];
-            if ($stock_apres === 0 && $statut !== 'retiree') $statut = 'epuisee';
-            elseif ($stock_apres > 0 && $statut === 'epuisee') $statut = $bob['site_id'] ? 'en_cours' : 'en_stock';
             db_query("UPDATE op_bobines
-                      SET qte_initiale=?, stock_systeme=?, films_restants=?, statut=?,
-                          films_total = CASE WHEN films_total=? THEN ? ELSE films_total END
+                      SET qte_initiale=?, films_total = CASE WHEN films_total=? THEN ? ELSE films_total END
                       WHERE id=?",
-                [$qte,$stock_apres,$stock_apres,$statut,$ancienne,$qte,$id]);
+                [$qte,$ancienne,$qte,$id]);
             $libelle = "Correction quantité initiale $ancienne → $qte" . ($motif !== '' ? " : $motif" : '');
             db_query("INSERT INTO mouvements_bobines (bobine_id,type,quantite,stock_avant,stock_apres,motif,created_by) VALUES (?,?,?,?,?,?,?)",
-                [$id,'correction_qte_initiale',$delta,$stock_avant,$stock_apres,mb_substr($libelle,0,255),$user['id']]);
-            audit_log($user['id'],'UPDATE','operations',$id,"Bobine {$bob['numero']} — $libelle (stock : $stock_avant → $stock_apres)");
+                [$id,'correction_qte_initiale',0,$stock,$stock,mb_substr($libelle,0,255),$user['id']]);
+            audit_log($user['id'],'UPDATE','operations',$id,"Bobine {$bob['numero']} — $libelle (stock restant inchangé : $stock)");
             db_commit();
-            json_response(true,"Quantité initiale corrigée : $ancienne → $qte. Stock restant : $stock_apres films.");
+            json_response(true,"Quantité initiale corrigée : $ancienne → $qte. Stock restant inchangé : $stock films.");
         } catch(Exception $e){ db_rollback(); json_response(false,'Erreur: '.$e->getMessage()); }
     }
 
@@ -445,14 +439,14 @@ $bobines = db_fetch_all(
     "SELECT b.*, s.nom AS site_nom, tv.libelle AS type_vehicule,
             t.format AS tb_format, t.version AS tb_version,
             -- Quantité réelle au moment de la dernière affectation (transfert)
-            COALESCE(
-                (SELECT m.stock_avant + COALESCE((SELECT SUM(c.quantite) FROM mouvements_bobines c
-                     WHERE c.bobine_id=m.bobine_id AND c.type='correction_qte_initiale' AND c.created_at > m.created_at),0)
-                 FROM mouvements_bobines m
+            -- plafonnée à qte_initiale : une correction de la quantité
+            -- initiale (500 → 499) doit se voir même après un transfert.
+            LEAST(COALESCE(
+                (SELECT m.stock_avant FROM mouvements_bobines m
                  WHERE m.bobine_id=b.id AND m.type='transfert'
                  ORDER BY m.created_at DESC LIMIT 1),
                 b.qte_initiale
-            ) AS qte_livree,
+            ), b.qte_initiale) AS qte_livree,
             (SELECT dd.id FROM demandes_bobines dd WHERE dd.bobine_id=b.id AND dd.statut='en_attente' LIMIT 1) AS demande_attente_id
      FROM op_bobines b
      LEFT JOIN sites s ON s.id=b.site_id
@@ -1518,7 +1512,7 @@ function openQteInit(id,num,qteInit,stockSys){
   document.getElementById('mQteInitActuelle').textContent=qteInit;
   document.getElementById('mQteInitStock').textContent=stockSys;
   inp.value=qteInit; inp.dataset.init=qteInit; inp.dataset.stock=stockSys;
-  inp.min=Math.max(1,qteInit-stockSys);
+  inp.min=Math.max(1,stockSys);
   document.getElementById('mQteInitMotif').value='';
   previewQteInit();
   openModal('modalQteInit');
@@ -1527,12 +1521,11 @@ function previewQteInit(){
   const inp=document.getElementById('mQteInitVal'), prev=document.getElementById('mQteInitPreview');
   const v=parseInt(inp.value), init=parseInt(inp.dataset.init), stock=parseInt(inp.dataset.stock);
   if(isNaN(v)||v===init){prev.style.display='none';return;}
-  const apres=stock+(v-init);
   prev.style.display='block';
-  prev.style.background=apres<0?'#fdf0ef':'#f0f9ff';
-  prev.textContent=apres<0
-    ? `Impossible : ${init-stock} films déjà consommés/sortis.`
-    : `Stock restant : ${stock} → ${apres} films (${v-init>0?'+':''}${v-init})`;
+  prev.style.background=v<stock?'#fdf0ef':'#f0f9ff';
+  prev.textContent=v<stock
+    ? `Impossible : la bobine a encore ${stock} films en stock (minimum ${stock}).`
+    : `Consommé : ${init-stock} → ${v-stock} films · Stock restant inchangé : ${stock}`;
 }
 async function saveQteInit(){
   const id=document.getElementById('mQteInitId').value;
@@ -1686,7 +1679,7 @@ async function chargerEcarts(){
       <label style="font-size:13px;font-weight:600;display:block;margin-bottom:5px">Motif</label>
       <input type="text" class="form-control" id="mQteInitMotif" placeholder="ex : bobine livrée avec 499 films">
     </div>
-    <p style="font-size:12px;color:var(--muted);margin-bottom:16px">La différence est reportée sur le stock restant ; les films déjà consommés ne changent pas. La correction est tracée dans l'historique de la bobine.</p>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:16px">Seule la quantité initiale change : le stock restant n'est pas modifié. La correction est tracée dans l'historique de la bobine.</p>
     <div style="display:flex;gap:8px;justify-content:flex-end">
       <button class="btn btn-secondary" onclick="closeAllModals()">Annuler</button>
       <button class="btn btn-primary" id="btnSaveQteInit" onclick="saveQteInit()">Enregistrer</button>
