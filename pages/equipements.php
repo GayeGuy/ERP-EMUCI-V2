@@ -231,6 +231,86 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !is_ajax() && isset($_FILES['fichie
     }
 }
 
+// ── NETTOYAGE DES DOUBLONS déjà en base (anciens imports, avant l'anti-
+// doublon ci-dessus). Deux sortes de groupes parmi les équipements actifs
+// de la catégorie :
+//  - « serie »  : même N° série externe → doublon certain, pré-coché ;
+//  - « probable »: sans N° série, mêmes type/marque/modèle/site/emplacement/
+//    date → peut être un vrai lot d'équipements identiques, jamais pré-coché.
+// Dans chaque groupe on garde celui qui a le plus d'historique (affectations,
+// mouvements, interventions, réceptions), puis le plus ancien. Un doublon qui
+// a lui-même un historique n'est pas supprimable ici (à traiter à la main).
+// Suppression = soft delete actif=0, comme l'action 'delete' de
+// api/equipements.php — réversible, aucune ligne liée n'est touchée.
+$can_delete = can($perm_module, 'can_delete');
+
+function _doublons_equipements(string $categorie): array {
+    $rows = db_fetch_all(
+        "WITH base AS (
+            SELECT e.id, e.numero_serie_interne, e.numero_serie_origine, e.marque, e.modele,
+                   e.emplacement, e.date_acquisition, e.prix_achat, e.created_at,
+                   n.libelle AS type_lib, s.nom AS site_nom,
+                   CASE WHEN COALESCE(TRIM(e.numero_serie_origine),'') <> ''
+                        THEN 'S:' || LOWER(TRIM(e.numero_serie_origine))
+                        ELSE 'P:' || COALESCE(e.nomenclature_id::text,'') || '|' || LOWER(COALESCE(TRIM(e.marque),''))
+                             || '|' || LOWER(COALESCE(TRIM(e.modele),'')) || '|' || COALESCE(e.site_id::text,'')
+                             || '|' || LOWER(COALESCE(TRIM(e.emplacement),'')) || '|' || COALESCE(e.date_acquisition::text,'')
+                   END AS cle,
+                   (SELECT COUNT(*) FROM affectations_equipements  x WHERE x.equipement_id=e.id)
+                 + (SELECT COUNT(*) FROM mouvements_equipements    x WHERE x.equipement_id=e.id)
+                 + (SELECT COUNT(*) FROM interventions_maintenance x WHERE x.equipement_id=e.id)
+                 + (SELECT COUNT(*) FROM receptions_site           x WHERE x.equipement_id=e.id) AS nb_hist
+            FROM equipements e
+            LEFT JOIN nomenclatures n ON n.id=e.nomenclature_id
+            LEFT JOIN sites s ON s.id=e.site_id
+            WHERE e.actif=1 AND e.categorie=?
+         )
+         SELECT * FROM base
+         WHERE cle IN (SELECT cle FROM base GROUP BY cle HAVING COUNT(*) > 1)
+         ORDER BY cle, nb_hist DESC, id",
+        [$categorie]
+    );
+    $groupes = [];
+    foreach ($rows as $r) {
+        $g = &$groupes[$r['cle']];
+        if (!$g) $g = ['certain' => str_starts_with($r['cle'], 'S:'), 'garde' => $r, 'autres' => []];
+        else     $g['autres'][] = $r;
+        unset($g);
+    }
+    return array_values($groupes);
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && !is_ajax() && isset($_POST['supprimer_doublons'])) {
+    if (!$can_delete) { http_response_code(403); exit('Accès refusé.'); }
+    // Seuls les ids que le calcul serveur désigne comme doublons supprimables
+    // sont acceptés : jamais l'équipement gardé d'un groupe, jamais un
+    // équipement avec historique, quoi que le formulaire envoie.
+    $supprimables = [];
+    foreach (_doublons_equipements($f_categorie) as $g)
+        foreach ($g['autres'] as $r) if ((int)$r['nb_hist'] === 0) $supprimables[(int)$r['id']] = $g['garde']['numero_serie_interne'];
+    $nb = 0;
+    db_begin();
+    try {
+        foreach (array_unique(array_map('intval', (array)($_POST['ids'] ?? []))) as $id) {
+            if (!isset($supprimables[$id])) continue;
+            $eq = db_fetch_one("SELECT * FROM equipements WHERE id=? AND actif=1", [$id]);
+            if (!$eq) continue;
+            db_query("UPDATE equipements SET actif=0 WHERE id=?", [$id]);
+            audit_log($user['id'], 'DELETE', 'equipements', $id,
+                "Suppression doublon {$eq['numero_serie_interne']} (gardé : {$supprimables[$id]})");
+            $nb++;
+        }
+        db_commit();
+    } catch (Exception $e) {
+        db_rollback();
+        throw $e;
+    }
+    header('Location: ?categorie=' . urlencode($f_categorie) . '&doublons=1&nettoyes=' . $nb);
+    exit;
+}
+$voir_doublons = $can_delete && ($_GET['doublons'] ?? '') === '1';
+$doublons      = $voir_doublons ? _doublons_equipements($f_categorie) : [];
+
 // ── AJAX
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     header('Content-Type: application/json');
@@ -503,6 +583,11 @@ include __DIR__ . '/../templates/header.php';
   <a class="btn btn-secondary" href="?categorie=<?= h($f_categorie) ?>&modele=1">
     <i class="ph-duotone ph-download-simple"></i> Télécharger le modèle
   </a>
+  <?php if($can_delete): ?>
+  <a class="btn btn-secondary" href="?categorie=<?= h($f_categorie) ?>&doublons=1">
+    <i class="ph-duotone ph-copy"></i> Doublons
+  </a>
+  <?php endif; ?>
 </div>
 
 <!-- MODAL IMPORT -->
@@ -584,6 +669,71 @@ include __DIR__ . '/../templates/header.php';
     <i class="ph-duotone ph-file-xls"></i> Excel
   </a>
 </form>
+
+<?php if($voir_doublons): ?>
+<!-- DOUBLONS -->
+<?php if(isset($_GET['nettoyes'])): ?>
+<div class="alert alert-success" style="margin-bottom:16px">
+  <i class="ph ph-check-circle" aria-hidden="true"></i> <strong><?= (int)$_GET['nettoyes'] ?></strong> doublon(s) supprimé(s).
+</div>
+<?php endif; ?>
+<div class="card" style="margin-bottom:20px">
+  <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+    <h3><i class="ph-duotone ph-copy" style="color:var(--primary-d)"></i> Doublons
+      <span style="font-size:13px;font-weight:400;color:var(--muted)">(<?= count($doublons) ?> groupe(s))</span></h3>
+    <a class="btn btn-secondary" href="?categorie=<?= h($f_categorie) ?>">Fermer</a>
+  </div>
+  <?php if(!$doublons): ?>
+    <p style="padding:16px;color:var(--muted)">Aucun doublon dans cette catégorie.</p>
+  <?php else: ?>
+  <p style="padding:12px 16px 0;font-size:13px;color:var(--muted)">
+    Dans chaque groupe, la ligne <strong>Gardé</strong> est conservée (celle qui a le plus d'historique, sinon la plus ancienne).
+    Même N° série externe = doublon certain, coché d'office. Sans N° série = doublon <em>probable</em> (ce peut être un lot d'équipements identiques) : à cocher vous-même.
+    Un doublon qui a déjà un historique (affectation, mouvement, intervention) n'est pas supprimable ici.
+  </p>
+  <form method="POST" onsubmit="return confirm('Supprimer les doublons cochés ?')">
+    <input type="hidden" name="supprimer_doublons" value="1">
+    <div class="table-wrap" style="max-height:520px;overflow:auto">
+      <table>
+        <thead><tr>
+          <th></th><th>N° interne</th><th>N° série externe</th><th>Type</th><th>Marque / Modèle</th>
+          <th>Site</th><th>Date acq.</th><th>Créé le</th><th style="text-align:center">Historique</th>
+        </tr></thead>
+        <tbody>
+        <?php foreach($doublons as $gi => $g): ?>
+          <?php foreach(array_merge([$g['garde']], $g['autres']) as $k => $r): ?>
+          <tr style="<?= $gi % 2 ? 'background:#f8fafc' : '' ?><?= $k === 0 ? ';border-top:2px solid var(--border)' : '' ?>">
+            <td>
+              <?php if($k === 0): ?>
+                <span class="etat-badge etat-bon">Gardé</span>
+              <?php elseif((int)$r['nb_hist'] > 0): ?>
+                <span title="A un historique : à traiter à la main" style="color:var(--muted)"><i class="ph ph-lock-simple"></i></span>
+              <?php else: ?>
+                <input type="checkbox" name="ids[]" value="<?= (int)$r['id'] ?>" <?= $g['certain'] ? 'checked' : '' ?>>
+                <?php if(!$g['certain']): ?><span style="font-size:11px;color:#92400e">probable</span><?php endif; ?>
+              <?php endif; ?>
+            </td>
+            <td><?= h($r['numero_serie_interne']) ?></td>
+            <td><?= h($r['numero_serie_origine'] ?: '—') ?></td>
+            <td><?= h($r['type_lib'] ?? '') ?></td>
+            <td><?= h(trim(($r['marque'] ?? '') . ' ' . ($r['modele'] ?? ''))) ?></td>
+            <td><?= h($r['site_nom'] ?? 'Non affecté') ?><?php if(!empty($r['emplacement'])): ?><div style="font-size:12px;color:var(--muted)"><?= h($r['emplacement']) ?></div><?php endif; ?></td>
+            <td><?= fmt_date($r['date_acquisition']) ?></td>
+            <td><?= fmt_datetime($r['created_at']) ?></td>
+            <td style="text-align:center"><?= (int)$r['nb_hist'] ?></td>
+          </tr>
+          <?php endforeach; ?>
+        <?php endforeach; ?>
+        </tbody>
+      </table>
+    </div>
+    <div style="display:flex;justify-content:flex-end;padding:14px 16px">
+      <button type="submit" class="btn btn-danger"><i class="ph ph-trash" aria-hidden="true"></i> Supprimer les doublons cochés</button>
+    </div>
+  </form>
+  <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <!-- LISTE ÉQUIPEMENTS -->
 <div class="card" id="equipResultCard">
