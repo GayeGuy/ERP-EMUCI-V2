@@ -56,8 +56,8 @@ require_once __DIR__ . '/../includes/import_helpers.php';
 
 if (($_GET['modele'] ?? '') === '1') {
     import_generer_modele(
-        ['Site', 'Type PMMA', 'Quantité (unités)'],
-        [$sites_list[0]['nom'] ?? '', $types_connus[0] ?? 'Type D', 250],
+        ['Site', 'Type PMMA', 'Cartons', 'Unités en vrac'],
+        [$sites_list[0]['nom'] ?? '', $types_connus[0] ?? 'Type D', 10, 0],
         'modele_pmma.xlsx'
     );
 }
@@ -77,11 +77,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !is_ajax() && isset($_FILES['fichie
 
                 $headers = array_map('trim', $rows[0]);
                 $col = array_flip($headers);
-                $required = ['Site', 'Type PMMA', 'Quantité (unités)'];
+                // Saisie en cartons (ce que l'on compte physiquement), les unités
+                // sont calculées avec la capacité carton du type (op_types_pmma).
+                // L'ancienne colonne « Quantité (unités) » reste acceptée pour
+                // les fichiers déjà préparés avec le premier modèle.
+                $required = ['Site', 'Type PMMA'];
                 $missing  = array_filter($required, fn($r) => !isset($col[$r]));
+                if (!isset($col['Cartons']) && !isset($col['Quantité (unités)'])) $missing[] = 'Cartons';
                 if ($missing) throw new Exception('Colonnes manquantes : ' . implode(', ', $missing) . '. Colonnes détectées : ' . implode(', ', array_filter($headers)));
 
                 $get = fn(array $row, string $k): string => isset($col[$k]) ? trim((string)($row[$col[$k]] ?? '')) : '';
+
+                // Entier positif ou nul, espaces de milliers tolérés ; null sinon.
+                $entier = function (string $v): ?int {
+                    $v = str_replace([' ', "\u{a0}", "\u{202f}"], '', $v);
+                    return preg_match('/^\d+$/', $v) ? (int)$v : null;
+                };
 
                 // Correspondance insensible à la casse vers la forme canonique
                 // du type (évite de créer "type d" à côté de "Type D").
@@ -104,11 +115,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !is_ajax() && isset($_FILES['fichie
                         $type = $types_lookup[mb_strtolower(trim($type_raw))] ?? null;
                         if (!$type) { $erreurs[] = "Ligne $ln : type PMMA \"$type_raw\" inconnu au catalogue."; continue; }
 
-                        $qte_raw = $get($row, 'Quantité (unités)');
-                        if ($qte_raw === '' || !is_numeric($qte_raw) || (int)$qte_raw < 0) {
-                            $erreurs[] = "Ligne $ln : quantité \"$qte_raw\" invalide."; continue;
+                        $cap         = $type_capacites[$type] ?? capacite_carton_pmma($type);
+                        $cartons_raw = $get($row, 'Cartons');
+                        $vrac_raw    = $get($row, 'Unités en vrac');
+                        $qte_raw     = $get($row, 'Quantité (unités)');
+                        if ($cartons_raw !== '' || $vrac_raw !== '') {
+                            $cartons = $cartons_raw === '' ? 0 : $entier($cartons_raw);
+                            if ($cartons === null) { $erreurs[] = "Ligne $ln : nombre de cartons \"$cartons_raw\" invalide (nombre entier attendu)."; continue; }
+                            $vrac = $vrac_raw === '' ? 0 : $entier($vrac_raw);
+                            if ($vrac === null) { $erreurs[] = "Ligne $ln : unités en vrac \"$vrac_raw\" invalide (nombre entier attendu)."; continue; }
+                            if ($vrac >= $cap) { $erreurs[] = "Ligne $ln : $vrac unités en vrac = au moins un carton plein ($cap u. pour $type), à compter dans Cartons."; continue; }
+                            $qte_new = $cartons * $cap + $vrac;
+                        } elseif ($qte_raw !== '') {
+                            $qte_new = $entier($qte_raw);
+                            if ($qte_new === null) { $erreurs[] = "Ligne $ln : quantité \"$qte_raw\" invalide."; continue; }
+                        } else {
+                            $erreurs[] = "Ligne $ln : nombre de cartons manquant."; continue;
                         }
-                        $qte_new = (int)$qte_raw;
 
                         $qte_old = (int)(db_fetch_value(
                             "SELECT quantite FROM stock_pmma_site WHERE site_id=? AND type_pmma=?", [$site_id, $type]
@@ -652,7 +675,8 @@ include __DIR__ . '/../templates/header.php';
       <button onclick="document.getElementById('modalImportPmma').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
-      Fichier Excel (.xlsx/.xls) ou CSV. Colonnes : Site, Type PMMA, Quantité (unités) — téléchargez le modèle pour les exemples.
+      Fichier Excel (.xlsx/.xls) ou CSV. Colonnes : Site, Type PMMA, <strong>Cartons</strong>, Unités en vrac (facultatif, carton entamé) — téléchargez le modèle pour les exemples.
+      Les unités sont calculées automatiquement : cartons × capacité du type<?php if($type_capacites): ?> (<?= h(implode(', ', array_map(fn($t, $c) => "$t : $c", array_keys($type_capacites), $type_capacites))) ?>)<?php endif; ?> + vrac.
       <strong>Chaque ligne remplace le stock actuel</strong> du site+type (ce n'est pas un ajout).
     </p>
     <form method="POST" enctype="multipart/form-data">
