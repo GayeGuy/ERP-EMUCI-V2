@@ -384,6 +384,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         }
     }
 
+    // Soft delete (actif=0), même effet que l'action 'delete' de
+    // api/equipements.php mais contrôlé sur le module de la catégorie
+    // (equipements / equipements_operationnel).
+    if ($action === 'supprimer') {
+        if (!$can_delete) json_response(false,'Accès refusé.');
+        $id = (int)($_POST['id'] ?? 0);
+        $eq = db_fetch_one("SELECT * FROM equipements WHERE id=? AND actif=1 AND categorie=?", [$id, $f_categorie]);
+        if (!$eq) json_response(false,'Équipement introuvable.');
+        db_query("UPDATE equipements SET actif=0 WHERE id=?", [$id]);
+        audit_log($user['id'],'DELETE','equipements',$id,"Suppression {$eq['numero_serie_interne']}");
+        json_response(true,'Équipement supprimé.');
+    }
+
     json_response(false,'Action inconnue.');
 }
 
@@ -759,7 +772,7 @@ include __DIR__ . '/../templates/header.php';
         <th style="text-align:center">Valeur résid. (FCFA)</th>
         <th style="text-align:center">Fin cycle</th>
         <th style="text-align:center">Statut stock</th>
-        <?php if($can_update): ?><th style="text-align:center">Actions</th><?php endif; ?>
+        <?php if($can_update || $can_delete): ?><th style="text-align:center">Actions</th><?php endif; ?>
       </tr></thead>
       <tbody>
       <?php if(empty($equipements)): ?>
@@ -801,9 +814,14 @@ include __DIR__ . '/../templates/header.php';
               <?= ($e['statut_stock']??'affecte')==='en_stock'?'<i class="ph ph-package" aria-hidden="true"></i> Stock':'<i class="ph ph-check-circle" aria-hidden="true"></i> Affecté' ?>
             </span>
           </td>
-          <?php if($can_update): ?>
-          <td style="text-align:center">
+          <?php if($can_update || $can_delete): ?>
+          <td style="text-align:center;white-space:nowrap">
+            <?php if($can_update): ?>
             <button class="btn btn-secondary btn-sm" onclick="modifierEquip(<?= htmlspecialchars(json_encode($e),ENT_QUOTES) ?>)"><i class="ph ph-pencil-simple" aria-hidden="true"></i></button>
+            <?php endif; ?>
+            <?php if($can_delete): ?>
+            <button class="btn btn-danger btn-sm" title="Supprimer" onclick="supprimerEquip(<?= (int)$e['id'] ?>, <?= htmlspecialchars(json_encode($e['numero_serie_interne']),ENT_QUOTES) ?>)"><i class="ph ph-trash" aria-hidden="true"></i></button>
+            <?php endif; ?>
           </td>
           <?php endif; ?>
         </tr>
@@ -901,6 +919,14 @@ include __DIR__ . '/../templates/header.php';
 <?php endif; ?>
 
 <script>
+async function supprimerEquip(id, numero){
+  if (!confirm('Supprimer l'équipement ' + numero + ' ?')) return;
+  try {
+    const d = await ap({action:'supprimer', id});
+    toast(d.message, d.success ? 'success' : 'error');
+    if (d.success) setTimeout(() => location.reload(), 800);
+  } catch(err) { toast('Erreur réseau.', 'error'); }
+}
 function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(achParseJson);}
 
 // ── Filtres sans rechargement de page : remplace les KPI et le tableau par
