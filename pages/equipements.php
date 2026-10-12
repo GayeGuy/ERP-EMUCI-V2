@@ -80,7 +80,7 @@ if (($_GET['modele'] ?? '') === '1') {
     require_once __DIR__ . '/../vendor/autoload.php';
     import_generer_modele(
         ['Marque','Modèle','Type','N° Série externe','Site','État','Date acquisition','Prix achat','Emplacement'],
-        ['HP','LaserJet Pro','', 'SN123456', $sites_list[0]['nom'] ?? '', 'neuf', date('d/m/Y'), '150000', 'Bureau RH, 2e étage'],
+        ['HP','LaserJet Pro', $nomenclatures[0]['libelle'] ?? '', 'SN123456', $sites_list[0]['nom'] ?? '', 'neuf', date('d/m/Y'), '150000', 'Bureau RH, 2e étage'],
         'modele_equipements_' . $f_categorie . '.xlsx'
     );
 }
@@ -101,6 +101,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !is_ajax() && isset($_FILES['fichie
 
                 $headers = array_map('trim', $rows[0]);
                 $col = array_flip($headers);
+                if (!isset($col['Type']))
+                    throw new Exception('Colonne manquante : "Type". Colonnes détectées : ' . implode(', ', array_filter($headers)));
                 if (!isset($col['Marque']) && !isset($col['Modèle']))
                     throw new Exception('Colonnes manquantes : au moins "Marque" ou "Modèle". Colonnes détectées : ' . implode(', ', array_filter($headers)));
 
@@ -142,14 +144,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !is_ajax() && isset($_FILES['fichie
                         $modele = $get($row, 'Modèle');
                         if (!$marque && !$modele) { $erreurs[] = "Ligne $ln : Marque ou Modèle obligatoire."; continue; }
 
+                        // nomenclature_id est NOT NULL en base (equipements) :
+                        // Type est donc obligatoire ici, pas optionnel comme le
+                        // reste des colonnes.
                         $type_lib = $get($row, 'Type');
-                        $nom_id = null; $code_nom = 'EQP';
-                        if ($type_lib !== '') {
-                            $n = $nom_par_libelle[mb_strtolower($type_lib)] ?? null;
-                            if (!$n) { $erreurs[] = "Ligne $ln : type \"$type_lib\" introuvable au catalogue."; continue; }
-                            $nom_id = (int)$n['id'];
-                            $code_nom = $n['code'] ?: 'EQP';
-                        }
+                        if ($type_lib === '') { $erreurs[] = "Ligne $ln : Type obligatoire."; continue; }
+                        $n = $nom_par_libelle[mb_strtolower($type_lib)] ?? null;
+                        if (!$n) { $erreurs[] = "Ligne $ln : type \"$type_lib\" introuvable au catalogue."; continue; }
+                        $nom_id = (int)$n['id'];
+                        $code_nom = $n['code'] ?: 'EQP';
 
                         $site_nom = $get($row, 'Site');
                         $site_id = null;
@@ -237,6 +240,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         else                  $statut_stock = 'affecte';
 
         if (!$marque && !$nsi) json_response(false,'Marque ou N° série interne obligatoire.');
+        // nomenclature_id est NOT NULL en base (equipements) : sans ce
+        // contrôle, l'INSERT/UPDATE plantait avec une erreur SQL brute au
+        // lieu d'un message clair.
+        if (!$nom_id) json_response(false,'Type obligatoire.');
 
         // Calcul fin cycle OHADA
         $duree_mois     = $ohada_durees[$f_categorie] ?? $ohada_durees['default'];
@@ -484,7 +491,7 @@ include __DIR__ . '/../templates/header.php';
       <button onclick="document.getElementById('modalImport').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
-      Fichier Excel (.xlsx/.xls) ou CSV. Colonnes attendues : Marque, Modèle, Type, N° Série externe, Site, État, Date acquisition, Prix achat, Emplacement — téléchargez le modèle pour les exemples.
+      Fichier Excel (.xlsx/.xls) ou CSV. Colonnes attendues : <strong>Type (obligatoire, doit exister au catalogue)</strong>, Marque ou Modèle (au moins l'un des deux), N° Série externe, Site, État, Date acquisition, Prix achat, Emplacement — téléchargez le modèle pour les exemples.
       Le numéro de série interne est généré automatiquement.
     </p>
     <form method="POST" enctype="multipart/form-data">
@@ -654,7 +661,7 @@ include __DIR__ . '/../templates/header.php';
         <input type="text" class="form-control" id="eModele" placeholder="ex: LaserJet Pro, C650...">
       </div>
       <div class="form-group">
-        <label>Type (nomenclature)</label>
+        <label>Type (nomenclature) *</label>
         <select class="form-control" id="eNom_id">
           <option value="">— Sélectionner —</option>
           <?php foreach($nomenclatures as $n): ?>
@@ -810,6 +817,10 @@ document.getElementById('eNom_id').addEventListener('change', async function(){
   if (d.success) document.getElementById('eNsi').value = d.data.numero;
 });
 async function sauvegarder(){
+  if (!document.getElementById('eNom_id').value) {
+    document.getElementById('eAlert').innerHTML = '<div class="alert alert-danger">Le type (nomenclature) est obligatoire.</div>';
+    return;
+  }
   const btn = document.getElementById('btnSave');
   btn.disabled = true;
   btn.textContent = '⏳ Enregistrement…';
