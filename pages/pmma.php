@@ -42,6 +42,13 @@ foreach (db_fetch_all("SELECT DISTINCT TRIM(type_pmma) AS t FROM stock_pmma_site
 }
 sort($types_connus);
 
+// Capacité carton par type (ex: 25, 50) — pour afficher le stock à la fois
+// en unités et en cartons, demandé après une confusion où une sortie de
+// "50" a été comprise comme 50 cartons alors que la quantité saisie est
+// toujours en unités (cf. $action==='sortie' plus bas).
+$type_capacites = [];
+foreach ($types_connus as $t) $type_capacites[$t] = capacite_carton_pmma($t);
+
 // ── AJAX (Entrée/Sortie manuelle — GSB/admin uniquement)
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     header('Content-Type: application/json');
@@ -90,7 +97,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $stock_actuel = (int)db_fetch_value(
             "SELECT quantite FROM stock_pmma_site WHERE site_id=? AND type_pmma=?", [$site_id, $type]
         );
-        if ($stock_actuel < $quantite) json_response(false, "Stock insuffisant. Disponible : $stock_actuel");
+        if ($stock_actuel < $quantite) {
+            $cap = capacite_carton_pmma($type);
+            $msg = "Stock insuffisant. Disponible : $stock_actuel unité(s)";
+            if ($stock_actuel > 0) {
+                $nb_cart = intdiv($stock_actuel, $cap);
+                $reste   = $stock_actuel % $cap;
+                $msg .= " (" . $nb_cart . " carton(s)" . ($reste ? " + $reste u." : '') . ")";
+            }
+            json_response(false, $msg);
+        }
         db_query("INSERT INTO stock_pmma (site_id,type_pmma,quantite,type_mouvement,bobine_id,notes,created_by) VALUES (?,?,?,'sortie',?,?,?)",
             [$site_id, $type, $quantite, $bobine_id ?: null, 'Utilisation production', $user['id']]);
         db_query("UPDATE stock_pmma_site SET quantite=quantite-? WHERE site_id=? AND type_pmma=?",
@@ -613,17 +629,22 @@ include __DIR__ . '/../templates/header.php';
       <div class="pmma-site"><i class="ph-duotone ph-map-pin"></i> <?= h($site_nom) ?></div>
     </div>
     <div class="pmma-body">
-      <?php foreach ($items as $item): if (!$item['type_pmma']) continue; ?>
+      <?php foreach ($items as $item): if (!$item['type_pmma']) continue;
+        $cap_item  = $type_capacites[$item['type_pmma']] ?? capacite_carton_pmma($item['type_pmma']);
+        $nb_cart   = intdiv((int)$item['quantite'], $cap_item);
+        $reste_u   = (int)$item['quantite'] % $cap_item;
+      ?>
       <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
         <div>
           <div style="font-size:13px;font-weight:600;color:var(--navy)"><?= h($item['type_pmma']) ?></div>
-          <div style="font-size:12px;color:var(--muted)">Seuil : <?= (int)($item['seuil_alerte'] ?? 10) ?></div>
+          <div style="font-size:12px;color:var(--muted)">Seuil : <?= (int)($item['seuil_alerte'] ?? 10) ?> · carton de <?= $cap_item ?></div>
         </div>
         <div style="text-align:right">
           <div style="font-family:'Montserrat',sans-serif;font-size:26px;font-weight:900;color:<?= $item['quantite'] < ($item['seuil_alerte'] ?? 10) ? 'var(--danger-d)' : 'var(--blue)' ?>">
             <?= (int)$item['quantite'] ?>
           </div>
           <div style="font-size:12px;color:var(--muted)">unités</div>
+          <div style="font-size:11.5px;color:var(--muted)">≈ <?= $nb_cart ?> carton(s)<?= $reste_u ? " + $reste_u u." : '' ?></div>
         </div>
       </div>
       <?php if ($item['quantite'] < ($item['seuil_alerte'] ?? 10)): ?>
@@ -643,18 +664,21 @@ include __DIR__ . '/../templates/header.php';
     <table class="pmma-matrix">
       <thead><tr>
         <th>Site</th>
-        <?php foreach ($pmma_types as $t): ?><th><?= h($t) ?></th><?php endforeach; ?>
-        <th>Total</th>
+        <?php foreach ($pmma_types as $t): ?><th><?= h($t) ?> <span style="font-weight:400;color:var(--muted)">(carton de <?= $type_capacites[$t] ?? capacite_carton_pmma($t) ?>)</span></th><?php endforeach; ?>
+        <th>Total <span style="font-weight:400;color:var(--muted)">(unités)</span></th>
       </tr></thead>
       <tbody>
       <?php foreach ($site_names_order as $sid => $site_nom): $site_total = 0; ?>
         <tr>
           <td style="font-weight:600;color:var(--navy)"><?= h($site_nom) ?></td>
-          <?php foreach ($pmma_types as $t): $cell = $pmma_matrix[$sid][$t] ?? null; if ($cell) $site_total += $cell['quantite']; ?>
+          <?php foreach ($pmma_types as $t): $cell = $pmma_matrix[$sid][$t] ?? null; if ($cell) $site_total += $cell['quantite'];
+            $cap_t = $type_capacites[$t] ?? capacite_carton_pmma($t);
+          ?>
           <td>
-            <?php if ($cell): $bas = $cell['quantite'] < $cell['seuil']; ?>
+            <?php if ($cell): $bas = $cell['quantite'] < $cell['seuil']; $nb_c = intdiv($cell['quantite'], $cap_t); $rst = $cell['quantite'] % $cap_t; ?>
             <span style="font-weight:700;color:<?= $bas ? 'var(--danger-d)' : 'var(--navy)' ?>"><?= $cell['quantite'] ?></span>
             <?php if ($bas): ?><i class="ph-duotone ph-warning" style="color:var(--danger-d);margin-left:3px" title="Stock bas"></i><?php endif; ?>
+            <div style="font-size:11px;color:var(--muted)"><?= $nb_c ?> carton(s)<?= $rst ? "+$rst" : '' ?></div>
             <?php else: ?><span style="color:var(--muted)">—</span><?php endif; ?>
           </td>
           <?php endforeach; ?>
@@ -750,10 +774,10 @@ include __DIR__ . '/../templates/header.php';
         </div>
         <?php else: ?><input type="hidden" id="eSiteId" value="<?= $site_force ?>"><?php endif; ?>
         <div class="form-group"><label>Type PMMA</label>
-          <select class="form-control" id="eTypePmma">
+          <select class="form-control" id="eTypePmma" onchange="majCartonsHint('e')">
             <option value="">— choisir —</option>
             <?php foreach ($types_connus as $t): ?>
-            <option value="<?= h($t) ?>"><?= h($t) ?><?php
+            <option value="<?= h($t) ?>" data-cap="<?= $type_capacites[$t] ?? capacite_carton_pmma($t) ?>"><?= h($t) ?><?php
               if (isset($catalogue_pmma[$t])):
                 ?> — carton de <?= (int)$catalogue_pmma[$t]['unites_par_carton'] ?><?php
               endif; ?></option>
@@ -761,8 +785,9 @@ include __DIR__ . '/../templates/header.php';
           </select>
         </div>
       </div>
-      <div class="form-group" style="margin-bottom:14px"><label>Quantité *</label>
-        <input type="number" class="form-control" id="eQteEntree" min="1" value="1">
+      <div class="form-group" style="margin-bottom:14px"><label>Quantité * <span style="font-weight:400;color:var(--muted)">(en unités)</span></label>
+        <input type="number" class="form-control" id="eQteEntree" min="1" value="1" oninput="majCartonsHint('e')">
+        <div id="eQteCartonsHint" style="font-size:12px;color:var(--muted);margin-top:4px"></div>
       </div>
       <div class="form-group"><label>Notes</label>
         <input type="text" class="form-control" id="eNotesEntree" placeholder="Fournisseur, N° BL…">
@@ -794,10 +819,10 @@ include __DIR__ . '/../templates/header.php';
         </div>
         <?php else: ?><input type="hidden" id="sSiteId" value="<?= $site_force ?>"><?php endif; ?>
         <div class="form-group"><label>Type PMMA</label>
-          <select class="form-control" id="sTypePmma">
+          <select class="form-control" id="sTypePmma" onchange="majCartonsHint('s')">
             <option value="">— choisir —</option>
             <?php foreach ($types_connus as $t): ?>
-            <option value="<?= h($t) ?>"><?= h($t) ?><?php
+            <option value="<?= h($t) ?>" data-cap="<?= $type_capacites[$t] ?? capacite_carton_pmma($t) ?>"><?= h($t) ?><?php
               if (isset($catalogue_pmma[$t])):
                 ?> — carton de <?= (int)$catalogue_pmma[$t]['unites_par_carton'] ?><?php
               endif; ?></option>
@@ -806,8 +831,9 @@ include __DIR__ . '/../templates/header.php';
         </div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
-        <div class="form-group"><label>Quantité *</label>
-          <input type="number" class="form-control" id="sQteSortie" min="1" value="1">
+        <div class="form-group"><label>Quantité * <span style="font-weight:400;color:var(--muted)">(en unités)</span></label>
+          <input type="number" class="form-control" id="sQteSortie" min="1" value="1" oninput="majCartonsHint('s')">
+          <div id="sQteCartonsHint" style="font-size:12px;color:var(--muted);margin-top:4px"></div>
         </div>
         <div class="form-group"><label>Bobine associée</label>
           <select class="form-control" id="sBobineId">
@@ -827,6 +853,21 @@ include __DIR__ . '/../templates/header.php';
 <?php endif; ?>
 
 <script>
+// Conversion unités -> cartons en direct dans les modals Entrée/Sortie,
+// pour éviter la confusion "j'ai saisi 50 en pensant 50 cartons" (la
+// quantité est toujours stockée/comparée en unités côté serveur).
+function majCartonsHint(prefix){
+  const typeSel = document.getElementById(prefix+'TypePmma');
+  const qteEl   = document.getElementById(prefix+'Qte'+(prefix==='e'?'Entree':'Sortie'));
+  const hintEl  = document.getElementById(prefix+'QteCartonsHint');
+  if(!typeSel||!qteEl||!hintEl) return;
+  const opt = typeSel.options[typeSel.selectedIndex];
+  const cap = opt ? parseInt(opt.dataset.cap||'0',10) : 0;
+  const qte = parseInt(qteEl.value||'0',10);
+  if(!cap || !qte){ hintEl.textContent=''; return; }
+  const nbCartons = Math.floor(qte/cap), reste = qte%cap;
+  hintEl.textContent = '≈ '+nbCartons+' carton(s)'+(reste?' + '+reste+' u.':'');
+}
 function ap(d){
     const fd=new FormData();
     for(const[k,v] of Object.entries(d)) if(v!==undefined) fd.append(k,v);
