@@ -269,7 +269,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             "SELECT cbl.*, b.films_restants, b.qte_initiale,
                     -- Quantité livrée = films au moment du transfert (mouvement le plus récent)
                     COALESCE((
-                        SELECT m.stock_avant FROM mouvements_bobines m
+                        SELECT m.stock_avant + COALESCE((SELECT SUM(c.quantite) FROM mouvements_bobines c
+                            WHERE c.bobine_id=m.bobine_id AND c.type='correction_qte_initiale' AND c.created_at > m.created_at),0)
+                        FROM mouvements_bobines m
                         WHERE m.bobine_id=cbl.bobine_id AND m.type='transfert'
                         ORDER BY m.created_at DESC LIMIT 1
                     ), b.qte_initiale) AS qte_livree,

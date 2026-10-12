@@ -126,6 +126,49 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         json_response(true,'Bobine affectée au site.');
     }
 
+    // ── CORRIGER LA QUANTITÉ INITIALE — bobine livrée avec moins (ou plus)
+    // de films que la capacité du catalogue (ex : 499 au lieu de 500). La
+    // différence est reportée sur le stock restant (les films consommés ne
+    // changent pas) et tracée par un mouvement 'correction_qte_initiale'
+    // dont la quantité signée est rajoutée à qte_livree dans les requêtes
+    // de liste (sinon la barre de % garderait l'ancienne quantité livrée).
+    if ($action==='modifier_qte_initiale') {
+        require_permission($perm_module_bob,'can_update');
+        if ($is_coord) json_response(false,'Accès refusé.');
+        $id    = (int)($_POST['id'] ?? 0);
+        $qte   = (int)($_POST['qte_initiale'] ?? 0);
+        $motif = trim($_POST['motif'] ?? '');
+        if ($qte <= 0) json_response(false,'La quantité initiale doit être supérieure à 0.');
+        db_begin();
+        try {
+            $bob = db_fetch_one("SELECT * FROM op_bobines WHERE id=? FOR UPDATE",[$id]);
+            if (!$bob) { db_rollback(); json_response(false,'Bobine introuvable.'); }
+            $ancienne = (int)$bob['qte_initiale'];
+            $delta    = $qte - $ancienne;
+            if ($delta === 0) { db_rollback(); json_response(false,"La quantité initiale est déjà de $qte."); }
+            $stock_avant = (int)$bob['stock_systeme'];
+            $stock_apres = $stock_avant + $delta;
+            if ($stock_apres < 0) {
+                db_rollback();
+                json_response(false,"Impossible : ".($ancienne - $stock_avant)." films ont déjà été consommés/sortis, la quantité initiale ne peut pas être inférieure à ".($ancienne - $stock_avant).".");
+            }
+            $statut = $bob['statut'];
+            if ($stock_apres === 0 && $statut !== 'retiree') $statut = 'epuisee';
+            elseif ($stock_apres > 0 && $statut === 'epuisee') $statut = $bob['site_id'] ? 'en_cours' : 'en_stock';
+            db_query("UPDATE op_bobines
+                      SET qte_initiale=?, stock_systeme=?, films_restants=?, statut=?,
+                          films_total = CASE WHEN films_total=? THEN ? ELSE films_total END
+                      WHERE id=?",
+                [$qte,$stock_apres,$stock_apres,$statut,$ancienne,$qte,$id]);
+            $libelle = "Correction quantité initiale $ancienne → $qte" . ($motif !== '' ? " : $motif" : '');
+            db_query("INSERT INTO mouvements_bobines (bobine_id,type,quantite,stock_avant,stock_apres,motif,created_by) VALUES (?,?,?,?,?,?,?)",
+                [$id,'correction_qte_initiale',$delta,$stock_avant,$stock_apres,mb_substr($libelle,0,255),$user['id']]);
+            audit_log($user['id'],'UPDATE','operations',$id,"Bobine {$bob['numero']} — $libelle (stock : $stock_avant → $stock_apres)");
+            db_commit();
+            json_response(true,"Quantité initiale corrigée : $ancienne → $qte. Stock restant : $stock_apres films.");
+        } catch(Exception $e){ db_rollback(); json_response(false,'Erreur: '.$e->getMessage()); }
+    }
+
     // ── SAISIE CONSOMMATION JOURNALIÈRE
     if ($action==='consommation') {
         require_permission($perm_module_bob,'can_create');
@@ -403,7 +446,9 @@ $bobines = db_fetch_all(
             t.format AS tb_format, t.version AS tb_version,
             -- Quantité réelle au moment de la dernière affectation (transfert)
             COALESCE(
-                (SELECT m.stock_avant FROM mouvements_bobines m
+                (SELECT m.stock_avant + COALESCE((SELECT SUM(c.quantite) FROM mouvements_bobines c
+                     WHERE c.bobine_id=m.bobine_id AND c.type='correction_qte_initiale' AND c.created_at > m.created_at),0)
+                 FROM mouvements_bobines m
                  WHERE m.bobine_id=b.id AND m.type='transfert'
                  ORDER BY m.created_at DESC LIMIT 1),
                 b.qte_initiale
@@ -769,6 +814,9 @@ endif;
               <?php endif; ?>
               <?php if(can($perm_module_bob,'can_update') && !$is_coord && $b['statut']==='en_stock'): ?>
               <button class="btn btn-sm" style="background:#e3f2fd;color:#1565c0;border:1px solid #90caf9;padding:4px 8px;border-radius:6px;cursor:pointer;margin-left:2px" onclick="openAffecter(<?= $b['id'] ?>,'<?= h($b['numero']) ?>')"><i class="ph ph-buildings" aria-hidden="true"></i></button>
+              <?php endif; ?>
+              <?php if(can($perm_module_bob,'can_update') && !$is_coord && $b['statut']!=='retiree'): ?>
+              <button class="btn btn-sm" style="background:#f3e8ff;color:#6b21a8;border:1px solid #d8b4fe;padding:4px 8px;border-radius:6px;cursor:pointer;margin-left:2px" onclick="openQteInit(<?= $b['id'] ?>,'<?= h($b['numero']) ?>',<?= (int)$b['qte_initiale'] ?>,<?= (int)$b['stock_systeme'] ?>)" title="Corriger la quantité initiale"><i class="ph ph-pencil-simple-line" aria-hidden="true"></i></button>
               <?php endif; ?>
             </td>
           </tr>
@@ -1206,7 +1254,7 @@ endif;
 
 <script>
 const IS_COORD = <?= $is_coord ? 'true' : 'false' ?>;
-const MODALS = ['modalDetail','modalConso','modalAffecter','modalEcart','modalResoudre'];
+const MODALS = ['modalDetail','modalConso','modalAffecter','modalEcart','modalResoudre','modalQteInit'];
 function openModal(id){ document.getElementById(id).style.display='flex'; }
 function closeAllModals(){ MODALS.forEach(id=>{ const el=document.getElementById(id); if(el) el.style.display='none'; }); }
 MODALS.forEach(id=>{ const el=document.getElementById(id); if(el) el.addEventListener('click',function(e){if(e.target===this)closeAllModals();}); });
@@ -1463,6 +1511,40 @@ async function saveImport(){
 }
 
 // ── DÉCLARER ÉCART MANUEL
+function openQteInit(id,num,qteInit,stockSys){
+  const inp=document.getElementById('mQteInitVal');
+  document.getElementById('mQteInitId').value=id;
+  document.getElementById('mQteInitNum').textContent=num;
+  document.getElementById('mQteInitActuelle').textContent=qteInit;
+  document.getElementById('mQteInitStock').textContent=stockSys;
+  inp.value=qteInit; inp.dataset.init=qteInit; inp.dataset.stock=stockSys;
+  inp.min=Math.max(1,qteInit-stockSys);
+  document.getElementById('mQteInitMotif').value='';
+  previewQteInit();
+  openModal('modalQteInit');
+}
+function previewQteInit(){
+  const inp=document.getElementById('mQteInitVal'), prev=document.getElementById('mQteInitPreview');
+  const v=parseInt(inp.value), init=parseInt(inp.dataset.init), stock=parseInt(inp.dataset.stock);
+  if(isNaN(v)||v===init){prev.style.display='none';return;}
+  const apres=stock+(v-init);
+  prev.style.display='block';
+  prev.style.background=apres<0?'#fdf0ef':'#f0f9ff';
+  prev.textContent=apres<0
+    ? `Impossible : ${init-stock} films déjà consommés/sortis.`
+    : `Stock restant : ${stock} → ${apres} films (${v-init>0?'+':''}${v-init})`;
+}
+async function saveQteInit(){
+  const id=document.getElementById('mQteInitId').value;
+  const qte=document.getElementById('mQteInitVal').value;
+  const motif=document.getElementById('mQteInitMotif').value.trim();
+  if(!qte||parseInt(qte)<=0){alert('Saisissez une quantité initiale valide.');return;}
+  const btn=document.getElementById('btnSaveQteInit');btn.disabled=true;
+  const d=await ap({action:'modifier_qte_initiale',id,qte_initiale:qte,motif});
+  btn.disabled=false;
+  if(d.success){closeAllModals();toast(d.message);setTimeout(()=>location.reload(),1200);}
+  else alert('Erreur : '+d.message);
+}
 function openDeclarerEcart(id,num,stockSys){
   document.getElementById('mEcartBobineId').value=id;
   document.getElementById('mEcartNum').textContent=num;
@@ -1585,6 +1667,33 @@ async function chargerEcarts(){
 </script>
 
 <!-- MODAL ECART -->
+<div id="modalQteInit" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:white;border-radius:16px;padding:28px;width:440px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+      <h3 style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#0d1f35">Quantité initiale — <span id="mQteInitNum"></span></h3>
+      <button onclick="closeAllModals()" style="background:none;border:none;font-size:20px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
+    </div>
+    <input type="hidden" id="mQteInitId">
+    <div style="background:#f8fafc;padding:12px 14px;border-radius:8px;margin-bottom:14px;font-size:13px;border-left:3px solid var(--blue)">
+      Quantité initiale actuelle : <strong id="mQteInitActuelle">-</strong> films · Stock restant : <strong id="mQteInitStock">-</strong> films
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:5px">Nouvelle quantité initiale *</label>
+      <input type="number" class="form-control" id="mQteInitVal" min="1" oninput="previewQteInit()">
+    </div>
+    <div id="mQteInitPreview" style="display:none;padding:10px 14px;border-radius:8px;margin-bottom:12px;font-size:13px;font-weight:600"></div>
+    <div class="form-group" style="margin-bottom:18px">
+      <label style="font-size:13px;font-weight:600;display:block;margin-bottom:5px">Motif</label>
+      <input type="text" class="form-control" id="mQteInitMotif" placeholder="ex : bobine livrée avec 499 films">
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-bottom:16px">La différence est reportée sur le stock restant ; les films déjà consommés ne changent pas. La correction est tracée dans l'historique de la bobine.</p>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-secondary" onclick="closeAllModals()">Annuler</button>
+      <button class="btn btn-primary" id="btnSaveQteInit" onclick="saveQteInit()">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
 <div id="modalEcart" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center">
   <div style="background:white;border-radius:16px;padding:28px;width:480px;max-width:95vw;box-shadow:0 20px 60px rgba(0,0,0,.3)">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
