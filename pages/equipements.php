@@ -129,6 +129,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !is_ajax() && isset($_FILES['fichie
                     return $code . '-EMUCI-' . str_pad((string)$seq_par_code[$code], 4, '0', STR_PAD_LEFT);
                 };
 
+                // Anti-doublon sur le N° série externe (seul identifiant physique
+                // de l'équipement) : contre la base, toutes catégories et
+                // réformés compris, et contre les lignes déjà lues du fichier —
+                // réimporter le même fichier ne crée donc rien deux fois.
+                $nse_existants = [];
+                foreach (db_fetch_all(
+                    "SELECT LOWER(TRIM(numero_serie_origine)) AS k, numero_serie_interne
+                     FROM equipements
+                     WHERE numero_serie_origine IS NOT NULL AND TRIM(numero_serie_origine) <> ''"
+                ) as $r) $nse_existants[$r['k']] = $r['numero_serie_interne'];
+                $nse_fichier = [];
+
                 $duree_mois_cat = $ohada_durees[$f_categorie] ?? $ohada_durees['default'];
                 $etats_valides  = ['neuf','bon','usage','endommage','hs'];
 
@@ -175,6 +187,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !is_ajax() && isset($_FILES['fichie
                         }
 
                         $nse         = $get($row, 'N° Série externe');
+                        if ($nse !== '') {
+                            $k = mb_strtolower($nse);
+                            if (isset($nse_existants[$k])) {
+                                $erreurs[] = "Ligne $ln : doublon, le N° série \"$nse\" existe déjà ({$nse_existants[$k]})."; continue;
+                            }
+                            if (isset($nse_fichier[$k])) {
+                                $erreurs[] = "Ligne $ln : doublon, le N° série \"$nse\" est déjà en ligne {$nse_fichier[$k]} du fichier."; continue;
+                            }
+                            $nse_fichier[$k] = $ln;
+                        }
                         $emplacement = $get($row, 'Emplacement');
                         $prix_achat  = (float)str_replace([' ', ','], ['', '.'], $get($row, 'Prix achat') ?: '0');
 
@@ -492,6 +514,7 @@ include __DIR__ . '/../templates/header.php';
     </div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
       Fichier Excel (.xlsx/.xls) ou CSV. Colonnes attendues : <strong>Type (obligatoire, doit exister au catalogue)</strong>, Marque ou Modèle (au moins l'un des deux), N° Série externe, Site, État, Date acquisition, Prix achat, Emplacement — téléchargez le modèle pour les exemples.
+      Une ligne dont le N° Série externe existe déjà (en base ou plus haut dans le fichier) est ignorée comme doublon.
       Le numéro de série interne est généré automatiquement.
     </p>
     <form method="POST" enctype="multipart/form-data">
