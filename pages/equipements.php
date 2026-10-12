@@ -920,12 +920,12 @@ include __DIR__ . '/../templates/header.php';
 
 <script>
 async function supprimerEquip(id, numero){
-  if (!confirm('Supprimer l'équipement ' + numero + ' ?')) return;
+  if (!confirm(`Supprimer l'équipement ${numero} ?`)) return;
   try {
     const d = await ap({action:'supprimer', id});
     toast(d.message, d.success ? 'success' : 'error');
     if (d.success) setTimeout(() => location.reload(), 800);
-  } catch(err) { toast('Erreur réseau.', 'error'); }
+  } catch(err) { toast(err.message, 'error'); }
 }
 function ap(d){return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(d)}).then(achParseJson);}
 
