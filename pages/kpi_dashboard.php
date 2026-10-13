@@ -625,6 +625,7 @@ foreach (db_fetch_all(
        FROM op_endommagements e
        JOIN op_points_journaliers p ON p.id = e.point_id
       WHERE p.statut <> 'brouillon' AND p.date_point BETWEEN ?::date AND ?::date
+        " . (db_colonne_existe('op_endommagements', 'objet') ? "AND COALESCE(e.objet,'film') = 'film'" : '') . "
         " . pref_clause_in('e.site_id', $sites_sel) . "
       GROUP BY e.cause, e.etape", [$C['du_a'], $C['au_a']]) as $r) {
     $endo_causes[$r['cause']] = ($endo_causes[$r['cause']] ?? 0) + (int)$r['n'];

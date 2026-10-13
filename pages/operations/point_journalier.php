@@ -288,13 +288,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             }
 
             // ── n° 2.1 CR PDG — déclarations d'endommagement
-            // On n'accepte une déclaration que pour une bobine réellement
-            // déclarée endommagée dans ce point : le pop-up est la seule
-            // porte prévue, mais la requête peut être forgée.
-            $bobines_endommagees = [];
+            // Chaque unité endommagée porte sa justification : film (par
+            // bobine), et — depuis sql/migration_endommagements_rivets_pmma.sql
+            // — rivet (par type) et PMMA (par type). Clé de groupe :
+            // « film:<bobine_id> », « rivet:gonflable|eclate », « pmma:<type> ».
+            // On n'accepte une déclaration que pour un groupe réellement
+            // déclaré endommagé dans ce point : la requête peut être forgée.
+            $endo_multi = db_colonne_existe('op_endommagements', 'objet');
+            $attendus = [];   // clé -> nombre d'unités endommagées
+            $libelles = [];   // clé -> libellé pour les messages
             foreach ($films_data as $fd) {
                 if ((int)($fd['films_endommages'] ?? 0) > 0) {
-                    $bobines_endommagees[(int)$fd['bobine_id']] = (int)$fd['films_endommages'];
+                    $k = 'film:' . (int)$fd['bobine_id'];
+                    $attendus[$k] = (int)$fd['films_endommages'];
+                    $libelles[$k] = 'film(s) sur une bobine';
+                }
+            }
+            if ($endo_multi) {
+                if ($riv_gonfl_end  > 0) { $attendus['rivet:gonflable'] = $riv_gonfl_end;  $libelles['rivet:gonflable'] = 'rivet(s) gonflable(s)'; }
+                if ($riv_eclate_end > 0) { $attendus['rivet:eclate']    = $riv_eclate_end; $libelles['rivet:eclate']    = 'rivet(s) éclaté(s)'; }
+                foreach ($pmma_data as $pd) {
+                    $t = trim($pd['type_pmma'] ?? ''); $n = (int)($pd['endommages'] ?? 0);
+                    if ($t !== '' && $n > 0) { $attendus["pmma:$t"] = $n; $libelles["pmma:$t"] = "PMMA $t"; }
                 }
             }
             $etapes_ok = ['pose','impression','lamination','transport','stockage','autre'];
@@ -305,16 +320,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 "SELECT character_maximum_length FROM information_schema.columns
                  WHERE table_name='op_endommagements' AND column_name='cause'") ?: 255);
 
-            // Une déclaration par film endommagé : six films abîmés sur une
+            // Une déclaration par unité endommagée : six films abîmés sur une
             // bobine peuvent l'avoir été à six moments et pour six causes.
-            $rangs = [];   // bobine_id -> compteur de films déjà déclarés
+            $rangs = [];   // clé -> compteur d'unités déjà déclarées
             foreach ($endo_data as $ed) {
-                $e_bobine = (int)($ed['bobine_id'] ?? 0);
-                if (!isset($bobines_endommagees[$e_bobine])) continue;
+                $objet = $ed['objet'] ?? 'film';
+                $e_bobine = null; $sous_type = null;
+                if ($objet === 'film') {
+                    $e_bobine = (int)($ed['bobine_id'] ?? 0);
+                    $k = "film:$e_bobine";
+                } elseif ($objet === 'rivet' || $objet === 'pmma') {
+                    $sous_type = trim((string)($ed['sous_type'] ?? ''));
+                    $k = "$objet:$sous_type";
+                } else {
+                    continue;
+                }
+                if (!isset($attendus[$k])) continue;
 
-                $rangs[$e_bobine] = ($rangs[$e_bobine] ?? 0) + 1;
-                if ($rangs[$e_bobine] > $bobines_endommagees[$e_bobine]) {
-                    throw new Exception("Déclarations d'endommagement plus nombreuses que les films endommagés déclarés sur une bobine.");
+                $rangs[$k] = ($rangs[$k] ?? 0) + 1;
+                if ($rangs[$k] > $attendus[$k]) {
+                    throw new Exception("Déclarations d'endommagement plus nombreuses que les {$libelles[$k]} déclarés endommagés.");
                 }
 
                 $e_personne = trim((string)($ed['personne'] ?? ''));
@@ -327,24 +352,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
                 $e_heure = trim((string)($ed['heure'] ?? ''));
                 if ($e_heure !== '' && !preg_match('/^\d{2}:\d{2}$/', $e_heure)) $e_heure = '';
+                $e_obs = trim((string)($ed['observations'] ?? ''));
 
-                db_query(
-                    "INSERT INTO op_endommagements
-                     (point_id,bobine_id,site_id,film_no,personne,etape,cause,heure,observations,created_by)
-                     VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    [$point_id, $e_bobine, $site_id, $rangs[$e_bobine],
-                     $e_personne, $e_etape, $e_cause, $e_heure ?: null,
-                     trim((string)($ed['observations'] ?? '')), $user['id']]
-                );
+                if ($endo_multi) {
+                    db_query(
+                        "INSERT INTO op_endommagements
+                         (point_id,objet,sous_type,bobine_id,site_id,film_no,personne,etape,cause,heure,observations,created_by)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                        [$point_id, $objet, $sous_type, $e_bobine, $site_id, $rangs[$k],
+                         $e_personne, $e_etape, $e_cause, $e_heure ?: null, $e_obs, $user['id']]
+                    );
+                } else {
+                    db_query(
+                        "INSERT INTO op_endommagements
+                         (point_id,bobine_id,site_id,film_no,personne,etape,cause,heure,observations,created_by)
+                         VALUES (?,?,?,?,?,?,?,?,?,?)",
+                        [$point_id, $e_bobine, $site_id, $rangs[$k],
+                         $e_personne, $e_etape, $e_cause, $e_heure ?: null, $e_obs, $user['id']]
+                    );
+                }
             }
 
-            // Chaque film endommagé doit avoir sa déclaration : sans ce
-            // contrôle, un envoi partiel laisserait des films sans traçabilité,
-            // ce que le module est précisément censé empêcher.
-            foreach ($bobines_endommagees as $bid => $nb) {
-                if (($rangs[$bid] ?? 0) !== $nb) {
-                    throw new Exception("Chaque film endommagé doit être déclaré : "
-                        . ($rangs[$bid] ?? 0) . " déclaration(s) pour $nb film(s) sur une bobine.");
+            // Chaque unité endommagée doit avoir sa déclaration : sans ce
+            // contrôle, un envoi partiel laisserait des unités sans
+            // traçabilité, ce que le module est précisément censé empêcher.
+            foreach ($attendus as $k => $nb) {
+                if (($rangs[$k] ?? 0) !== $nb) {
+                    throw new Exception("Chaque endommagement doit être justifié : "
+                        . ($rangs[$k] ?? 0) . " déclaration(s) pour $nb {$libelles[$k]}.");
                 }
             }
 
@@ -472,6 +507,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             "SELECT bobine_id, films_utilises, films_endommages FROM op_films_utilises WHERE point_id=?",
             [$point_id]
         );
+        // Lignes PMMA et déclarations d'endommagement : rechargées dans le
+        // formulaire, sinon une simple mise à jour du point effaçait la
+        // consommation PMMA et obligeait à tout re-justifier.
+        $point['pmma'] = db_fetch_all("SELECT * FROM op_pmma_utilises WHERE point_id=? ORDER BY type_pmma", [$point_id]);
+        $point['endommagements'] = db_fetch_all(
+            "SELECT * FROM op_endommagements WHERE point_id=? ORDER BY bobine_id, film_no, id", [$point_id]);
         json_response(true, '', ['point' => $point]);
     }
 
@@ -1487,7 +1528,7 @@ foreach($points as $p):
             <div class="form-group" style="margin:0">
               <label style="font-size:12px;color:#e65100">Endommagés</label>
               <input type="number" class="form-control" id="p-gonfl-end" min="0" value="0"
-                     oninput="recalcule()" style="text-align:center;border-color:#f39c12">
+                     oninput="recalcule()" onchange="onRivetEndChange('gonflable', this)" style="text-align:center;border-color:#f39c12">
             </div>
           </div>
           <div id="info-gonfl" style="font-size:12px;margin-top:8px;color:#1565c0;font-weight:600">Stock: — | Sortis: 0</div>
@@ -1503,7 +1544,7 @@ foreach($points as $p):
             <div class="form-group" style="margin:0">
               <label style="font-size:12px;color:#e65100">Endommagés</label>
               <input type="number" class="form-control" id="p-eclate-end" min="0" value="0"
-                     oninput="recalcule()" style="text-align:center;border-color:#f39c12">
+                     oninput="recalcule()" onchange="onRivetEndChange('eclate', this)" style="text-align:center;border-color:#f39c12">
             </div>
           </div>
           <div id="info-eclate" style="font-size:12px;margin-top:8px;color:#880e4f;font-weight:600">Stock: — | Sortis: 0</div>
@@ -1795,6 +1836,7 @@ function resetPointForm(){
   document.getElementById('pAlert').innerHTML='';
   document.getElementById('point-preview').style.display='none';
   bobinesCache={}; stockRivets=0; stockGonfl=0; stockEclate=0;
+  endommagementsSaisis = {};
   recalcule();
 }
 
@@ -1896,11 +1938,21 @@ function ajouterLignePmma(){
   const sel = document.getElementById('pmma-select');
   const type = sel.value;
   if(!type) return;
+  ajouterLignePmmaType(type);
+  sel.value='';
+}
+
+// Ajoute la ligne d'un type ; `deja` = quantité déjà sortie par le point
+// rouvert, rendue au stock affiché (le serveur la restaure avant contrôle).
+function ajouterLignePmmaType(type, deja = 0){
   // Éviter les doublons
-  if(document.querySelector(`#pmma-lignes [data-type="${CSS.escape(type)}"]`)){
-    sel.value=''; return;
+  if(document.querySelector(`#pmma-lignes [data-type="${CSS.escape(type)}"]`)) return null;
+  let lignes = document.getElementById('pmma-lignes');
+  if(!lignes){
+    document.getElementById('pmma-container').innerHTML = '<div id="pmma-lignes"></div>';
+    lignes = document.getElementById('pmma-lignes');
   }
-  const stock = pmmaStockDisponible[type] ?? '?';
+  const stock = (pmmaStockDisponible[type] ?? 0) + deja;
   const div = document.createElement('div');
   div.dataset.type = type;
   div.style.cssText='display:grid;grid-template-columns:1fr 100px 100px 100px 32px;gap:8px;align-items:end;padding:8px 10px;background:var(--lighter);border-radius:9px;margin-bottom:6px';
@@ -1914,7 +1966,8 @@ function ajouterLignePmma(){
     <div>
       <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px">Endommagés</label>
       <input type="number" data-kind="end" min="0" max="${stock}" value="0"
-             class="form-control" style="font-size:13px;text-align:center">
+             class="form-control" style="font-size:13px;text-align:center"
+             onchange="onPmmaEndChange(this.closest('[data-type]').dataset.type, this)">
     </div>
     <div>
       <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px" title="PMMA reçus qui ne respectent pas les règles">Non conformes</label>
@@ -1923,8 +1976,8 @@ function ajouterLignePmma(){
     </div>
     <button type="button" onclick="this.closest('[data-type]').remove()"
             style="background:#fee2e2;border:none;border-radius:7px;cursor:pointer;font-size:15px;color:#991b1b;width:32px;height:32px;margin-bottom:1px"><i class="ph ph-x" aria-hidden="true"></i></button>`;
-  document.getElementById('pmma-lignes').appendChild(div);
-  sel.value='';
+  lignes.appendChild(div);
+  return div;
 }
 
 function collectPmmaData(){
@@ -2158,17 +2211,50 @@ const CAUSES_ENDO = [
   ['incident_externe', 'Incident externe'],
   ['autre',            'Autre'],
 ];
-// bobine_id -> tableau d'une entrée par film endommagé
+// Rivets et PMMA endommagés ne se justifient qu'une fois les colonnes
+// objet/sous_type créées (sql/migration_endommagements_rivets_pmma.sql).
+const ENDO_MULTI = <?= db_colonne_existe('op_endommagements', 'objet') ? 'true' : 'false' ?>;
+// clé de groupe -> tableau d'une entrée par unité endommagée.
+// Clés : « film:<bobine_id> », « rivet:gonflable|eclate », « pmma:<type> ».
 let endommagementsSaisis = {};
+
+const escEndo = v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+// Groupes à justifier, d'après ce qui est saisi dans le formulaire.
+function groupesEndommages(){
+  const g = getBobinesData().filter(f => (f.films_endommages|0) > 0).map(f => ({
+    cle: 'film:'+f.bobine_id, objet: 'film', bobine_id: f.bobine_id, sous_type: null,
+    titre: 'Bobine ' + ((bobinesCache[f.bobine_id]||{}).numero || f.bobine_id),
+    unite: 'Film', nb: f.films_endommages|0,
+  }));
+  if (ENDO_MULTI){
+    const gEnd = parseInt(document.getElementById('p-gonfl-end')?.value||0);
+    const eEnd = parseInt(document.getElementById('p-eclate-end')?.value||0);
+    if (gEnd > 0) g.push({cle:'rivet:gonflable', objet:'rivet', sous_type:'gonflable', titre:'Rivets gonflables', unite:'Rivet', nb:gEnd});
+    if (eEnd > 0) g.push({cle:'rivet:eclate',    objet:'rivet', sous_type:'eclate',    titre:'Rivets éclatés',    unite:'Rivet', nb:eEnd});
+    collectPmmaData().filter(pm => (pm.endommages|0) > 0).forEach(pm => g.push({
+      cle:'pmma:'+pm.type_pmma, objet:'pmma', sous_type:pm.type_pmma, titre:'PMMA '+pm.type_pmma, unite:'PMMA', nb:pm.endommages|0,
+    }));
+  }
+  return g;
+}
 
 // Appelé quand une quantité endommagée change : on ouvre le pop-up à la
 // première saisie, sans harceler l'agent à chaque frappe suivante.
+function onEndoQuantite(cle, nb){
+  if (nb > 0 && !endommagementsSaisis[cle]) ouvrirPopupEndommagement();
+  if (nb === 0) delete endommagementsSaisis[cle];
+}
 function onEndommageChange(idx){
   updateBobineRestants(idx);
-  const bid    = document.getElementById('bsel-'+idx)?.value;
-  const endomm = parseInt(document.getElementById('bendomm-'+idx)?.value||0);
-  if (endomm > 0 && bid && !endommagementsSaisis[bid]) ouvrirPopupEndommagement();
-  if (endomm === 0 && bid) delete endommagementsSaisis[bid];
+  const bid = document.getElementById('bsel-'+idx)?.value;
+  if (bid) onEndoQuantite('film:'+bid, parseInt(document.getElementById('bendomm-'+idx)?.value||0));
+}
+function onRivetEndChange(type, el){
+  if (ENDO_MULTI) onEndoQuantite('rivet:'+type, parseInt(el.value||0));
+}
+function onPmmaEndChange(type, el){
+  if (ENDO_MULTI) onEndoQuantite('pmma:'+type, parseInt(el.value||0));
 }
 
 function causeLibelle(c){
@@ -2176,45 +2262,44 @@ function causeLibelle(c){
 }
 
 function ouvrirPopupEndommagement(){
-  const lignes = getBobinesData().filter(f => (f.films_endommages|0) > 0);
+  const groupes = groupesEndommages();
   const box = document.getElementById('endoLignes');
-  if (!lignes.length){
-    box.innerHTML = '<div style="color:var(--muted);font-size:13px">Aucune bobine endommagée saisie.</div>';
+  if (!groupes.length){
+    box.innerHTML = '<div style="color:var(--muted);font-size:13px">Aucun endommagement saisi.</div>';
   } else {
     const opt = (arr, sel) => arr.map(([v,l]) =>
       `<option value="${v}" ${sel===v?'selected':''}>${l}</option>`).join('');
 
-    box.innerHTML = lignes.map(f => {
-      const b   = bobinesCache[f.bobine_id] || {};
-      const nb  = f.films_endommages|0;
-      const dej = endommagementsSaisis[f.bobine_id] || [];
+    box.innerHTML = groupes.map(g => {
+      const nb  = g.nb;
+      const dej = endommagementsSaisis[g.cle] || [];
 
-      // Un bloc par film : chacun peut avoir sa propre étape, sa cause et
+      // Un bloc par unité : chacune peut avoir sa propre étape, sa cause et
       // sa personne. Le report ci-dessous évite de tout ressaisir quand
-      // les films ont été abîmés dans les mêmes circonstances.
-      const films = Array.from({length: nb}, (_, i) => {
+      // les unités ont été abîmées dans les mêmes circonstances.
+      const unites = Array.from({length: nb}, (_, i) => {
         const d = dej[i] || {};
         return `
-        <div class="endo-film" data-bobine="${f.bobine_id}" data-film="${i+1}"
+        <div class="endo-film" data-cle="${escEndo(g.cle)}"
              style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-top:10px;background:white">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">
             <span style="font-size:12px;font-weight:800;color:var(--danger-d);text-transform:uppercase;letter-spacing:.4px">
-              Film ${i+1} sur ${nb}
+              ${g.unite} ${i+1} sur ${nb}
             </span>
             ${i===0 && nb>1 ? `<button type="button" class="btn btn-secondary btn-sm"
-                 onclick="reporterEndommagement('${f.bobine_id}')"
-                 title="Recopier ces valeurs sur les films suivants de cette bobine">
+                 onclick="reporterEndommagement(this)"
+                 title="Recopier ces valeurs sur les suivants de ce groupe">
                  <i class="ph ph-copy" aria-hidden="true"></i> Reporter sur les ${nb-1} suivants</button>` : ''}
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <div>
               <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Personne concernée *</label>
-              <input type="text" class="form-control endo-personne" value="${(d.personne||'').replace(/"/g,'&quot;')}"
+              <input type="text" class="form-control endo-personne" value="${escEndo(d.personne)}"
                      placeholder="Nom de la personne" style="margin-top:4px">
             </div>
             <div>
               <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Heure de l'incident</label>
-              <input type="time" class="form-control endo-heure" value="${d.heure||''}" style="margin-top:4px">
+              <input type="time" class="form-control endo-heure" value="${escEndo(d.heure)}" style="margin-top:4px">
             </div>
             <div>
               <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Étape *</label>
@@ -2223,25 +2308,25 @@ function ouvrirPopupEndommagement(){
             <div>
               <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Cause *</label>
               <input type="text" class="form-control endo-cause" list="endoCausesList" maxlength="255"
-                     value="${causeLibelle(d.cause).replace(/"/g,'&quot;')}"
+                     value="${escEndo(causeLibelle(d.cause))}"
                      placeholder="Décrivez la cause" style="margin-top:4px">
             </div>
           </div>
           <div style="margin-top:9px">
             <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Observations</label>
             <textarea class="form-control endo-obs" rows="2" placeholder="Précisions libres…"
-                      style="margin-top:4px">${d.observations||''}</textarea>
+                      style="margin-top:4px">${escEndo(d.observations)}</textarea>
           </div>
         </div>`;
       }).join('');
 
       return `
       <div style="border:1.5px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px;background:var(--lighter)">
-        <div style="font-weight:800;color:var(--navy);font-size:14px">Bobine ${b.numero||f.bobine_id}</div>
+        <div style="font-weight:800;color:var(--navy);font-size:14px">${escEndo(g.titre)}</div>
         <div style="font-size:12px;color:var(--danger-d);font-weight:700">
-          ${nb} film(s) endommagé(s) — une déclaration par film
+          ${nb} endommagé(s) — une déclaration par ${g.unite.toLowerCase()}
         </div>
-        ${films}
+        ${unites}
       </div>`;
     }).join('');
   }
@@ -2249,9 +2334,10 @@ function ouvrirPopupEndommagement(){
   document.getElementById('mEndommagement').classList.add('open');
 }
 
-// Recopie le premier film sur les suivants de la même bobine.
-function reporterEndommagement(bobineId){
-  const blocs = document.querySelectorAll(`.endo-film[data-bobine="${bobineId}"]`);
+// Recopie la première unité sur les suivantes du même groupe.
+function reporterEndommagement(btn){
+  const cle = btn.closest('.endo-film').dataset.cle;
+  const blocs = [...document.querySelectorAll('#endoLignes .endo-film')].filter(b => b.dataset.cle === cle);
   if (blocs.length < 2) return;
   const src = blocs[0];
   const val = s => src.querySelector(s).value;
@@ -2262,7 +2348,7 @@ function reporterEndommagement(bobineId){
     blocs[i].querySelector('.endo-cause').value    = val('.endo-cause');
     blocs[i].querySelector('.endo-obs').value      = val('.endo-obs');
   }
-  toast(`Valeurs reportées sur ${blocs.length-1} film(s).`,'success');
+  toast(`Valeurs reportées sur ${blocs.length-1} élément(s).`,'success');
 }
 
 function validerEndommagements(){
@@ -2272,20 +2358,20 @@ function validerEndommagements(){
     const personne = l.querySelector('.endo-personne').value.trim();
     if (!personne){
       document.getElementById('endoAlert').innerHTML =
-        '<div class="alert alert-danger" style="font-size:13px">La personne concernée est obligatoire pour chaque film.</div>';
+        '<div class="alert alert-danger" style="font-size:13px">La personne concernée est obligatoire pour chaque élément endommagé.</div>';
       l.querySelector('.endo-personne').focus();
       l.scrollIntoView({behavior:'smooth', block:'center'});
       return;
     }
     if (!l.querySelector('.endo-cause').value.trim()){
       document.getElementById('endoAlert').innerHTML =
-        '<div class="alert alert-danger" style="font-size:13px">La cause est obligatoire pour chaque film.</div>';
+        '<div class="alert alert-danger" style="font-size:13px">La cause est obligatoire pour chaque élément endommagé.</div>';
       l.querySelector('.endo-cause').focus();
       l.scrollIntoView({behavior:'smooth', block:'center'});
       return;
     }
-    const bid = l.dataset.bobine;
-    (saisie[bid] = saisie[bid] || []).push({
+    const cle = l.dataset.cle;
+    (saisie[cle] = saisie[cle] || []).push({
       personne,
       etape:        l.querySelector('.endo-etape').value,
       cause:        l.querySelector('.endo-cause').value.trim(),
@@ -2298,19 +2384,41 @@ function validerEndommagements(){
   toast('Déclaration(s) enregistrée(s).','success');
 }
 
-// Aplatit en une entrée par film, et n'envoie que les bobines dont le
+// Groupes dont le nombre de déclarations ne correspond pas (encore) à la
+// quantité endommagée saisie.
+function groupesNonJustifies(){
+  return groupesEndommages().filter(g => {
+    const d = endommagementsSaisis[g.cle];
+    return !d || d.length !== g.nb;
+  });
+}
+
+// Aplatit en une entrée par unité, et n'envoie que les groupes dont le
 // nombre de déclarations correspond encore à la quantité endommagée :
 // le serveur refuse tout écart, autant ne pas l'y conduire.
-function collectEndommagements(films){
+function collectEndommagements(){
   const sortie = [];
-  films.forEach(f => {
-    const nb = f.films_endommages|0;
-    const d  = endommagementsSaisis[f.bobine_id];
-    if (nb > 0 && d && d.length === nb){
-      d.forEach(x => sortie.push(Object.assign({bobine_id: f.bobine_id}, x)));
+  groupesEndommages().forEach(g => {
+    const d = endommagementsSaisis[g.cle];
+    if (d && d.length === g.nb){
+      d.forEach(x => sortie.push(Object.assign({objet: g.objet, bobine_id: g.bobine_id || null, sous_type: g.sous_type}, x)));
     }
   });
   return sortie;
+}
+
+// Recharge les déclarations déjà enregistrées d'un point rouvert : sans
+// elles, la moindre mise à jour obligeait à tout re-justifier.
+function chargerEndommagementsSaisis(liste){
+  endommagementsSaisis = {};
+  (liste || []).forEach(e => {
+    const objet = e.objet || 'film';
+    const cle = objet === 'film' ? 'film:'+e.bobine_id : objet+':'+(e.sous_type||'');
+    (endommagementsSaisis[cle] = endommagementsSaisis[cle] || []).push({
+      personne: e.personne || '', etape: e.etape || 'autre', cause: e.cause || '',
+      heure: (e.heure || '').slice(0,5), observations: e.observations || '',
+    });
+  });
 }
 
 function getBobinesData(){
@@ -2401,12 +2509,7 @@ function savePoint(){
   // « la bobine a une déclaration » laisserait passer les films suivants.
   // On bloque avant l'envoi plutôt que de laisser le serveur refuser :
   // l'agent est déjà dans le formulaire, autant lui ouvrir le pop-up.
-  const manquantes = films_data.filter(f => {
-    const nb = f.films_endommages|0;
-    const d  = endommagementsSaisis[f.bobine_id];
-    return nb > 0 && (!d || d.length !== nb);
-  });
-  if (manquantes.length) {
+  if (groupesNonJustifies().length) {
     btn.disabled = false; btn.textContent = '💾 Enregistrer le point';
     ouvrirPopupEndommagement();
     return;
@@ -2430,7 +2533,7 @@ function savePoint(){
     observations:JSON.stringify(collectObservations()),
     films_data:  JSON.stringify(films_data),
     pmma_data:   JSON.stringify(collectPmmaData()),
-    endommagements_data: JSON.stringify(collectEndommagements(films_data)),
+    endommagements_data: JSON.stringify(collectEndommagements()),
   }).then(d=>{
     btn.disabled=false; btn.textContent='💾 Enregistrer le point';
     if(d.success){
@@ -2651,6 +2754,15 @@ async function editPoint(id){
     });
   }
   await loadStockPMMA();
+  (p.pmma || []).forEach(pm => {
+    const nc  = parseInt(pm.non_conformes)||0;
+    const div = ajouterLignePmmaType(pm.type_pmma, (parseInt(pm.utilises)||0)+(parseInt(pm.endommages)||0)+nc);
+    if(!div) return;
+    div.querySelector('[data-kind="util"]').value = pm.utilises||0;
+    div.querySelector('[data-kind="end"]').value  = pm.endommages||0;
+    const ncEl = div.querySelector('[data-kind="nc"]'); if(ncEl) ncEl.value = nc;
+  });
+  chargerEndommagementsSaisis(p.endommagements);
   recalcule();
   document.getElementById('mPoint').classList.add('open');
 }
