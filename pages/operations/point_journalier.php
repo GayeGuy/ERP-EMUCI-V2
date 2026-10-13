@@ -35,6 +35,44 @@ function _pj_pmma_nc(): bool {
     return db_colonne_existe('op_pmma_utilises', 'non_conformes');
 }
 
+// Remet dans le stock du site tout ce qu'un point avait retiré (films des
+// bobines, rivets, PMMA utilisés/endommagés/non conformes). Le stock est
+// déduit dès l'enregistrement, brouillon compris : on l'appelle avant de
+// réécrire un point modifié et avant de supprimer un brouillon.
+function _pj_restaurer_stock(int $point_id, int $site_id, int $riv_gonfl, int $riv_eclate): void {
+    $old_films = db_fetch_all(
+        "SELECT bobine_id, films_utilises, films_endommages FROM op_films_utilises WHERE point_id=?",
+        [$point_id]
+    );
+    foreach ($old_films as $of) {
+        $total_restore = (int)$of['films_utilises'] + (int)$of['films_endommages'];
+        if ($total_restore > 0) {
+            db_query(
+                "UPDATE op_bobines SET
+                 films_utilises   = GREATEST(0, films_utilises   - ?),
+                 films_endommages = GREATEST(0, films_endommages - ?),
+                 films_restants   = films_restants + ?,
+                 statut = CASE WHEN statut='epuisee' AND films_restants + ? > 0 THEN 'en_cours' ELSE statut END
+                 WHERE id=?",
+                [(int)$of['films_utilises'], (int)$of['films_endommages'], $total_restore, $total_restore, (int)$of['bobine_id']]
+            );
+        }
+    }
+    if ($riv_gonfl > 0)
+        db_query("UPDATE op_stock_rivets SET quantite = quantite + ? WHERE site_id=? AND type_rivet='gonflable'",
+            [$riv_gonfl, $site_id]);
+    if ($riv_eclate > 0)
+        db_query("UPDATE op_stock_rivets SET quantite = quantite + ? WHERE site_id=? AND type_rivet='eclate'",
+            [$riv_eclate, $site_id]);
+    $old_pmma = db_fetch_all("SELECT * FROM op_pmma_utilises WHERE point_id=?", [$point_id]);
+    foreach ($old_pmma as $op_) {
+        $total_pm_restore = (int)$op_['utilises'] + (int)$op_['endommages'] + (int)($op_['non_conformes'] ?? 0);
+        if ($total_pm_restore > 0)
+            db_query("UPDATE stock_pmma_site SET quantite = quantite + ? WHERE site_id=? AND type_pmma=?",
+                [$total_pm_restore, $site_id, $op_['type_pmma']]);
+    }
+}
+
 function _site_bloque_ecart(int $site_id, string $date_today): ?string {
     $dernier_point = db_fetch_one(
         "SELECT date_point FROM op_points_journaliers
@@ -143,40 +181,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                      $total_engins,$total_plaques,$moy_prod,
                      $rivets_util,$riv_endomm,$total_gonfl,$total_eclate,
                      $np_conc,$np_usag,$heures,$obs,$point_id]);
-                // Restaurer le stock bobines avant de supprimer les anciens films
-                $old_films = db_fetch_all(
-                    "SELECT bobine_id, films_utilises, films_endommages FROM op_films_utilises WHERE point_id=?",
-                    [$point_id]
-                );
-                foreach ($old_films as $of) {
-                    $total_restore = (int)$of['films_utilises'] + (int)$of['films_endommages'];
-                    if ($total_restore > 0) {
-                        db_query(
-                            "UPDATE op_bobines SET
-                             films_utilises   = GREATEST(0, films_utilises   - ?),
-                             films_endommages = GREATEST(0, films_endommages - ?),
-                             films_restants   = films_restants + ?,
-                             statut = CASE WHEN statut='epuisee' AND films_restants + ? > 0 THEN 'en_cours' ELSE statut END
-                             WHERE id=?",
-                            [(int)$of['films_utilises'], (int)$of['films_endommages'], $total_restore, $total_restore, (int)$of['bobine_id']]
-                        );
-                    }
-                }
-                // Restaurer le stock rivets avant de supprimer
-                if ($old_riv_gonfl > 0)
-                    db_query("UPDATE op_stock_rivets SET quantite = quantite + ? WHERE site_id=? AND type_rivet='gonflable'",
-                        [$old_riv_gonfl, $site_id]);
-                if ($old_riv_eclate > 0)
-                    db_query("UPDATE op_stock_rivets SET quantite = quantite + ? WHERE site_id=? AND type_rivet='eclate'",
-                        [$old_riv_eclate, $site_id]);
-                // Restaurer le stock PMMA avant de supprimer
-                $old_pmma = db_fetch_all("SELECT * FROM op_pmma_utilises WHERE point_id=?", [$point_id]);
-                foreach ($old_pmma as $op_) {
-                    $total_pm_restore = (int)$op_['utilises'] + (int)$op_['endommages'] + (int)($op_['non_conformes'] ?? 0);
-                    if ($total_pm_restore > 0)
-                        db_query("UPDATE stock_pmma_site SET quantite = quantite + ? WHERE site_id=? AND type_pmma=?",
-                            [$total_pm_restore, $site_id, $op_['type_pmma']]);
-                }
+                // Remettre en stock ce que l'ancienne version du point avait retiré
+                _pj_restaurer_stock((int)$point_id, $site_id, $old_riv_gonfl, $old_riv_eclate);
                 // Supprimer anciens films et PMMA
                 db_query("DELETE FROM op_films_utilises WHERE point_id=?", [$point_id]);
                 db_query("DELETE FROM op_pmma_utilises  WHERE point_id=?", [$point_id]);
@@ -574,6 +580,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     }
 
     // ── REJETER POINT (superviseur) — reverse les déductions stock
+    // Supprimer un brouillon : le stock ayant été retiré dès
+    // l'enregistrement, il est remis en place avant la suppression (sinon un
+    // brouillon abandonné laissait le stock diminué). Réservé à l'auteur,
+    // comme la modification.
+    if ($action === 'supprimer_brouillon') {
+        $point_id = (int)($_POST['point_id'] ?? 0);
+        $point = db_fetch_one("SELECT * FROM op_points_journaliers WHERE id=?", [$point_id]);
+        if (!$point) json_response(false, 'Point introuvable.');
+        if (($point['created_by'] ?? 0) != $user['id']) json_response(false, 'Accès refusé : seul l\'auteur peut supprimer son brouillon.');
+        if ($point['statut'] !== 'brouillon') json_response(false, 'Seul un point en brouillon peut être supprimé.');
+        // Ne pas effacer le travail d'un superviseur sur une observation déjà prise en charge.
+        $obs_suivies = (int)db_fetch_value(
+            "SELECT COUNT(*) FROM op_observations WHERE point_id=? AND statut <> 'en_attente'", [$point_id]);
+        if ($obs_suivies > 0)
+            json_response(false, 'Impossible : une observation de ce point est déjà prise en charge par un superviseur.');
+
+        db_begin();
+        try {
+            _pj_restaurer_stock($point_id, (int)$point['site_id'],
+                (int)($point['rivets_gonflables'] ?? 0), (int)($point['rivets_eclates'] ?? 0));
+            // Lignes liées (films, PMMA, endommagements, observations…) :
+            // ON DELETE CASCADE ; supprimées explicitement pour ne pas
+            // dépendre des contraintes de chaque base.
+            db_query("DELETE FROM op_films_utilises WHERE point_id=?", [$point_id]);
+            db_query("DELETE FROM op_pmma_utilises  WHERE point_id=?", [$point_id]);
+            db_query("DELETE FROM op_endommagements WHERE point_id=?", [$point_id]);
+            db_query("DELETE FROM op_observations   WHERE point_id=?", [$point_id]);
+            db_query("DELETE FROM op_points_journaliers WHERE id=?", [$point_id]);
+            audit_log($user['id'], 'DELETE', 'operations', $point_id,
+                "Suppression brouillon point journalier #$point_id du {$point['date_point']} — stock films, rivets et PMMA restauré");
+            db_commit();
+            json_response(true, 'Brouillon supprimé. Films, rivets et PMMA remis en stock.');
+        } catch (Exception $e) {
+            db_rollback();
+            json_response(false, 'Erreur : ' . $e->getMessage());
+        }
+    }
+
     if ($action === 'rejeter_point') {
         if (!in_array($user['role_slug'] ?? '', ['admin','superadmin','superviseur_operation']))
             json_response(false, 'Accès refusé.');
@@ -1346,6 +1390,7 @@ foreach($points as $p):
         <button class="btn btn-success btn-sm" onclick="validerPointCoord(<?= $p['id'] ?>)" title="Valider"><i class="ph ph-check-circle" aria-hidden="true"></i></button>
         <?php endif; ?>
         <button class="btn btn-secondary btn-sm" onclick="editPoint(<?= $p['id'] ?>)" title="Modifier" style="background:#e8f4f9;color:var(--blue)"><i class="ph ph-pencil-simple" aria-hidden="true"></i></button>
+        <button class="btn btn-sm" onclick="supprimerBrouillon(<?= $p['id'] ?>)" title="Supprimer le brouillon" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5"><i class="ph ph-trash" aria-hidden="true"></i></button>
       <?php endif; ?>
       <?php if(in_array($p['statut'],['brouillon','en_attente_validation']) && ($p['type_point']??'')==='point_18h' && in_array($role_slug_pj,['admin','superadmin','superviseur_operation'])): ?>
         <button class="btn btn-success btn-sm" onclick="validerPoint(<?= $p['id'] ?>)" title="Valider"><i class="ph ph-check-circle" aria-hidden="true"></i></button>
@@ -2798,6 +2843,13 @@ async function editPoint(id){
   document.getElementById('mPoint').classList.add('open');
 }
 
+function supprimerBrouillon(id){
+  if(!confirm("Supprimer ce brouillon ?\n\nLes films, rivets et PMMA qu'il avait retirés seront remis dans le stock du site. Cette action est définitive."))return;
+  ap({action:'supprimer_brouillon',point_id:id}).then(d=>{
+    toast(d.message,d.success?'success':'danger');
+    if(d.success)setTimeout(()=>location.reload(),800);
+  });
+}
 function validerPointCoord(id){
   if(!confirm('Valider ce point ? Vous ne pourrez plus le modifier après.'))return;
   ap({action:'valider_point_coord',point_id:id}).then(d=>{
