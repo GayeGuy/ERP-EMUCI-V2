@@ -21,7 +21,15 @@ $types_v = db_fetch_all("SELECT * FROM op_types_vehicule ORDER BY ordre");
 $types_map = array_column($types_v, null, 'id');
 
 // Sites accessibles
-$sites_list = db_fetch_all("SELECT id,nom,type FROM sites WHERE actif=1 AND type NOT IN ('entrepot') ORDER BY nom");
+// Colonne sites.operation présente ? (sql/migration_operation_sites_duplicata_postimmat.sql)
+// — ignorée tant qu'elle n'est pas passée, pour ne pas casser la page.
+$sites_operation_ok = db_colonne_existe('sites', 'operation');
+$sites_list = db_fetch_all("SELECT id,nom,type" . ($sites_operation_ok ? ',operation' : "") . "
+    FROM sites WHERE actif=1 AND type NOT IN ('entrepot') ORDER BY nom");
+// Opération du site du coordinateur (champ fixe, pas de <select> à interroger côté JS)
+$coord_site_operation = ($sites_operation_ok && ($user['role_slug'] ?? '') === 'coordinateur_site' && !empty($user['site_id']))
+    ? (db_fetch_value("SELECT operation FROM sites WHERE id=?", [(int)$user['site_id']]) ?: 'primo')
+    : 'primo';
 
 // ── Vérifie si le coordinateur est bloqué par un écart GSB non résolu
 // Colonnes rivets_gonflables_end / rivets_eclates_end présentes en base ?
@@ -33,6 +41,11 @@ function _pj_rivets_end_par_type(): bool {
 // Idem pour op_pmma_utilises.non_conformes (sql/migration_pmma_non_conformes.sql).
 function _pj_pmma_nc(): bool {
     return db_colonne_existe('op_pmma_utilises', 'non_conformes');
+}
+// Idem pour les compteurs Duplicatas/Post-Immat
+// (sql/migration_operation_sites_duplicata_postimmat.sql).
+function _pj_reimmat_ok(): bool {
+    return db_colonne_existe('op_points_journaliers', 'nb_vp_duplicata');
 }
 
 function _site_bloque_ecart(int $site_id, string $date_today): ?string {
@@ -69,6 +82,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $nb_camion  = (int)($_POST['nb_camion']  ?? 0);
         $nb_semi    = (int)($_POST['nb_semi']    ?? 0);
         $nb_moto    = (int)($_POST['nb_moto']    ?? 0);
+        // Duplicatas / Post-Immat (sites operation='reimmat_post') — jamais
+        // fusionnés dans nb_vp/total_engins/total_plaques : ce sont des
+        // compteurs de reporting distincts qui ne touchent pas les chiffres
+        // Primo. Les rivets/films consommés restent dans les champs partagés
+        // ci-dessous (stock unique, saisie globale).
+        $nb_vp_dup      = (int)($_POST['nb_vp_duplicata']     ?? 0);
+        $nb_camion_dup  = (int)($_POST['nb_camion_duplicata'] ?? 0);
+        $nb_semi_dup    = (int)($_POST['nb_semi_duplicata']   ?? 0);
+        $nb_moto_dup    = (int)($_POST['nb_moto_duplicata']   ?? 0);
+        $nb_vp_pi       = (int)($_POST['nb_vp_postimmat']     ?? 0);
+        $nb_camion_pi   = (int)($_POST['nb_camion_postimmat'] ?? 0);
+        $nb_semi_pi     = (int)($_POST['nb_semi_postimmat']   ?? 0);
+        $nb_moto_pi     = (int)($_POST['nb_moto_postimmat']   ?? 0);
         $riv_gonfl      = (int)($_POST['rivets_gonflables']     ?? 0);
         $riv_gonfl_end  = (int)($_POST['rivets_gonflables_end'] ?? 0);
         $riv_eclate     = (int)($_POST['rivets_eclates']         ?? 0);
@@ -103,6 +129,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $total_engins  = $nb_vp + $nb_camion + $nb_semi + $nb_moto;
         $total_plaques = ($nb_vp * 2) + ($nb_camion * 2) + ($nb_semi * 1) + ($nb_moto * 1);
         $moy_prod      = $heures > 0 ? round($total_engins / $heures, 1) : 0;
+        $total_engins_dup   = $nb_vp_dup + $nb_camion_dup + $nb_semi_dup + $nb_moto_dup;
+        $total_plaques_dup  = ($nb_vp_dup * 2) + ($nb_camion_dup * 2) + ($nb_semi_dup * 1) + ($nb_moto_dup * 1);
+        $total_engins_pi    = $nb_vp_pi + $nb_camion_pi + $nb_semi_pi + $nb_moto_pi;
+        $total_plaques_pi   = ($nb_vp_pi * 2) + ($nb_camion_pi * 2) + ($nb_semi_pi * 1) + ($nb_moto_pi * 1);
 
         // Pré-vérifier si c'est une mise à jour (pour ajuster le check stock en conséquence)
         $existing_pre = db_fetch_one(
@@ -121,6 +151,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         if ($total_eclate > $stock_eclate)
             json_response(false, "Stock rivets éclatés insuffisant. Disponible : $stock_eclate, Nécessaires : $total_eclate");
 
+        // Colonnes Duplicatas/Post-Immat présentes en base ? (migration
+        // sql/migration_operation_sites_duplicata_postimmat.sql) — ignorées
+        // tant qu'elle n'est pas passée, pour ne pas casser la saisie.
+        $reimmat_ok = _pj_reimmat_ok();
+        $reimmat_set_sql = $reimmat_ok ? ",
+                    nb_vp_duplicata=?,nb_camion_duplicata=?,nb_semi_duplicata=?,nb_moto_duplicata=?,
+                    total_engins_duplicata=?,total_plaques_duplicata=?,
+                    nb_vp_postimmat=?,nb_camion_postimmat=?,nb_semi_postimmat=?,nb_moto_postimmat=?,
+                    total_engins_postimmat=?,total_plaques_postimmat=?" : "";
+        $reimmat_params = $reimmat_ok ? [
+            $nb_vp_dup,$nb_camion_dup,$nb_semi_dup,$nb_moto_dup,
+            $total_engins_dup,$total_plaques_dup,
+            $nb_vp_pi,$nb_camion_pi,$nb_semi_pi,$nb_moto_pi,
+            $total_engins_pi,$total_plaques_pi,
+        ] : [];
+        $reimmat_cols_sql    = $reimmat_ok ? ",
+                     nb_vp_duplicata,nb_camion_duplicata,nb_semi_duplicata,nb_moto_duplicata,
+                     total_engins_duplicata,total_plaques_duplicata,
+                     nb_vp_postimmat,nb_camion_postimmat,nb_semi_postimmat,nb_moto_postimmat,
+                     total_engins_postimmat,total_plaques_postimmat" : "";
+        $reimmat_placeholders = $reimmat_ok ? ',' . implode(',', array_fill(0, 12, '?')) : "";
+
         db_begin();
         try {
             // Insérer ou mettre à jour le point
@@ -138,11 +190,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     rivets_gonflables=?,rivets_eclates=?,
                     non_poses_concessionnaires=?,non_poses_usagers=?,
                     nb_heures_travail=?,observations=?,updated_at=NOW()
+                    $reimmat_set_sql
                     WHERE id=?",
-                    [$nb_vp,$nb_camion,$nb_semi,$nb_moto,
+                    array_merge([$nb_vp,$nb_camion,$nb_semi,$nb_moto,
                      $total_engins,$total_plaques,$moy_prod,
                      $rivets_util,$riv_endomm,$total_gonfl,$total_eclate,
-                     $np_conc,$np_usag,$heures,$obs,$point_id]);
+                     $np_conc,$np_usag,$heures,$obs],
+                     $reimmat_params, [$point_id]));
                 // Restaurer le stock bobines avant de supprimer les anciens films
                 $old_films = db_fetch_all(
                     "SELECT bobine_id, films_utilises, films_endommages FROM op_films_utilises WHERE point_id=?",
@@ -194,12 +248,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     (site_id,date_point,type_point,nb_vp,nb_camion,nb_semi,nb_moto,
                      total_engins,total_plaques,moyenne_prod,rivets_utilises,rivets_endommages,
                      rivets_gonflables,rivets_eclates,
-                     non_poses_concessionnaires,non_poses_usagers,nb_heures_travail,observations,created_by)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                    [$site_id,$date_point,$type_point,$nb_vp,$nb_camion,$nb_semi,$nb_moto,
+                     non_poses_concessionnaires,non_poses_usagers,nb_heures_travail,observations,created_by
+                     $reimmat_cols_sql)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?$reimmat_placeholders)",
+                    array_merge([$site_id,$date_point,$type_point,$nb_vp,$nb_camion,$nb_semi,$nb_moto,
                      $total_engins,$total_plaques,$moy_prod,$rivets_util,$riv_endomm,
                      $total_gonfl,$total_eclate,
-                     $np_conc,$np_usag,$heures,$obs,$user['id']]);
+                     $np_conc,$np_usag,$heures,$obs,$user['id']],
+                     $reimmat_params));
                 $point_id = (int)db_last_id();
                 if (!$point_id) throw new Exception("Impossible de créer le point journalier.");
             }
@@ -1282,6 +1338,12 @@ foreach($points as $p):
     <div class="pj-pills">
       <span class="pj-pill engins"><i class="ph ph-car" aria-hidden="true"></i> <?= $p['total_engins'] ?> engins</span>
       <span class="pj-pill plaques"><i class="ph ph-clipboard-text" aria-hidden="true"></i> <?= $p['total_plaques'] ?> plaques</span>
+      <?php if(($p['total_engins_duplicata'] ?? 0) > 0): ?>
+      <span class="pj-pill" style="background:#f3e8ff;color:#6b21a8"><i class="ph ph-copy" aria-hidden="true"></i> <?= $p['total_engins_duplicata'] ?> Duplicata</span>
+      <?php endif; ?>
+      <?php if(($p['total_engins_postimmat'] ?? 0) > 0): ?>
+      <span class="pj-pill" style="background:#fff3e0;color:#9a3412"><i class="ph ph-stamp" aria-hidden="true"></i> <?= $p['total_engins_postimmat'] ?> Post-Immat</span>
+      <?php endif; ?>
       <?php if($p['rivets_utilises'] > 0): ?>
       <span class="pj-pill rivets"><i class="ph ph-wrench" aria-hidden="true"></i> <?= $p['rivets_utilises'] ?> rivets<?= $p['rivets_endommages']>0?' (<i class="ph ph-warning" aria-hidden="true"></i>'.$p['rivets_endommages'].' end.)':'' ?></span>
       <?php endif; ?>
@@ -1389,15 +1451,15 @@ foreach($points as $p):
         <div class="form-row cols-3">
           <div class="form-group"><label for="p-site">Site</label>
             <?php if($role_slug_pj === 'coordinateur_site' && $user['site_id']): ?>
-            <input type="hidden" id="p-site" value="<?= (int)$user['site_id'] ?>">
+            <input type="hidden" id="p-site" value="<?= (int)$user['site_id'] ?>" data-operation="<?= h($coord_site_operation) ?>">
             <div class="form-control" style="background:var(--lighter);color:var(--navy);font-weight:600;cursor:default">
               <i class="ph ph-map-pin" aria-hidden="true"></i> <?= h(db_fetch_value("SELECT nom FROM sites WHERE id=?",[(int)$user['site_id']]) ?? '') ?>
             </div>
             <?php else: ?>
-            <select class="form-control" id="p-site" required onchange="loadStockRivets();loadBobines();loadStockPMMA()">
+            <select class="form-control" id="p-site" required onchange="loadStockRivets();loadBobines();loadStockPMMA();toggleReimmatSections()">
               <option value="">— Sélectionner —</option>
               <?php foreach($sites_list as $s): ?>
-              <option value="<?= $s['id'] ?>"><?= h($s['nom']) ?></option>
+              <option value="<?= $s['id'] ?>" data-operation="<?= h($s['operation'] ?? 'primo') ?>"><?= h($s['nom']) ?></option>
               <?php endforeach; ?>
             </select>
             <?php endif; ?>
@@ -1469,10 +1531,52 @@ foreach($points as $p):
       </div>
       </div><!-- /form-section ② -->
 
-      <!-- ③ Consommation rivets -->
+      <?php
+      // Sections Duplicatas / Post-Immat — uniquement pour les sites dont
+      // l'opération est reimmat_post. Mêmes compteurs par type de véhicule
+      // que "Véhicules posés", mais jamais fusionnés dans total_engins/
+      // total_plaques : ce sont des totaux de reporting séparés.
+      $reimmat_sections = [
+          ['suffix' => 'DUP', 'field' => 'duplicata', 'num' => 3, 'titre' => 'Duplicatas',  'bg' => '#f3e8ff', 'color' => '#6b21a8'],
+          ['suffix' => 'PI',  'field' => 'postimmat', 'num' => 4, 'titre' => 'Post-Immat',  'bg' => '#fff3e0', 'color' => '#9a3412'],
+      ];
+      foreach ($reimmat_sections as $rs): ?>
+      <div class="form-section section-reimmat" id="section-<?= $rs['field'] ?>" style="display:none">
+        <div class="form-section-title">
+          <div class="form-section-num"><?= $rs['num'] ?></div>
+          <h4><?= $rs['titre'] ?></h4>
+          <span style="margin-left:8px;font-size:12px;color:var(--muted)">Site Réimmat Post-Immat uniquement — ne modifie pas les totaux Primo</span>
+        </div>
+        <div class="point-grid" style="margin-bottom:0">
+          <?php foreach ($types_v as $tv): ?>
+          <div class="veh-card">
+            <div class="vc-header">
+              <div class="vc-icon" style="background:<?= $rs['bg'] ?>"><?= $veh_icons[$tv['code']] ?></div>
+              <div>
+                <div class="vc-title"><?= h($tv['libelle']) ?></div>
+                <div class="vc-sub"><?= $rs['titre'] ?></div>
+              </div>
+            </div>
+            <div class="vc-badges">
+              <span class="badge-info"><i class="ph ph-identification-card" aria-hidden="true"></i> <?= $tv['nb_plaques'] ?> plaque(s)</span>
+            </div>
+            <input type="number" class="nb-input" id="nb-<?= $tv['code'] ?>-<?= $rs['suffix'] ?>"
+                   min="0" value="0" placeholder="0"
+                   aria-label="Nombre de <?= h($tv['libelle']) ?> posés en <?= $rs['titre'] ?>"
+                   oninput="recalculeExtra();autoFilmsFromVeh('<?= $tv['code'] ?>',<?= $tv['id'] ?>,'<?= $tv['serie_bobine'] ?>')">
+          </div>
+          <?php endforeach; ?>
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:var(--muted)">
+          Total <?= $rs['titre'] ?> : <strong id="c-engins-<?= $rs['suffix'] ?>" style="color:var(--navy)">0</strong> engin(s), <strong id="c-plaques-<?= $rs['suffix'] ?>" style="color:var(--navy)">0</strong> plaque(s)
+        </div>
+      </div><!-- /form-section <?= $rs['titre'] ?> -->
+      <?php endforeach; ?>
+
+      <!-- ⑤ Consommation rivets -->
       <div class="form-section">
         <div class="form-section-title">
-          <div class="form-section-num">3</div>
+          <div class="form-section-num">5</div>
           <h4>Consommation rivets</h4>
         </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:0">
@@ -1515,7 +1619,7 @@ foreach($points as $p):
       <!-- ④ PMMA -->
       <div class="form-section">
         <div class="form-section-title">
-          <div class="form-section-num">4</div>
+          <div class="form-section-num">6</div>
           <h4>PMMA</h4>
           <span style="margin-left:8px;font-size:12px;color:var(--muted)">Sélectionner et ajouter les types consommés</span>
         </div>
@@ -1527,7 +1631,7 @@ foreach($points as $p):
       <!-- ⑤ Films -->
       <div class="form-section">
         <div class="form-section-title">
-          <div class="form-section-num">5</div>
+          <div class="form-section-num">7</div>
           <h4>Films utilisés par bobine</h4>
           <span style="margin-left:8px;font-size:12px;color:var(--muted)">Uniquement les bobines en utilisation</span>
         </div>
@@ -1539,7 +1643,7 @@ foreach($points as $p):
       <!-- ⑥ Compléments -->
       <div class="form-section">
         <div class="form-section-title">
-          <div class="form-section-num">6</div>
+          <div class="form-section-num">8</div>
           <h4>Compléments</h4>
         </div>
         <div class="form-row cols-2" style="margin-bottom:16px">
@@ -1772,13 +1876,32 @@ function openPointForm(){
   loadStockRivets();
   loadBobines();
   loadStockPMMA();
+  toggleReimmatSections();
   <?php endif; ?>
 }
+// ── AFFICHAGE SECTIONS DUPLICATAS / POST-IMMAT (site operation='reimmat_post')
+function toggleReimmatSections(){
+  const el = document.getElementById('p-site');
+  if(!el) return;
+  const operation = el.tagName === 'SELECT'
+    ? (el.options[el.selectedIndex]?.dataset.operation || 'primo')
+    : (el.dataset.operation || 'primo');
+  const show = operation === 'reimmat_post';
+  const dup = document.getElementById('section-duplicata');
+  const pi  = document.getElementById('section-postimmat');
+  if(dup) dup.style.display = show ? '' : 'none';
+  if(pi)  pi.style.display  = show ? '' : 'none';
+}
 function resetPointForm(){
-  TYPES_V.forEach(tv=>{ const el=document.getElementById('nb-'+tv.code); if(el) el.value=0; });
+  TYPES_V.forEach(tv=>{
+    const el=document.getElementById('nb-'+tv.code); if(el) el.value=0;
+    const elDup=document.getElementById('nb-'+tv.code+'-DUP'); if(elDup) elDup.value=0;
+    const elPi=document.getElementById('nb-'+tv.code+'-PI');  if(elPi)  elPi.value=0;
+  });
   <?php if($role_slug_pj !== 'coordinateur_site'): ?>
   document.getElementById('p-site').value='';
   <?php endif; ?>
+  toggleReimmatSections();
   resetObservations();
   document.getElementById('p-date').value='<?= date('Y-m-d') ?>';
   document.getElementById('p-type').value='final';
@@ -1840,6 +1963,22 @@ function recalcule(){
     si.textContent=`Stock rivets: ${stockRivets} | Sortis: ${totalRivets}${totalRivets>stockRivets?' ⚠️ INSUFFISANT':''}`;
   }
   if(previewOpen) updatePreview(engins,plaques,moy);
+}
+
+// ── CALCUL DUPLICATAS / POST-IMMAT (totaux séparés, jamais fusionnés)
+function recalculeExtra(){
+  ['DUP','PI'].forEach(suffix=>{
+    let engins=0, plaques=0;
+    TYPES_V.forEach(tv=>{
+      const n=parseInt(document.getElementById('nb-'+tv.code+'-'+suffix)?.value||0);
+      engins  += n;
+      plaques += n * tv.nb_plaques;
+    });
+    const eEl=document.getElementById('c-engins-'+suffix);
+    const pEl=document.getElementById('c-plaques-'+suffix);
+    if(eEl) eEl.textContent=engins;
+    if(pEl) pEl.textContent=plaques;
+  });
 }
 
 // ── CHARGER STOCK RIVETS
@@ -2341,8 +2480,12 @@ function checkBobineStock(bid){
 }
 
 // ── AUTO-REMPLIR FILMS selon nb véhicules
+// Somme Primo + Duplicata + Post-Immat : les films consommés sont partagés
+// (saisie globale), donc la suggestion doit couvrir les 3 catégories.
 function autoFilmsFromVeh(code,tvId,serie){
-  const nb=parseInt(document.getElementById('nb-'+code)?.value||0);
+  const nb=parseInt(document.getElementById('nb-'+code)?.value||0)
+         + parseInt(document.getElementById('nb-'+code+'-DUP')?.value||0)
+         + parseInt(document.getElementById('nb-'+code+'-PI')?.value||0);
   // Trouver la bobine en cours pour cette série
   const sid=document.getElementById('p-site').value; if(!sid) return;
   const bobinesDispos=Object.values(bobinesCache).filter(b=>b.serie===serie&&b.films_restants>0);
@@ -2420,6 +2563,14 @@ function savePoint(){
     nb_camion:   document.getElementById('nb-CAM').value,
     nb_semi:     document.getElementById('nb-SEMI').value,
     nb_moto:     document.getElementById('nb-MOTO').value,
+    nb_vp_duplicata:     document.getElementById('nb-VP-DUP')?.value   || 0,
+    nb_camion_duplicata: document.getElementById('nb-CAM-DUP')?.value  || 0,
+    nb_semi_duplicata:   document.getElementById('nb-SEMI-DUP')?.value || 0,
+    nb_moto_duplicata:   document.getElementById('nb-MOTO-DUP')?.value || 0,
+    nb_vp_postimmat:     document.getElementById('nb-VP-PI')?.value    || 0,
+    nb_camion_postimmat: document.getElementById('nb-CAM-PI')?.value   || 0,
+    nb_semi_postimmat:   document.getElementById('nb-SEMI-PI')?.value  || 0,
+    nb_moto_postimmat:   document.getElementById('nb-MOTO-PI')?.value  || 0,
     rivets_gonflables:     document.getElementById('p-gonfl-util').value,
     rivets_gonflables_end: document.getElementById('p-gonfl-end').value,
     rivets_eclates:        document.getElementById('p-eclate-util').value,
@@ -2476,6 +2627,30 @@ async function viewPoint(id){
       <div style="font-family:'Montserrat',sans-serif;font-size:20px;font-weight:900;color:${nb>0?'#1565c0':'#cbd5e1'}">${nb}</div>
       <div style="font-size:12px;color:${nb>0?'#1565c0':'#94a3b8'};font-weight:600;text-transform:uppercase">${lb}</div>
     </div>`).join('');
+
+  // Duplicatas / Post-Immat (jamais inclus dans les totaux Primo ci-dessus)
+  const reimmatCat = [
+    ['Duplicatas', '#6b21a8', '#f3e8ff', p.nb_vp_duplicata, p.nb_camion_duplicata, p.nb_semi_duplicata, p.nb_moto_duplicata, p.total_engins_duplicata, p.total_plaques_duplicata],
+    ['Post-Immat', '#9a3412', '#fff3e0', p.nb_vp_postimmat,  p.nb_camion_postimmat,  p.nb_semi_postimmat,  p.nb_moto_postimmat,  p.total_engins_postimmat,  p.total_plaques_postimmat],
+  ].filter(([,,, vp,cam,semi,moto]) => (parseInt(vp)||0)+(parseInt(cam)||0)+(parseInt(semi)||0)+(parseInt(moto)||0) > 0);
+  const reimmatSection = reimmatCat.length ? reimmatCat.map(([lbl,color,bg,vp,cam,semi,moto,engins,plaques])=>`
+    <div style="margin-bottom:20px">
+      <div style="font-size:12px;font-weight:700;color:${color};text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">${lbl}</div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+        ${[['🚗','VP',vp],['🚛','Camion',cam],['🚚','Semi',semi],['🏍️','Moto',moto]].map(([ic,lb,nb])=>`
+        <div style="background:${bg};border-radius:10px;padding:12px;text-align:center;border:1px solid ${color}33">
+          <div style="font-size:20px">${ic}</div>
+          <div style="font-family:'Montserrat',sans-serif;font-size:20px;font-weight:900;color:${color}">${nb||0}</div>
+          <div style="font-size:12px;color:${color};font-weight:600;text-transform:uppercase">${lb}</div>
+        </div>`).join('')}
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-top:10px;padding:10px 14px;background:#f8fafc;border-radius:8px;font-size:13px">
+        <span style="color:var(--muted)">Total engins</span>
+        <span style="font-family:'Montserrat',sans-serif;font-weight:800;color:${color}">${engins||0}</span>
+        <span style="color:var(--muted)">Total plaques</span>
+        <span style="font-family:'Montserrat',sans-serif;font-weight:800;color:${color}">${plaques||0}</span>
+      </div>
+    </div>`).join('') : '';
 
   // Rivets
   const gonfl  = parseInt(p.rivets_gonflables)||0;
@@ -2594,6 +2769,7 @@ async function viewPoint(id){
       </div>
     </div>
 
+    ${reimmatSection}
     ${rivSection}
     ${pmmaSection}
     ${filmsSection}
@@ -2616,6 +2792,7 @@ async function editPoint(id){
   // Champs généraux
   if(document.getElementById('p-site').tagName==='SELECT')
     document.getElementById('p-site').value = p.site_id;
+  toggleReimmatSections();
   document.getElementById('p-date').value  = p.date_point;
   document.getElementById('p-type').value  = p.type_point;
   document.getElementById('p-heures').value= p.nb_heures_travail||'8';
@@ -2627,6 +2804,12 @@ async function editPoint(id){
   const nbCAM  = document.getElementById('nb-CAM');  if(nbCAM)  nbCAM.value  = p.nb_camion||'0';
   const nbSEMI = document.getElementById('nb-SEMI'); if(nbSEMI) nbSEMI.value = p.nb_semi||'0';
   const nbMOTO = document.getElementById('nb-MOTO'); if(nbMOTO) nbMOTO.value = p.nb_moto||'0';
+  // Duplicatas / Post-Immat
+  [['VP','nb_vp'],['CAM','nb_camion'],['SEMI','nb_semi'],['MOTO','nb_moto']].forEach(([code,field])=>{
+    const elDup = document.getElementById('nb-'+code+'-DUP'); if(elDup) elDup.value = p[field+'_duplicata'] || '0';
+    const elPi  = document.getElementById('nb-'+code+'-PI');  if(elPi)  elPi.value  = p[field+'_postimmat'] || '0';
+  });
+  recalculeExtra();
   // Rivets : rivets_gonflables/eclates sont des totaux (posés + endommagés).
   // Avec la répartition par type, on restaure posés et endommagés ; sinon
   // (anciens points) posés = total et endommagés = 0, faute de mieux.
