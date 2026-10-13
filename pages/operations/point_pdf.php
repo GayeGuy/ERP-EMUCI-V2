@@ -13,8 +13,10 @@ $user = current_user();
 $point_id = (int)($_GET['id'] ?? 0);
 if (!$point_id) { http_response_code(400); exit('Identifiant manquant.'); }
 
+$sites_operation_ok = db_colonne_existe('sites', 'operation');
 $point = db_fetch_one(
-    "SELECT p.*, s.nom AS site_nom, CONCAT(u.prenom,' ',u.nom) AS agent
+    "SELECT p.*, s.nom AS site_nom, " . ($sites_operation_ok ? "s.operation AS site_operation," : "'primo' AS site_operation,") . "
+            CONCAT(u.prenom,' ',u.nom) AS agent
      FROM op_points_journaliers p
      JOIN sites s ON s.id=p.site_id
      LEFT JOIN users u ON u.id=p.created_by
@@ -223,7 +225,7 @@ ob_start();
 
   <!-- Véhicules -->
   <div class="section">
-    <div class="section-title">Répartition des véhicules</div>
+    <div class="section-title"><?= ($point['site_operation'] ?? 'primo') === 'reimmat_post' ? 'Re-Immatriculation' : 'Répartition des véhicules' ?></div>
     <table class="veh">
       <thead>
         <tr>

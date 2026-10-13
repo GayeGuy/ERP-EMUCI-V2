@@ -962,6 +962,7 @@ $filtre_brouillon = ($role_slug_pj === 'coordinateur_site')
 $points = db_fetch_all(
     "SELECT p.*, s.nom AS site_nom,
             p.created_by AS agent_id,
+            " . ($sites_operation_ok ? "s.operation AS site_operation," : "'primo' AS site_operation,") . "
             (SELECT COALESCE(SUM(pu.utilises),0) FROM op_pmma_utilises pu WHERE pu.point_id=p.id) AS pmma_utilises,
             (SELECT COALESCE(SUM(fu.films_utilises),0) FROM op_films_utilises fu WHERE fu.point_id=p.id) AS films_utilises_total,
             CONCAT(u.prenom,' ',u.nom) AS agent
@@ -3036,7 +3037,7 @@ async function viewPoint(id){
 
     <!-- Véhicules -->
     <div style="margin-bottom:20px">
-      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px"><i class="ph ph-car" aria-hidden="true"></i> Répartition véhicules</div>
+      <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px"><i class="ph ph-car" aria-hidden="true"></i> ${p.site_operation==='reimmat_post' ? 'Re-Immatriculation' : 'Répartition véhicules'}</div>
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">${vehCards}</div>
       <div style="display:flex;justify-content:space-between;margin-top:10px;padding:10px 14px;background:#f8fafc;border-radius:8px;font-size:13px">
         <span style="color:var(--muted)">Total engins</span>
