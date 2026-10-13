@@ -39,14 +39,25 @@ function _pj_pmma_nc(): bool {
 // bobines, rivets, PMMA utilisés/endommagés/non conformes). Le stock est
 // déduit dès l'enregistrement, brouillon compris : on l'appelle avant de
 // réécrire un point modifié et avant de supprimer un brouillon.
-function _pj_restaurer_stock(int $point_id, int $site_id, int $riv_gonfl, int $riv_eclate): void {
+// $deja_remis : point rejeté, dont le rejet a déjà rendu films restants,
+// rivets et PMMA — on ne fait plus que décompter les compteurs « consommés »
+// des bobines, que le rejet ne touche pas, sans rien remettre une 2e fois.
+function _pj_restaurer_stock(int $point_id, int $site_id, int $riv_gonfl, int $riv_eclate, bool $deja_remis = false): void {
     $old_films = db_fetch_all(
         "SELECT bobine_id, films_utilises, films_endommages FROM op_films_utilises WHERE point_id=?",
         [$point_id]
     );
     foreach ($old_films as $of) {
         $total_restore = (int)$of['films_utilises'] + (int)$of['films_endommages'];
-        if ($total_restore > 0) {
+        if ($total_restore > 0 && $deja_remis) {
+            db_query(
+                "UPDATE op_bobines SET
+                 films_utilises   = GREATEST(0, films_utilises   - ?),
+                 films_endommages = GREATEST(0, films_endommages - ?)
+                 WHERE id=?",
+                [(int)$of['films_utilises'], (int)$of['films_endommages'], (int)$of['bobine_id']]
+            );
+        } elseif ($total_restore > 0) {
             db_query(
                 "UPDATE op_bobines SET
                  films_utilises   = GREATEST(0, films_utilises   - ?),
@@ -58,6 +69,7 @@ function _pj_restaurer_stock(int $point_id, int $site_id, int $riv_gonfl, int $r
             );
         }
     }
+    if ($deja_remis) return;
     if ($riv_gonfl > 0)
         db_query("UPDATE op_stock_rivets SET quantite = quantite + ? WHERE site_id=? AND type_rivet='gonflable'",
             [$riv_gonfl, $site_id]);
@@ -144,11 +156,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
         // Pré-vérifier si c'est une mise à jour (pour ajuster le check stock en conséquence)
         $existing_pre = db_fetch_one(
-            "SELECT id, rivets_gonflables, rivets_eclates FROM op_points_journaliers WHERE site_id=? AND date_point=? AND type_point=?",
+            "SELECT id, statut, rivets_gonflables, rivets_eclates FROM op_points_journaliers WHERE site_id=? AND date_point=? AND type_point=?",
             [$site_id, $date_point, $type_point]
         );
-        $old_riv_gonfl  = $existing_pre ? (int)($existing_pre['rivets_gonflables'] ?? 0) : 0;
-        $old_riv_eclate = $existing_pre ? (int)($existing_pre['rivets_eclates']    ?? 0) : 0;
+        // Un point soumis ou validé ne se réécrit pas en ressaisissant la
+        // même date : seul un brouillon ou un point rejeté (à corriger) le peut.
+        if ($existing_pre && !in_array($existing_pre['statut'], ['brouillon', 'rejete'], true))
+            json_response(false, "Un point existe déjà pour ce site, cette date et ce type (statut : {$existing_pre['statut']}). Il ne peut plus être modifié.");
+        // Point rejeté : le rejet a déjà remis son stock en place. Il ne
+        // faut pas le remettre une 2e fois en le corrigeant.
+        $deja_remis     = $existing_pre && $existing_pre['statut'] === 'rejete';
+        $old_riv_gonfl  = ($existing_pre && !$deja_remis) ? (int)($existing_pre['rivets_gonflables'] ?? 0) : 0;
+        $old_riv_eclate = ($existing_pre && !$deja_remis) ? (int)($existing_pre['rivets_eclates']    ?? 0) : 0;
 
         // Vérifier stock rivets par type (stock actuel + anciens rivets qui seront restaurés)
         $stock_gonfl  = (int)(db_fetch_value("SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=? AND type_rivet='gonflable'", [$site_id]) ?? 0) + $old_riv_gonfl;
@@ -175,14 +194,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     rivets_utilises=?,rivets_endommages=?,
                     rivets_gonflables=?,rivets_eclates=?,
                     non_poses_concessionnaires=?,non_poses_usagers=?,
-                    nb_heures_travail=?,observations=?,updated_at=NOW()
+                    nb_heures_travail=?,observations=?,updated_at=NOW(),
+                    statut = CASE WHEN statut='rejete' THEN 'brouillon' ELSE statut END
                     WHERE id=?",
                     [$nb_vp,$nb_camion,$nb_semi,$nb_moto,
                      $total_engins,$total_plaques,$moy_prod,
                      $rivets_util,$riv_endomm,$total_gonfl,$total_eclate,
                      $np_conc,$np_usag,$heures,$obs,$point_id]);
                 // Remettre en stock ce que l'ancienne version du point avait retiré
-                _pj_restaurer_stock((int)$point_id, $site_id, $old_riv_gonfl, $old_riv_eclate);
+                _pj_restaurer_stock((int)$point_id, $site_id, $old_riv_gonfl, $old_riv_eclate, $deja_remis);
                 // Supprimer anciens films et PMMA
                 db_query("DELETE FROM op_films_utilises WHERE point_id=?", [$point_id]);
                 db_query("DELETE FROM op_pmma_utilises  WHERE point_id=?", [$point_id]);
