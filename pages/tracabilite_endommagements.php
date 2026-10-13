@@ -56,9 +56,16 @@ $where  = ["e.created_at::date BETWEEN ? AND ?"];
 $params = [$f_du, $f_au];
 if ($f_site)  { $where[] = "e.site_id = ?";  $params[] = $f_site; }
 if (isset($ETAPES[$f_etape])) { $where[] = "e.etape = ?"; $params[] = $f_etape; }
-if (isset($CAUSES[$f_cause])) { $where[] = "e.cause = ?"; $params[] = $f_cause; }
+// Cause en saisie libre depuis 2026-10 : filtre sur la valeur exacte,
+// $CAUSES ne sert plus qu'à afficher en clair les anciens codes.
+if ($f_cause !== '') { $where[] = "e.cause = ?"; $params[] = $f_cause; }
 if ($f_pers)  { $where[] = "e.personne ILIKE ?"; $params[] = '%'.$f_pers.'%'; }
 $wsql = implode(' AND ', $where);
+
+// Valeurs réellement saisies, pour la liste du filtre Cause.
+$causes_liste = array_column(db_fetch_all(
+    "SELECT DISTINCT cause FROM op_endommagements WHERE TRIM(cause) <> ''"
+    . ($site_force ? " AND site_id = " . (int)$site_force : '') . " ORDER BY cause"), 'cause');
 
 $lignes = db_fetch_all(
     "SELECT e.*, b.numero AS bobine_num, b.type_code,
@@ -234,7 +241,7 @@ include __DIR__ . '/../templates/header.php';
   </div>
   <div class="endo-kpi orange">
     <div class="endo-kpi-v" style="font-size:16px;line-height:1.3">
-      <?= $cause_top ? h($CAUSES[$cause_top]) : '—' ?>
+      <?= $cause_top ? h($CAUSES[$cause_top] ?? $cause_top) : '—' ?>
     </div>
     <div class="endo-kpi-l">Cause la plus fréquente</div>
   </div>
@@ -265,8 +272,8 @@ include __DIR__ . '/../templates/header.php';
   <div><label>Cause</label>
     <select name="cause">
       <option value="">Toutes</option>
-      <?php foreach($CAUSES as $k=>$lbl): ?>
-      <option value="<?= $k ?>" <?= $f_cause===$k?'selected':'' ?>><?= h($lbl) ?></option>
+      <?php foreach($causes_liste as $k): ?>
+      <option value="<?= h($k) ?>" <?= $f_cause===$k?'selected':'' ?>><?= h($CAUSES[$k] ?? $k) ?></option>
       <?php endforeach; ?>
     </select>
   </div>

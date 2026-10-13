@@ -269,7 +269,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 }
             }
             $etapes_ok = ['pose','impression','transport','stockage','autre'];
-            $causes_ok = ['manipulation','defaut_materiel','incident_externe','autre'];
+            // Cause en saisie libre (demande métier) : seule la longueur est
+            // contrôlée, sur la taille réelle de la colonne — 30 tant que
+            // sql/migration_endommagements_cause_libre.sql n'est pas passée.
+            $cause_max = (int)(db_fetch_value(
+                "SELECT character_maximum_length FROM information_schema.columns
+                 WHERE table_name='op_endommagements' AND column_name='cause'") ?: 255);
 
             // Une déclaration par film endommagé : six films abîmés sur une
             // bobine peuvent l'avoir été à six moments et pour six causes.
@@ -288,7 +293,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 $e_cause    = trim((string)($ed['cause'] ?? ''));
                 if ($e_personne === '') throw new Exception("Déclaration d'endommagement : la personne concernée est obligatoire.");
                 if (!in_array($e_etape, $etapes_ok, true)) throw new Exception("Déclaration d'endommagement : étape invalide.");
-                if (!in_array($e_cause, $causes_ok, true)) throw new Exception("Déclaration d'endommagement : cause invalide.");
+                if ($e_cause === '') throw new Exception("Déclaration d'endommagement : la cause est obligatoire.");
+                if (mb_strlen($e_cause) > $cause_max) throw new Exception("Déclaration d'endommagement : cause trop longue ($cause_max caractères maximum).");
 
                 $e_heure = trim((string)($ed['heure'] ?? ''));
                 if ($e_heure !== '' && !preg_match('/^\d{2}:\d{2}$/', $e_heure)) $e_heure = '';
@@ -1301,6 +1307,7 @@ foreach($points as $p):
       </p>
       <div id="endoAlert"></div>
       <div id="endoLignes"></div>
+      <datalist id="endoCausesList"><option value="Manipulation incorrecte"><option value="Défaut matériel"><option value="Incident externe"></datalist>
     </div>
     <div class="mfoot">
       <button class="btn btn-secondary" onclick="document.getElementById('mEndommagement').classList.remove('open')">Annuler</button>
@@ -2107,6 +2114,8 @@ const ETAPES_ENDO = [
   ['stockage',   'Au stockage'],
   ['autre',      'Autre'],
 ];
+// Causes proposées en suggestion (datalist) — la cause est en saisie libre.
+// Sert aussi à réafficher en clair une cause enregistrée sous l'ancien code.
 const CAUSES_ENDO = [
   ['manipulation',     'Manipulation incorrecte'],
   ['defaut_materiel',  'Défaut matériel'],
@@ -2124,6 +2133,10 @@ function onEndommageChange(idx){
   const endomm = parseInt(document.getElementById('bendomm-'+idx)?.value||0);
   if (endomm > 0 && bid && !endommagementsSaisis[bid]) ouvrirPopupEndommagement();
   if (endomm === 0 && bid) delete endommagementsSaisis[bid];
+}
+
+function causeLibelle(c){
+  return (CAUSES_ENDO.find(([v]) => v === c) || [null, c || ''])[1];
 }
 
 function ouvrirPopupEndommagement(){
@@ -2173,7 +2186,9 @@ function ouvrirPopupEndommagement(){
             </div>
             <div>
               <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Cause *</label>
-              <select class="form-control endo-cause" style="margin-top:4px">${opt(CAUSES_ENDO, d.cause)}</select>
+              <input type="text" class="form-control endo-cause" list="endoCausesList" maxlength="255"
+                     value="${causeLibelle(d.cause).replace(/"/g,'&quot;')}"
+                     placeholder="Décrivez la cause" style="margin-top:4px">
             </div>
           </div>
           <div style="margin-top:9px">
@@ -2226,11 +2241,18 @@ function validerEndommagements(){
       l.scrollIntoView({behavior:'smooth', block:'center'});
       return;
     }
+    if (!l.querySelector('.endo-cause').value.trim()){
+      document.getElementById('endoAlert').innerHTML =
+        '<div class="alert alert-danger" style="font-size:13px">La cause est obligatoire pour chaque film.</div>';
+      l.querySelector('.endo-cause').focus();
+      l.scrollIntoView({behavior:'smooth', block:'center'});
+      return;
+    }
     const bid = l.dataset.bobine;
     (saisie[bid] = saisie[bid] || []).push({
       personne,
       etape:        l.querySelector('.endo-etape').value,
-      cause:        l.querySelector('.endo-cause').value,
+      cause:        l.querySelector('.endo-cause').value.trim(),
       heure:        l.querySelector('.endo-heure').value,
       observations: l.querySelector('.endo-obs').value.trim(),
     });
