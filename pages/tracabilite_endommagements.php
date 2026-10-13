@@ -126,7 +126,7 @@ if ($export !== '' && !can('tracabilite_endommagements', 'can_export')) {
 if ($export === 'xlsx') {
     $sp = new Spreadsheet();
     $sh = $sp->getActiveSheet()->setTitle('Endommagements');
-    $entetes = ['Date','Site','Élément','N°','Étape','Cause','Personne','Heure','Observations','Déclaré par'];
+    $entetes = ['Date','Site','Élément','N°','N° consommable','Étape','Cause','Personne','Heure','Observations','Déclaré par'];
     foreach ($entetes as $i => $t) {
         $col = chr(65 + $i);
         $sh->setCellValue($col.'1', $t);
@@ -142,15 +142,16 @@ if ($export === 'xlsx') {
         $sh->setCellValue("B$r", $l['site_nom'] ?? '—');
         $sh->setCellValue("C$r", $l['element']);
         $sh->setCellValue("D$r", (int)$l['film_no']);
-        $sh->setCellValue("E$r", $ETAPES[$l['etape']] ?? $l['etape']);
-        $sh->setCellValue("F$r", $CAUSES[$l['cause']] ?? $l['cause']);
-        $sh->setCellValue("G$r", $l['personne']);
-        $sh->setCellValue("H$r", $l['heure'] ? substr($l['heure'],0,5) : '—');
-        $sh->setCellValue("I$r", $l['observations'] ?? '');
-        $sh->setCellValue("J$r", $l['declare_par'] ?? '—');
+        $sh->setCellValueExplicit("E$r", (string)($l['numero_consommable'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $sh->setCellValue("F$r", $ETAPES[$l['etape']] ?? $l['etape']);
+        $sh->setCellValue("G$r", $CAUSES[$l['cause']] ?? $l['cause']);
+        $sh->setCellValue("H$r", $l['personne']);
+        $sh->setCellValue("I$r", $l['heure'] ? substr($l['heure'],0,5) : '—');
+        $sh->setCellValue("J$r", $l['observations'] ?? '');
+        $sh->setCellValue("K$r", $l['declare_par'] ?? '—');
         $r++;
     }
-    foreach (range('A','J') as $c) $sh->getColumnDimension($c)->setAutoSize(true);
+    foreach (range('A','K') as $c) $sh->getColumnDimension($c)->setAutoSize(true);
     audit_log($user['id'],'READ','tracabilite_endommagements',0,"Export XLSX ($f_du → $f_au)");
     header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     header('Content-Disposition: attachment;filename="endommagements_'.$f_du.'_'.$f_au.'.xlsx"');
@@ -177,7 +178,7 @@ if ($export === 'pdf') {
     </div>
     <table>
       <thead><tr>
-        <th>Date</th><th>Site</th><th>Élément</th><th>N°</th>
+        <th>Date</th><th>Site</th><th>Élément</th><th>N°</th><th>N° consommable</th>
         <th>Étape</th><th>Cause</th><th>Personne</th><th>Observations</th>
       </tr></thead>
       <tbody>
@@ -187,6 +188,7 @@ if ($export === 'pdf') {
           <td><?= h($l['site_nom'] ?? '—') ?></td>
           <td><?= h($l['element']) ?></td>
           <td><?= (int)$l['film_no'] ?></td>
+          <td><?= h($l['numero_consommable'] ?? '') ?></td>
           <td><?= h($ETAPES[$l['etape']] ?? $l['etape']) ?></td>
           <td><?= h($CAUSES[$l['cause']] ?? $l['cause']) ?></td>
           <td><?= h($l['personne']) ?></td>
@@ -320,13 +322,14 @@ include __DIR__ . '/../templates/header.php';
       <thead><tr>
         <th>Date</th><th>Site</th><th>Élément</th>
         <th style="text-align:center">N°</th>
+        <th>N° consommable</th>
         <th>Étape</th><th>Cause</th><th>Personne</th>
         <th style="text-align:center">Heure</th>
         <th>Observations</th><th>Déclaré par</th>
       </tr></thead>
       <tbody>
       <?php if (empty($lignes)): ?>
-        <tr><td colspan="10" style="text-align:center;padding:44px;color:var(--muted)">
+        <tr><td colspan="11" style="text-align:center;padding:44px;color:var(--muted)">
           Aucune déclaration d'endommagement sur cette période.
         </td></tr>
       <?php else: foreach ($lignes as $l): ?>
@@ -335,6 +338,7 @@ include __DIR__ . '/../templates/header.php';
           <td style="font-size:12.5px"><?= h($l['site_nom'] ?? '—') ?></td>
           <td style="font-family:monospace;font-weight:700;color:var(--navy)"><?= h($l['element']) ?></td>
           <td style="text-align:center;font-weight:800;color:var(--danger-d)"><?= (int)$l['film_no'] ?></td>
+          <td style="font-family:monospace;font-weight:700"><?= h(($l['numero_consommable'] ?? '') ?: '—') ?></td>
           <td><span class="badge-etape"><?= h($ETAPES[$l['etape']] ?? $l['etape']) ?></span></td>
           <td><span class="badge-cause"><?= h($CAUSES[$l['cause']] ?? $l['cause']) ?></span></td>
           <td style="font-size:12.5px;font-weight:600"><?= h($l['personne']) ?></td>

@@ -47,6 +47,14 @@ function _pj_pmma_nc(): bool {
 function _pj_reimmat_ok(): bool {
     return db_colonne_existe('op_points_journaliers', 'nb_vp_duplicata');
 }
+// Films non conformes par bobine et n° du consommable endommagé
+// (sql/migration_films_nc_numero_consommable.sql).
+function _pj_films_nc(): bool {
+    return db_colonne_existe('op_films_utilises', 'non_conformes');
+}
+function _pj_endo_numero(): bool {
+    return db_colonne_existe('op_endommagements', 'numero_consommable');
+}
 
 // Remet dans le stock du site tout ce qu'un point avait retiré (films des
 // bobines, rivets, PMMA utilisés/endommagés/non conformes). Le stock est
@@ -56,12 +64,9 @@ function _pj_reimmat_ok(): bool {
 // rivets et PMMA — on ne fait plus que décompter les compteurs « consommés »
 // des bobines, que le rejet ne touche pas, sans rien remettre une 2e fois.
 function _pj_restaurer_stock(int $point_id, int $site_id, int $riv_gonfl, int $riv_eclate, bool $deja_remis = false): void {
-    $old_films = db_fetch_all(
-        "SELECT bobine_id, films_utilises, films_endommages FROM op_films_utilises WHERE point_id=?",
-        [$point_id]
-    );
+    $old_films = db_fetch_all("SELECT * FROM op_films_utilises WHERE point_id=?", [$point_id]);
     foreach ($old_films as $of) {
-        $total_restore = (int)$of['films_utilises'] + (int)$of['films_endommages'];
+        $total_restore = (int)$of['films_utilises'] + (int)$of['films_endommages'] + (int)($of['non_conformes'] ?? 0);
         if ($total_restore > 0 && $deja_remis) {
             db_query(
                 "UPDATE op_bobines SET
@@ -342,17 +347,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 $tv_id = max(1, (int)($fd['type_vehicule_id'] ?? 1));
                 $f_util       = (int)($fd['films_utilises'] ?? 0);
                 $f_endomm     = (int)($fd['films_endommages'] ?? 0);
-                if (!$bobine_id || ($f_util + $f_endomm) === 0) continue;
+                // Films non conformes (reçus hors règles) : sortis des films
+                // restants comme les endommagés, sans entrer dans les
+                // compteurs utilisés/endommagés de la bobine.
+                $f_nc         = _pj_films_nc() ? max(0, (int)($fd['films_non_conformes'] ?? 0)) : 0;
+                if (!$bobine_id || ($f_util + $f_endomm + $f_nc) === 0) continue;
 
                 $bobine = db_fetch_one("SELECT * FROM op_bobines WHERE id=?", [$bobine_id]);
                 if (!$bobine) continue;
 
-                $total_sortis = $f_util + $f_endomm;
+                $total_sortis = $f_util + $f_endomm + $f_nc;
                 if ($bobine['films_restants'] < $total_sortis)
                     throw new Exception("Bobine {$bobine['numero']} : stock insuffisant ({$bobine['films_restants']} restants, {$total_sortis} demandés).");
 
-                db_query("INSERT INTO op_films_utilises (point_id,bobine_id,type_vehicule_id,films_utilises,films_endommages)
-                          VALUES (?,?,?,?,?)", [$point_id, $bobine_id, $tv_id, $f_util, $f_endomm]);
+                if (_pj_films_nc())
+                    db_query("INSERT INTO op_films_utilises (point_id,bobine_id,type_vehicule_id,films_utilises,films_endommages,non_conformes)
+                              VALUES (?,?,?,?,?,?)", [$point_id, $bobine_id, $tv_id, $f_util, $f_endomm, $f_nc]);
+                else
+                    db_query("INSERT INTO op_films_utilises (point_id,bobine_id,type_vehicule_id,films_utilises,films_endommages)
+                              VALUES (?,?,?,?,?)", [$point_id, $bobine_id, $tv_id, $f_util, $f_endomm]);
 
                 // Mettre à jour la bobine
                 $new_restants = $bobine['films_restants'] - $total_sortis;
@@ -366,7 +379,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                           WHERE id=?",
                     [$f_util, $f_endomm, $new_restants, $new_statut, $date_point, $bobine_id]);
 
-                $films_detail[] = "Bobine {$bobine['numero']} : $f_util utilisés, $f_endomm endommagés";
+                $films_detail[] = "Bobine {$bobine['numero']} : $f_util utilisés, $f_endomm endommagés" . ($f_nc ? ", $f_nc non conformes" : '');
             }
 
             // ── n° 2.1 CR PDG — déclarations d'endommagement
@@ -435,24 +448,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 $e_heure = trim((string)($ed['heure'] ?? ''));
                 if ($e_heure !== '' && !preg_match('/^\d{2}:\d{2}$/', $e_heure)) $e_heure = '';
                 $e_obs = trim((string)($ed['observations'] ?? ''));
+                // N° du consommable : obligatoire pour un film endommagé.
+                $e_numero = mb_substr(trim((string)($ed['numero_consommable'] ?? '')), 0, 100);
+                if (_pj_endo_numero() && $objet === 'film' && $e_numero === '')
+                    throw new Exception("Déclaration d'endommagement : le n° du consommable est obligatoire pour chaque film.");
 
-                if ($endo_multi) {
-                    db_query(
-                        "INSERT INTO op_endommagements
-                         (point_id,objet,sous_type,bobine_id,site_id,film_no,personne,etape,cause,heure,observations,created_by)
-                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                        [$point_id, $objet, $sous_type, $e_bobine, $site_id, $rangs[$k],
-                         $e_personne, $e_etape, $e_cause, $e_heure ?: null, $e_obs, $user['id']]
-                    );
-                } else {
-                    db_query(
-                        "INSERT INTO op_endommagements
-                         (point_id,bobine_id,site_id,film_no,personne,etape,cause,heure,observations,created_by)
-                         VALUES (?,?,?,?,?,?,?,?,?,?)",
-                        [$point_id, $e_bobine, $site_id, $rangs[$k],
-                         $e_personne, $e_etape, $e_cause, $e_heure ?: null, $e_obs, $user['id']]
-                    );
-                }
+                $cols = ['point_id','bobine_id','site_id','film_no','personne','etape','cause','heure','observations','created_by'];
+                $vals = [$point_id, $e_bobine, $site_id, $rangs[$k],
+                         $e_personne, $e_etape, $e_cause, $e_heure ?: null, $e_obs, $user['id']];
+                if ($endo_multi)       { array_push($cols, 'objet', 'sous_type'); array_push($vals, $objet, $sous_type); }
+                if (_pj_endo_numero()) { $cols[] = 'numero_consommable'; $vals[] = $e_numero !== '' ? $e_numero : null; }
+                db_query("INSERT INTO op_endommagements (" . implode(',', $cols) . ")
+                          VALUES (" . implode(',', array_fill(0, count($cols), '?')) . ")", $vals);
             }
 
             // Chaque unité endommagée doit avoir sa déclaration : sans ce
@@ -572,8 +579,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $point_id = (int)($_POST['point_id'] ?? 0);
         $pmma  = db_fetch_all("SELECT * FROM op_pmma_utilises WHERE point_id=? ORDER BY type_pmma", [$point_id]);
         $films = db_fetch_all(
-            "SELECT b.numero AS bobine_num, b.type_code, tv.libelle AS type_veh,
-                    fu.films_utilises, fu.films_endommages
+            "SELECT fu.*, b.numero AS bobine_num, b.type_code, tv.libelle AS type_veh
              FROM op_films_utilises fu
              JOIN op_bobines b ON b.id=fu.bobine_id
              LEFT JOIN op_types_vehicule tv ON tv.id=fu.type_vehicule_id
@@ -588,10 +594,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $point_id = (int)($_POST['point_id'] ?? 0);
         $point = db_fetch_one("SELECT * FROM op_points_journaliers WHERE id=?", [$point_id]);
         if (!$point) json_response(false, 'Point introuvable.');
-        $point['films'] = db_fetch_all(
-            "SELECT bobine_id, films_utilises, films_endommages FROM op_films_utilises WHERE point_id=?",
-            [$point_id]
-        );
+        $point['films'] = db_fetch_all("SELECT * FROM op_films_utilises WHERE point_id=?", [$point_id]);
         // Lignes PMMA et déclarations d'endommagement : rechargées dans le
         // formulaire, sinon une simple mise à jour du point effaçait la
         // consommation PMMA et obligeait à tout re-justifier.
@@ -711,12 +714,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         db_begin();
         try {
             // Restaurer les films dans chaque bobine
-            $films = db_fetch_all(
-                "SELECT bobine_id, films_utilises, films_endommages FROM op_films_utilises WHERE point_id=?",
-                [$point_id]
-            );
+            $films = db_fetch_all("SELECT * FROM op_films_utilises WHERE point_id=?", [$point_id]);
             foreach ($films as $f) {
-                $total = (int)$f['films_utilises'] + (int)$f['films_endommages'];
+                $total = (int)$f['films_utilises'] + (int)$f['films_endommages'] + (int)($f['non_conformes'] ?? 0);
                 if ($total > 0) {
                     db_query(
                         "UPDATE op_bobines SET films_restants = films_restants + ?,
@@ -2320,7 +2320,7 @@ function buildBobineRow(selectedBobineId, idx){
   const b = bobinesCache[selectedBobineId]||{};
   return `
     <div class="bobine-saisie-row" id="bsrow-${idx}" style="
-      display:grid;grid-template-columns:1fr 120px 120px 40px;gap:10px;
+      display:grid;grid-template-columns:1fr 110px 110px 110px 40px;gap:10px;
       align-items:center;background:var(--lighter);border-radius:12px;
       padding:12px 14px;margin-bottom:8px;border:1.5px solid var(--border)">
       <div>
@@ -2343,6 +2343,12 @@ function buildBobineRow(selectedBobineId, idx){
         <input type="number" class="form-control" id="bendomm-${idx}" min="0" value="0"
                oninput="updateBobineRestants(${idx})" onchange="onEndommageChange(${idx})"
                style="margin-top:4px;text-align:center;border-color:var(--danger)">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:.5px" title="Films reçus qui ne respectent pas les règles">Non conformes</label>
+        <input type="number" class="form-control" id="bnc-${idx}" min="0" value="0"
+               oninput="updateBobineRestants(${idx})"
+               style="margin-top:4px;text-align:center;border-color:#c4b5fd">
       </div>
       <div style="text-align:center;margin-top:18px">
         ${idx>0?`<button type="button" onclick="removeBobineRow(${idx})"
@@ -2383,7 +2389,8 @@ function updateBobineRestants(idx){
   const b=bobinesCache[bid]||{films_restants:0};
   const util=parseInt(document.getElementById('butil-'+idx)?.value||0);
   const endomm=parseInt(document.getElementById('bendomm-'+idx)?.value||0);
-  const restants=b.films_restants-(util+endomm);
+  const nc=parseInt(document.getElementById('bnc-'+idx)?.value||0);
+  const restants=b.films_restants-(util+endomm+nc);
   const info=document.getElementById('binfo-'+idx);
   if(info){
     info.textContent=`${Math.max(0,restants)} films restants · ${b.type_code||''}`;
@@ -2422,6 +2429,8 @@ const CAUSES_ENDO = [
 // Rivets et PMMA endommagés ne se justifient qu'une fois les colonnes
 // objet/sous_type créées (sql/migration_endommagements_rivets_pmma.sql).
 const ENDO_MULTI = <?= db_colonne_existe('op_endommagements', 'objet') ? 'true' : 'false' ?>;
+// N° du consommable (obligatoire pour un film) — sql/migration_films_nc_numero_consommable.sql
+const ENDO_NUMERO = <?= db_colonne_existe('op_endommagements', 'numero_consommable') ? 'true' : 'false' ?>;
 // clé de groupe -> tableau d'une entrée par unité endommagée.
 // Clés : « film:<bobine_id> », « rivet:gonflable|eclate », « pmma:<type> ».
 let endommagementsSaisis = {};
@@ -2516,6 +2525,13 @@ function ouvrirPopupEndommagement(){
                  title="Recopier ces valeurs sur les autres éléments de ce groupe">
                  <i class="ph ph-copy" aria-hidden="true"></i> Reporter sur les ${nb-1} autres</button>` : ''}
           </div>
+          ${ENDO_NUMERO && g.objet !== 'rivet' ? `
+          <div style="margin-bottom:10px">
+            <label style="font-size:12px;font-weight:700;color:${st.c};text-transform:uppercase">N° du consommable${g.objet === 'film' ? ' *' : ''}</label>
+            <input type="text" class="form-control endo-numero" maxlength="100" value="${escEndo(d.numero_consommable)}"
+                   placeholder="${g.objet === 'film' ? 'Numéro du film endommagé' : 'Numéro du PMMA (si connu)'}"
+                   style="margin-top:4px;font-family:monospace;font-weight:700">
+          </div>` : ''}
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <div>
               <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Personne concernée *</label>
@@ -2596,6 +2612,14 @@ function validerEndommagements(){
       l.scrollIntoView({behavior:'smooth', block:'center'});
       return;
     }
+    const numEl = l.querySelector('.endo-numero');
+    if (numEl && l.dataset.cle.startsWith('film:') && !numEl.value.trim()){
+      document.getElementById('endoAlert').innerHTML =
+        '<div class="alert alert-danger" style="font-size:13px">Le n° du consommable est obligatoire pour chaque film endommagé.</div>';
+      numEl.focus();
+      l.scrollIntoView({behavior:'smooth', block:'center'});
+      return;
+    }
     if (!l.querySelector('.endo-cause').value.trim()){
       document.getElementById('endoAlert').innerHTML =
         '<div class="alert alert-danger" style="font-size:13px">La cause est obligatoire pour chaque élément endommagé.</div>';
@@ -2606,6 +2630,7 @@ function validerEndommagements(){
     const cle = l.dataset.cle;
     (saisie[cle] = saisie[cle] || []).push({
       idx: parseInt(l.dataset.idx)||0,
+      numero_consommable: numEl ? numEl.value.trim() : '',
       personne,
       etape:        l.querySelector('.endo-etape').value,
       cause:        l.querySelector('.endo-cause').value.trim(),
@@ -2653,6 +2678,7 @@ function chargerEndommagementsSaisis(liste){
     const cle = objet === 'film' ? 'film:'+e.bobine_id : objet+':'+(e.sous_type||'');
     if (!(cle in ordreEndo)) ordreEndo[cle] = ++ordreEndoSeq;
     (endommagementsSaisis[cle] = endommagementsSaisis[cle] || []).push({
+      numero_consommable: e.numero_consommable || '',
       personne: e.personne || '', etape: e.etape || 'autre', cause: e.cause || '',
       heure: (e.heure || '').slice(0,5), observations: e.observations || '',
     });
@@ -2666,7 +2692,8 @@ function getBobinesData(){
     const bid=document.getElementById('bsel-'+idx)?.value;
     const util=parseInt(document.getElementById('butil-'+idx)?.value||0);
     const endomm=parseInt(document.getElementById('bendomm-'+idx)?.value||0);
-    if(bid&&(util+endomm)>0) rows.push({bobine_id:bid,films_utilises:util,films_endommages:endomm,type_vehicule_id:1});
+    const nc=parseInt(document.getElementById('bnc-'+idx)?.value||0);
+    if(bid&&(util+endomm+nc)>0) rows.push({bobine_id:bid,films_utilises:util,films_endommages:endomm,films_non_conformes:nc,type_vehicule_id:1});
   });
   return rows;
 }
@@ -2926,13 +2953,14 @@ async function viewPoint(id){
       <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">🎞️ Films utilisés par bobine</div>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${filmsList.map(f=>`
-          <div style="display:grid;grid-template-columns:1fr 90px 90px;gap:8px;align-items:center;background:#f8fafc;border-radius:8px;padding:10px 12px">
+          <div style="display:grid;grid-template-columns:1fr 90px 90px 90px;gap:8px;align-items:center;background:#f8fafc;border-radius:8px;padding:10px 12px">
             <div>
               <div style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:800;color:#1565c0">Bobine #${f.bobine_num}</div>
               <div style="font-size:12px;color:var(--muted)">${f.type_code||''}</div>
             </div>
             <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#1565c0">${f.films_utilises}</div><div style="font-size:12px;color:var(--muted);text-transform:uppercase">Utilisés</div></div>
             <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#e65100">${f.films_endommages||0}</div><div style="font-size:12px;color:var(--muted);text-transform:uppercase">Endommagés</div></div>
+            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#7c3aed">${f.non_conformes||0}</div><div style="font-size:12px;color:var(--muted);text-transform:uppercase">Non conformes</div></div>
           </div>`).join('')}
       </div>
     </div>` : '';
@@ -3037,9 +3065,11 @@ async function editPoint(id){
       const sel    = document.getElementById('bsel-'+i);
       const util   = document.getElementById('butil-'+i);
       const endomm = document.getElementById('bendomm-'+i);
+      const nc     = document.getElementById('bnc-'+i);
       if(sel)    sel.value    = f.bobine_id;
       if(util)   util.value   = f.films_utilises;
       if(endomm) endomm.value = f.films_endommages;
+      if(nc)     nc.value     = f.non_conformes||0;
       updateBobineRestants(i);
     });
   }
