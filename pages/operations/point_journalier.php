@@ -1654,7 +1654,7 @@ foreach($points as $p):
         <div class="form-section-title">
           <div class="form-section-num"><?= $rs['num'] ?></div>
           <h4><?= $rs['titre'] ?></h4>
-          <span style="margin-left:8px;font-size:12px;color:var(--muted)">Site Réimmat Post-Immat uniquement — ne modifie pas les totaux Primo</span>
+          <span style="margin-left:8px;font-size:12px;color:var(--muted)">Site Re-Immatriculation uniquement — ne modifie pas les totaux Primo</span>
         </div>
         <div class="point-grid" style="margin-bottom:0">
           <?php foreach ($types_v as $tv): ?>

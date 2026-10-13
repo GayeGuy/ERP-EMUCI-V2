@@ -1160,7 +1160,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- ══════════ DUPLICATAS & POST-IMMAT (sites reimmat_post) ══════════ -->
 <div class="biz-card" style="margin-bottom:20px">
   <div class="card-ttl">Duplicatas &amp; Post-Immat</div>
-  <div class="card-sub">Sites Réimmat Post-Immat · <?= h($mois_display) ?> · totaux séparés du Primo</div>
+  <div class="card-sub">Sites Re-Immatriculation · <?= h($mois_display) ?> · totaux séparés du Primo</div>
   <div class="kpi-mini">
     <div class="kpi-m">
       <div class="kpi-m-val" style="color:#6b21a8"><?= number_format($engins_dup_curr,0,',',' ') ?></div>

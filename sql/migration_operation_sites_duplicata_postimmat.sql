@@ -1,5 +1,5 @@
 -- ============================================================
--- Champ "Opération" sur les sites (Primo / Réimmat Post-Immat)
+-- Champ "Opération" sur les sites (Primo / Re-Immatriculation)
 -- + compteurs Duplicatas / Post-Immat sur les points journaliers.
 -- Rejouable : chaque instruction est protégée (IF NOT EXISTS / vérif catalogue).
 -- ============================================================

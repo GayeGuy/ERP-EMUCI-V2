@@ -1295,7 +1295,7 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
   <section class="kp kp--sites" aria-labelledby="kp-reimmat">
     <div class="kp-h">
       <span class="kp-ic"><i class="ph ph-copy" aria-hidden="true"></i></span>
-      <h3 class="kp-t" id="kp-reimmat">Duplicatas &amp; Post-Immat<em>sites Réimmat Post-Immat — totaux séparés du Primo</em></h3>
+      <h3 class="kp-t" id="kp-reimmat">Duplicatas &amp; Post-Immat<em>sites Re-Immatriculation — totaux séparés du Primo</em></h3>
     </div>
     <div class="kc-row">
       <div class="kc">
@@ -1335,7 +1335,7 @@ body.pdg-collee .kpi-bar{border-bottom-color:var(--border);
                    $serie_borne, $serie_borne_b) ?>
     <?php if (!empty($classement_reimmat)): ?>
     <div class="kp-sep"></div>
-    <div class="kp-st">Production par site (sites Réimmat Post-Immat), <?= h($P['libelle']) ?></div>
+    <div class="kp-st">Production par site (sites Re-Immatriculation), <?= h($P['libelle']) ?></div>
     <div class="kp-2c">
       <div>
         <div class="kp-st">Duplicatas par site</div>

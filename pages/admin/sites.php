@@ -605,7 +605,7 @@ $type_colors = [
               <span style="font-size:12px;background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:8px;margin-left:3px"><i class="ph ph-currency-circle-dollar" aria-hidden="true"></i></span>
               <?php endif; ?>
               <?php if (($s['operation'] ?? 'primo') === 'reimmat_post'): ?>
-              <span style="font-size:11px;background:#ede9fe;color:#5b21b6;padding:1px 6px;border-radius:8px;margin-left:3px;font-weight:700">Post-Immat</span>
+              <span style="font-size:11px;background:#ede9fe;color:#5b21b6;padding:1px 6px;border-radius:8px;margin-left:3px;font-weight:700">Re-Immatriculation</span>
               <?php endif; ?>
             </span>
           </td>
@@ -694,9 +694,9 @@ $type_colors = [
       <div class="form-group" id="sOperationWrap" style="display:none;margin-bottom:14px"><label>Opération</label>
         <select class="form-control" id="sOperation">
           <option value="primo">Primo</option>
-          <option value="reimmat_post">Réimmat Post-Immat</option>
+          <option value="reimmat_post">Re-Immatriculation</option>
         </select>
-        <div style="font-size:12px;color:var(--muted);margin-top:4px">Réimmat Post-Immat ajoute les catégories Duplicatas et Post-Immat sur le point journalier et les tableaux de bord de ce site.</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">Re-Immatriculation ajoute les catégories Duplicatas et Post-Immat sur le point journalier et les tableaux de bord de ce site.</div>
       </div>
       <div class="form-group" style="margin-bottom:14px"><label>Nom du site *</label>
         <input type="text" class="form-control" id="sNom" placeholder="Agence Cocody">
@@ -935,7 +935,7 @@ function viewS(id){
       </div>`).join('')||'<p style="color:var(--muted);font-size:13px">Aucun utilisateur.</p>';
     document.getElementById('sdB').innerHTML=`
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px 18px;margin-bottom:18px">
-        ${[['Code',r.code],['Type',r.type],['Opération',r.operation==='reimmat_post'?'Réimmat Post-Immat':'Primo'],['Ville',r.ville||'—'],['Responsable',r.responsable_nom||'—'],['Adresse',r.adresse||'—'],['Statut',r.actif==1?'<i class="ph ph-check-circle" aria-hidden="true"></i> Actif':'<i class="ph ph-x-circle" aria-hidden="true"></i> Inactif']].map(([l,v])=>`<div style="padding:6px 0;border-bottom:1px solid var(--border)"><div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">${l}</div><div style="font-size:13px">${v}</div></div>`).join('')}
+        ${[['Code',r.code],['Type',r.type],['Opération',r.operation==='reimmat_post'?'Re-Immatriculation':'Primo'],['Ville',r.ville||'—'],['Responsable',r.responsable_nom||'—'],['Adresse',r.adresse||'—'],['Statut',r.actif==1?'<i class="ph ph-check-circle" aria-hidden="true"></i> Actif':'<i class="ph ph-x-circle" aria-hidden="true"></i> Inactif']].map(([l,v])=>`<div style="padding:6px 0;border-bottom:1px solid var(--border)"><div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.4px">${l}</div><div style="font-size:13px">${v}</div></div>`).join('')}
       </div>
       <h4 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:13px;margin-bottom:8px">Équipements (${r.equip_par_type.reduce((s,e)=>s+parseInt(e.total),0)})</h4>
       ${equips}
