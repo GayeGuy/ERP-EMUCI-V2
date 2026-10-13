@@ -37,7 +37,7 @@ $active_page = 'tracabilite_endommagements';
 $is_coord   = ($role_slug === 'coordinateur_site');
 $site_force = ($is_coord && $user['site_id']) ? (int)$user['site_id'] : 0;
 
-$ETAPES = ['pose'=>'À la pose','impression'=>"À l'impression",'transport'=>'Au transport',
+$ETAPES = ['pose'=>'À la pose','impression'=>"À l'impression",'lamination'=>'À la lamination','transport'=>'Au transport',
            'stockage'=>'Au stockage','autre'=>'Autre'];
 $CAUSES = ['manipulation'=>'Manipulation incorrecte','defaut_materiel'=>'Défaut matériel',
            'incident_externe'=>'Incident externe','autre'=>'Autre'];

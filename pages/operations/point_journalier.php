@@ -268,7 +268,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     $bobines_endommagees[(int)$fd['bobine_id']] = (int)$fd['films_endommages'];
                 }
             }
-            $etapes_ok = ['pose','impression','transport','stockage','autre'];
+            $etapes_ok = ['pose','impression','lamination','transport','stockage','autre'];
             // Cause en saisie libre (demande métier) : seule la longueur est
             // contrôlée, sur la taille réelle de la colonne — 30 tant que
             // sql/migration_endommagements_cause_libre.sql n'est pas passée.
@@ -2110,6 +2110,7 @@ function getSelectedBobineIds(){
 const ETAPES_ENDO = [
   ['pose',       'À la pose'],
   ['impression', "À l'impression"],
+  ['lamination', 'À la lamination'],
   ['transport',  'Au transport'],
   ['stockage',   'Au stockage'],
   ['autre',      'Autre'],
