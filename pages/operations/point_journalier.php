@@ -445,7 +445,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 'moy_prod'     => $moy_prod,
                 'films_detail' => $films_detail,
             ]);
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
+            // Throwable et pas seulement Exception : une erreur PHP (Error,
+            // TypeError) passait à travers et renvoyait une page d'erreur au
+            // lieu d'un JSON — le bouton restait bloqué sur « Enregistrement… ».
             db_rollback();
             json_response(false, 'Erreur : ' . $e->getMessage());
         }
@@ -2638,7 +2641,15 @@ function savePoint(){
       setTimeout(()=>location.reload(),900);
     } else {
       document.getElementById('pAlert').innerHTML=`<div class="alert alert-danger">${d.message}</div>`;
+      document.getElementById('pAlert').scrollIntoView({behavior:'smooth', block:'center'});
     }
+  }).catch(err=>{
+    // Réponse illisible (erreur serveur, coupure réseau) : sans ce catch, le
+    // bouton restait figé sur « Enregistrement… » sans rien dire.
+    btn.disabled=false; btn.textContent='💾 Enregistrer le point';
+    document.getElementById('pAlert').innerHTML=
+      `<div class="alert alert-danger">Échec de l'enregistrement : ${escEndo(err.message)}</div>`;
+    document.getElementById('pAlert').scrollIntoView({behavior:'smooth', block:'center'});
   });
 }
 
@@ -2912,7 +2923,7 @@ document.getElementById('mRejet').addEventListener('click',e=>{if(e.target===e.c
 function ap(data){
   const fd=new FormData();
   for(const[k,v]of Object.entries(data))if(v!==undefined)fd.append(k,v);
-  return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
+  return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(achParseJson);
 }
 document.getElementById('mPoint').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');});
 document.getElementById('mDetail').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');});
