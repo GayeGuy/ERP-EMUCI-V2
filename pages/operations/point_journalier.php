@@ -48,6 +48,56 @@ function _pj_reimmat_ok(): bool {
     return db_colonne_existe('op_points_journaliers', 'nb_vp_duplicata');
 }
 
+// Remet dans le stock du site tout ce qu'un point avait retiré (films des
+// bobines, rivets, PMMA utilisés/endommagés/non conformes). Le stock est
+// déduit dès l'enregistrement, brouillon compris : on l'appelle avant de
+// réécrire un point modifié et avant de supprimer un brouillon.
+// $deja_remis : point rejeté, dont le rejet a déjà rendu films restants,
+// rivets et PMMA — on ne fait plus que décompter les compteurs « consommés »
+// des bobines, que le rejet ne touche pas, sans rien remettre une 2e fois.
+function _pj_restaurer_stock(int $point_id, int $site_id, int $riv_gonfl, int $riv_eclate, bool $deja_remis = false): void {
+    $old_films = db_fetch_all(
+        "SELECT bobine_id, films_utilises, films_endommages FROM op_films_utilises WHERE point_id=?",
+        [$point_id]
+    );
+    foreach ($old_films as $of) {
+        $total_restore = (int)$of['films_utilises'] + (int)$of['films_endommages'];
+        if ($total_restore > 0 && $deja_remis) {
+            db_query(
+                "UPDATE op_bobines SET
+                 films_utilises   = GREATEST(0, films_utilises   - ?),
+                 films_endommages = GREATEST(0, films_endommages - ?)
+                 WHERE id=?",
+                [(int)$of['films_utilises'], (int)$of['films_endommages'], (int)$of['bobine_id']]
+            );
+        } elseif ($total_restore > 0) {
+            db_query(
+                "UPDATE op_bobines SET
+                 films_utilises   = GREATEST(0, films_utilises   - ?),
+                 films_endommages = GREATEST(0, films_endommages - ?),
+                 films_restants   = films_restants + ?,
+                 statut = CASE WHEN statut='epuisee' AND films_restants + ? > 0 THEN 'en_cours' ELSE statut END
+                 WHERE id=?",
+                [(int)$of['films_utilises'], (int)$of['films_endommages'], $total_restore, $total_restore, (int)$of['bobine_id']]
+            );
+        }
+    }
+    if ($deja_remis) return;
+    if ($riv_gonfl > 0)
+        db_query("UPDATE op_stock_rivets SET quantite = quantite + ? WHERE site_id=? AND type_rivet='gonflable'",
+            [$riv_gonfl, $site_id]);
+    if ($riv_eclate > 0)
+        db_query("UPDATE op_stock_rivets SET quantite = quantite + ? WHERE site_id=? AND type_rivet='eclate'",
+            [$riv_eclate, $site_id]);
+    $old_pmma = db_fetch_all("SELECT * FROM op_pmma_utilises WHERE point_id=?", [$point_id]);
+    foreach ($old_pmma as $op_) {
+        $total_pm_restore = (int)$op_['utilises'] + (int)$op_['endommages'] + (int)($op_['non_conformes'] ?? 0);
+        if ($total_pm_restore > 0)
+            db_query("UPDATE stock_pmma_site SET quantite = quantite + ? WHERE site_id=? AND type_pmma=?",
+                [$total_pm_restore, $site_id, $op_['type_pmma']]);
+    }
+}
+
 function _site_bloque_ecart(int $site_id, string $date_today): ?string {
     $dernier_point = db_fetch_one(
         "SELECT date_point FROM op_points_journaliers
@@ -136,11 +186,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
         // Pré-vérifier si c'est une mise à jour (pour ajuster le check stock en conséquence)
         $existing_pre = db_fetch_one(
-            "SELECT id, rivets_gonflables, rivets_eclates FROM op_points_journaliers WHERE site_id=? AND date_point=? AND type_point=?",
+            "SELECT id, statut, rivets_gonflables, rivets_eclates FROM op_points_journaliers WHERE site_id=? AND date_point=? AND type_point=?",
             [$site_id, $date_point, $type_point]
         );
-        $old_riv_gonfl  = $existing_pre ? (int)($existing_pre['rivets_gonflables'] ?? 0) : 0;
-        $old_riv_eclate = $existing_pre ? (int)($existing_pre['rivets_eclates']    ?? 0) : 0;
+        // Un point soumis ou validé ne se réécrit pas en ressaisissant la
+        // même date : seul un brouillon ou un point rejeté (à corriger) le peut.
+        if ($existing_pre && !in_array($existing_pre['statut'], ['brouillon', 'rejete'], true))
+            json_response(false, "Un point existe déjà pour ce site, cette date et ce type (statut : {$existing_pre['statut']}). Il ne peut plus être modifié.");
+        // Point rejeté : le rejet a déjà remis son stock en place. Il ne
+        // faut pas le remettre une 2e fois en le corrigeant.
+        $deja_remis     = $existing_pre && $existing_pre['statut'] === 'rejete';
+        $old_riv_gonfl  = ($existing_pre && !$deja_remis) ? (int)($existing_pre['rivets_gonflables'] ?? 0) : 0;
+        $old_riv_eclate = ($existing_pre && !$deja_remis) ? (int)($existing_pre['rivets_eclates']    ?? 0) : 0;
 
         // Vérifier stock rivets par type (stock actuel + anciens rivets qui seront restaurés)
         $stock_gonfl  = (int)(db_fetch_value("SELECT COALESCE(quantite,0) FROM op_stock_rivets WHERE site_id=? AND type_rivet='gonflable'", [$site_id]) ?? 0) + $old_riv_gonfl;
@@ -189,7 +246,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     rivets_utilises=?,rivets_endommages=?,
                     rivets_gonflables=?,rivets_eclates=?,
                     non_poses_concessionnaires=?,non_poses_usagers=?,
-                    nb_heures_travail=?,observations=?,updated_at=NOW()
+                    nb_heures_travail=?,observations=?,updated_at=NOW(),
+                    statut = CASE WHEN statut='rejete' THEN 'brouillon' ELSE statut END
                     $reimmat_set_sql
                     WHERE id=?",
                     array_merge([$nb_vp,$nb_camion,$nb_semi,$nb_moto,
@@ -197,40 +255,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                      $rivets_util,$riv_endomm,$total_gonfl,$total_eclate,
                      $np_conc,$np_usag,$heures,$obs],
                      $reimmat_params, [$point_id]));
-                // Restaurer le stock bobines avant de supprimer les anciens films
-                $old_films = db_fetch_all(
-                    "SELECT bobine_id, films_utilises, films_endommages FROM op_films_utilises WHERE point_id=?",
-                    [$point_id]
-                );
-                foreach ($old_films as $of) {
-                    $total_restore = (int)$of['films_utilises'] + (int)$of['films_endommages'];
-                    if ($total_restore > 0) {
-                        db_query(
-                            "UPDATE op_bobines SET
-                             films_utilises   = GREATEST(0, films_utilises   - ?),
-                             films_endommages = GREATEST(0, films_endommages - ?),
-                             films_restants   = films_restants + ?,
-                             statut = CASE WHEN statut='epuisee' AND films_restants + ? > 0 THEN 'en_cours' ELSE statut END
-                             WHERE id=?",
-                            [(int)$of['films_utilises'], (int)$of['films_endommages'], $total_restore, $total_restore, (int)$of['bobine_id']]
-                        );
-                    }
-                }
-                // Restaurer le stock rivets avant de supprimer
-                if ($old_riv_gonfl > 0)
-                    db_query("UPDATE op_stock_rivets SET quantite = quantite + ? WHERE site_id=? AND type_rivet='gonflable'",
-                        [$old_riv_gonfl, $site_id]);
-                if ($old_riv_eclate > 0)
-                    db_query("UPDATE op_stock_rivets SET quantite = quantite + ? WHERE site_id=? AND type_rivet='eclate'",
-                        [$old_riv_eclate, $site_id]);
-                // Restaurer le stock PMMA avant de supprimer
-                $old_pmma = db_fetch_all("SELECT * FROM op_pmma_utilises WHERE point_id=?", [$point_id]);
-                foreach ($old_pmma as $op_) {
-                    $total_pm_restore = (int)$op_['utilises'] + (int)$op_['endommages'] + (int)($op_['non_conformes'] ?? 0);
-                    if ($total_pm_restore > 0)
-                        db_query("UPDATE stock_pmma_site SET quantite = quantite + ? WHERE site_id=? AND type_pmma=?",
-                            [$total_pm_restore, $site_id, $op_['type_pmma']]);
-                }
+                // Remettre en stock ce que l'ancienne version du point avait retiré
+                _pj_restaurer_stock((int)$point_id, $site_id, $old_riv_gonfl, $old_riv_eclate, $deja_remis);
                 // Supprimer anciens films et PMMA
                 db_query("DELETE FROM op_films_utilises WHERE point_id=?", [$point_id]);
                 db_query("DELETE FROM op_pmma_utilises  WHERE point_id=?", [$point_id]);
@@ -344,13 +370,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             }
 
             // ── n° 2.1 CR PDG — déclarations d'endommagement
-            // On n'accepte une déclaration que pour une bobine réellement
-            // déclarée endommagée dans ce point : le pop-up est la seule
-            // porte prévue, mais la requête peut être forgée.
-            $bobines_endommagees = [];
+            // Chaque unité endommagée porte sa justification : film (par
+            // bobine), et — depuis sql/migration_endommagements_rivets_pmma.sql
+            // — rivet (par type) et PMMA (par type). Clé de groupe :
+            // « film:<bobine_id> », « rivet:gonflable|eclate », « pmma:<type> ».
+            // On n'accepte une déclaration que pour un groupe réellement
+            // déclaré endommagé dans ce point : la requête peut être forgée.
+            $endo_multi = db_colonne_existe('op_endommagements', 'objet');
+            $attendus = [];   // clé -> nombre d'unités endommagées
+            $libelles = [];   // clé -> libellé pour les messages
             foreach ($films_data as $fd) {
                 if ((int)($fd['films_endommages'] ?? 0) > 0) {
-                    $bobines_endommagees[(int)$fd['bobine_id']] = (int)$fd['films_endommages'];
+                    $k = 'film:' . (int)$fd['bobine_id'];
+                    $attendus[$k] = (int)$fd['films_endommages'];
+                    $libelles[$k] = 'film(s) sur une bobine';
+                }
+            }
+            if ($endo_multi) {
+                if ($riv_gonfl_end  > 0) { $attendus['rivet:gonflable'] = $riv_gonfl_end;  $libelles['rivet:gonflable'] = 'rivet(s) gonflable(s)'; }
+                if ($riv_eclate_end > 0) { $attendus['rivet:eclate']    = $riv_eclate_end; $libelles['rivet:eclate']    = 'rivet(s) éclaté(s)'; }
+                foreach ($pmma_data as $pd) {
+                    $t = trim($pd['type_pmma'] ?? ''); $n = (int)($pd['endommages'] ?? 0);
+                    if ($t !== '' && $n > 0) { $attendus["pmma:$t"] = $n; $libelles["pmma:$t"] = "PMMA $t"; }
                 }
             }
             $etapes_ok = ['pose','impression','lamination','transport','stockage','autre'];
@@ -361,16 +402,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 "SELECT character_maximum_length FROM information_schema.columns
                  WHERE table_name='op_endommagements' AND column_name='cause'") ?: 255);
 
-            // Une déclaration par film endommagé : six films abîmés sur une
+            // Une déclaration par unité endommagée : six films abîmés sur une
             // bobine peuvent l'avoir été à six moments et pour six causes.
-            $rangs = [];   // bobine_id -> compteur de films déjà déclarés
+            $rangs = [];   // clé -> compteur d'unités déjà déclarées
             foreach ($endo_data as $ed) {
-                $e_bobine = (int)($ed['bobine_id'] ?? 0);
-                if (!isset($bobines_endommagees[$e_bobine])) continue;
+                $objet = $ed['objet'] ?? 'film';
+                $e_bobine = null; $sous_type = null;
+                if ($objet === 'film') {
+                    $e_bobine = (int)($ed['bobine_id'] ?? 0);
+                    $k = "film:$e_bobine";
+                } elseif ($objet === 'rivet' || $objet === 'pmma') {
+                    $sous_type = trim((string)($ed['sous_type'] ?? ''));
+                    $k = "$objet:$sous_type";
+                } else {
+                    continue;
+                }
+                if (!isset($attendus[$k])) continue;
 
-                $rangs[$e_bobine] = ($rangs[$e_bobine] ?? 0) + 1;
-                if ($rangs[$e_bobine] > $bobines_endommagees[$e_bobine]) {
-                    throw new Exception("Déclarations d'endommagement plus nombreuses que les films endommagés déclarés sur une bobine.");
+                $rangs[$k] = ($rangs[$k] ?? 0) + 1;
+                if ($rangs[$k] > $attendus[$k]) {
+                    throw new Exception("Déclarations d'endommagement plus nombreuses que les {$libelles[$k]} déclarés endommagés.");
                 }
 
                 $e_personne = trim((string)($ed['personne'] ?? ''));
@@ -383,24 +434,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
                 $e_heure = trim((string)($ed['heure'] ?? ''));
                 if ($e_heure !== '' && !preg_match('/^\d{2}:\d{2}$/', $e_heure)) $e_heure = '';
+                $e_obs = trim((string)($ed['observations'] ?? ''));
 
-                db_query(
-                    "INSERT INTO op_endommagements
-                     (point_id,bobine_id,site_id,film_no,personne,etape,cause,heure,observations,created_by)
-                     VALUES (?,?,?,?,?,?,?,?,?,?)",
-                    [$point_id, $e_bobine, $site_id, $rangs[$e_bobine],
-                     $e_personne, $e_etape, $e_cause, $e_heure ?: null,
-                     trim((string)($ed['observations'] ?? '')), $user['id']]
-                );
+                if ($endo_multi) {
+                    db_query(
+                        "INSERT INTO op_endommagements
+                         (point_id,objet,sous_type,bobine_id,site_id,film_no,personne,etape,cause,heure,observations,created_by)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                        [$point_id, $objet, $sous_type, $e_bobine, $site_id, $rangs[$k],
+                         $e_personne, $e_etape, $e_cause, $e_heure ?: null, $e_obs, $user['id']]
+                    );
+                } else {
+                    db_query(
+                        "INSERT INTO op_endommagements
+                         (point_id,bobine_id,site_id,film_no,personne,etape,cause,heure,observations,created_by)
+                         VALUES (?,?,?,?,?,?,?,?,?,?)",
+                        [$point_id, $e_bobine, $site_id, $rangs[$k],
+                         $e_personne, $e_etape, $e_cause, $e_heure ?: null, $e_obs, $user['id']]
+                    );
+                }
             }
 
-            // Chaque film endommagé doit avoir sa déclaration : sans ce
-            // contrôle, un envoi partiel laisserait des films sans traçabilité,
-            // ce que le module est précisément censé empêcher.
-            foreach ($bobines_endommagees as $bid => $nb) {
-                if (($rangs[$bid] ?? 0) !== $nb) {
-                    throw new Exception("Chaque film endommagé doit être déclaré : "
-                        . ($rangs[$bid] ?? 0) . " déclaration(s) pour $nb film(s) sur une bobine.");
+            // Chaque unité endommagée doit avoir sa déclaration : sans ce
+            // contrôle, un envoi partiel laisserait des unités sans
+            // traçabilité, ce que le module est précisément censé empêcher.
+            foreach ($attendus as $k => $nb) {
+                if (($rangs[$k] ?? 0) !== $nb) {
+                    throw new Exception("Chaque endommagement doit être justifié : "
+                        . ($rangs[$k] ?? 0) . " déclaration(s) pour $nb {$libelles[$k]}.");
                 }
             }
 
@@ -440,7 +501,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 'moy_prod'     => $moy_prod,
                 'films_detail' => $films_detail,
             ]);
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
+            // Throwable et pas seulement Exception : une erreur PHP (Error,
+            // TypeError) passait à travers et renvoyait une page d'erreur au
+            // lieu d'un JSON — le bouton restait bloqué sur « Enregistrement… ».
             db_rollback();
             json_response(false, 'Erreur : ' . $e->getMessage());
         }
@@ -528,6 +592,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             "SELECT bobine_id, films_utilises, films_endommages FROM op_films_utilises WHERE point_id=?",
             [$point_id]
         );
+        // Lignes PMMA et déclarations d'endommagement : rechargées dans le
+        // formulaire, sinon une simple mise à jour du point effaçait la
+        // consommation PMMA et obligeait à tout re-justifier.
+        $point['pmma'] = db_fetch_all("SELECT * FROM op_pmma_utilises WHERE point_id=? ORDER BY type_pmma", [$point_id]);
+        $point['endommagements'] = db_fetch_all(
+            "SELECT * FROM op_endommagements WHERE point_id=? ORDER BY bobine_id, film_no, id", [$point_id]);
         json_response(true, '', ['point' => $point]);
     }
 
@@ -589,6 +659,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     }
 
     // ── REJETER POINT (superviseur) — reverse les déductions stock
+    // Supprimer un brouillon : le stock ayant été retiré dès
+    // l'enregistrement, il est remis en place avant la suppression (sinon un
+    // brouillon abandonné laissait le stock diminué). Réservé à l'auteur,
+    // comme la modification.
+    if ($action === 'supprimer_brouillon') {
+        $point_id = (int)($_POST['point_id'] ?? 0);
+        $point = db_fetch_one("SELECT * FROM op_points_journaliers WHERE id=?", [$point_id]);
+        if (!$point) json_response(false, 'Point introuvable.');
+        if (($point['created_by'] ?? 0) != $user['id']) json_response(false, 'Accès refusé : seul l\'auteur peut supprimer son brouillon.');
+        if ($point['statut'] !== 'brouillon') json_response(false, 'Seul un point en brouillon peut être supprimé.');
+        // Ne pas effacer le travail d'un superviseur sur une observation déjà prise en charge.
+        $obs_suivies = (int)db_fetch_value(
+            "SELECT COUNT(*) FROM op_observations WHERE point_id=? AND statut <> 'en_attente'", [$point_id]);
+        if ($obs_suivies > 0)
+            json_response(false, 'Impossible : une observation de ce point est déjà prise en charge par un superviseur.');
+
+        db_begin();
+        try {
+            _pj_restaurer_stock($point_id, (int)$point['site_id'],
+                (int)($point['rivets_gonflables'] ?? 0), (int)($point['rivets_eclates'] ?? 0));
+            // Lignes liées (films, PMMA, endommagements, observations…) :
+            // ON DELETE CASCADE ; supprimées explicitement pour ne pas
+            // dépendre des contraintes de chaque base.
+            db_query("DELETE FROM op_films_utilises WHERE point_id=?", [$point_id]);
+            db_query("DELETE FROM op_pmma_utilises  WHERE point_id=?", [$point_id]);
+            db_query("DELETE FROM op_endommagements WHERE point_id=?", [$point_id]);
+            db_query("DELETE FROM op_observations   WHERE point_id=?", [$point_id]);
+            db_query("DELETE FROM op_points_journaliers WHERE id=?", [$point_id]);
+            audit_log($user['id'], 'DELETE', 'operations', $point_id,
+                "Suppression brouillon point journalier #$point_id du {$point['date_point']} — stock films, rivets et PMMA restauré");
+            db_commit();
+            json_response(true, 'Brouillon supprimé. Films, rivets et PMMA remis en stock.');
+        } catch (Exception $e) {
+            db_rollback();
+            json_response(false, 'Erreur : ' . $e->getMessage());
+        }
+    }
+
     if ($action === 'rejeter_point') {
         if (!in_array($user['role_slug'] ?? '', ['admin','superadmin','superviseur_operation']))
             json_response(false, 'Accès refusé.');
@@ -1367,6 +1475,7 @@ foreach($points as $p):
         <button class="btn btn-success btn-sm" onclick="validerPointCoord(<?= $p['id'] ?>)" title="Valider"><i class="ph ph-check-circle" aria-hidden="true"></i></button>
         <?php endif; ?>
         <button class="btn btn-secondary btn-sm" onclick="editPoint(<?= $p['id'] ?>)" title="Modifier" style="background:#e8f4f9;color:var(--blue)"><i class="ph ph-pencil-simple" aria-hidden="true"></i></button>
+        <button class="btn btn-sm" onclick="supprimerBrouillon(<?= $p['id'] ?>)" title="Supprimer le brouillon" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5"><i class="ph ph-trash" aria-hidden="true"></i></button>
       <?php endif; ?>
       <?php if(in_array($p['statut'],['brouillon','en_attente_validation']) && ($p['type_point']??'')==='point_18h' && in_array($role_slug_pj,['admin','superadmin','superviseur_operation'])): ?>
         <button class="btn btn-success btn-sm" onclick="validerPoint(<?= $p['id'] ?>)" title="Valider"><i class="ph ph-check-circle" aria-hidden="true"></i></button>
@@ -1591,7 +1700,7 @@ foreach($points as $p):
             <div class="form-group" style="margin:0">
               <label style="font-size:12px;color:#e65100">Endommagés</label>
               <input type="number" class="form-control" id="p-gonfl-end" min="0" value="0"
-                     oninput="recalcule()" style="text-align:center;border-color:#f39c12">
+                     oninput="recalcule()" onchange="onRivetEndChange('gonflable', this)" style="text-align:center;border-color:#f39c12">
             </div>
           </div>
           <div id="info-gonfl" style="font-size:12px;margin-top:8px;color:#1565c0;font-weight:600">Stock: — | Sortis: 0</div>
@@ -1607,7 +1716,7 @@ foreach($points as $p):
             <div class="form-group" style="margin:0">
               <label style="font-size:12px;color:#e65100">Endommagés</label>
               <input type="number" class="form-control" id="p-eclate-end" min="0" value="0"
-                     oninput="recalcule()" style="text-align:center;border-color:#f39c12">
+                     oninput="recalcule()" onchange="onRivetEndChange('eclate', this)" style="text-align:center;border-color:#f39c12">
             </div>
           </div>
           <div id="info-eclate" style="font-size:12px;margin-top:8px;color:#880e4f;font-weight:600">Stock: — | Sortis: 0</div>
@@ -1918,6 +2027,8 @@ function resetPointForm(){
   document.getElementById('pAlert').innerHTML='';
   document.getElementById('point-preview').style.display='none';
   bobinesCache={}; stockRivets=0; stockGonfl=0; stockEclate=0;
+  endommagementsSaisis = {};
+  ordreEndo = {}; ordreEndoSeq = 0;
   recalcule();
 }
 
@@ -2035,11 +2146,21 @@ function ajouterLignePmma(){
   const sel = document.getElementById('pmma-select');
   const type = sel.value;
   if(!type) return;
+  ajouterLignePmmaType(type);
+  sel.value='';
+}
+
+// Ajoute la ligne d'un type ; `deja` = quantité déjà sortie par le point
+// rouvert, rendue au stock affiché (le serveur la restaure avant contrôle).
+function ajouterLignePmmaType(type, deja = 0){
   // Éviter les doublons
-  if(document.querySelector(`#pmma-lignes [data-type="${CSS.escape(type)}"]`)){
-    sel.value=''; return;
+  if(document.querySelector(`#pmma-lignes [data-type="${CSS.escape(type)}"]`)) return null;
+  let lignes = document.getElementById('pmma-lignes');
+  if(!lignes){
+    document.getElementById('pmma-container').innerHTML = '<div id="pmma-lignes"></div>';
+    lignes = document.getElementById('pmma-lignes');
   }
-  const stock = pmmaStockDisponible[type] ?? '?';
+  const stock = (pmmaStockDisponible[type] ?? 0) + deja;
   const div = document.createElement('div');
   div.dataset.type = type;
   div.style.cssText='display:grid;grid-template-columns:1fr 100px 100px 100px 32px;gap:8px;align-items:end;padding:8px 10px;background:var(--lighter);border-radius:9px;margin-bottom:6px';
@@ -2053,7 +2174,8 @@ function ajouterLignePmma(){
     <div>
       <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px">Endommagés</label>
       <input type="number" data-kind="end" min="0" max="${stock}" value="0"
-             class="form-control" style="font-size:13px;text-align:center">
+             class="form-control" style="font-size:13px;text-align:center"
+             onchange="onPmmaEndChange(this.closest('[data-type]').dataset.type, this)">
     </div>
     <div>
       <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px" title="PMMA reçus qui ne respectent pas les règles">Non conformes</label>
@@ -2062,8 +2184,8 @@ function ajouterLignePmma(){
     </div>
     <button type="button" onclick="this.closest('[data-type]').remove()"
             style="background:#fee2e2;border:none;border-radius:7px;cursor:pointer;font-size:15px;color:#991b1b;width:32px;height:32px;margin-bottom:1px"><i class="ph ph-x" aria-hidden="true"></i></button>`;
-  document.getElementById('pmma-lignes').appendChild(div);
-  sel.value='';
+  lignes.appendChild(div);
+  return div;
 }
 
 function collectPmmaData(){
@@ -2297,17 +2419,60 @@ const CAUSES_ENDO = [
   ['incident_externe', 'Incident externe'],
   ['autre',            'Autre'],
 ];
-// bobine_id -> tableau d'une entrée par film endommagé
+// Rivets et PMMA endommagés ne se justifient qu'une fois les colonnes
+// objet/sous_type créées (sql/migration_endommagements_rivets_pmma.sql).
+const ENDO_MULTI = <?= db_colonne_existe('op_endommagements', 'objet') ? 'true' : 'false' ?>;
+// clé de groupe -> tableau d'une entrée par unité endommagée.
+// Clés : « film:<bobine_id> », « rivet:gonflable|eclate », « pmma:<type> ».
 let endommagementsSaisis = {};
+// Une couleur par type d'élément, pour ne pas confondre films, rivets et
+// PMMA dans le pop-up.
+const ENDO_STYLE = {
+  film:  {c:'#1565c0', bg:'#e3f2fd', bd:'#90caf9', ic:'ph-film-strip', lbl:'Film'},
+  rivet: {c:'#6a1b9a', bg:'#f3e5f5', bd:'#ce93d8', ic:'ph-nut',        lbl:'Rivet'},
+  pmma:  {c:'#00695c', bg:'#e0f2f1', bd:'#80cbc4', ic:'ph-app-window', lbl:'PMMA'},
+};
+// Ordre d'arrivée des groupes : le dernier saisi s'affiche en haut, les
+// précédents descendent (on retrouve tout de suite ce qu'on vient d'ajouter).
+let ordreEndo = {}, ordreEndoSeq = 0;
+
+const escEndo = v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+// Groupes à justifier, d'après ce qui est saisi dans le formulaire.
+function groupesEndommages(){
+  const g = getBobinesData().filter(f => (f.films_endommages|0) > 0).map(f => ({
+    cle: 'film:'+f.bobine_id, objet: 'film', bobine_id: f.bobine_id, sous_type: null,
+    titre: 'Bobine ' + ((bobinesCache[f.bobine_id]||{}).numero || f.bobine_id),
+    unite: 'Film', nb: f.films_endommages|0,
+  }));
+  if (ENDO_MULTI){
+    const gEnd = parseInt(document.getElementById('p-gonfl-end')?.value||0);
+    const eEnd = parseInt(document.getElementById('p-eclate-end')?.value||0);
+    if (gEnd > 0) g.push({cle:'rivet:gonflable', objet:'rivet', sous_type:'gonflable', titre:'Rivets gonflables', unite:'Rivet', nb:gEnd});
+    if (eEnd > 0) g.push({cle:'rivet:eclate',    objet:'rivet', sous_type:'eclate',    titre:'Rivets éclatés',    unite:'Rivet', nb:eEnd});
+    collectPmmaData().filter(pm => (pm.endommages|0) > 0).forEach(pm => g.push({
+      cle:'pmma:'+pm.type_pmma, objet:'pmma', sous_type:pm.type_pmma, titre:'PMMA '+pm.type_pmma, unite:'PMMA', nb:pm.endommages|0,
+    }));
+  }
+  return g;
+}
 
 // Appelé quand une quantité endommagée change : on ouvre le pop-up à la
 // première saisie, sans harceler l'agent à chaque frappe suivante.
+function onEndoQuantite(cle, nb){
+  if (nb > 0 && !endommagementsSaisis[cle]) ouvrirPopupEndommagement();
+  if (nb === 0) delete endommagementsSaisis[cle];
+}
 function onEndommageChange(idx){
   updateBobineRestants(idx);
-  const bid    = document.getElementById('bsel-'+idx)?.value;
-  const endomm = parseInt(document.getElementById('bendomm-'+idx)?.value||0);
-  if (endomm > 0 && bid && !endommagementsSaisis[bid]) ouvrirPopupEndommagement();
-  if (endomm === 0 && bid) delete endommagementsSaisis[bid];
+  const bid = document.getElementById('bsel-'+idx)?.value;
+  if (bid) onEndoQuantite('film:'+bid, parseInt(document.getElementById('bendomm-'+idx)?.value||0));
+}
+function onRivetEndChange(type, el){
+  if (ENDO_MULTI) onEndoQuantite('rivet:'+type, parseInt(el.value||0));
+}
+function onPmmaEndChange(type, el){
+  if (ENDO_MULTI) onEndoQuantite('pmma:'+type, parseInt(el.value||0));
 }
 
 function causeLibelle(c){
@@ -2315,45 +2480,51 @@ function causeLibelle(c){
 }
 
 function ouvrirPopupEndommagement(){
-  const lignes = getBobinesData().filter(f => (f.films_endommages|0) > 0);
+  const groupes = groupesEndommages();
   const box = document.getElementById('endoLignes');
-  if (!lignes.length){
-    box.innerHTML = '<div style="color:var(--muted);font-size:13px">Aucune bobine endommagée saisie.</div>';
+  if (!groupes.length){
+    box.innerHTML = '<div style="color:var(--muted);font-size:13px">Aucun endommagement saisi.</div>';
   } else {
     const opt = (arr, sel) => arr.map(([v,l]) =>
       `<option value="${v}" ${sel===v?'selected':''}>${l}</option>`).join('');
 
-    box.innerHTML = lignes.map(f => {
-      const b   = bobinesCache[f.bobine_id] || {};
-      const nb  = f.films_endommages|0;
-      const dej = endommagementsSaisis[f.bobine_id] || [];
+    groupes.forEach(g => { if (!(g.cle in ordreEndo)) ordreEndo[g.cle] = ++ordreEndoSeq; });
+    groupes.sort((a, b) => ordreEndo[b.cle] - ordreEndo[a.cle]);
 
-      // Un bloc par film : chacun peut avoir sa propre étape, sa cause et
+    box.innerHTML = groupes.map(g => {
+      const nb  = g.nb;
+      const dej = endommagementsSaisis[g.cle] || [];
+      const st  = ENDO_STYLE[g.objet] || ENDO_STYLE.film;
+      const complet = dej.length === nb && dej.every(d => d.personne && d.cause);
+
+      // Un bloc par unité : chacune peut avoir sa propre étape, sa cause et
       // sa personne. Le report ci-dessous évite de tout ressaisir quand
-      // les films ont été abîmés dans les mêmes circonstances.
-      const films = Array.from({length: nb}, (_, i) => {
+      // les unités ont été abîmées dans les mêmes circonstances.
+      // Affichées de la plus récente à la plus ancienne ; data-idx garde le
+      // vrai rang pour l'enregistrement.
+      const unites = Array.from({length: nb}, (_, k) => nb - 1 - k).map(i => {
         const d = dej[i] || {};
         return `
-        <div class="endo-film" data-bobine="${f.bobine_id}" data-film="${i+1}"
-             style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-top:10px;background:white">
+        <div class="endo-film" data-cle="${escEndo(g.cle)}" data-idx="${i}"
+             style="border:1px solid var(--border);border-left:4px solid ${st.c};border-radius:10px;padding:12px 14px;margin-top:10px;background:white">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">
-            <span style="font-size:12px;font-weight:800;color:var(--danger-d);text-transform:uppercase;letter-spacing:.4px">
-              Film ${i+1} sur ${nb}
+            <span style="font-size:12px;font-weight:800;color:${st.c};text-transform:uppercase;letter-spacing:.4px">
+              ${g.unite} ${i+1} sur ${nb}
             </span>
             ${i===0 && nb>1 ? `<button type="button" class="btn btn-secondary btn-sm"
-                 onclick="reporterEndommagement('${f.bobine_id}')"
-                 title="Recopier ces valeurs sur les films suivants de cette bobine">
-                 <i class="ph ph-copy" aria-hidden="true"></i> Reporter sur les ${nb-1} suivants</button>` : ''}
+                 onclick="reporterEndommagement(this)"
+                 title="Recopier ces valeurs sur les autres éléments de ce groupe">
+                 <i class="ph ph-copy" aria-hidden="true"></i> Reporter sur les ${nb-1} autres</button>` : ''}
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <div>
               <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Personne concernée *</label>
-              <input type="text" class="form-control endo-personne" value="${(d.personne||'').replace(/"/g,'&quot;')}"
+              <input type="text" class="form-control endo-personne" value="${escEndo(d.personne)}"
                      placeholder="Nom de la personne" style="margin-top:4px">
             </div>
             <div>
               <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Heure de l'incident</label>
-              <input type="time" class="form-control endo-heure" value="${d.heure||''}" style="margin-top:4px">
+              <input type="time" class="form-control endo-heure" value="${escEndo(d.heure)}" style="margin-top:4px">
             </div>
             <div>
               <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Étape *</label>
@@ -2362,46 +2533,55 @@ function ouvrirPopupEndommagement(){
             <div>
               <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Cause *</label>
               <input type="text" class="form-control endo-cause" list="endoCausesList" maxlength="255"
-                     value="${causeLibelle(d.cause).replace(/"/g,'&quot;')}"
+                     value="${escEndo(causeLibelle(d.cause))}"
                      placeholder="Décrivez la cause" style="margin-top:4px">
             </div>
           </div>
           <div style="margin-top:9px">
             <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Observations</label>
             <textarea class="form-control endo-obs" rows="2" placeholder="Précisions libres…"
-                      style="margin-top:4px">${d.observations||''}</textarea>
+                      style="margin-top:4px">${escEndo(d.observations)}</textarea>
           </div>
         </div>`;
       }).join('');
 
       return `
-      <div style="border:1.5px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px;background:var(--lighter)">
-        <div style="font-weight:800;color:var(--navy);font-size:14px">Bobine ${b.numero||f.bobine_id}</div>
-        <div style="font-size:12px;color:var(--danger-d);font-weight:700">
-          ${nb} film(s) endommagé(s) — une déclaration par film
+      <div style="border:1.5px solid ${st.bd};border-left:6px solid ${st.c};border-radius:12px;padding:14px 16px;margin-bottom:14px;background:${st.bg}">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="background:${st.c};color:white;font-size:11px;font-weight:800;letter-spacing:.5px;padding:3px 9px;border-radius:20px;text-transform:uppercase">
+            <i class="ph ${st.ic}" aria-hidden="true"></i> ${st.lbl}
+          </span>
+          <span style="font-weight:800;color:${st.c};font-size:14px">${escEndo(g.titre)}</span>
+          ${complet ? `<span style="margin-left:auto;font-size:12px;font-weight:700;color:#2e7d32"><i class="ph ph-check-circle" aria-hidden="true"></i> Justifié</span>` : ''}
         </div>
-        ${films}
+        <div style="font-size:12px;color:var(--danger-d);font-weight:700;margin-top:4px">
+          ${nb} endommagé(s) — une déclaration par ${g.unite.toLowerCase()}
+        </div>
+        ${unites}
       </div>`;
     }).join('');
   }
   document.getElementById('endoAlert').innerHTML = '';
   document.getElementById('mEndommagement').classList.add('open');
+  box.scrollTop = 0;
+  box.closest('.mbody')?.scrollTo?.(0, 0);
 }
 
-// Recopie le premier film sur les suivants de la même bobine.
-function reporterEndommagement(bobineId){
-  const blocs = document.querySelectorAll(`.endo-film[data-bobine="${bobineId}"]`);
-  if (blocs.length < 2) return;
-  const src = blocs[0];
+// Recopie la première unité sur les suivantes du même groupe.
+function reporterEndommagement(btn){
+  const src = btn.closest('.endo-film');
+  const cle = src.dataset.cle;
+  const blocs = [...document.querySelectorAll('#endoLignes .endo-film')].filter(b => b.dataset.cle === cle && b !== src);
+  if (!blocs.length) return;
   const val = s => src.querySelector(s).value;
-  for (let i = 1; i < blocs.length; i++){
+  for (let i = 0; i < blocs.length; i++){
     blocs[i].querySelector('.endo-personne').value = val('.endo-personne');
     blocs[i].querySelector('.endo-heure').value    = val('.endo-heure');
     blocs[i].querySelector('.endo-etape').value    = val('.endo-etape');
     blocs[i].querySelector('.endo-cause').value    = val('.endo-cause');
     blocs[i].querySelector('.endo-obs').value      = val('.endo-obs');
   }
-  toast(`Valeurs reportées sur ${blocs.length-1} film(s).`,'success');
+  toast(`Valeurs reportées sur ${blocs.length} élément(s).`,'success');
 }
 
 function validerEndommagements(){
@@ -2411,20 +2591,21 @@ function validerEndommagements(){
     const personne = l.querySelector('.endo-personne').value.trim();
     if (!personne){
       document.getElementById('endoAlert').innerHTML =
-        '<div class="alert alert-danger" style="font-size:13px">La personne concernée est obligatoire pour chaque film.</div>';
+        '<div class="alert alert-danger" style="font-size:13px">La personne concernée est obligatoire pour chaque élément endommagé.</div>';
       l.querySelector('.endo-personne').focus();
       l.scrollIntoView({behavior:'smooth', block:'center'});
       return;
     }
     if (!l.querySelector('.endo-cause').value.trim()){
       document.getElementById('endoAlert').innerHTML =
-        '<div class="alert alert-danger" style="font-size:13px">La cause est obligatoire pour chaque film.</div>';
+        '<div class="alert alert-danger" style="font-size:13px">La cause est obligatoire pour chaque élément endommagé.</div>';
       l.querySelector('.endo-cause').focus();
       l.scrollIntoView({behavior:'smooth', block:'center'});
       return;
     }
-    const bid = l.dataset.bobine;
-    (saisie[bid] = saisie[bid] || []).push({
+    const cle = l.dataset.cle;
+    (saisie[cle] = saisie[cle] || []).push({
+      idx: parseInt(l.dataset.idx)||0,
       personne,
       etape:        l.querySelector('.endo-etape').value,
       cause:        l.querySelector('.endo-cause').value.trim(),
@@ -2432,24 +2613,50 @@ function validerEndommagements(){
       observations: l.querySelector('.endo-obs').value.trim(),
     });
   }
+  // Affichage décroissant -> on remet chaque groupe dans l'ordre 1, 2, 3…
+  Object.values(saisie).forEach(arr => { arr.sort((a, b) => a.idx - b.idx); arr.forEach(x => delete x.idx); });
   endommagementsSaisis = saisie;
   document.getElementById('mEndommagement').classList.remove('open');
   toast('Déclaration(s) enregistrée(s).','success');
 }
 
-// Aplatit en une entrée par film, et n'envoie que les bobines dont le
+// Groupes dont le nombre de déclarations ne correspond pas (encore) à la
+// quantité endommagée saisie.
+function groupesNonJustifies(){
+  return groupesEndommages().filter(g => {
+    const d = endommagementsSaisis[g.cle];
+    return !d || d.length !== g.nb;
+  });
+}
+
+// Aplatit en une entrée par unité, et n'envoie que les groupes dont le
 // nombre de déclarations correspond encore à la quantité endommagée :
 // le serveur refuse tout écart, autant ne pas l'y conduire.
-function collectEndommagements(films){
+function collectEndommagements(){
   const sortie = [];
-  films.forEach(f => {
-    const nb = f.films_endommages|0;
-    const d  = endommagementsSaisis[f.bobine_id];
-    if (nb > 0 && d && d.length === nb){
-      d.forEach(x => sortie.push(Object.assign({bobine_id: f.bobine_id}, x)));
+  groupesEndommages().forEach(g => {
+    const d = endommagementsSaisis[g.cle];
+    if (d && d.length === g.nb){
+      d.forEach(x => sortie.push(Object.assign({objet: g.objet, bobine_id: g.bobine_id || null, sous_type: g.sous_type}, x)));
     }
   });
   return sortie;
+}
+
+// Recharge les déclarations déjà enregistrées d'un point rouvert : sans
+// elles, la moindre mise à jour obligeait à tout re-justifier.
+function chargerEndommagementsSaisis(liste){
+  endommagementsSaisis = {};
+  ordreEndo = {}; ordreEndoSeq = 0;
+  (liste || []).forEach(e => {
+    const objet = e.objet || 'film';
+    const cle = objet === 'film' ? 'film:'+e.bobine_id : objet+':'+(e.sous_type||'');
+    if (!(cle in ordreEndo)) ordreEndo[cle] = ++ordreEndoSeq;
+    (endommagementsSaisis[cle] = endommagementsSaisis[cle] || []).push({
+      personne: e.personne || '', etape: e.etape || 'autre', cause: e.cause || '',
+      heure: (e.heure || '').slice(0,5), observations: e.observations || '',
+    });
+  });
 }
 
 function getBobinesData(){
@@ -2544,12 +2751,7 @@ function savePoint(){
   // « la bobine a une déclaration » laisserait passer les films suivants.
   // On bloque avant l'envoi plutôt que de laisser le serveur refuser :
   // l'agent est déjà dans le formulaire, autant lui ouvrir le pop-up.
-  const manquantes = films_data.filter(f => {
-    const nb = f.films_endommages|0;
-    const d  = endommagementsSaisis[f.bobine_id];
-    return nb > 0 && (!d || d.length !== nb);
-  });
-  if (manquantes.length) {
+  if (groupesNonJustifies().length) {
     btn.disabled = false; btn.textContent = '💾 Enregistrer le point';
     ouvrirPopupEndommagement();
     return;
@@ -2581,7 +2783,7 @@ function savePoint(){
     observations:JSON.stringify(collectObservations()),
     films_data:  JSON.stringify(films_data),
     pmma_data:   JSON.stringify(collectPmmaData()),
-    endommagements_data: JSON.stringify(collectEndommagements(films_data)),
+    endommagements_data: JSON.stringify(collectEndommagements()),
   }).then(d=>{
     btn.disabled=false; btn.textContent='💾 Enregistrer le point';
     if(d.success){
@@ -2590,7 +2792,15 @@ function savePoint(){
       setTimeout(()=>location.reload(),900);
     } else {
       document.getElementById('pAlert').innerHTML=`<div class="alert alert-danger">${d.message}</div>`;
+      document.getElementById('pAlert').scrollIntoView({behavior:'smooth', block:'center'});
     }
+  }).catch(err=>{
+    // Réponse illisible (erreur serveur, coupure réseau) : sans ce catch, le
+    // bouton restait figé sur « Enregistrement… » sans rien dire.
+    btn.disabled=false; btn.textContent='💾 Enregistrer le point';
+    document.getElementById('pAlert').innerHTML=
+      `<div class="alert alert-danger">Échec de l'enregistrement : ${escEndo(err.message)}</div>`;
+    document.getElementById('pAlert').scrollIntoView({behavior:'smooth', block:'center'});
   });
 }
 
@@ -2834,10 +3044,26 @@ async function editPoint(id){
     });
   }
   await loadStockPMMA();
+  (p.pmma || []).forEach(pm => {
+    const nc  = parseInt(pm.non_conformes)||0;
+    const div = ajouterLignePmmaType(pm.type_pmma, (parseInt(pm.utilises)||0)+(parseInt(pm.endommages)||0)+nc);
+    if(!div) return;
+    div.querySelector('[data-kind="util"]').value = pm.utilises||0;
+    div.querySelector('[data-kind="end"]').value  = pm.endommages||0;
+    const ncEl = div.querySelector('[data-kind="nc"]'); if(ncEl) ncEl.value = nc;
+  });
+  chargerEndommagementsSaisis(p.endommagements);
   recalcule();
   document.getElementById('mPoint').classList.add('open');
 }
 
+function supprimerBrouillon(id){
+  if(!confirm("Supprimer ce brouillon ?\n\nLes films, rivets et PMMA qu'il avait retirés seront remis dans le stock du site. Cette action est définitive."))return;
+  ap({action:'supprimer_brouillon',point_id:id}).then(d=>{
+    toast(d.message,d.success?'success':'danger');
+    if(d.success)setTimeout(()=>location.reload(),800);
+  });
+}
 function validerPointCoord(id){
   if(!confirm('Valider ce point ? Vous ne pourrez plus le modifier après.'))return;
   ap({action:'valider_point_coord',point_id:id}).then(d=>{
@@ -2880,7 +3106,7 @@ document.getElementById('mRejet').addEventListener('click',e=>{if(e.target===e.c
 function ap(data){
   const fd=new FormData();
   for(const[k,v]of Object.entries(data))if(v!==undefined)fd.append(k,v);
-  return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(r=>r.json());
+  return fetch(window.location.href,{method:'POST',headers:{'X-Requested-With':'XMLHttpRequest'},body:fd}).then(achParseJson);
 }
 document.getElementById('mPoint').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');});
 document.getElementById('mDetail').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');});

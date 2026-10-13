@@ -49,6 +49,11 @@ $f_au    = trim($_GET['au'] ?? date('Y-m-d'));
 $f_etape = trim($_GET['etape'] ?? '');
 $f_cause = trim($_GET['cause'] ?? '');
 $f_pers  = trim($_GET['personne'] ?? '');
+// Rivets et PMMA endommagés sont justifiés comme les films depuis
+// sql/migration_endommagements_rivets_pmma.sql (colonnes objet/sous_type).
+$endo_multi = db_colonne_existe('op_endommagements', 'objet');
+$OBJETS  = ['film' => 'Films', 'rivet' => 'Rivets', 'pmma' => 'PMMA'];
+$f_objet = trim($_GET['objet'] ?? '');
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $f_du)) $f_du = date('Y-m-01');
 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $f_au)) $f_au = date('Y-m-d');
 
@@ -60,6 +65,7 @@ if (isset($ETAPES[$f_etape])) { $where[] = "e.etape = ?"; $params[] = $f_etape; 
 // $CAUSES ne sert plus qu'à afficher en clair les anciens codes.
 if ($f_cause !== '') { $where[] = "e.cause = ?"; $params[] = $f_cause; }
 if ($f_pers)  { $where[] = "e.personne ILIKE ?"; $params[] = '%'.$f_pers.'%'; }
+if ($endo_multi && isset($OBJETS[$f_objet])) { $where[] = "COALESCE(e.objet,'film') = ?"; $params[] = $f_objet; }
 $wsql = implode(' AND ', $where);
 
 // Valeurs réellement saisies, pour la liste du filtre Cause.
@@ -80,6 +86,20 @@ $lignes = db_fetch_all(
      ORDER BY e.created_at DESC, e.id DESC",
     $params
 );
+
+// Libellé de l'élément endommagé : bobine pour un film, type pour un
+// rivet ou un PMMA.
+$par_objet = ['film' => 0, 'rivet' => 0, 'pmma' => 0];
+foreach ($lignes as &$l) {
+    $objet = $l['objet'] ?? 'film';
+    $l['element'] = match ($objet) {
+        'rivet' => $l['sous_type'] === 'eclate' ? 'Rivets éclatés' : 'Rivets gonflables',
+        'pmma'  => 'PMMA ' . ($l['sous_type'] ?? ''),
+        default => 'Bobine ' . ($l['bobine_num'] ?? '—'),
+    };
+    $par_objet[$objet] = ($par_objet[$objet] ?? 0) + 1;
+}
+unset($l);
 
 $total_films = 0;
 $par_etape = $par_cause = [];
@@ -106,7 +126,7 @@ if ($export !== '' && !can('tracabilite_endommagements', 'can_export')) {
 if ($export === 'xlsx') {
     $sp = new Spreadsheet();
     $sh = $sp->getActiveSheet()->setTitle('Endommagements');
-    $entetes = ['Date','Site','Bobine','Film n°','Étape','Cause','Personne','Heure','Observations','Déclaré par'];
+    $entetes = ['Date','Site','Élément','N°','Étape','Cause','Personne','Heure','Observations','Déclaré par'];
     foreach ($entetes as $i => $t) {
         $col = chr(65 + $i);
         $sh->setCellValue($col.'1', $t);
@@ -120,7 +140,7 @@ if ($export === 'xlsx') {
     foreach ($lignes as $l) {
         $sh->setCellValue("A$r", fmt_date($l['date_point'] ?: $l['created_at']));
         $sh->setCellValue("B$r", $l['site_nom'] ?? '—');
-        $sh->setCellValue("C$r", $l['bobine_num'] ?? '—');
+        $sh->setCellValue("C$r", $l['element']);
         $sh->setCellValue("D$r", (int)$l['film_no']);
         $sh->setCellValue("E$r", $ETAPES[$l['etape']] ?? $l['etape']);
         $sh->setCellValue("F$r", $CAUSES[$l['cause']] ?? $l['cause']);
@@ -152,12 +172,12 @@ if ($export === 'pdf') {
     <h1>Traçabilité des endommagements</h1>
     <div class="meta">
       Du <?= fmt_date($f_du) ?> au <?= fmt_date($f_au) ?>
-      · <?= count($lignes) ?> déclaration(s) · <?= $total_films ?> film(s)
+      · <?= count($lignes) ?> déclaration(s) · <?= $par_objet['film'] ?> film(s), <?= $par_objet['rivet'] ?> rivet(s), <?= $par_objet['pmma'] ?> PMMA
       · Généré le <?= date('d/m/Y H:i') ?>
     </div>
     <table>
       <thead><tr>
-        <th>Date</th><th>Site</th><th>Bobine</th><th>Film n°</th>
+        <th>Date</th><th>Site</th><th>Élément</th><th>N°</th>
         <th>Étape</th><th>Cause</th><th>Personne</th><th>Observations</th>
       </tr></thead>
       <tbody>
@@ -165,7 +185,7 @@ if ($export === 'pdf') {
         <tr>
           <td><?= h(fmt_date($l['date_point'] ?: $l['created_at'])) ?></td>
           <td><?= h($l['site_nom'] ?? '—') ?></td>
-          <td><?= h($l['bobine_num'] ?? '—') ?></td>
+          <td><?= h($l['element']) ?></td>
           <td><?= (int)$l['film_no'] ?></td>
           <td><?= h($ETAPES[$l['etape']] ?? $l['etape']) ?></td>
           <td><?= h($CAUSES[$l['cause']] ?? $l['cause']) ?></td>
@@ -208,7 +228,7 @@ include __DIR__ . '/../templates/header.php';
       <i class="ph ph-first-aid-kit" aria-hidden="true"></i> Traçabilité des endommagements
     </h2>
     <p style="font-size:13px;color:var(--muted);margin-top:4px">
-      Déclarations saisies dans le point journalier — une ligne par bobine endommagée.
+      Déclarations saisies dans le point journalier — une ligne par film, rivet ou PMMA endommagé.
     </p>
   </div>
   <?php if(can('tracabilite_endommagements','can_export')): ?>
@@ -227,10 +247,11 @@ include __DIR__ . '/../templates/header.php';
 <div class="endo-kpis">
   <div class="endo-kpi">
     <div class="endo-kpi-v"><?= fmt_number($total_films) ?></div>
-    <div class="endo-kpi-l">Films endommagés</div>
+    <div class="endo-kpi-l">Endommagements déclarés</div>
+    <div style="font-size:12px;color:var(--muted);margin-top:2px"><?= $par_objet['film'] ?> film(s) · <?= $par_objet['rivet'] ?> rivet(s) · <?= $par_objet['pmma'] ?> PMMA</div>
   </div>
   <div class="endo-kpi blue">
-    <div class="endo-kpi-v"><?= fmt_number(count(array_unique(array_column($lignes,'bobine_id')))) ?></div>
+    <div class="endo-kpi-v"><?= fmt_number(count(array_unique(array_filter(array_column($lignes,'bobine_id'))))) ?></div>
     <div class="endo-kpi-l">Bobines concernées</div>
   </div>
   <div class="endo-kpi orange">
@@ -277,6 +298,16 @@ include __DIR__ . '/../templates/header.php';
       <?php endforeach; ?>
     </select>
   </div>
+  <?php if($endo_multi): ?>
+  <div><label>Élément</label>
+    <select name="objet">
+      <option value="">Tous</option>
+      <?php foreach($OBJETS as $k=>$lbl): ?>
+      <option value="<?= $k ?>" <?= $f_objet===$k?'selected':'' ?>><?= h($lbl) ?></option>
+      <?php endforeach; ?>
+    </select>
+  </div>
+  <?php endif; ?>
   <div><label>Personne</label><input type="text" name="personne" value="<?= h($f_pers) ?>" placeholder="Nom…"></div>
   <button class="btn btn-primary btn-sm" type="submit"><i class="ph ph-funnel" aria-hidden="true"></i> Filtrer</button>
   <a class="btn btn-secondary btn-sm" href="tracabilite_endommagements.php"><i class="ph ph-x" aria-hidden="true"></i> Réinitialiser</a>
@@ -287,8 +318,8 @@ include __DIR__ . '/../templates/header.php';
   <div class="table-wrap" style="overflow-x:auto">
     <table>
       <thead><tr>
-        <th>Date</th><th>Site</th><th>Bobine</th>
-        <th style="text-align:center">Film n°</th>
+        <th>Date</th><th>Site</th><th>Élément</th>
+        <th style="text-align:center">N°</th>
         <th>Étape</th><th>Cause</th><th>Personne</th>
         <th style="text-align:center">Heure</th>
         <th>Observations</th><th>Déclaré par</th>
@@ -302,7 +333,7 @@ include __DIR__ . '/../templates/header.php';
         <tr>
           <td style="white-space:nowrap;font-weight:600"><?= h(fmt_date($l['date_point'] ?: $l['created_at'])) ?></td>
           <td style="font-size:12.5px"><?= h($l['site_nom'] ?? '—') ?></td>
-          <td style="font-family:monospace;font-weight:700;color:var(--navy)"><?= h($l['bobine_num'] ?? '—') ?></td>
+          <td style="font-family:monospace;font-weight:700;color:var(--navy)"><?= h($l['element']) ?></td>
           <td style="text-align:center;font-weight:800;color:var(--danger-d)"><?= (int)$l['film_no'] ?></td>
           <td><span class="badge-etape"><?= h($ETAPES[$l['etape']] ?? $l['etape']) ?></span></td>
           <td><span class="badge-cause"><?= h($CAUSES[$l['cause']] ?? $l['cause']) ?></span></td>
