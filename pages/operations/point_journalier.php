@@ -56,6 +56,15 @@ function _pj_endo_numero(): bool {
     return db_colonne_existe('op_endommagements', 'numero_consommable');
 }
 
+// Règle métier : un point ne part pas en validation sans PMMA utilisés.
+// Sans stock PMMA sur le site, le coordinateur garde son point en brouillon
+// jusqu'au réapprovisionnement, puis le complète.
+const PJ_MSG_SANS_PMMA = "Impossible : aucun PMMA utilisé n'est saisi dans ce point. S'il n'y a pas de stock PMMA sur le site, gardez le point en brouillon jusqu'à réception du stock, puis modifiez-le pour saisir les PMMA.";
+function _pj_sans_pmma(int $point_id): bool {
+    return (int)db_fetch_value(
+        "SELECT COALESCE(SUM(utilises),0) FROM op_pmma_utilises WHERE point_id=?", [$point_id]) === 0;
+}
+
 // Remet dans le stock du site tout ce qu'un point avait retiré (films des
 // bobines, rivets, PMMA utilisés/endommagés/non conformes). Le stock est
 // déduit dès l'enregistrement, brouillon compris : on l'appelle avant de
@@ -500,7 +509,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             audit_log($user['id'], 'CREATE', 'operations', $point_id,
                 "Point journalier $type_point — Site:$site_id — $date_point — $total_engins engins");
             db_commit();
-            json_response(true, "Point enregistré. $total_engins engins, $total_plaques plaques, $rivets_util rivets déduits.", [
+            $msg_save = "Point enregistré. $total_engins engins, $total_plaques plaques, $rivets_util rivets déduits.";
+            if ($pmma_total_util === 0)
+                $msg_save .= " ⚠️ Aucun PMMA utilisé : le point reste en brouillon et ne pourra être soumis/validé qu'une fois les PMMA saisis.";
+            json_response(true, $msg_save, [
                 'point_id'     => $point_id,
                 'total_engins' => $total_engins,
                 'total_plaques'=> $total_plaques,
@@ -613,6 +625,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         if ($point['statut'] !== 'brouillon') json_response(false, 'Ce point ne peut plus être modifié.');
         $nb_films = (int)db_fetch_value("SELECT COUNT(*) FROM op_films_utilises WHERE point_id=?", [$point_id]);
         if ($nb_films === 0) json_response(false, 'Impossible de valider un point sans données bobines. Veuillez saisir les films utilisés avant de valider.');
+        if (_pj_sans_pmma($point_id)) json_response(false, PJ_MSG_SANS_PMMA);
         db_query("UPDATE op_points_journaliers SET statut='valide', validated_by=?, validated_at=NOW() WHERE id=?",
             [$user['id'], $point_id]);
         json_response(true, 'Point validé avec succès.');
@@ -628,6 +641,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         if (($point['type_point'] ?? '') !== 'point_18h') json_response(false, 'Seul le point 18h peut être soumis au superviseur.');
         $nb_films = (int)db_fetch_value("SELECT COUNT(*) FROM op_films_utilises WHERE point_id=?", [$point_id]);
         if ($nb_films === 0) json_response(false, 'Impossible de soumettre un point sans données bobines. Veuillez saisir les films utilisés avant de soumettre.');
+        if (_pj_sans_pmma($point_id)) json_response(false, PJ_MSG_SANS_PMMA);
         db_query("UPDATE op_points_journaliers SET statut='en_attente_validation' WHERE id=?", [$point_id]);
         // Notifier le superviseur
         $notif_targets = db_fetch_all(
@@ -648,6 +662,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $point_id = (int)($_POST['point_id'] ?? 0);
         $point = db_fetch_one("SELECT * FROM op_points_journaliers WHERE id=?", [$point_id]);
         if (!$point) json_response(false, 'Point introuvable.');
+        if (_pj_sans_pmma($point_id)) json_response(false, 'Impossible de valider : ce point ne comporte aucun PMMA utilisé. Le coordinateur doit le compléter (ou le rejeter pour correction).');
         db_query("UPDATE op_points_journaliers SET statut='valide',validated_by=?,validated_at=NOW() WHERE id=?",
             [$user['id'], $point_id]);
         // Notifier le coordinateur
@@ -934,6 +949,7 @@ $filtre_brouillon = ($role_slug_pj === 'coordinateur_site')
 $points = db_fetch_all(
     "SELECT p.*, s.nom AS site_nom,
             p.created_by AS agent_id,
+            (SELECT COALESCE(SUM(pu.utilises),0) FROM op_pmma_utilises pu WHERE pu.point_id=p.id) AS pmma_utilises,
             CONCAT(u.prenom,' ',u.nom) AS agent
      FROM op_points_journaliers p
      JOIN sites s ON s.id=p.site_id
@@ -1468,6 +1484,9 @@ foreach($points as $p):
     <div style="display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end">
       <button class="btn btn-secondary btn-sm" onclick="viewPoint(<?= $p['id'] ?>)" title="Aperçu"><i class="ph ph-eye" aria-hidden="true"></i></button>
       <button class="btn btn-secondary btn-sm" onclick="printPoint(<?= $p['id'] ?>)" title="Imprimer"><i class="ph ph-printer" aria-hidden="true"></i></button>
+      <?php if($p['statut']==='brouillon' && (int)($p['pmma_utilises'] ?? 0) === 0): ?>
+        <span style="font-size:11px;font-weight:700;color:#92400e;background:#fef3c7;border-radius:6px;padding:3px 7px" title="Saisir les PMMA utilisés avant de soumettre/valider">⚠️ PMMA manquants</span>
+      <?php endif; ?>
       <?php if($p['statut']==='brouillon' && ($p['agent_id']??0)==$user['id']): ?>
         <?php if(($p['type_point']??'')==='point_18h'): ?>
         <button class="btn btn-primary btn-sm" onclick="soumettrePoint(<?= $p['id'] ?>)" title="Soumettre"><i class="ph ph-upload-simple" aria-hidden="true"></i></button>
