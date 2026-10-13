@@ -897,6 +897,9 @@ include __DIR__ . '/../../templates/header.php';
 
 /* ── MODALS ── */
 .modal-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(10,22,40,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center}
+/* S'ouvre par-dessus le formulaire du point (#mPoint), placé après lui dans
+   le DOM : à z-index égal il passait derrière. */
+#mEndommagement{z-index:600}
 .modal-overlay.open{display:flex}
 .modal{background:white;border-radius:16px;max-width:95vw;max-height:95vh;overflow-y:auto;animation:mIn .22s cubic-bezier(.22,1,.36,1)}
 @keyframes mIn{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
