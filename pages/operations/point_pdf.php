@@ -254,6 +254,52 @@ ob_start();
     </table>
   </div>
 
+  <!-- Duplicatas / Post-Immat (sites reimmat_post) — totaux separes du Primo -->
+  <?php
+  $reimmat_cats = [
+      ['Duplicatas', '#6b21a8', '#f3e8ff', (int)($point['nb_vp_duplicata'] ?? 0), (int)($point['nb_camion_duplicata'] ?? 0),
+       (int)($point['nb_semi_duplicata'] ?? 0), (int)($point['nb_moto_duplicata'] ?? 0),
+       (int)($point['total_engins_duplicata'] ?? 0), (int)($point['total_plaques_duplicata'] ?? 0)],
+      ['Post-Immat', '#9a3412', '#fff3e0', (int)($point['nb_vp_postimmat'] ?? 0), (int)($point['nb_camion_postimmat'] ?? 0),
+       (int)($point['nb_semi_postimmat'] ?? 0), (int)($point['nb_moto_postimmat'] ?? 0),
+       (int)($point['total_engins_postimmat'] ?? 0), (int)($point['total_plaques_postimmat'] ?? 0)],
+  ];
+  foreach ($reimmat_cats as [$lbl, $color, $bg, $r_vp, $r_cam, $r_semi, $r_moto, $r_engins, $r_plaques]):
+      if ($r_engins <= 0) continue;
+  ?>
+  <div class="section">
+    <div class="section-title" style="color:<?= $color ?>"><?= h($lbl) ?></div>
+    <table class="veh">
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th style="text-align:center">Nombre</th>
+          <th style="text-align:center">Plaques</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php if($r_vp>0): ?>
+        <tr><td>🚗 Véhicule Particulier</td><td style="text-align:center"><?= $r_vp ?></td><td style="text-align:center"><?= $r_vp*2 ?></td></tr>
+        <?php endif; ?>
+        <?php if($r_cam>0): ?>
+        <tr><td>🚛 Camion</td><td style="text-align:center"><?= $r_cam ?></td><td style="text-align:center"><?= $r_cam*2 ?></td></tr>
+        <?php endif; ?>
+        <?php if($r_semi>0): ?>
+        <tr><td>🚚 Semi-remorque</td><td style="text-align:center"><?= $r_semi ?></td><td style="text-align:center"><?= $r_semi ?></td></tr>
+        <?php endif; ?>
+        <?php if($r_moto>0): ?>
+        <tr><td>🏍️ Moto</td><td style="text-align:center"><?= $r_moto ?></td><td style="text-align:center"><?= $r_moto ?></td></tr>
+        <?php endif; ?>
+        <tr class="total">
+          <td>TOTAL</td>
+          <td style="text-align:center"><?= $r_engins ?></td>
+          <td style="text-align:center"><?= $r_plaques ?></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <?php endforeach; ?>
+
   <!-- Rivets -->
   <?php
   $gonfl  = (int)($point['rivets_gonflables'] ?? 0);
