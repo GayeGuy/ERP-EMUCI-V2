@@ -24,6 +24,16 @@ $types_map = array_column($types_v, null, 'id');
 $sites_list = db_fetch_all("SELECT id,nom,type FROM sites WHERE actif=1 AND type NOT IN ('entrepot') ORDER BY nom");
 
 // ── Vérifie si le coordinateur est bloqué par un écart GSB non résolu
+// Colonnes rivets_gonflables_end / rivets_eclates_end présentes en base ?
+// (sql/migration_rivets_endommages_par_type.sql) — la saisie ne doit pas
+// échouer tant que la migration n'est pas passée sur Neon.
+function _pj_rivets_end_par_type(): bool {
+    static $ok = null;
+    return $ok ??= (bool)db_fetch_value(
+        "SELECT COUNT(*) FROM information_schema.columns
+         WHERE table_name='op_points_journaliers' AND column_name='rivets_gonflables_end'");
+}
+
 function _site_bloque_ecart(int $site_id, string $date_today): ?string {
     $dernier_point = db_fetch_one(
         "SELECT date_point FROM op_points_journaliers
@@ -191,6 +201,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                      $np_conc,$np_usag,$heures,$obs,$user['id']]);
                 $point_id = (int)db_last_id();
                 if (!$point_id) throw new Exception("Impossible de créer le point journalier.");
+            }
+
+            // Répartition des rivets endommagés par type : seul le total
+            // (rivets_endommages) était gardé, on ne savait plus dire s'il
+            // s'agissait de gonflables ou d'éclatés. Colonnes ajoutées par
+            // sql/migration_rivets_endommages_par_type.sql — ignorées tant
+            // qu'elle n'est pas passée, pour ne pas bloquer la saisie.
+            if (_pj_rivets_end_par_type()) {
+                db_query("UPDATE op_points_journaliers SET rivets_gonflables_end=?, rivets_eclates_end=? WHERE id=?",
+                    [$riv_gonfl_end, $riv_eclate_end, $point_id]);
             }
 
             // Déduire rivets du stock site par type
@@ -2446,13 +2466,18 @@ async function viewPoint(id){
   const gonfl  = parseInt(p.rivets_gonflables)||0;
   const eclate = parseInt(p.rivets_eclates)||0;
   const rivEnd  = parseInt(p.rivets_endommages)||0;
+  const gEnd = parseInt(p.rivets_gonflables_end)||0, eEnd = parseInt(p.rivets_eclates_end)||0;
+  // Anciens points : seul le total endommagé est connu.
+  const rivEndDetail = rivEnd === 0 ? '' : (gEnd + eEnd === rivEnd
+    ? [gEnd ? `${gEnd} gonflable${gEnd>1?'s':''}` : '', eEnd ? `${eEnd} éclaté${eEnd>1?'s':''}` : ''].filter(Boolean).join(' · ')
+    : 'type non précisé');
   const rivSection = (gonfl+eclate+rivEnd)>0 ? `
     <div style="margin-bottom:20px">
       <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">🔩 Rivets</div>
       <div style="display:grid;grid-template-columns:1fr 1fr${rivEnd>0?' 1fr':''};gap:10px">
         ${gonfl>0?`<div style="background:#e3f2fd;border-radius:10px;padding:12px;text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#1565c0">${gonfl}</div><div style="font-size:12px;color:#1565c0;font-weight:700;text-transform:uppercase">🔵 Gonflables</div></div>`:''}
         ${eclate>0?`<div style="background:#fce4ec;border-radius:10px;padding:12px;text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#880e4f">${eclate}</div><div style="font-size:12px;color:#880e4f;font-weight:700;text-transform:uppercase">🔴 Éclatés</div></div>`:''}
-        ${rivEnd>0?`<div style="background:#fff3e0;border-radius:10px;padding:12px;text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#e65100">${rivEnd}</div><div style="font-size:12px;color:#e65100;font-weight:700;text-transform:uppercase">⚠️ Endommagés</div></div>`:''}
+        ${rivEnd>0?`<div style="background:#fff3e0;border-radius:10px;padding:12px;text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:22px;font-weight:900;color:#e65100">${rivEnd}</div><div style="font-size:12px;color:#e65100;font-weight:700;text-transform:uppercase">⚠️ Endommagés</div><div style="font-size:12px;color:#e65100;margin-top:3px">${rivEndDetail}</div></div>`:''}
       </div>
     </div>` : '';
 
@@ -2585,11 +2610,14 @@ async function editPoint(id){
   const nbCAM  = document.getElementById('nb-CAM');  if(nbCAM)  nbCAM.value  = p.nb_camion||'0';
   const nbSEMI = document.getElementById('nb-SEMI'); if(nbSEMI) nbSEMI.value = p.nb_semi||'0';
   const nbMOTO = document.getElementById('nb-MOTO'); if(nbMOTO) nbMOTO.value = p.nb_moto||'0';
-  // Rivets (on stocke les totaux par type ; posés = total, endomm = 0 si non distinguables)
-  document.getElementById('p-gonfl-util').value  = p.rivets_gonflables||'0';
-  document.getElementById('p-gonfl-end').value   = '0';
-  document.getElementById('p-eclate-util').value = p.rivets_eclates||'0';
-  document.getElementById('p-eclate-end').value  = '0';
+  // Rivets : rivets_gonflables/eclates sont des totaux (posés + endommagés).
+  // Avec la répartition par type, on restaure posés et endommagés ; sinon
+  // (anciens points) posés = total et endommagés = 0, faute de mieux.
+  const gEndR = parseInt(p.rivets_gonflables_end)||0, eEndR = parseInt(p.rivets_eclates_end)||0;
+  document.getElementById('p-gonfl-util').value  = Math.max(0,(parseInt(p.rivets_gonflables)||0) - gEndR);
+  document.getElementById('p-gonfl-end').value   = gEndR;
+  document.getElementById('p-eclate-util').value = Math.max(0,(parseInt(p.rivets_eclates)||0) - eEndR);
+  document.getElementById('p-eclate-end').value  = eEndR;
   await loadStockRivets();
   await loadBobines();
   // Restaurer les bobines sauvegardées

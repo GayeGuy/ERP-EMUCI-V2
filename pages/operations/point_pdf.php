@@ -259,6 +259,14 @@ ob_start();
   $gonfl  = (int)($point['rivets_gonflables'] ?? 0);
   $eclate = (int)($point['rivets_eclates']    ?? 0);
   $endomm = (int)($point['rivets_endommages'] ?? 0);
+  // Répartition par type (sql/migration_rivets_endommages_par_type.sql) ;
+  // anciens points : seul le total est connu.
+  $g_end = (int)($point['rivets_gonflables_end'] ?? 0);
+  $e_end = (int)($point['rivets_eclates_end']    ?? 0);
+  $endomm_detail = $g_end + $e_end === $endomm
+      ? implode(' · ', array_filter([$g_end ? "$g_end gonflable" . ($g_end > 1 ? 's' : '') : '',
+                                     $e_end ? "$e_end éclaté"   . ($e_end > 1 ? 's' : '') : '']))
+      : 'type non précisé';
   if ($gonfl + $eclate + $endomm > 0):
   ?>
   <div class="section">
@@ -281,6 +289,7 @@ ob_start();
         <td style="text-align:center;padding:8px;background:#fff3e0;border-radius:6px">
           <div style="font-size:18px;font-weight:bold;color:#e65100"><?= $endomm ?></div>
           <div style="font-size:9px;color:#e65100;text-transform:uppercase;margin-top:2px">Endommagés</div>
+          <div style="font-size:9px;color:#e65100;margin-top:2px"><?= h($endomm_detail) ?></div>
         </td>
         <?php endif; ?>
       </tr>
