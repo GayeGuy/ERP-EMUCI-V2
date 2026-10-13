@@ -1837,6 +1837,7 @@ function resetPointForm(){
   document.getElementById('point-preview').style.display='none';
   bobinesCache={}; stockRivets=0; stockGonfl=0; stockEclate=0;
   endommagementsSaisis = {};
+  ordreEndo = {}; ordreEndoSeq = 0;
   recalcule();
 }
 
@@ -2217,6 +2218,16 @@ const ENDO_MULTI = <?= db_colonne_existe('op_endommagements', 'objet') ? 'true' 
 // clé de groupe -> tableau d'une entrée par unité endommagée.
 // Clés : « film:<bobine_id> », « rivet:gonflable|eclate », « pmma:<type> ».
 let endommagementsSaisis = {};
+// Une couleur par type d'élément, pour ne pas confondre films, rivets et
+// PMMA dans le pop-up.
+const ENDO_STYLE = {
+  film:  {c:'#1565c0', bg:'#e3f2fd', bd:'#90caf9', ic:'ph-film-strip', lbl:'Film'},
+  rivet: {c:'#6a1b9a', bg:'#f3e5f5', bd:'#ce93d8', ic:'ph-nut',        lbl:'Rivet'},
+  pmma:  {c:'#00695c', bg:'#e0f2f1', bd:'#80cbc4', ic:'ph-app-window', lbl:'PMMA'},
+};
+// Ordre d'arrivée des groupes : le dernier saisi s'affiche en haut, les
+// précédents descendent (on retrouve tout de suite ce qu'on vient d'ajouter).
+let ordreEndo = {}, ordreEndoSeq = 0;
 
 const escEndo = v => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -2270,26 +2281,33 @@ function ouvrirPopupEndommagement(){
     const opt = (arr, sel) => arr.map(([v,l]) =>
       `<option value="${v}" ${sel===v?'selected':''}>${l}</option>`).join('');
 
+    groupes.forEach(g => { if (!(g.cle in ordreEndo)) ordreEndo[g.cle] = ++ordreEndoSeq; });
+    groupes.sort((a, b) => ordreEndo[b.cle] - ordreEndo[a.cle]);
+
     box.innerHTML = groupes.map(g => {
       const nb  = g.nb;
       const dej = endommagementsSaisis[g.cle] || [];
+      const st  = ENDO_STYLE[g.objet] || ENDO_STYLE.film;
+      const complet = dej.length === nb && dej.every(d => d.personne && d.cause);
 
       // Un bloc par unité : chacune peut avoir sa propre étape, sa cause et
       // sa personne. Le report ci-dessous évite de tout ressaisir quand
       // les unités ont été abîmées dans les mêmes circonstances.
-      const unites = Array.from({length: nb}, (_, i) => {
+      // Affichées de la plus récente à la plus ancienne ; data-idx garde le
+      // vrai rang pour l'enregistrement.
+      const unites = Array.from({length: nb}, (_, k) => nb - 1 - k).map(i => {
         const d = dej[i] || {};
         return `
-        <div class="endo-film" data-cle="${escEndo(g.cle)}"
-             style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-top:10px;background:white">
+        <div class="endo-film" data-cle="${escEndo(g.cle)}" data-idx="${i}"
+             style="border:1px solid var(--border);border-left:4px solid ${st.c};border-radius:10px;padding:12px 14px;margin-top:10px;background:white">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px">
-            <span style="font-size:12px;font-weight:800;color:var(--danger-d);text-transform:uppercase;letter-spacing:.4px">
+            <span style="font-size:12px;font-weight:800;color:${st.c};text-transform:uppercase;letter-spacing:.4px">
               ${g.unite} ${i+1} sur ${nb}
             </span>
             ${i===0 && nb>1 ? `<button type="button" class="btn btn-secondary btn-sm"
                  onclick="reporterEndommagement(this)"
-                 title="Recopier ces valeurs sur les suivants de ce groupe">
-                 <i class="ph ph-copy" aria-hidden="true"></i> Reporter sur les ${nb-1} suivants</button>` : ''}
+                 title="Recopier ces valeurs sur les autres éléments de ce groupe">
+                 <i class="ph ph-copy" aria-hidden="true"></i> Reporter sur les ${nb-1} autres</button>` : ''}
           </div>
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <div>
@@ -2321,9 +2339,15 @@ function ouvrirPopupEndommagement(){
       }).join('');
 
       return `
-      <div style="border:1.5px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px;background:var(--lighter)">
-        <div style="font-weight:800;color:var(--navy);font-size:14px">${escEndo(g.titre)}</div>
-        <div style="font-size:12px;color:var(--danger-d);font-weight:700">
+      <div style="border:1.5px solid ${st.bd};border-left:6px solid ${st.c};border-radius:12px;padding:14px 16px;margin-bottom:14px;background:${st.bg}">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <span style="background:${st.c};color:white;font-size:11px;font-weight:800;letter-spacing:.5px;padding:3px 9px;border-radius:20px;text-transform:uppercase">
+            <i class="ph ${st.ic}" aria-hidden="true"></i> ${st.lbl}
+          </span>
+          <span style="font-weight:800;color:${st.c};font-size:14px">${escEndo(g.titre)}</span>
+          ${complet ? `<span style="margin-left:auto;font-size:12px;font-weight:700;color:#2e7d32"><i class="ph ph-check-circle" aria-hidden="true"></i> Justifié</span>` : ''}
+        </div>
+        <div style="font-size:12px;color:var(--danger-d);font-weight:700;margin-top:4px">
           ${nb} endommagé(s) — une déclaration par ${g.unite.toLowerCase()}
         </div>
         ${unites}
@@ -2332,23 +2356,25 @@ function ouvrirPopupEndommagement(){
   }
   document.getElementById('endoAlert').innerHTML = '';
   document.getElementById('mEndommagement').classList.add('open');
+  box.scrollTop = 0;
+  box.closest('.mbody')?.scrollTo?.(0, 0);
 }
 
 // Recopie la première unité sur les suivantes du même groupe.
 function reporterEndommagement(btn){
-  const cle = btn.closest('.endo-film').dataset.cle;
-  const blocs = [...document.querySelectorAll('#endoLignes .endo-film')].filter(b => b.dataset.cle === cle);
-  if (blocs.length < 2) return;
-  const src = blocs[0];
+  const src = btn.closest('.endo-film');
+  const cle = src.dataset.cle;
+  const blocs = [...document.querySelectorAll('#endoLignes .endo-film')].filter(b => b.dataset.cle === cle && b !== src);
+  if (!blocs.length) return;
   const val = s => src.querySelector(s).value;
-  for (let i = 1; i < blocs.length; i++){
+  for (let i = 0; i < blocs.length; i++){
     blocs[i].querySelector('.endo-personne').value = val('.endo-personne');
     blocs[i].querySelector('.endo-heure').value    = val('.endo-heure');
     blocs[i].querySelector('.endo-etape').value    = val('.endo-etape');
     blocs[i].querySelector('.endo-cause').value    = val('.endo-cause');
     blocs[i].querySelector('.endo-obs').value      = val('.endo-obs');
   }
-  toast(`Valeurs reportées sur ${blocs.length-1} élément(s).`,'success');
+  toast(`Valeurs reportées sur ${blocs.length} élément(s).`,'success');
 }
 
 function validerEndommagements(){
@@ -2372,6 +2398,7 @@ function validerEndommagements(){
     }
     const cle = l.dataset.cle;
     (saisie[cle] = saisie[cle] || []).push({
+      idx: parseInt(l.dataset.idx)||0,
       personne,
       etape:        l.querySelector('.endo-etape').value,
       cause:        l.querySelector('.endo-cause').value.trim(),
@@ -2379,6 +2406,8 @@ function validerEndommagements(){
       observations: l.querySelector('.endo-obs').value.trim(),
     });
   }
+  // Affichage décroissant -> on remet chaque groupe dans l'ordre 1, 2, 3…
+  Object.values(saisie).forEach(arr => { arr.sort((a, b) => a.idx - b.idx); arr.forEach(x => delete x.idx); });
   endommagementsSaisis = saisie;
   document.getElementById('mEndommagement').classList.remove('open');
   toast('Déclaration(s) enregistrée(s).','success');
@@ -2411,9 +2440,11 @@ function collectEndommagements(){
 // elles, la moindre mise à jour obligeait à tout re-justifier.
 function chargerEndommagementsSaisis(liste){
   endommagementsSaisis = {};
+  ordreEndo = {}; ordreEndoSeq = 0;
   (liste || []).forEach(e => {
     const objet = e.objet || 'film';
     const cle = objet === 'film' ? 'film:'+e.bobine_id : objet+':'+(e.sous_type||'');
+    if (!(cle in ordreEndo)) ordreEndo[cle] = ++ordreEndoSeq;
     (endommagementsSaisis[cle] = endommagementsSaisis[cle] || []).push({
       personne: e.personne || '', etape: e.etape || 'autre', cause: e.cause || '',
       heure: (e.heure || '').slice(0,5), observations: e.observations || '',
