@@ -1612,7 +1612,7 @@ foreach($points as $p):
       <div class="form-section">
         <div class="form-section-title">
           <div class="form-section-num">2</div>
-          <h4>Véhicules posés</h4>
+          <h4 id="vehicules-poses-title"><?= $coord_site_operation === 'reimmat_post' ? 'Re-Immatriculation' : 'Véhicules posés' ?></h4>
           <span style="margin-left:auto;font-size:12px;color:var(--muted)">⏱
             <input type="number" id="p-heures" value="8" min="0" max="24" step="0.5"
                    aria-label="Heures de travail"
@@ -2019,6 +2019,8 @@ function toggleReimmatSections(){
   const pi  = document.getElementById('section-postimmat');
   if(dup) dup.style.display = show ? '' : 'none';
   if(pi)  pi.style.display  = show ? '' : 'none';
+  const titre = document.getElementById('vehicules-poses-title');
+  if(titre) titre.textContent = show ? 'Re-Immatriculation' : 'Véhicules posés';
 }
 function resetPointForm(){
   TYPES_V.forEach(tv=>{
