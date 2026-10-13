@@ -51,7 +51,7 @@ if (!empty($point['observations'])) {
     }
 }
 
-$pmma  = db_fetch_all("SELECT type_pmma, utilises, endommages FROM op_pmma_utilises WHERE point_id=? ORDER BY type_pmma", [$point_id]);
+$pmma  = db_fetch_all("SELECT * FROM op_pmma_utilises WHERE point_id=? ORDER BY type_pmma", [$point_id]);
 $films = db_fetch_all(
     "SELECT b.numero AS bobine_num, b.type_code, fu.films_utilises, fu.films_endommages
      FROM op_films_utilises fu
@@ -307,6 +307,7 @@ ob_start();
           <th>Type PMMA</th>
           <th style="text-align:center">Utilisés</th>
           <th style="text-align:center">Endommagés</th>
+          <th style="text-align:center">Non conformes</th>
           <th style="text-align:center">Total</th>
         </tr>
       </thead>
@@ -316,7 +317,8 @@ ob_start();
           <td><?= h($pm['type_pmma']) ?></td>
           <td style="text-align:center;color:#1565c0;font-weight:bold"><?= (int)$pm['utilises'] ?></td>
           <td style="text-align:center;color:#e65100;font-weight:bold"><?= (int)$pm['endommages'] ?></td>
-          <td style="text-align:center;font-weight:bold"><?= (int)$pm['utilises']+(int)$pm['endommages'] ?></td>
+          <td style="text-align:center;color:#7c3aed;font-weight:bold"><?= (int)($pm['non_conformes'] ?? 0) ?></td>
+          <td style="text-align:center;font-weight:bold"><?= (int)$pm['utilises']+(int)$pm['endommages']+(int)($pm['non_conformes'] ?? 0) ?></td>
         </tr>
         <?php endforeach; ?>
       </tbody>

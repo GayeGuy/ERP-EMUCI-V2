@@ -28,10 +28,11 @@ $sites_list = db_fetch_all("SELECT id,nom,type FROM sites WHERE actif=1 AND type
 // (sql/migration_rivets_endommages_par_type.sql) — la saisie ne doit pas
 // échouer tant que la migration n'est pas passée sur Neon.
 function _pj_rivets_end_par_type(): bool {
-    static $ok = null;
-    return $ok ??= (bool)db_fetch_value(
-        "SELECT COUNT(*) FROM information_schema.columns
-         WHERE table_name='op_points_journaliers' AND column_name='rivets_gonflables_end'");
+    return db_colonne_existe('op_points_journaliers', 'rivets_gonflables_end');
+}
+// Idem pour op_pmma_utilises.non_conformes (sql/migration_pmma_non_conformes.sql).
+function _pj_pmma_nc(): bool {
+    return db_colonne_existe('op_pmma_utilises', 'non_conformes');
 }
 
 function _site_bloque_ecart(int $site_id, string $date_today): ?string {
@@ -169,9 +170,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     db_query("UPDATE op_stock_rivets SET quantite = quantite + ? WHERE site_id=? AND type_rivet='eclate'",
                         [$old_riv_eclate, $site_id]);
                 // Restaurer le stock PMMA avant de supprimer
-                $old_pmma = db_fetch_all("SELECT type_pmma, utilises, endommages FROM op_pmma_utilises WHERE point_id=?", [$point_id]);
+                $old_pmma = db_fetch_all("SELECT * FROM op_pmma_utilises WHERE point_id=?", [$point_id]);
                 foreach ($old_pmma as $op_) {
-                    $total_pm_restore = (int)$op_['utilises'] + (int)$op_['endommages'];
+                    $total_pm_restore = (int)$op_['utilises'] + (int)$op_['endommages'] + (int)($op_['non_conformes'] ?? 0);
                     if ($total_pm_restore > 0)
                         db_query("UPDATE stock_pmma_site SET quantite = quantite + ? WHERE site_id=? AND type_pmma=?",
                             [$total_pm_restore, $site_id, $op_['type_pmma']]);
@@ -228,16 +229,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 $type_pmma  = trim($pd['type_pmma'] ?? '');
                 $pm_util    = (int)($pd['utilises']    ?? 0);
                 $pm_endomm  = (int)($pd['endommages']  ?? 0);
-                if (!$type_pmma || ($pm_util + $pm_endomm) === 0) continue;
-                $total_pm = $pm_util + $pm_endomm;
+                // Non conformes : PMMA reçus qui ne respectent pas les règles,
+                // sortis du stock utilisable comme les endommagés. Ignorés si
+                // la colonne n'existe pas encore (migration non passée).
+                $pm_nc      = _pj_pmma_nc() ? max(0, (int)($pd['non_conformes'] ?? 0)) : 0;
+                if (!$type_pmma || ($pm_util + $pm_endomm + $pm_nc) === 0) continue;
+                $total_pm = $pm_util + $pm_endomm + $pm_nc;
                 $stock_pm = (int)(db_fetch_value(
                     "SELECT COALESCE(quantite,0) FROM stock_pmma_site WHERE site_id=? AND type_pmma=?",
                     [$site_id, $type_pmma]
                 ) ?? 0);
                 if ($total_pm > $stock_pm)
                     throw new Exception("Stock PMMA $type_pmma insuffisant. Disponible : $stock_pm, Nécessaire : $total_pm");
-                db_query("INSERT INTO op_pmma_utilises (point_id, type_pmma, utilises, endommages) VALUES (?,?,?,?)",
-                    [$point_id, $type_pmma, $pm_util, $pm_endomm]);
+                if (_pj_pmma_nc())
+                    db_query("INSERT INTO op_pmma_utilises (point_id, type_pmma, utilises, endommages, non_conformes) VALUES (?,?,?,?,?)",
+                        [$point_id, $type_pmma, $pm_util, $pm_endomm, $pm_nc]);
+                else
+                    db_query("INSERT INTO op_pmma_utilises (point_id, type_pmma, utilises, endommages) VALUES (?,?,?,?)",
+                        [$point_id, $type_pmma, $pm_util, $pm_endomm]);
                 db_query("UPDATE stock_pmma_site SET quantite = GREATEST(0, quantite - ?) WHERE site_id=? AND type_pmma=?",
                     [$total_pm, $site_id, $type_pmma]);
                 $pmma_total_util   += $pm_util;
@@ -441,7 +450,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     // ── DÉTAIL POINT (PMMA + films pour la vue détail)
     if ($action === 'get_point_detail') {
         $point_id = (int)($_POST['point_id'] ?? 0);
-        $pmma  = db_fetch_all("SELECT type_pmma, utilises, endommages FROM op_pmma_utilises WHERE point_id=? ORDER BY type_pmma", [$point_id]);
+        $pmma  = db_fetch_all("SELECT * FROM op_pmma_utilises WHERE point_id=? ORDER BY type_pmma", [$point_id]);
         $films = db_fetch_all(
             "SELECT b.numero AS bobine_num, b.type_code, tv.libelle AS type_veh,
                     fu.films_utilises, fu.films_endommages
@@ -567,9 +576,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     [$riv_eclate, $point['site_id']]);
 
             // Restaurer les PMMA
-            $pmmats = db_fetch_all("SELECT type_pmma, utilises, endommages FROM op_pmma_utilises WHERE point_id=?", [$point_id]);
+            $pmmats = db_fetch_all("SELECT * FROM op_pmma_utilises WHERE point_id=?", [$point_id]);
             foreach ($pmmats as $pm) {
-                $total_pm = (int)$pm['utilises'] + (int)$pm['endommages'];
+                $total_pm = (int)$pm['utilises'] + (int)$pm['endommages'] + (int)($pm['non_conformes'] ?? 0);
                 if ($total_pm > 0) {
                     db_query("UPDATE stock_pmma_site SET quantite = quantite + ? WHERE site_id=? AND type_pmma=?",
                         [$total_pm, $point['site_id'], $pm['type_pmma']]);
@@ -1894,7 +1903,7 @@ function ajouterLignePmma(){
   const stock = pmmaStockDisponible[type] ?? '?';
   const div = document.createElement('div');
   div.dataset.type = type;
-  div.style.cssText='display:grid;grid-template-columns:1fr 110px 110px 32px;gap:8px;align-items:end;padding:8px 10px;background:var(--lighter);border-radius:9px;margin-bottom:6px';
+  div.style.cssText='display:grid;grid-template-columns:1fr 100px 100px 100px 32px;gap:8px;align-items:end;padding:8px 10px;background:var(--lighter);border-radius:9px;margin-bottom:6px';
   div.innerHTML=`
     <div style="font-size:13px;font-weight:600;color:var(--navy);padding-bottom:2px"><i class="ph ph-app-window" aria-hidden="true"></i> ${type} <span style="font-size:12px;color:var(--muted);font-weight:400">stock : ${stock}</span></div>
     <div>
@@ -1905,6 +1914,11 @@ function ajouterLignePmma(){
     <div>
       <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px">Endommagés</label>
       <input type="number" data-kind="end" min="0" max="${stock}" value="0"
+             class="form-control" style="font-size:13px;text-align:center">
+    </div>
+    <div>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:3px" title="PMMA reçus qui ne respectent pas les règles">Non conformes</label>
+      <input type="number" data-kind="nc" min="0" max="${stock}" value="0"
              class="form-control" style="font-size:13px;text-align:center">
     </div>
     <button type="button" onclick="this.closest('[data-type]').remove()"
@@ -1919,7 +1933,8 @@ function collectPmmaData(){
     const type_pmma = row.dataset.type;
     const util   = parseInt(row.querySelector('[data-kind="util"]')?.value||0);
     const endomm = parseInt(row.querySelector('[data-kind="end"]')?.value||0);
-    result.push({type_pmma, utilises:util, endommages:endomm});
+    const nc     = parseInt(row.querySelector('[data-kind="nc"]')?.value||0);
+    result.push({type_pmma, utilises:util, endommages:endomm, non_conformes:nc});
   });
   return result;
 }
@@ -2507,11 +2522,13 @@ async function viewPoint(id){
       <div style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px">🟦 PMMA consommé</div>
       <div style="display:flex;flex-direction:column;gap:6px">
         ${pmmaList.map(pm=>{
-          const tot=(parseInt(pm.utilises)||0)+(parseInt(pm.endommages)||0);
-          return `<div style="display:grid;grid-template-columns:1fr 90px 90px 80px;gap:8px;align-items:center;background:#f8fafc;border-radius:8px;padding:10px 12px">
+          const nc=parseInt(pm.non_conformes)||0;
+          const tot=(parseInt(pm.utilises)||0)+(parseInt(pm.endommages)||0)+nc;
+          return `<div style="display:grid;grid-template-columns:1fr 80px 80px 80px 70px;gap:8px;align-items:center;background:#f8fafc;border-radius:8px;padding:10px 12px">
             <div style="font-weight:600;font-size:13px;color:var(--navy)">${pm.type_pmma}</div>
             <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#1565c0">${pm.utilises}</div><div style="font-size:12px;color:var(--muted);text-transform:uppercase">Utilisés</div></div>
             <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#e65100">${pm.endommages}</div><div style="font-size:12px;color:var(--muted);text-transform:uppercase">Endommagés</div></div>
+            <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800;color:#7c3aed">${nc}</div><div style="font-size:12px;color:var(--muted);text-transform:uppercase">Non conformes</div></div>
             <div style="text-align:center"><div style="font-family:'Montserrat',sans-serif;font-size:15px;font-weight:800">${tot}</div><div style="font-size:12px;color:var(--muted);text-transform:uppercase">Total</div></div>
           </div>`;
         }).join('')}
