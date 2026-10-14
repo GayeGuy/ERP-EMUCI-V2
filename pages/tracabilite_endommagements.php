@@ -59,6 +59,10 @@ if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $f_au)) $f_au = date('Y-m-d');
 
 $where  = ["e.created_at::date BETWEEN ? AND ?"];
 $params = [$f_du, $f_au];
+// Un brouillon n'est visible que de son auteur (même règle que la liste
+// des points) : ses déclarations n'apparaissent ici qu'à lui.
+$where[]  = "(p.statut IS NULL OR p.statut <> 'brouillon' OR e.created_by = ?)";
+$params[] = (int)$user['id'];
 if ($f_site)  { $where[] = "e.site_id = ?";  $params[] = $f_site; }
 if (isset($ETAPES[$f_etape])) { $where[] = "e.etape = ?"; $params[] = $f_etape; }
 // Cause en saisie libre depuis 2026-10 : filtre sur la valeur exacte,
