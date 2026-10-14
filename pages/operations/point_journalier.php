@@ -2874,7 +2874,13 @@ function savePoint(){
 }
 
 // ── VOIR DÉTAIL POINT
+// Point affiché dans le détail ou ouvert en modification — sert au bouton
+// « Imprimer » du détail. N'était renseigné que par editPoint() : pour un
+// superviseur qui ne fait que consulter, la variable n'existait pas et le
+// bouton levait une erreur sans rien ouvrir.
+var currentPointId = null;
 async function viewPoint(id){
+  currentPointId = id;
   document.getElementById('mDetail').classList.add('open');
   document.getElementById('detail-body').innerHTML='<div style="text-align:center;padding:40px;color:var(--muted)">Chargement…</div>';
   const pts=<?= json_encode(array_values($points)) ?>;
@@ -3155,7 +3161,7 @@ function validerPoint(id){
   ap({action:'valider_point',point_id:id}).then(d=>{toast(d.message,d.success?'success':'danger');if(d.success)setTimeout(()=>location.reload(),800);});
 }
 
-function printPoint(id){window.open('<?= rtrim(APP_URL,'/') ?>/pages/operations/point_pdf.php?id='+id,'_blank');}
+function printPoint(id){if(!id)return;window.open('<?= rtrim(APP_URL,'/') ?>/pages/operations/point_pdf.php?id='+id,'_blank');}
 
 function ouvrirRejet(id, date){
   document.getElementById('rejet-point-id').value = id;
