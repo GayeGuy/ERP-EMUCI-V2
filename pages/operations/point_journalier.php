@@ -3339,6 +3339,7 @@ async function ouvrirComparaisonOptoplate(id, date){
     const rowDup = ligneComp('Duplicatas', c.duplicata.coordinateur, c.duplicata.optoplate, c.duplicata.ecart);
     const rowPi  = ligneComp('Post-Immat', c.post_immat.coordinateur, c.post_immat.optoplate, c.post_immat.ecart);
     const rowsEndo = c.endommages.map(r => ligneComp('Endommagés — ' + (ETAPE_LBL_COMP[r.etape]||r.etape), r.coordinateur, r.optoplate, r.ecart)).join('');
+    const rowsBobine = (c.par_bobine||[]).map(r => ligneComp('Bobine ' + r.numero, r.coordinateur, r.optoplate, r.ecart)).join('');
     const tbl = `
       <table style="width:100%;border-collapse:collapse">
         <thead><tr style="border-bottom:2px solid var(--border)">
@@ -3352,6 +3353,7 @@ async function ouvrirComparaisonOptoplate(id, date){
           ${rowDup}
           ${rowPi}
           ${rowsEndo}
+          ${rowsBobine}
         </tbody>
       </table>`;
     document.getElementById('comp-body').innerHTML = c.has_ecart

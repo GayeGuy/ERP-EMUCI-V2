@@ -198,12 +198,34 @@ function op_comparer_point(array $point): array {
         $endommages[] = ['etape' => $et, 'coordinateur' => $c, 'optoplate' => $o, 'ecart' => $ecart];
     }
 
+    // Films par bobine : total déclaré par le coordinateur (utilisés +
+    // endommagés, comme pour le reste du point) vs plaques posées du jour
+    // comptées par OptoPlate sur le même n° de bobine.
+    $coord_bobine_rows = db_fetch_all(
+        "SELECT b.numero, SUM(fu.films_utilises + fu.films_endommages) AS n
+         FROM op_films_utilises fu JOIN op_bobines b ON b.id = fu.bobine_id
+         WHERE fu.point_id=? GROUP BY b.numero",
+        [(int)$point['id']]
+    );
+    $coord_bobine = [];
+    foreach ($coord_bobine_rows as $r) $coord_bobine[$r['numero']] = (int)$r['n'];
+    $par_bobine = [];
+    $bobines_vues = array_unique(array_merge(array_keys($coord_bobine), array_keys($opto['par_bobine'])));
+    sort($bobines_vues);
+    foreach ($bobines_vues as $num) {
+        $c = $coord_bobine[$num] ?? 0;
+        $o = $opto['par_bobine'][$num] ?? 0;
+        $ecart = $c - $o;
+        if ($ecart !== 0) $has_ecart = true;
+        $par_bobine[] = ['numero' => $num, 'coordinateur' => $c, 'optoplate' => $o, 'ecart' => $ecart];
+    }
+
     return [
         'primo'       => $primo,
         'duplicata'   => ['coordinateur' => $coord_dup, 'optoplate' => $opt_dup, 'ecart' => $ecart_dup],
         'post_immat'  => ['coordinateur' => $coord_pi,  'optoplate' => $opt_pi,  'ecart' => $ecart_pi],
         'endommages'  => $endommages,
-        'par_bobine'  => $opto['par_bobine'],
+        'par_bobine'  => $par_bobine,
         'total_optoplate_jour' => $opto['total_jour'],
         'has_ecart'   => $has_ecart,
     ];
