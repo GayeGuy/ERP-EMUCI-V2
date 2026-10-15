@@ -1457,7 +1457,12 @@ include __DIR__ . '/../templates/header.php';
         </div>
         <div>
           <label style="font-size:12px;font-weight:600;color:var(--navy)">Unité</label>
-          <input type="text" class="form-control" id="aUnite" value="unité" style="margin-top:4px">
+          <select class="form-control" id="aUnite" style="margin-top:4px">
+            <option value="UNITE" selected>UNITE</option>
+            <option value="CARTON">CARTON</option>
+            <option value="BOBINE">BOBINE</option>
+            <option value="BOITE">BOITE</option>
+          </select>
         </div>
         <button type="button" class="btn btn-primary" onclick="ajouterLigne()">+ Ajouter</button>
       </div>
@@ -1953,10 +1958,17 @@ function onTypeChange(){
       data-stock-site="${a.stock_site||0}">${lib}</option>`;
   });
 }
+// Normalise une unité libre (base de données, souvent minuscule/accentuée)
+// vers l'une des 4 valeurs du menu déroulant — UNITE par défaut sinon.
+function normaliserUnite(u){
+  const n = String(u||'').trim().toUpperCase()
+    .replace(/Î/g,'I').replace(/É|È|Ê/g,'E');
+  return ['UNITE','CARTON','BOBINE','BOITE'].includes(n) ? n : 'UNITE';
+}
 function onArticleChange(){
   const opt=document.getElementById('aArticle').options[document.getElementById('aArticle').selectedIndex];
   if(!opt||!opt.value){document.getElementById('infoContexte').style.display='none';return;}
-  document.getElementById('aUnite').value=opt.dataset.unite||'unité';
+  document.getElementById('aUnite').value=normaliserUnite(opt.dataset.unite);
   if(!voirPrix) {
     const derniere=parseInt(opt.dataset.derniere)||0;
     const stockSite=parseInt(opt.dataset.stockSite)||0;
