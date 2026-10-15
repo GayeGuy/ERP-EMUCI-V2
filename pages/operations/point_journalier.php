@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../includes/audit.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/notifications.php';
 require_once __DIR__ . '/../../includes/point_emuci_corrections.php';
+require_once __DIR__ . '/../../includes/validation_stock.php';
 
 require_auth();
 require_permission('operations', 'can_read');
@@ -124,13 +125,21 @@ function _pj_restaurer_stock(int $point_id, int $site_id, int $riv_gonfl, int $r
 
 function _site_bloque_ecart(int $site_id, string $date_today): ?string {
     $dernier_point = db_fetch_one(
-        "SELECT date_point FROM op_points_journaliers
+        "SELECT date_point, statut, motif_rejet FROM op_points_journaliers
          WHERE site_id=? AND date_point < ? AND statut != 'brouillon'
          ORDER BY date_point DESC LIMIT 1",
         [$site_id, $date_today]
     );
     if (!$dernier_point) return null;
     $date_prec = $dernier_point['date_point'];
+    // Le dernier point n'a jamais été validé par le superviseur (rejeté) :
+    // le GSB n'a donc rien pu comparer, le message générique GSB ci-dessous
+    // serait trompeur. C'est au coordinateur de corriger ce point précis.
+    if ($dernier_point['statut'] === 'rejete') {
+        $motif = $dernier_point['motif_rejet'] ?? '';
+        return "🚫 Votre point du ".date('d/m/Y', strtotime($date_prec))." a été rejeté par le superviseur"
+            . ($motif ? " — motif : $motif" : '') . ". Corrigez-le avant de saisir un nouveau point.";
+    }
     $validation = db_fetch_one(
         "SELECT statut FROM validations_stock_matin WHERE site_id=? AND date_validation=?",
         [$site_id, $date_prec]
@@ -684,6 +693,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 [$point['created_by'], 'info', '✅ Point journalier validé',
                  "Votre point journalier du ".fmt_date($point['date_point'],'d/m/Y')." a été validé par le superviseur.",
                  '/pages/operations/point_journalier.php']);
+        }
+        // Point 18h validé : si l'import EMUCI du jour est déjà là, la
+        // comparaison stock se fait tout de suite (ordre indifférent avec
+        // l'import — includes/validation_stock.php). Sinon l'import s'en
+        // chargera lui-même à son arrivée.
+        if (($point['type_point'] ?? '') === 'point_18h') {
+            vs_evaluer_site_gsb((int)$point['site_id'], $point['date_point'], $user['id']);
         }
         audit_log($user['id'], 'UPDATE', 'operations', $point_id, "Validation point journalier #$point_id");
         json_response(true, 'Point validé.');

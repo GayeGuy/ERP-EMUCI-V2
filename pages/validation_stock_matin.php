@@ -8,6 +8,7 @@ require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/audit.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
+require_once __DIR__ . '/../includes/validation_stock.php';
 
 require_auth();
 
@@ -44,115 +45,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             $date    = trim($_POST['date'] ?? date('Y-m-d'));
             if (!$site_id) json_response(false, 'Site obligatoire.');
 
-            // ── Source : Point 18h validé par le superviseur site
-            // C'est ce point qui résume la journée et sert de référence pour la comparaison
-            $pj_entries = db_fetch_all(
-                "SELECT fu.bobine_id,
-                        SUM(fu.films_utilises)   AS films_utilises,
-                        SUM(fu.films_endommages) AS films_endommages,
-                        b.numero, b.type_code, b.format, b.serie,
-                        b.stock_systeme, b.films_restants, b.statut,
-                        pj.id AS point_id, pj.type_point
-                 FROM op_films_utilises fu
-                 JOIN op_points_journaliers pj ON pj.id = fu.point_id
-                 JOIN op_bobines b ON b.id = fu.bobine_id
-                 WHERE pj.site_id=?
-                   AND pj.date_point=?
-                   AND pj.type_point='point_18h'
-                   AND pj.statut IN ('valide','en_attente_validation','suivi','rejete')
-                 GROUP BY fu.bobine_id, b.numero, b.type_code, b.format, b.serie,
-                          b.stock_systeme, b.films_restants, b.statut, pj.id, pj.type_point",
-                [$site_id, $date]
-            );
-
-            // Fallback 1 : si pas de point_18h, prendre n'importe quel point soumis du jour
-            if (empty($pj_entries)) {
-                $pj_entries = db_fetch_all(
-                    "SELECT fu.bobine_id,
-                            SUM(fu.films_utilises)   AS films_utilises,
-                            SUM(fu.films_endommages) AS films_endommages,
-                            b.numero, b.type_code, b.format, b.serie,
-                            b.stock_systeme, b.films_restants, b.statut,
-                            ANY_VALUE(pj.id) AS point_id, ANY_VALUE(pj.type_point) AS type_point
-                     FROM op_films_utilises fu
-                     JOIN op_points_journaliers pj ON pj.id = fu.point_id
-                     JOIN op_bobines b ON b.id = fu.bobine_id
-                     WHERE pj.site_id=? AND pj.date_point=?
-                       AND pj.statut IN ('valide','en_attente_validation','suivi','rejete')
-                     GROUP BY fu.bobine_id, b.numero, b.type_code, b.format, b.serie,
-                              b.stock_systeme, b.films_restants, b.statut",
-                    [$site_id, $date]
-                );
+            // ── Source unique : point 18h validé par le superviseur
+            // (sql/vs_calculer_ecarts_site — includes/validation_stock.php).
+            // Tant qu'il n'est pas validé, il n'y a rien à comparer : aucun
+            // repli sur un autre point ou une autre table.
+            $statut_pt18h = vs_point18h_statut($site_id, $date);
+            if ($statut_pt18h !== 'valide') {
+                $lbl = match ($statut_pt18h) {
+                    'en_attente_validation' => 'soumis, en attente de validation par le superviseur',
+                    'rejete'                => 'rejeté par le superviseur',
+                    null                    => 'absent',
+                    default                 => $statut_pt18h,
+                };
+                json_response(false, "Point 18h $lbl — la comparaison stock n'est possible qu'une fois le point validé par le superviseur.");
             }
-
-            // Fallback 2 : consommations_bobines si aucun point validé
-            if (empty($pj_entries)) {
-                $pj_entries = db_fetch_all(
-                    "SELECT cb.bobine_id,
-                            SUM(cb.quantite) AS films_utilises,
-                            0 AS films_endommages,
-                            b.numero, b.type_code, b.format, b.serie,
-                            b.stock_systeme, b.films_restants, b.statut,
-                            MAX(cb.stock_avant) AS stock_avant
-                     FROM consommations_bobines cb
-                     JOIN op_bobines b ON b.id = cb.bobine_id
-                     WHERE cb.site_id=? AND cb.date_conso=?
-                     GROUP BY cb.bobine_id, b.numero, b.type_code, b.format, b.serie,
-                              b.stock_systeme, b.films_restants, b.statut",
-                    [$site_id, $date]
-                );
-            }
-
-            // ── Dernier import OPTOTRACE pour ce site+date
-            $dernier_import = db_fetch_value(
-                "SELECT MAX(date_import) FROM import_optotrace WHERE site_id=? AND date_import=?",
-                [$site_id, $date]
-            );
-
-            $ecarts        = [];
-            $bobines_detail = [];
-            $nb_ecarts     = 0;
-
-            foreach ($pj_entries as $b) {
-                $films_utilises  = (int)$b['films_utilises'];
-                $films_endommages= (int)($b['films_endommages'] ?? 0);
-                $films_total_pj  = $films_utilises + $films_endommages;
-
-                // films_restants = stock physique réel (non écrasé par import EMUCI)
-                // stock_systeme  = valeur EMUCI (mise à jour par import, comparaison uniquement)
-                // Quand stock_avant est disponible (consommations_bobines), recalcul depuis début journée.
-                // Sinon, op_bobines.films_restants a déjà été mis à jour par la validation du PJ
-                // (point_journalier.php soustrait les films lors de la validation) → utiliser tel quel.
-                if (!empty($b['stock_avant'])) {
-                    $stock_debut    = (int)$b['stock_avant'];
-                    $films_restants = $stock_debut - $films_total_pj;
-                } else {
-                    $films_restants = (int)($b['films_restants'] ?? $b['stock_systeme']);
-                    $stock_debut    = $films_restants + $films_total_pj;
-                }
-
-                // Écart : ERP EMUCI restant vs EMUCI restant (stock_systeme mis par l'import)
-                $stock_emuci = (int)($b['stock_systeme'] ?? 0);
-                $ecart_val   = $dernier_import ? ($films_restants - $stock_emuci) : 0;
-                $has_ecart   = $dernier_import !== null && $ecart_val !== 0;
-
-                $ligne = [
-                    'bobine_id'        => $b['bobine_id'],
-                    'numero'           => $b['numero'],
-                    'type_code'        => $b['type_code'] ?? '',
-                    'format'           => $b['format'] ?? '',
-                    'stock_debut'      => $stock_debut,
-                    'films_utilises'   => $films_utilises,
-                    'films_endommages' => $films_endommages,
-                    'films_restants'   => $films_restants,
-                    'stock_systeme'    => $stock_emuci,
-                    'ecart'            => $ecart_val,
-                    'has_ecart'        => $has_ecart,
-                ];
-
-                $bobines_detail[] = $ligne;
-                if ($has_ecart) { $nb_ecarts++; $ecarts[] = $ligne; }
-            }
+            $r = vs_calculer_ecarts_site($site_id, $date);
+            $ecarts         = $r['ecarts'];
+            $bobines_detail = $r['bobines_detail'];
+            $nb_ecarts      = $r['nb_ecarts'];
+            $dernier_import = $r['dernier_import'];
 
             // ── Validation existante
             $exist = db_fetch_one(
@@ -174,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             //    Sur une bobine tranchée, le recalcul live n'a plus de sens
             //    (un réajustement réaligne le stock de départ) : on réaffiche
             //    les valeurs constatées au moment de la décision.
-            $decisions = _decisions_bobines_site($site_id, $date);
+            $decisions = vs_decisions_bobines_site($site_id, $date);
             foreach ($bobines_detail as &$_bl) {
                 $_dec = $decisions[(int)$_bl['bobine_id']] ?? null;
                 $_bl['decision'] = $_dec;
@@ -255,7 +166,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     if ($action === 'valider_auto') {
         $site_id = (int)($_POST['site_id'] ?? 0);
         $date    = trim($_POST['date'] ?? date('Y-m-d'));
-        $snap    = _calculer_ecarts_site($site_id, $date);
+        $snap    = vs_calculer_ecarts_site($site_id, $date);
         if (!$snap['dernier_import']) {
             json_response(false,
                 'Validation impossible : aucun import OPTOTRACE trouvé pour le ' . $date . '. '
@@ -300,7 +211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         if (!$site_id) json_response(false, 'Site obligatoire.');
         if (!$commentaire) json_response(false, 'Un commentaire est obligatoire pour valider sans import EMUCI.');
 
-        $snap = _calculer_ecarts_site($site_id, $date);
+        $snap = vs_calculer_ecarts_site($site_id, $date);
         if ($snap['dernier_import']) {
             json_response(false, 'Un import EMUCI existe désormais pour ce site à cette date — utilisez la validation normale.');
         }
@@ -438,8 +349,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 "$decision $nb_traite bobine(s) site:$site_id $date — $commentaire");
 
             // ── Reste-t-il des bobines en écart sans décision ?
-            $decisions = _decisions_bobines_site($site_id, $date);
-            $snap      = _calculer_ecarts_site($site_id, $date);
+            $decisions = vs_decisions_bobines_site($site_id, $date);
+            $snap      = vs_calculer_ecarts_site($site_id, $date);
             $restants  = array_values(array_filter(
                 $snap['ecarts'],
                 fn($x) => !isset($decisions[(int)$x['bobine_id']])
@@ -640,7 +551,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     }
                     // Réconcilier ecarts_bobines avec les nouvelles valeurs pour que l'affichage
                     // montre le stock à jour (ecart=0, films_restants=nouveau) — sans cette entrée,
-                    // _decisions_bobines_site renverrait encore les anciennes valeurs de l'écart initial.
+                    // vs_decisions_bobines_site renverrait encore les anciennes valeurs de l'écart initial.
                     db_query(
                         "INSERT INTO ecarts_bobines
                          (bobine_id,date_constat,stock_systeme,stock_physique,ecart,motif,source,statut,resolu_at,resolu_par,resolution_notes,created_by)
@@ -687,7 +598,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 if ($all_reajuste_done) {
                     // Rafraîchir details_ecarts avec les valeurs réconciliées (stock_physique = nouveau)
                     // afin que les prochains "Demander modif" et l'affichage du détail soient cohérents
-                    $new_decs_map = _decisions_bobines_site($site_id, $date);
+                    $new_decs_map = vs_decisions_bobines_site($site_id, $date);
                     db_query(
                         "UPDATE validations_stock_matin SET statut='valide_gsb',nb_ecarts=0,commentaire=?,gsb_user_id=?,gsb_at=NOW(),details_ecarts=?
                          WHERE site_id=? AND date_validation=?",
@@ -956,145 +867,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 $f_date = trim($_GET['date'] ?? date('Y-m-d'));
 $f_site = (int)($_GET['site'] ?? 0);
 
-// ── Décisions GSB déjà enregistrées bobine par bobine pour un site/date.
-//    Une bobine peut être traitée plusieurs fois (révision) : la ligne la plus
-//    récente d'ecarts_bobines fait foi. Retourne une map bobine_id => décision.
-function _decisions_bobines_site(int $site_id, string $date): array {
-    $rows = db_fetch_all(
-        "SELECT DISTINCT ON (e.bobine_id)
-                e.bobine_id, e.statut, e.motif, e.stock_systeme, e.stock_physique, e.ecart, e.created_at,
-                b.numero, b.type_code, b.format,
-                CONCAT(u.prenom,' ',u.nom) AS par_nom
-         FROM ecarts_bobines e
-         JOIN op_bobines b ON b.id = e.bobine_id
-         LEFT JOIN users u ON u.id = e.created_by
-         WHERE e.source = 'validation_stock' AND e.date_constat = ? AND b.site_id = ?
-         ORDER BY e.bobine_id, e.id DESC",
-        [$date, $site_id]
-    );
-    $map = [];
-    foreach ($rows as $r) {
-        $map[(int)$r['bobine_id']] = [
-            'bobine_id'      => (int)$r['bobine_id'],
-            'numero'         => $r['numero'],
-            'type_code'      => $r['type_code'] ?? '',
-            'format'         => $r['format'] ?? '',
-            'stock_systeme'  => (int)$r['stock_systeme'],
-            'films_restants' => (int)$r['stock_physique'],
-            'ecart'          => (int)$r['ecart'],
-            'decision'       => match($r['statut']) {
-                'resolu' => 'reajuste',
-                'ignore' => 'autorise_ecart',
-                default  => 'refuse',
-            },
-            'commentaire'    => $r['motif'] ?? '',
-            'par'            => trim($r['par_nom'] ?? '') ?: 'GSB',
-            'at'             => $r['created_at'],
-        ];
-    }
-    return $map;
-}
-
-// ── Fonction réutilisable : calculer les écarts d'un site pour une date
-function _calculer_ecarts_site(int $site_id, string $date): array {
-    $pj_entries = db_fetch_all(
-        "SELECT fu.bobine_id,
-                SUM(fu.films_utilises)   AS films_utilises,
-                SUM(fu.films_endommages) AS films_endommages,
-                b.numero, b.type_code, b.format, b.serie,
-                b.stock_systeme, b.films_restants, b.statut,
-                pj.id AS point_id, pj.type_point
-         FROM op_films_utilises fu
-         JOIN op_points_journaliers pj ON pj.id = fu.point_id
-         JOIN op_bobines b ON b.id = fu.bobine_id
-         WHERE pj.site_id=? AND pj.date_point=?
-           AND pj.type_point='point_18h' AND pj.statut='valide'
-         GROUP BY fu.bobine_id, b.numero, b.type_code, b.format, b.serie,
-                  b.stock_systeme, b.films_restants, b.statut, pj.id, pj.type_point",
-        [$site_id, $date]
-    );
-    if (empty($pj_entries)) {
-        $pj_entries = db_fetch_all(
-            "SELECT fu.bobine_id,
-                    SUM(fu.films_utilises)   AS films_utilises,
-                    SUM(fu.films_endommages) AS films_endommages,
-                    b.numero, b.type_code, b.format, b.serie,
-                    b.stock_systeme, b.films_restants, b.statut,
-                    ANY_VALUE(pj.id) AS point_id, ANY_VALUE(pj.type_point) AS type_point
-             FROM op_films_utilises fu
-             JOIN op_points_journaliers pj ON pj.id = fu.point_id
-             JOIN op_bobines b ON b.id = fu.bobine_id
-             WHERE pj.site_id=? AND pj.date_point=?
-               AND pj.statut IN ('valide','en_attente_validation','suivi','rejete')
-             GROUP BY fu.bobine_id, b.numero, b.type_code, b.format, b.serie,
-                      b.stock_systeme, b.films_restants, b.statut",
-            [$site_id, $date]
-        );
-    }
-    $dernier_import = db_fetch_value(
-        "SELECT MAX(date_import) FROM import_optotrace WHERE site_id=? AND date_import=?",
-        [$site_id, $date]
-    );
-    $ecarts = []; $bobines_detail = []; $nb_ecarts = 0;
-    foreach ($pj_entries as $b) {
-        $films_utilises   = (int)$b['films_utilises'];
-        $films_endommages = (int)($b['films_endommages'] ?? 0);
-        $films_total_pj   = $films_utilises + $films_endommages;
-        // Même logique que calculer_ecarts : op_bobines.films_restants est déjà mis à jour
-        // par la validation du PJ → ne pas re-soustraire les films du jour.
-        if (!empty($b['stock_avant'])) {
-            $stock_debut    = (int)$b['stock_avant'];
-            $films_restants = $stock_debut - $films_total_pj;
-        } else {
-            $films_restants = (int)($b['films_restants'] ?? $b['stock_systeme']);
-            $stock_debut    = $films_restants + $films_total_pj;
-        }
-        $stock_emuci = (int)($b['stock_systeme'] ?? 0);
-        $ecart_val   = $dernier_import ? ($films_restants - $stock_emuci) : 0;
-        $has_ecart   = $dernier_import !== null && $ecart_val !== 0;
-        $ligne = [
-            'bobine_id' => $b['bobine_id'], 'numero' => $b['numero'],
-            'type_code' => $b['type_code'] ?? '', 'format' => $b['format'] ?? '',
-            'stock_debut' => $stock_debut, 'films_utilises' => $films_utilises,
-            'films_endommages' => $films_endommages, 'films_restants' => $films_restants,
-            'stock_systeme' => $stock_emuci,
-            'ecart' => $ecart_val, 'has_ecart' => $has_ecart,
-        ];
-        $bobines_detail[] = $ligne;
-        if ($has_ecart) { $nb_ecarts++; $ecarts[] = $ligne; }
-    }
-    return compact('nb_ecarts','ecarts','bobines_detail','dernier_import');
-}
-
-// ── Re-vérification des validations auto : un import EMUCI plus récent (après
-//    la validation) écrase op_bobines.stock_systeme sans se soucier des sites
-//    déjà validés. Si le recalcul révèle désormais un écart, la validation
-//    auto n'est plus valable : elle est annulée, le site retombe dans la file
-//    d'attente GSB comme s'il n'avait jamais été validé. Ne touche jamais aux
-//    décisions manuelles (valide_gsb / autorise_ecart / reajuste / refuse) :
-//    celles-ci reflètent un jugement humain, pas une simple absence d'écart.
+// ── Réexamen des validations auto (0 écart) — seulement si un import EMUCI
+//    plus récent que la validation existe (includes/validation_stock.php).
+//    Sans nouvel import, un site valide_auto n'est jamais retouché par
+//    autre chose (un point du lendemain, un rejet, une correction...).
 if ($can_valider) {
-    $valides_auto_jour = db_fetch_all(
-        "SELECT site_id FROM validations_stock_matin WHERE date_validation=? AND statut='valide_auto'",
-        [$f_date]
-    );
-    foreach ($valides_auto_jour as $sv) {
-        $recheck = _calculer_ecarts_site((int)$sv['site_id'], $f_date);
-        if ($recheck['nb_ecarts'] > 0) {
-            db_query("DELETE FROM validations_stock_matin WHERE site_id=? AND date_validation=?",
-                [(int)$sv['site_id'], $f_date]);
-            audit_log($user['id'], 'UPDATE', 'validations_stock_matin', 0,
-                "Validation auto annulée site:{$sv['site_id']} $f_date — écart détecté suite à un import EMUCI plus récent");
-            $coords = db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1", [(int)$sv['site_id']]);
-            foreach ($coords as $c) {
-                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
-                    [$c['id'], 'info', '⚠️ Validation annulée',
-                     "Votre stock bobines du $f_date, validé automatiquement, présente désormais un écart après un nouvel import EMUCI. Il repasse en attente de traitement par le GSB.",
-                     '/pages/validation_stock_matin.php']);
-            }
-        }
-    }
+    vs_reverifier_valides_auto($f_date, $user['id']);
 }
+
+// ── Sites dont le point 18h est soumis ou rejeté, mais pas encore validé
+//    par le superviseur : rubrique informative, rien à comparer ni à
+//    traiter tant que ce n'est pas le cas (règle de base de la fonctionnalité).
+$sites_attente_superviseur = [];
+if ($can_valider) {
+    $sites_attente_superviseur = db_fetch_all(
+        "SELECT DISTINCT ON (pj.site_id) pj.site_id AS id, s.nom, pj.statut AS pt_statut, pj.motif_rejet
+         FROM op_points_journaliers pj
+         JOIN sites s ON s.id = pj.site_id
+         WHERE pj.date_point=? AND pj.type_point='point_18h'
+           AND pj.statut IN ('en_attente_validation','rejete')
+           AND s.actif=1
+           AND pj.site_id NOT IN (SELECT site_id FROM validations_stock_matin WHERE date_validation=?)
+         ORDER BY pj.site_id, pj.id DESC",
+        [$f_date, $f_date]
+    );
+}
+$sites_attente_superviseur_ids = array_map('intval', array_column($sites_attente_superviseur, 'id'));
 
 // ── Auto-traitement batch : valider silencieusement tous les sites sans écart
 $sites_non_valides = [];
@@ -1109,41 +907,34 @@ if ($can_valider) {
          ORDER BY s.nom",
         [$f_date]
     );
-    // Pour chaque site non encore validé, calculer les écarts et auto-valider si 0 écart
+    // Les sites déjà classés "en attente de validation superviseur" ne sont
+    // pas recalculés ici : il n'y a rien à comparer tant que le point n'est
+    // pas validé.
+    $sites_non_valides = array_values(array_filter(
+        $sites_non_valides,
+        fn($s) => !in_array((int)$s['id'], $sites_attente_superviseur_ids, true)
+    ));
+    // Pour chaque site restant, calculer les écarts et auto-valider/notifier si éligible
     foreach ($sites_non_valides as &$s) {
-        $result = _calculer_ecarts_site((int)$s['id'], $f_date);
+        $result = vs_calculer_ecarts_site((int)$s['id'], $f_date);
         $s['nb_ecarts']     = $result['nb_ecarts'];
         $s['ecarts']        = $result['ecarts'];
         $s['bobines_detail']= $result['bobines_detail'];
         $s['dernier_import']= $result['dernier_import'];
         // Décisions déjà prises bobine par bobine : le site reste en attente
         // tant qu'il reste des écarts sans décision.
-        $dec_site           = _decisions_bobines_site((int)$s['id'], $f_date);
+        $dec_site           = vs_decisions_bobines_site((int)$s['id'], $f_date);
         $s['nb_traites']    = count($dec_site);
         $s['nb_restants']   = count(array_filter(
             $result['ecarts'],
             fn($e) => !isset($dec_site[(int)$e['bobine_id']])
         ));
-        if ($result['nb_ecarts'] === 0 && !empty($result['bobines_detail']) && $result['dernier_import']) {
-            // Auto-valider avec snapshot — seulement si un import EMUCI existe pour comparer.
-            // Sans import, has_ecart est forcé à false faute de référence : ce n'est pas
-            // une preuve de conformité, donc pas d'auto-validation dans ce cas.
-            $snapshot = json_encode($result['bobines_detail']);
-            db_query(
-                "INSERT INTO validations_stock_matin (site_id,date_validation,statut,nb_ecarts,bobines_snapshot,gsb_user_id,gsb_at)
-                 VALUES (?,?,'valide_auto',0,?,?,NOW())
-                 ON CONFLICT (site_id,date_validation) DO UPDATE SET statut='valide_auto',nb_ecarts=0,bobines_snapshot=EXCLUDED.bobines_snapshot,gsb_user_id=EXCLUDED.gsb_user_id,gsb_at=NOW()",
-                [(int)$s['id'], $f_date, $snapshot, $user['id']]
-            );
-            $coords = db_fetch_all("SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE r.slug='coordinateur_site' AND u.site_id=? AND u.actif=1", [(int)$s['id']]);
-            foreach ($coords as $c) {
-                db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
-                    [$c['id'],'stock_valide','✅ Stock validé',"Votre stock bobines du $f_date est validé. Vous pouvez commencer votre activité.",'/pages/validation_stock_matin.php']);
-            }
-            $s['auto_valide'] = true;
-        } else {
-            $s['auto_valide'] = false;
-        }
+        // Point 18h validé + import déjà là : auto-valide (0 écart) ou notifie
+        // le GSB (écart) — ordre indifférent avec l'import EMUCI, cf.
+        // vs_evaluer_site_gsb(). $result est réutilisé pour ne jamais
+        // diverger entre "notifié d'un écart" et "rien à Traiter" affiché.
+        $statut_eval = vs_evaluer_site_gsb((int)$s['id'], $f_date, $user['id'], $result);
+        $s['auto_valide'] = ($statut_eval === 'valide_auto');
     }
     unset($s);
     // Séparer : sites avec écarts (action GSB) vs sites auto-validés maintenant
@@ -1656,6 +1447,27 @@ $nb_total_bobines = count($coord_reajust_details);
   <div style="display:flex;gap:6px;flex-wrap:wrap">
     <?php foreach($sites_sans_point as $s): ?>
     <span style="background:#E0F2FE;color:#0369A1;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600"><?= h($s['nom']) ?></span>
+    <?php endforeach; ?>
+  </div>
+</div>
+<?php endif; ?>
+
+<!-- Sites dont le point 18h est soumis/rejeté, en attente de validation par le superviseur -->
+<?php if(!empty($sites_attente_superviseur) && $can_valider): ?>
+<div style="background:#F5F3FF;border:1.5px solid #DDD6FE;border-radius:12px;padding:13px 18px;margin-bottom:20px">
+  <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+    <i class="ph-duotone ph-user-check" style="color:#5B21B6;font-size:20px;flex-shrink:0"></i>
+    <span style="font-weight:700;color:#5B21B6;font-size:13px"><?= count($sites_attente_superviseur) ?> site(s) en attente de validation superviseur</span>
+  </div>
+  <p style="font-size:12px;color:#5B21B6;margin:8px 0 10px">Le point 18h n'est pas encore validé par le superviseur — rien à traiter ici, la comparaison stock se fera automatiquement dès la validation.</p>
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <?php foreach($sites_attente_superviseur as $s): ?>
+    <span style="background:#EDE9FE;color:#5B21B6;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px">
+      <?= h($s['nom']) ?>
+      <span style="background:<?= $s['pt_statut']==='rejete' ? '#991b1b' : '#5B21B6' ?>;color:white;border-radius:10px;padding:1px 7px;font-size:10.5px;font-weight:700">
+        <?= $s['pt_statut']==='rejete' ? 'Rejeté' : 'Soumis' ?>
+      </span>
+    </span>
     <?php endforeach; ?>
   </div>
 </div>
