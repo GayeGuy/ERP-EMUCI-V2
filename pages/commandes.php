@@ -1410,6 +1410,7 @@ include __DIR__ . '/../templates/header.php';
           <label style="font-size:12px;font-weight:600;color:var(--navy)">Catégorie</label>
           <select class="form-control" id="aType" onchange="onTypeChange()" style="margin-top:4px">
             <option value="article">📦 Article</option>
+            <option value="bobine">🎞️ Bobine</option>
             <option value="pmma">🖨️ PMMA</option>
             <option value="rivet">🔩 Rivets</option>
             <option value="equipement">🖥️ Équipement</option>
