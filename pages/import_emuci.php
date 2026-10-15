@@ -261,7 +261,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         $num_bobine   = $get('N°Bobine');
                         $site_id_emu  = $get('Id du site');
                         $site_nom_emu = $get("Nom du site d'installation");
-
                         if (!$immat || !$statut) { $nb_err++; continue; }
 
                         $site_id_ds = trouver_site_id($site_nom_emu, $sites_list);
@@ -270,11 +269,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                             logger_site_inconnu($site_nom_emu, 'optoplate');
                         }
 
+                        $cols_opto = ['import_session_id','date_import','date_installation','numero_dossier','immatriculation','vin','type_plaque','statut_plaque','position','num_consommable','num_bobine','site_id_emuci','site_nom_emuci','site_id','importe_par'];
+                        $vals_opto = [$session_id,$date_import,$date_install,$num_dossier,$immat,$vin,$type_plaque,$statut,$position,$num_conso,$num_bobine,$site_id_emu,$site_nom_emu,$site_id_ds,$user['id']];
+                        // Catégorie véhicule (plan comparaison OptoPlate, 15/10) — lue si
+                        // présente dans l'export des poses et la colonne déjà migrée,
+                        // sinon ignorée (complétée au besoin par l'import désactivations).
+                        if (db_colonne_existe('import_optoplate', 'categorie')) {
+                            $cols_opto[] = 'categorie';
+                            $vals_opto[] = $get('Catégorie') ?: null;
+                        }
                         db_query(
-                            "INSERT INTO import_optoplate
-                             (import_session_id,date_import,date_installation,numero_dossier,immatriculation,vin,type_plaque,statut_plaque,position,num_consommable,num_bobine,site_id_emuci,site_nom_emuci,site_id,importe_par)
-                             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                            [$session_id,$date_import,$date_install,$num_dossier,$immat,$vin,$type_plaque,$statut,$position,$num_conso,$num_bobine,$site_id_emu,$site_nom_emu,$site_id_ds,$user['id']]
+                            "INSERT INTO import_optoplate (" . implode(',', $cols_opto) . ")
+                             VALUES (" . implode(',', array_fill(0, count($cols_opto), '?')) . ")",
+                            $vals_opto
                         );
                         $nb_ok++;
                     }
@@ -304,6 +311,161 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         // reste en transaction annulée (25P02) pour toute la page.
                         db_rollback();
                         $msg_optoplate = ['type'=>'danger','text'=>'Erreur import : '.$e->getMessage()];
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ============================================================
+// POST — IMPORT OPTOPLATE DÉSACTIVATIONS (CSV/XLSX)
+//  Plan comparaison OptoPlate avant validation superviseur, 15/10/2026.
+//  Complète (upsert par N°Consommable) les lignes déjà posées plutôt que
+//  d'effacer/réinsérer par jour : une désactivation peut arriver bien
+//  après la pose, parfois avant elle (ordre indifférent, réimportable).
+//  Ignoré tant que sql/migration_optoplate_desactivations.sql n'est pas
+//  passée (colonnes et index absents).
+// ============================================================
+$msg_optoplate_desact = null;
+$result_optoplate_desact = null;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'import_optoplate_desactivation') {
+    require_permission('import_emuci', 'can_create');
+
+    if (!db_colonne_existe('import_optoplate', 'type_desactivation')) {
+        $msg_optoplate_desact = ['type'=>'danger','text'=>"Import indisponible : la migration sql/migration_optoplate_desactivations.sql n'a pas encore été jouée sur cette base."];
+    } elseif (empty($_FILES['fichier_optoplate_desact']) || $_FILES['fichier_optoplate_desact']['error'] !== UPLOAD_ERR_OK) {
+        $err = $_FILES['fichier_optoplate_desact']['error'] ?? null;
+        $detail = match ($err) {
+            UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE => 'Le fichier dépasse la taille maximale autorisée par le serveur ('.ini_get('upload_max_filesize').').',
+            UPLOAD_ERR_PARTIAL => 'Le fichier n\'a été que partiellement envoyé — réessayez.',
+            UPLOAD_ERR_NO_FILE, null => 'Aucun fichier sélectionné.',
+            UPLOAD_ERR_NO_TMP_DIR, UPLOAD_ERR_CANT_WRITE, UPLOAD_ERR_EXTENSION => 'Erreur serveur lors de la réception du fichier (code '.$err.').',
+            default => 'Erreur inconnue (code '.$err.').',
+        };
+        $msg_optoplate_desact = ['type'=>'danger','text'=>"Veuillez sélectionner un fichier CSV ou XLSX valide. — $detail"];
+    } else {
+        $tmp = $_FILES['fichier_optoplate_desact']['tmp_name'];
+        $ext = strtolower(pathinfo($_FILES['fichier_optoplate_desact']['name'], PATHINFO_EXTENSION));
+
+        if (!in_array($ext, ['csv', 'xlsx', 'xls'])) {
+            $msg_optoplate_desact = ['type'=>'danger','text'=>'Format invalide. Utilisez un fichier .csv ou .xlsx (exporté depuis OptoPlate).'];
+        } else {
+            $session_id = sprintf('%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+                mt_rand(0,0xffff),mt_rand(0,0xffff),mt_rand(0,0xffff),
+                mt_rand(0,0x0fff)|0x4000,mt_rand(0,0x3fff)|0x8000,
+                mt_rand(0,0xffff),mt_rand(0,0xffff),mt_rand(0,0xffff));
+
+            $all_rows = [];
+            if ($ext === 'csv') {
+                $handle = fopen($tmp, 'r');
+                $headers_raw = fgetcsv($handle, 0, ';');
+                if ($headers_raw) {
+                    while (($row = fgetcsv($handle, 0, ';')) !== false) $all_rows[] = $row;
+                }
+                fclose($handle);
+                $headers = $headers_raw ? array_map(fn($h) => trim($h, "\"\xEF\xBB\xBF"), $headers_raw) : [];
+            } else {
+                $autoload = __DIR__ . '/../vendor/autoload.php';
+                if (!file_exists($autoload)) {
+                    $msg_optoplate_desact = ['type'=>'danger','text'=>'PhpSpreadsheet non installé. Exécutez : composer require phpoffice/phpspreadsheet'];
+                    $headers = [];
+                } else {
+                    require_once $autoload;
+                    $tmp_dest = sys_get_temp_dir().'/optoplate_desact_'.uniqid().'.'.$ext;
+                    move_uploaded_file($tmp, $tmp_dest);
+                    $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($tmp_dest);
+                    $sheet = $spreadsheet->getActiveSheet();
+                    $rows_raw = $sheet->toArray(null, true, true, false);
+                    @unlink($tmp_dest);
+                    $headers_raw = $rows_raw[0] ?? [];
+                    $headers = array_map('trim', $headers_raw);
+                    $all_rows = array_slice($rows_raw, 1);
+                }
+            }
+
+            if (empty($headers)) {
+                $msg_optoplate_desact = ['type'=>'danger','text'=>'Fichier vide ou invalide.'];
+            } else {
+                $col = array_flip($headers);
+                // N°Consommable est la clé de rapprochement avec la ligne de pose
+                // déjà importée (ou créée si la pose n'a jamais été importée) :
+                // sans elle, impossible de savoir quelle plaque désactiver.
+                $required = ['N°Consommable', 'Statut plaque', 'Type de désactivation'];
+                $missing = array_filter($required, fn($r) => !isset($col[$r]));
+                if ($missing) {
+                    $msg_optoplate_desact = ['type'=>'danger','text'=>'Colonnes manquantes : '.implode(', ', $missing)];
+                } else {
+                    set_time_limit(0);
+                    $nb_ok = 0; $nb_err = 0; $sites_inconnus = [];
+
+                    db_query("INSERT INTO import_sessions_emuci (id,date_import,type_import,statut,importe_par) VALUES (?,?,'optoplate_desactivation','en_cours',?)",
+                        [$session_id, date('Y-m-d'), $user['id']]);
+
+                    try {
+                        db_begin();
+                        foreach ($all_rows as $row) {
+                            $get = fn($k) => trim((string)($row[$col[$k] ?? -1] ?? ''));
+
+                            $num_conso     = $get('N°Consommable');
+                            $statut        = $get('Statut plaque');
+                            $type_desact   = $get('Type de désactivation');
+                            if (!$num_conso || !$statut || !$type_desact) { $nb_err++; continue; }
+
+                            $motif_desact  = $get('Motif de désactivation');
+                            $date_desact   = emuci_parse_date_fr($get('Date de désactivation'));
+                            $ancienne_pl   = $get('Ancien Plate') ?: null;
+                            $categorie     = $get('Catégorie') ?: null;
+                            $num_bobine    = $get('N°Bobine') ?: null;
+                            $immat         = $get("Numéro d'immatriculation") ?: null;
+                            $vin           = $get('Vin') ?: null;
+                            $site_id_emu   = $get('Id du site') ?: null;
+                            $site_nom_emu  = $get("Nom du site d'installation");
+
+                            $site_id_ds = $site_nom_emu ? trouver_site_id($site_nom_emu, $sites_list) : null;
+                            if ($site_nom_emu && !$site_id_ds) {
+                                $sites_inconnus[$site_nom_emu] = true;
+                                logger_site_inconnu($site_nom_emu, 'optoplate_desactivation');
+                            }
+
+                            // Upsert par N°Consommable : met à jour la ligne de pose déjà
+                            // là, ou en crée une (désactivation d'une plaque posée avant
+                            // l'intégration EMUCI, ou dont la pose n'a jamais été importée).
+                            db_query(
+                                "INSERT INTO import_optoplate
+                                 (import_session_id,date_import,immatriculation,vin,statut_plaque,num_consommable,num_bobine,
+                                  site_id_emuci,site_nom_emuci,site_id,importe_par,categorie,ancienne_plaque,type_desactivation,motif_desactivation,date_desactivation)
+                                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                                 ON CONFLICT (num_consommable) WHERE num_consommable IS NOT NULL DO UPDATE SET
+                                   statut_plaque=EXCLUDED.statut_plaque,
+                                   categorie=COALESCE(EXCLUDED.categorie, import_optoplate.categorie),
+                                   ancienne_plaque=EXCLUDED.ancienne_plaque,
+                                   type_desactivation=EXCLUDED.type_desactivation,
+                                   motif_desactivation=EXCLUDED.motif_desactivation,
+                                   date_desactivation=EXCLUDED.date_desactivation",
+                                [$session_id, $date_desact ? substr($date_desact,0,10) : date('Y-m-d'), $immat ?: '', $vin, $statut,
+                                 $num_conso, $num_bobine, $site_id_emu, $site_nom_emu ?: null, $site_id_ds, $user['id'],
+                                 $categorie, $ancienne_pl, $type_desact, $motif_desact ?: null, $date_desact]
+                            );
+                            $nb_ok++;
+                        }
+                        db_commit();
+
+                        db_query("UPDATE import_sessions_emuci SET statut='termine',nb_lignes_optoplate=?,nb_erreurs=? WHERE id=?",
+                            [$nb_ok, $nb_err, $session_id]);
+                        audit_log($user['id'], 'CREATE', 'import_emuci', 0, "Import désactivations OptoPlate — $nb_ok lignes");
+
+                        $result_optoplate_desact = [
+                            'nb_ok' => $nb_ok, 'nb_err' => $nb_err,
+                            'sites_inconnus' => array_keys($sites_inconnus),
+                            'session_id' => $session_id,
+                        ];
+                        $msg_optoplate_desact = ['type'=>'success','text'=>"Import terminé : $nb_ok désactivation(s) rapprochée(s)/enregistrée(s)."
+                            .($nb_err?" ($nb_err ignorées)":'')];
+                    } catch (Exception $e) {
+                        db_rollback();
+                        $msg_optoplate_desact = ['type'=>'danger','text'=>'Erreur import : '.$e->getMessage()];
                     }
                 }
             }
@@ -899,6 +1061,40 @@ include __DIR__ . '/../templates/header.php';
         </div>
         <div style="margin-top:16px;display:flex;justify-content:flex-end">
           <button type="submit" class="btn btn-primary"><i class="ph ph-upload-simple" aria-hidden="true"></i> Importer OptoPlate</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Import désactivations (plan comparaison OptoPlate, 15/10/2026) -->
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-header">
+      <h3><i class="ph ph-upload-simple" aria-hidden="true"></i> Importer désactivations OptoPlate (CSV/XLSX)</h3>
+      <span style="font-size:12px;color:var(--muted)">Plaques désactivées (Duplicata / Modification POST / Incident) — complète les poses déjà importées, réimportable, ordre indifférent</span>
+    </div>
+    <div class="card-body">
+      <?php if($msg_optoplate_desact): ?>
+      <div class="alert alert-<?= $msg_optoplate_desact['type'] ?>" style="margin-bottom:16px"><?= h($msg_optoplate_desact['text']) ?></div>
+      <?php endif; ?>
+      <?php if(!empty($result_optoplate_desact['sites_inconnus'])): ?>
+      <div class="alert alert-warning"><i class="ph ph-warning" aria-hidden="true"></i> Sites non reconnus dans ERP EMUCI : <strong><?= implode(', ', array_map('h',$result_optoplate_desact['sites_inconnus'])) ?></strong></div>
+      <?php endif; ?>
+
+      <form method="POST" enctype="multipart/form-data">
+        <input type="hidden" name="action" value="import_optoplate_desactivation">
+        <div class="upload-zone" onclick="document.getElementById('fileOptoDesact').click()"
+             ondragover="this.classList.add('drag');event.preventDefault()"
+             ondragleave="this.classList.remove('drag')"
+             ondrop="this.classList.remove('drag');handleDrop(event,'fileOptoDesact','selectedOptoDesact')">
+          <div class="upload-icon"><i class="ph ph-clipboard-text" aria-hidden="true"></i></div>
+          <div class="upload-label">Glissez le fichier des désactivations ici ou cliquez</div>
+          <div class="upload-sub">export des plaques désactivées (CSV ou XLSX)</div>
+          <div class="upload-selected" id="selectedOptoDesact"></div>
+          <input type="file" id="fileOptoDesact" name="fichier_optoplate_desact" accept=".csv,.xlsx,.xls"
+                 onchange="document.getElementById('selectedOptoDesact').textContent=this.files[0]?.name||''">
+        </div>
+        <div style="margin-top:16px;display:flex;justify-content:flex-end">
+          <button type="submit" class="btn btn-primary"><i class="ph ph-upload-simple" aria-hidden="true"></i> Importer les désactivations</button>
         </div>
       </form>
     </div>
