@@ -360,14 +360,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 }
                 // Ligne de distribution
                 if ($q_liv > 0) {
+                    // type_article vient de la base (voir commentaire plus haut),
+                    // jamais du article_id envoyé par le client : pour une ligne
+                    // bobine, cet id désigne un TYPE de bobine
+                    // (op_types_bobines), pas un articles.id — le traiter comme
+                    // un article déciderait le stock d'un article sans rapport.
+                    $ta = $type_article_map[(int)($l['ligne_id'] ?? 0)] ?? '';
                     db_query(
                         "INSERT INTO distribution_lignes (distribution_id,article_id,commande_ligne_id,libelle,quantite_envoyee,unite,statut)
                          VALUES (?,?,?,?,?,?,'en_cours_livraison')",
-                        [$dist_id, $l['article_id']??null, (int)$l['ligne_id'],
+                        [$dist_id, $ta === 'article' ? ($l['article_id']??null) : null, (int)$l['ligne_id'],
                          $l['libelle']??'', $q_liv, $l['unite']??'unité']
                     );
                     // Décrémenter stock central articles
-                    if (!empty($l['article_id'])) {
+                    if ($ta === 'article' && !empty($l['article_id'])) {
                         db_query("UPDATE articles SET stock_global = GREATEST(0, stock_global - ?) WHERE id=?",
                             [$q_liv, (int)$l['article_id']]);
                         // …et sa contrepartie au magasin : le décrément global
@@ -386,7 +392,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     // quantité : mieux vaut arrêter l'expédition que livrer
                     // un site avec un stock qui ne serait jamais sorti de
                     // nulle part.
-                    $ta = $type_article_map[(int)($l['ligne_id'] ?? 0)] ?? '';
                     if ($ta === 'rivet') {
                         $lib_norm = strtolower(str_replace(
                             ['é','è','ê','ë','É','È','Ê','Ë'],
@@ -458,10 +463,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             db_query("UPDATE distributions_site SET statut='livre',recu_at=NOW(),recu_par=?
                       WHERE commande_id=?",[$user['id'],$cmd_id]);
             // Mettre à jour stock site — articles classiques (+)
+            // "bobine" exclu comme "rivet" : son article_id est l'id du TYPE
+            // de bobine (op_types_bobines), pas un articles.id — l'y insérer
+            // créditerait le stock d'un article sans rapport. La réception
+            // physique des bobines (numéro, série) reste gérée ailleurs.
             $lignes_rec = db_fetch_all(
                 "SELECT cl.article_id, cl.quantite_livree AS qte
                  FROM commande_lignes cl
-                 WHERE cl.commande_id=? AND cl.type_article != 'rivet'
+                 WHERE cl.commande_id=? AND cl.type_article NOT IN ('rivet','bobine')
                    AND cl.article_id IS NOT NULL AND cl.quantite_livree > 0",
                 [$cmd_id]
             );
