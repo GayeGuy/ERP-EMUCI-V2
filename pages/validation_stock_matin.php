@@ -53,7 +53,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             if ($statut_pt18h !== 'valide') {
                 $lbl = match ($statut_pt18h) {
                     'en_attente_validation' => 'soumis, en attente de validation par le superviseur',
-                    'rejete'                => 'rejeté par le superviseur',
+                    'rejete'                => 'en attente de modification (demande du superviseur)',
                     null                    => 'absent',
                     default                 => $statut_pt18h,
                 };
@@ -1465,7 +1465,7 @@ $nb_total_bobines = count($coord_reajust_details);
     <span style="background:#EDE9FE;color:#5B21B6;padding:3px 10px;border-radius:20px;font-size:12px;font-weight:600;display:inline-flex;align-items:center;gap:6px">
       <?= h($s['nom']) ?>
       <span style="background:<?= $s['pt_statut']==='rejete' ? '#991b1b' : '#5B21B6' ?>;color:white;border-radius:10px;padding:1px 7px;font-size:10.5px;font-weight:700">
-        <?= $s['pt_statut']==='rejete' ? 'Rejeté' : 'Soumis' ?>
+        <?= $s['pt_statut']==='rejete' ? 'Modif. demandée' : 'Soumis' ?>
       </span>
     </span>
     <?php endforeach; ?>

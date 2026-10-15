@@ -140,13 +140,14 @@ function _site_bloque_ecart(int $site_id, string $date_today): ?string {
     );
     if (!$dernier_point) return null;
     $date_prec = $dernier_point['date_point'];
-    // Le dernier point n'a jamais été validé par le superviseur (rejeté) :
-    // le GSB n'a donc rien pu comparer, le message générique GSB ci-dessous
-    // serait trompeur. C'est au coordinateur de corriger ce point précis.
+    // Le dernier point n'a jamais été validé par le superviseur (modification
+    // demandée) : le GSB n'a donc rien pu comparer, le message générique GSB
+    // ci-dessous serait trompeur. C'est au coordinateur de corriger ce point
+    // précis avant de pouvoir avancer.
     if ($dernier_point['statut'] === 'rejete') {
         $motif = $dernier_point['motif_rejet'] ?? '';
-        return "🚫 Votre point du ".date('d/m/Y', strtotime($date_prec))." a été rejeté par le superviseur"
-            . ($motif ? " — motif : $motif" : '') . ". Corrigez-le avant de saisir un nouveau point.";
+        return "✏️ Le superviseur a demandé une modification sur votre point du ".date('d/m/Y', strtotime($date_prec))
+            . ($motif ? " — motif : $motif" : '') . ". Corrigez-le et renvoyez-le avant de saisir un nouveau point.";
     }
     $validation = db_fetch_one(
         "SELECT statut FROM validations_stock_matin WHERE site_id=? AND date_validation=?",
@@ -726,7 +727,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $point = db_fetch_one("SELECT * FROM op_points_journaliers WHERE id=?", [$point_id]);
         if (!$point) json_response(false, 'Point introuvable.');
         if ($manque = _pj_elements_manquants($point))
-            json_response(false, "Impossible de valider : ce point ne comporte aucun " . implode(', ', $manque) . ". Rejetez-le pour correction.");
+            json_response(false, "Impossible de valider : ce point ne comporte aucun " . implode(', ', $manque) . ". Demandez une modification pour correction.");
 
         // Comparaison OptoPlate : écart tolérance 0 (plan 15/10/2026). Une
         // justification est exigée côté serveur, pas seulement côté écran —
@@ -735,7 +736,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         if (($point['type_point'] ?? '') === 'point_18h' && _pj_optoplate_comparaison_ok()) {
             $comparaison = op_comparer_point($point);
             if ($comparaison['has_ecart'] && $justification === '')
-                json_response(false, "Un écart a été constaté avec OptoPlate : une justification est obligatoire pour valider malgré cet écart (ou rejetez le point).");
+                json_response(false, "Un écart a été constaté avec OptoPlate : une justification est obligatoire pour valider malgré cet écart (ou demandez une modification du point).");
             $ecart_json = json_encode($comparaison);
         }
 
@@ -804,16 +805,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         }
     }
 
-    if ($action === 'rejeter_point') {
+    // Historiquement nommée "rejet" ; c'est en réalité une demande de
+    // modification adressée au coordinateur, qui peut corriger le point
+    // (statut repasse en brouillon à la prochaine sauvegarde) et le
+    // renvoyer pour validation — le point n'est jamais définitivement
+    // perdu. Le statut interne 'rejete' et la colonne motif_rejet sont
+    // conservés tels quels (pas de migration), seul l'habillage change.
+    if ($action === 'demander_modification_point') {
         if (!in_array($user['role_slug'] ?? '', ['admin','superadmin','superviseur_operation']))
             json_response(false, 'Accès refusé.');
         $point_id   = (int)($_POST['point_id']    ?? 0);
         $motif      = trim($_POST['motif_rejet']  ?? '');
-        if (!$motif) json_response(false, 'Motif de rejet obligatoire.');
+        if (!$motif) json_response(false, 'Motif de la demande de modification obligatoire.');
         $point = db_fetch_one("SELECT * FROM op_points_journaliers WHERE id=?", [$point_id]);
         if (!$point) json_response(false, 'Point introuvable.');
         if (!in_array($point['statut'], ['en_attente_validation','brouillon']))
-            json_response(false, 'Ce point ne peut plus être rejeté (statut : '.$point['statut'].').');
+            json_response(false, 'Impossible de demander une modification sur ce point (statut : '.$point['statut'].').');
 
         db_begin();
         try {
@@ -853,7 +860,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 }
             }
 
-            // Marquer rejeté
+            // Marquer en modification demandée (statut DB inchangé : 'rejete')
             db_query("UPDATE op_points_journaliers SET statut='rejete', motif_rejet=?, validated_by=?, validated_at=NOW() WHERE id=?",
                 [$motif, $user['id'], $point_id]);
 
@@ -861,14 +868,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             $coord = db_fetch_one("SELECT u.id FROM users u WHERE u.id=?", [$point['created_by']]);
             if ($coord) {
                 db_query("INSERT INTO notifications (user_id,type,titre,message,lien) VALUES (?,?,?,?,?)",
-                    [$coord['id'], 'info', '❌ Point journalier rejeté',
-                     "Votre point journalier du ".fmt_date($point['date_point'],'d/m/Y')." a été rejeté. Motif : $motif",
+                    [$coord['id'], 'info', '✏️ Modification demandée sur votre point journalier',
+                     "Le superviseur demande une modification de votre point journalier du ".fmt_date($point['date_point'],'d/m/Y').". Motif : $motif — corrigez-le puis renvoyez-le pour validation.",
                      '/pages/operations/point_journalier.php']);
             }
 
-            audit_log($user['id'], 'UPDATE', 'operations', $point_id, "Rejet point journalier #$point_id — stock restauré");
+            audit_log($user['id'], 'UPDATE', 'operations', $point_id, "Demande de modification sur le point journalier #$point_id — stock restauré");
             db_commit();
-            json_response(true, 'Point rejeté. Stock films, rivets et PMMA restaurés.');
+            json_response(true, 'Demande de modification envoyée. Stock films, rivets et PMMA restaurés.');
         } catch (Exception $e) {
             db_rollback();
             json_response(false, 'Erreur : '.$e->getMessage());
@@ -1514,7 +1521,7 @@ $statut_cfg = [
   'brouillon'             => ['bg'=>'#fef3c7','col'=>'#92400e','icon'=>'⏳','lbl'=>'Brouillon'],
   'en_attente_validation' => ['bg'=>'#dbeafe','col'=>'#1d4ed8','icon'=>'<i class="ph ph-upload-simple" aria-hidden="true"></i>','lbl'=>'En attente'],
   'suivi'                 => ['bg'=>'#f1f5f9','col'=>'#475569','icon'=>'<i class="ph ph-chart-bar" aria-hidden="true"></i>','lbl'=>'Suivi'],
-  'rejete'                => ['bg'=>'#fee2e2','col'=>'#991b1b','icon'=>'<i class="ph ph-x-circle" aria-hidden="true"></i>','lbl'=>'Rejeté'],
+  'rejete'                => ['bg'=>'#fee2e2','col'=>'#991b1b','icon'=>'<i class="ph ph-pencil-simple-line" aria-hidden="true"></i>','lbl'=>'Modif. demandée'],
 ];
 $type_cfg = [
   'point_9h'  => ['lbl'=>'9h', 'bg'=>'#fef3c7','col'=>'#92400e'],
@@ -1595,7 +1602,7 @@ foreach($points as $p):
       <?php endif; ?>
       <?php if(in_array($p['statut'],['brouillon','en_attente_validation']) && ($p['type_point']??'')==='point_18h' && in_array($role_slug_pj,['admin','superadmin','superviseur_operation'])): ?>
         <button class="btn btn-success btn-sm" onclick="validerPoint(<?= $p['id'] ?>,<?= htmlspecialchars(json_encode($p['date_point'])) ?>)" title="Valider"><i class="ph ph-check-circle" aria-hidden="true"></i></button>
-        <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5" onclick="ouvrirRejet(<?= $p['id'] ?>,<?= htmlspecialchars(json_encode($p['date_point'])) ?>)" title="Rejeter"><i class="ph ph-x-circle" aria-hidden="true"></i></button>
+        <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5" onclick="ouvrirDemandeModification(<?= $p['id'] ?>,<?= htmlspecialchars(json_encode($p['date_point'])) ?>)" title="Demander une modification"><i class="ph ph-pencil-simple-line" aria-hidden="true"></i></button>
       <?php endif; ?>
     </div>
   </div>
@@ -1926,26 +1933,26 @@ foreach($points as $p):
   </div>
 </div>
 
-<div class="modal-overlay" id="mRejet">
+<div class="modal-overlay" id="mDemandeModif">
   <div class="modal" style="width:480px">
     <div class="mhdr">
-      <h3><i class="ph ph-x-circle" aria-hidden="true"></i> Rejeter le point journalier</h3>
-      <button class="mclose" onclick="document.getElementById('mRejet').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button>
+      <h3><i class="ph ph-pencil-simple-line" aria-hidden="true"></i> Demander une modification</h3>
+      <button class="mclose" onclick="document.getElementById('mDemandeModif').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <div class="mbody">
-      <input type="hidden" id="rejet-point-id" value="">
-      <div id="rejet-info" style="background:#fee2e2;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#991b1b;font-weight:600"></div>
+      <input type="hidden" id="dmod-point-id" value="">
+      <div id="dmod-info" style="background:#fee2e2;border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#991b1b;font-weight:600"></div>
       <div class="form-group">
-        <label>Motif du rejet *</label>
-        <textarea class="form-control" id="rejet-motif" rows="3" placeholder="Expliquer pourquoi le point est rejeté…"></textarea>
+        <label>Motif de la demande *</label>
+        <textarea class="form-control" id="dmod-motif" rows="3" placeholder="Expliquer ce qui doit être corrigé…"></textarea>
       </div>
       <div style="background:#fef3c7;border-radius:10px;padding:10px 14px;font-size:12px;color:#92400e;margin-top:12px">
-        <i class="ph ph-warning" aria-hidden="true"></i> Le rejet va <strong>restaurer le stock</strong> films et rivets déduits par ce point. Le coordinateur sera notifié.
+        <i class="ph ph-warning" aria-hidden="true"></i> La demande va <strong>restaurer le stock</strong> films et rivets déduits par ce point. Le coordinateur sera notifié et pourra corriger puis renvoyer le point.
       </div>
     </div>
     <div class="mfoot">
-      <button class="btn btn-secondary" onclick="document.getElementById('mRejet').classList.remove('open')">Annuler</button>
-      <button class="btn" style="background:#dc2626;color:white" onclick="confirmerRejet()"><i class="ph ph-x-circle" aria-hidden="true"></i> Confirmer le rejet</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('mDemandeModif').classList.remove('open')">Annuler</button>
+      <button class="btn" style="background:#dc2626;color:white" onclick="confirmerDemandeModification()"><i class="ph ph-pencil-simple-line" aria-hidden="true"></i> Envoyer la demande</button>
     </div>
   </div>
 </div>
@@ -3023,7 +3030,7 @@ async function viewPoint(id){
     'brouillon':            {bg:'#fef3c7',col:'#92400e',icon:'⏳',lbl:'Brouillon'},
     'en_attente_validation':{bg:'#dbeafe',col:'#1d4ed8',icon:'📤',lbl:'En attente validation'},
     'suivi':                {bg:'#f1f5f9',col:'#475569',icon:'📊',lbl:'Suivi'},
-    'rejete':               {bg:'#fee2e2',col:'#991b1b',icon:'❌',lbl:'Rejeté'},
+    'rejete':               {bg:'#fee2e2',col:'#991b1b',icon:'✏️',lbl:'Modif. demandée'},
   };
   const typeLbl={'point_9h':'Point 9h','point_13h':'Point 13h','point_18h':'Point 18h — Final','final':'Final','intermediaire':'Intermédiaire'};
   const sc = statutCfg[p.statut]||{bg:'#f3f4f6',col:'#374151',icon:'·',lbl:p.statut};
@@ -3097,7 +3104,7 @@ async function viewPoint(id){
 
   const motifSection = p.motif_rejet ? `
     <div style="background:#fee2e2;border-radius:10px;padding:14px;margin-bottom:20px;border-left:3px solid #ef4444">
-      <div style="font-size:12px;font-weight:700;color:#991b1b;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">❌ Motif de rejet</div>
+      <div style="font-size:12px;font-weight:700;color:#991b1b;text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">✏️ Motif de la demande de modification</div>
       <div style="font-size:13px;color:#7f1d1d">${p.motif_rejet}</div>
     </div>` : '';
 
@@ -3350,7 +3357,7 @@ function compBandeau(hasEcart, nbEcarts){
   return hasEcart
     ? `<div style="display:flex;align-items:center;gap:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:12px 16px">
          <div style="width:36px;height:36px;border-radius:50%;background:#fee2e2;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ph ph-warning" style="color:#991b1b;font-size:18px" aria-hidden="true"></i></div>
-         <div><div style="font-weight:800;color:#991b1b;font-size:13.5px">${nbEcarts} écart(s) constaté(s) avec OptoPlate</div><div style="font-size:12px;color:#991b1b">Rejetez le point, ou justifiez pour valider quand même.</div></div>
+         <div><div style="font-weight:800;color:#991b1b;font-size:13.5px">${nbEcarts} écart(s) constaté(s) avec OptoPlate</div><div style="font-size:12px;color:#991b1b">Demandez une modification, ou justifiez pour valider quand même.</div></div>
        </div>`
     : `<div style="display:flex;align-items:center;gap:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:12px 16px">
          <div style="width:36px;height:36px;border-radius:50%;background:#dcfce7;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ph ph-check-circle" style="color:#166534;font-size:18px" aria-hidden="true"></i></div>
@@ -3418,17 +3425,17 @@ async function ouvrirComparaisonOptoplate(id, date){
 
   document.getElementById('comp-footer').innerHTML = `
     <button class="btn btn-secondary" onclick="document.getElementById('mCompOpto').classList.remove('open')">Annuler</button>
-    <button class="btn" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5" onclick="rejeterDepuisComparaison()"><i class="ph ph-x-circle" aria-hidden="true"></i> Rejeter</button>
+    <button class="btn" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5" onclick="demanderModifDepuisComparaison()"><i class="ph ph-pencil-simple-line" aria-hidden="true"></i> Demander une modification</button>
     <button class="btn btn-success" onclick="validerDepuisComparaison()"><i class="ph ph-check-circle" aria-hidden="true"></i> Valider</button>`;
 }
 
-function rejeterDepuisComparaison(){
+function demanderModifDepuisComparaison(){
   const id   = document.getElementById('comp-point-id').value;
   const date = document.getElementById('comp-point-date').value;
   document.getElementById('mCompOpto').classList.remove('open');
-  ouvrirRejet(id, date);
+  ouvrirDemandeModification(id, date);
   const justif = document.getElementById('comp-justif');
-  if(justif && justif.value.trim()) document.getElementById('rejet-motif').value = 'Écart OptoPlate : ' + justif.value.trim();
+  if(justif && justif.value.trim()) document.getElementById('dmod-motif').value = 'Écart OptoPlate : ' + justif.value.trim();
 }
 
 function validerDepuisComparaison(){
@@ -3444,23 +3451,23 @@ function validerDepuisComparaison(){
 
 function printPoint(id){if(!id)return;window.open('<?= rtrim(APP_URL,'/') ?>/pages/operations/point_pdf.php?id='+id,'_blank');}
 
-function ouvrirRejet(id, date){
-  document.getElementById('rejet-point-id').value = id;
-  document.getElementById('rejet-info').textContent = `Point journalier du ${date} — les films et rivets déduits seront restaurés.`;
-  document.getElementById('rejet-motif').value = '';
-  document.getElementById('mRejet').classList.add('open');
+function ouvrirDemandeModification(id, date){
+  document.getElementById('dmod-point-id').value = id;
+  document.getElementById('dmod-info').textContent = `Point journalier du ${date} — les films et rivets déduits seront restaurés.`;
+  document.getElementById('dmod-motif').value = '';
+  document.getElementById('mDemandeModif').classList.add('open');
 }
-function confirmerRejet(){
-  const id     = document.getElementById('rejet-point-id').value;
-  const motif  = document.getElementById('rejet-motif').value.trim();
-  if(!motif){alert('Veuillez saisir un motif de rejet.');return;}
-  ap({action:'rejeter_point', point_id:id, motif_rejet:motif}).then(d=>{
+function confirmerDemandeModification(){
+  const id     = document.getElementById('dmod-point-id').value;
+  const motif  = document.getElementById('dmod-motif').value.trim();
+  if(!motif){alert('Veuillez saisir le motif de la demande de modification.');return;}
+  ap({action:'demander_modification_point', point_id:id, motif_rejet:motif}).then(d=>{
     toast(d.message, d.success?'success':'danger');
-    document.getElementById('mRejet').classList.remove('open');
+    document.getElementById('mDemandeModif').classList.remove('open');
     if(d.success) setTimeout(()=>location.reload(), 900);
   });
 }
-document.getElementById('mRejet').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');});
+document.getElementById('mDemandeModif').addEventListener('click',e=>{if(e.target===e.currentTarget)e.currentTarget.classList.remove('open');});
 
 function ap(data){
   const fd=new FormData();
