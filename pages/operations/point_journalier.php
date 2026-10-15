@@ -1910,7 +1910,7 @@ foreach($points as $p):
 <!-- MODAL REJET POINT -->
 <!-- MODAL COMPARAISON OPTOPLATE (superviseur, avant validation du point 18h) -->
 <div class="modal-overlay" id="mCompOpto">
-  <div class="modal" style="width:740px">
+  <div class="modal" style="width:820px">
     <div class="mhdr">
       <h3><i class="ph ph-scales" aria-hidden="true"></i> Comparaison OptoPlate avant validation</h3>
       <button class="mclose" onclick="document.getElementById('mCompOpto').classList.remove('open')"><i class="ph ph-x" aria-hidden="true"></i></button>
@@ -3301,16 +3301,62 @@ function validerPoint(id, date){
 
 // ── Comparaison OptoPlate (plan 15/10/2026) : coordinateur / OptoPlate / écart,
 // avant que le superviseur ne valide un point 18h.
-function ligneComp(libelle, coord, opt, ecart){
-  const col = ecart===0 ? 'var(--navy)' : '#991b1b';
-  return `<tr>
-    <td style="padding:6px 10px;font-size:13px">${libelle}</td>
-    <td style="padding:6px 10px;text-align:center;font-weight:700">${coord}</td>
-    <td style="padding:6px 10px;text-align:center;font-weight:700">${opt}</td>
-    <td style="padding:6px 10px;text-align:center;font-weight:800;color:${col}">${ecart>0?'+':''}${ecart}</td>
-  </tr>`;
-}
 const ETAPE_LBL_COMP = {verification:'À la vérification',impression:"À l'impression",lamination:'À la lamination',percee:'À la percée',fissuree:'Plaque fissurée'};
+const VEH_ICON_COMP = {VP:'ph-car', CAM:'ph-truck', SEMI:'ph-truck', MOTO:'ph-motorcycle'};
+const VEH_BG_COMP   = {VP:'#e3f2fd', CAM:'#e8f5e9', SEMI:'#fff3e0', MOTO:'#fce4ec'};
+const VEH_FG_COMP   = {VP:'#1565c0', CAM:'#2e7d32', SEMI:'#e65100', MOTO:'#ad1457'};
+
+function ecartBadgeComp(ecart){
+  if(ecart===0) return `<span style="display:inline-flex;align-items:center;gap:3px;background:#dcfce7;color:#166534;font-weight:800;font-size:12px;padding:2px 10px;border-radius:20px;white-space:nowrap"><i class="ph ph-check" aria-hidden="true"></i> 0</span>`;
+  const signe = ecart>0 ? '+' : '';
+  return `<span style="display:inline-flex;align-items:center;gap:3px;background:#fee2e2;color:#991b1b;font-weight:800;font-size:12px;padding:2px 10px;border-radius:20px;white-space:nowrap"><i class="ph ph-warning" aria-hidden="true"></i> ${signe}${ecart}</span>`;
+}
+function compSectionTitreComp(txt){
+  return `<div style="font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:18px 0 8px">${txt}</div>`;
+}
+function compCategCard(icon, bg, fg, libelle, coord, opt, ecart){
+  return `
+  <div style="background:white;border:1.5px solid ${ecart!==0?'#fca5a5':'var(--border)'};border-radius:12px;padding:12px">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <div style="width:30px;height:30px;border-radius:9px;background:${bg};display:flex;align-items:center;justify-content:center;flex-shrink:0">
+        <i class="ph ${icon}" style="color:${fg};font-size:16px" aria-hidden="true"></i>
+      </div>
+      <div style="font-size:12.5px;font-weight:700;color:var(--navy);line-height:1.2">${libelle}</div>
+    </div>
+    <div style="display:flex;align-items:center;gap:4px">
+      <div style="text-align:center;flex:1">
+        <div style="font-size:17px;font-weight:800;color:var(--navy)">${coord}</div>
+        <div style="font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px">Coord.</div>
+      </div>
+      <div style="text-align:center;flex:1;border-left:1px solid var(--border)">
+        <div style="font-size:17px;font-weight:800;color:var(--navy)">${opt}</div>
+        <div style="font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px">OptoPlate</div>
+      </div>
+    </div>
+    <div style="margin-top:8px;text-align:center">${ecartBadgeComp(ecart)}</div>
+  </div>`;
+}
+function compListRow(libelle, coord, opt, ecart, icon){
+  return `
+  <div style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-bottom:1px solid var(--border)">
+    <i class="ph ${icon}" style="color:var(--muted);font-size:15px;flex-shrink:0" aria-hidden="true"></i>
+    <div style="flex:1;font-size:13px;color:var(--navy);font-weight:600">${libelle}</div>
+    <div style="width:70px;text-align:center" title="Coordinateur"><span style="font-weight:700;font-size:13px">${coord}</span></div>
+    <div style="width:70px;text-align:center" title="OptoPlate"><span style="font-weight:700;font-size:13px;color:var(--muted)">${opt}</span></div>
+    <div style="width:64px;text-align:right">${ecartBadgeComp(ecart)}</div>
+  </div>`;
+}
+function compBandeau(hasEcart, nbEcarts){
+  return hasEcart
+    ? `<div style="display:flex;align-items:center;gap:12px;background:#fef2f2;border:1px solid #fca5a5;border-radius:10px;padding:12px 16px">
+         <div style="width:36px;height:36px;border-radius:50%;background:#fee2e2;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ph ph-warning" style="color:#991b1b;font-size:18px" aria-hidden="true"></i></div>
+         <div><div style="font-weight:800;color:#991b1b;font-size:13.5px">${nbEcarts} écart(s) constaté(s) avec OptoPlate</div><div style="font-size:12px;color:#991b1b">Rejetez le point, ou justifiez pour valider quand même.</div></div>
+       </div>`
+    : `<div style="display:flex;align-items:center;gap:12px;background:#f0fdf4;border:1px solid #86efac;border-radius:10px;padding:12px 16px">
+         <div style="width:36px;height:36px;border-radius:50%;background:#dcfce7;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ph ph-check-circle" style="color:#166534;font-size:18px" aria-hidden="true"></i></div>
+         <div style="font-weight:800;color:#166534;font-size:13.5px">Aucun écart avec OptoPlate</div>
+       </div>`;
+}
 
 async function ouvrirComparaisonOptoplate(id, date){
   document.getElementById('comp-point-id').value = id;
@@ -3328,41 +3374,46 @@ async function ouvrirComparaisonOptoplate(id, date){
   const c = d.data.comparaison;
   if(!d.data.import_present){
     document.getElementById('comp-body').innerHTML = `
-      <div class="alert alert-warning"><i class="ph ph-warning" aria-hidden="true"></i>
-        Aucun import OptoPlate du ${date} pour <strong>${escEndo(d.data.site_nom||'')}</strong> — comparaison impossible. Vous pouvez valider avec une justification, ou attendre l'import.</div>
-      <div class="form-group" style="margin-top:14px">
+      <div style="display:flex;align-items:center;gap:12px;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 16px">
+        <div style="width:36px;height:36px;border-radius:50%;background:#fef3c7;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="ph ph-clock-countdown" style="color:#92400e;font-size:18px" aria-hidden="true"></i></div>
+        <div><div style="font-weight:800;color:#92400e;font-size:13.5px">Comparaison impossible</div>
+        <div style="font-size:12px;color:#92400e">Aucun import OptoPlate du ${date} pour <strong>${escEndo(d.data.site_nom||'')}</strong>. Vous pouvez valider avec une justification, ou attendre l'import.</div></div>
+      </div>
+      <div class="form-group" style="margin-top:16px">
         <label>Justification *</label>
         <textarea class="form-control" id="comp-justif" rows="3" placeholder="Import OptoPlate non disponible…"></textarea>
       </div>`;
   } else {
-    const rowsPrimo = c.primo.map(r => ligneComp(r.libelle, r.coordinateur, r.optoplate, r.ecart)).join('');
-    const rowDup = ligneComp('Duplicatas', c.duplicata.coordinateur, c.duplicata.optoplate, c.duplicata.ecart);
-    const rowPi  = ligneComp('Post-Immat', c.post_immat.coordinateur, c.post_immat.optoplate, c.post_immat.ecart);
-    const rowsEndo = c.endommages.map(r => ligneComp('Endommagés — ' + (ETAPE_LBL_COMP[r.etape]||r.etape), r.coordinateur, r.optoplate, r.ecart)).join('');
-    const rowsBobine = (c.par_bobine||[]).map(r => ligneComp('Bobine ' + r.numero, r.coordinateur, r.optoplate, r.ecart)).join('');
-    const tbl = `
-      <table style="width:100%;border-collapse:collapse">
-        <thead><tr style="border-bottom:2px solid var(--border)">
-          <th style="padding:6px 10px;text-align:left;font-size:11px;color:var(--muted);text-transform:uppercase">Catégorie</th>
-          <th style="padding:6px 10px;font-size:11px;color:var(--muted);text-transform:uppercase">Coordinateur</th>
-          <th style="padding:6px 10px;font-size:11px;color:var(--muted);text-transform:uppercase">OptoPlate</th>
-          <th style="padding:6px 10px;font-size:11px;color:var(--muted);text-transform:uppercase">Écart</th>
-        </tr></thead>
-        <tbody>
-          ${rowsPrimo}
-          ${rowDup}
-          ${rowPi}
-          ${rowsEndo}
-          ${rowsBobine}
-        </tbody>
-      </table>`;
-    document.getElementById('comp-body').innerHTML = c.has_ecart
-      ? `<div class="alert alert-danger" style="margin-bottom:12px"><i class="ph ph-warning" aria-hidden="true"></i> Écart constaté avec OptoPlate — rejetez le point ou justifiez pour valider quand même.</div>${tbl}
-         <div class="form-group" style="margin-top:14px">
-           <label>Justification (obligatoire pour valider malgré l'écart) *</label>
-           <textarea class="form-control" id="comp-justif" rows="3" placeholder="Expliquer l'écart constaté…"></textarea>
-         </div>`
-      : `<div class="alert alert-success" style="margin-bottom:12px"><i class="ph ph-check-circle" aria-hidden="true"></i> Aucun écart avec OptoPlate.</div>${tbl}`;
+    const toutes = [...c.primo, c.duplicata, c.post_immat, ...c.endommages, ...(c.par_bobine||[])];
+    const nbEcarts = toutes.filter(r => r.ecart !== 0).length;
+
+    const primoCards = c.primo.map(r => compCategCard(VEH_ICON_COMP[r.code], VEH_BG_COMP[r.code], VEH_FG_COMP[r.code], r.libelle, r.coordinateur, r.optoplate, r.ecart)).join('');
+    const reimprCards = `<div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px">
+        ${compCategCard('ph-copy', '#f3e8ff', '#6b21a8', 'Duplicatas', c.duplicata.coordinateur, c.duplicata.optoplate, c.duplicata.ecart)}
+        ${compCategCard('ph-stamp', '#fff3e0', '#9a3412', 'Post-Immat', c.post_immat.coordinateur, c.post_immat.optoplate, c.post_immat.ecart)}
+      </div>`;
+    const endoList = c.endommages.length
+      ? c.endommages.map(r => compListRow(ETAPE_LBL_COMP[r.etape]||r.etape, r.coordinateur, r.optoplate, r.ecart, 'ph-warning-circle')).join('')
+      : `<div style="padding:16px;text-align:center;color:var(--muted);font-size:12.5px">Aucun endommagement déclaré.</div>`;
+    const bobineList = (c.par_bobine||[]).length
+      ? c.par_bobine.map(r => compListRow('Bobine ' + r.numero, r.coordinateur, r.optoplate, r.ecart, 'ph-film-strip')).join('')
+      : `<div style="padding:16px;text-align:center;color:var(--muted);font-size:12.5px">Aucune donnée par bobine.</div>`;
+
+    document.getElementById('comp-body').innerHTML = `
+      ${compBandeau(c.has_ecart, nbEcarts)}
+      ${compSectionTitreComp('Véhicules Primo')}
+      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px">${primoCards}</div>
+      ${compSectionTitreComp('Réimpressions')}
+      ${reimprCards}
+      ${compSectionTitreComp('Endommagés par étape')}
+      <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden">${endoList}</div>
+      ${compSectionTitreComp('Films par bobine')}
+      <div style="border:1px solid var(--border);border-radius:10px;max-height:170px;overflow-y:auto">${bobineList}</div>
+      ${c.has_ecart ? `
+      <div class="form-group" style="margin-top:16px">
+        <label>Justification (obligatoire pour valider malgré l'écart) *</label>
+        <textarea class="form-control" id="comp-justif" rows="3" placeholder="Expliquer l'écart constaté…"></textarea>
+      </div>` : ''}`;
   }
 
   document.getElementById('comp-footer').innerHTML = `
