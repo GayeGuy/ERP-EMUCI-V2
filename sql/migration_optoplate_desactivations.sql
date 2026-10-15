@@ -4,14 +4,14 @@
 --  Idempotente. 2026-10-15
 -- ============================================================
 --  Jusqu'ici, import_optoplate ne portait que les poses du jour (export
---  "installations"), effacées puis réinsérées à chaque import. Le nouvel
---  export "désactivations" vient compléter la MÊME ligne (une plaque =
---  une ligne, identifiée par num_consommable) avec son éventuelle
---  désactivation ultérieure : catégorie métier (Primo/Duplicata/
---  Post-Immat/Endommagé), plaque remplacée, type et motif de
---  désactivation, date de désactivation.
---  Tant que cette migration n'est pas passée, l'import désactivations
---  reste désactivé côté application (ignoré sans erreur).
+--  "installations"), effacées puis réinsérées à chaque import. Le même
+--  export OptoPlate porte en réalité aussi l'éventuelle désactivation de
+--  la plaque (catégorie métier Primo/Duplicata/Post-Immat/Endommagé,
+--  plaque remplacée, type et motif de désactivation, date de
+--  désactivation) : une ligne par plaque, identifiée par num_consommable,
+--  mise à jour dans le temps plutôt qu'effacée/réinsérée.
+--  Tant que cette migration n'est pas passée, ces colonnes sont ignorées
+--  à l'import (comportement inchangé, sans erreur).
 -- ============================================================
 
 ALTER TABLE import_optoplate
