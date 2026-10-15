@@ -37,7 +37,12 @@ $active_page = 'tracabilite_endommagements';
 $is_coord   = ($role_slug === 'coordinateur_site');
 $site_force = ($is_coord && $user['site_id']) ? (int)$user['site_id'] : 0;
 
-$ETAPES = ['pose'=>'À la pose','impression'=>"À l'impression",'lamination'=>'À la lamination','transport'=>'Au transport',
+// "pose" reste valide pour les rivets (inchangé) ; pour un film c'est
+// désormais une ancienne déclaration (vérification/percée/fissurée l'ont
+// remplacée) — le libellé générique "À la pose" reste correct dans les
+// deux cas, sans distinction par objet sur cette page.
+$ETAPES = ['pose'=>'À la pose','verification'=>'À la vérification','impression'=>"À l'impression",'lamination'=>'À la lamination',
+           'percee'=>'À la percée','fissuree'=>'Plaque fissurée','transport'=>'Au transport',
            'stockage'=>'Au stockage','autre'=>'Autre'];
 $CAUSES = ['manipulation'=>'Manipulation incorrecte','defaut_materiel'=>'Défaut matériel',
            'incident_externe'=>'Incident externe','autre'=>'Autre'];

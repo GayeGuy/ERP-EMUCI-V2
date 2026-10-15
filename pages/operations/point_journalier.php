@@ -435,7 +435,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     if ($t !== '' && $n > 0) { $attendus["pmma:$t"] = $n; $libelles["pmma:$t"] = "PMMA $t"; }
                 }
             }
-            $etapes_ok = ['pose','impression','lamination','transport','stockage','autre'];
+            // Étapes par objet (plan comparaison OptoPlate, 2026-10-15) : le
+            // film perd "pose" pour les nouvelles déclarations (comparé
+            // étape par étape à OptoPlate — vérification/percée/fissurée
+            // remplacent et complètent l'ancienne liste), le PMMA se limite
+            // à lamination/percée (non comparé), le rivet reste inchangé.
+            // Les anciennes déclarations film en "pose" restent lisibles
+            // (non réémises) : seule l'écriture est désormais bloquée.
+            $etapes_par_objet = [
+                'film'  => ['verification','impression','lamination','percee','fissuree','transport','stockage','autre'],
+                'pmma'  => ['lamination','percee','transport','stockage','autre'],
+                'rivet' => ['pose','impression','lamination','transport','stockage','autre'],
+            ];
             // Cause en saisie libre (demande métier) : seule la longueur est
             // contrôlée, sur la taille réelle de la colonne — 30 tant que
             // sql/migration_endommagements_cause_libre.sql n'est pas passée.
@@ -469,7 +480,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 $e_etape    = trim((string)($ed['etape'] ?? ''));
                 $e_cause    = trim((string)($ed['cause'] ?? ''));
                 if ($e_personne === '') throw new Exception("Déclaration d'endommagement : la personne concernée est obligatoire.");
-                if (!in_array($e_etape, $etapes_ok, true)) throw new Exception("Déclaration d'endommagement : étape invalide.");
+                $etapes_ok = $etapes_par_objet[$objet] ?? $etapes_par_objet['rivet'];
+                if (!in_array($e_etape, $etapes_ok, true)) throw new Exception("Déclaration d'endommagement : étape invalide pour cet élément.");
                 if ($e_cause === '') throw new Exception("Déclaration d'endommagement : la cause est obligatoire.");
                 if (mb_strlen($e_cause) > $cause_max) throw new Exception("Déclaration d'endommagement : cause trop longue ($cause_max caractères maximum).");
 
@@ -2468,14 +2480,37 @@ function getSelectedBobineIds(){
    sont conservées ici, indexées par bobine, puis envoyées avec le
    point : une ligne par bobine, comme demandé au compte rendu.
    ══════════════════════════════════════════════════════════════ */
-const ETAPES_ENDO = [
-  ['pose',       'À la pose'],
-  ['impression', "À l'impression"],
-  ['lamination', 'À la lamination'],
-  ['transport',  'Au transport'],
-  ['stockage',   'Au stockage'],
-  ['autre',      'Autre'],
-];
+// Étapes par objet (plan comparaison OptoPlate, 2026-10-15) : film et PMMA
+// ont leur propre liste, le rivet reste inchangé. "pose" n'est plus
+// proposé pour un film (sauf "pose (ancien)" injecté à l'affichage d'une
+// déclaration existante — cf. ouvrirPopupEndommagement).
+const ETAPES_ENDO = {
+  film: [
+    ['verification', 'À la vérification'],
+    ['impression',   "À l'impression"],
+    ['lamination',   'À la lamination'],
+    ['percee',       'À la percée'],
+    ['fissuree',     'Plaque fissurée'],
+    ['transport',    'Au transport'],
+    ['stockage',     'Au stockage'],
+    ['autre',        'Autre'],
+  ],
+  pmma: [
+    ['lamination', 'À la lamination'],
+    ['percee',     'À la percée'],
+    ['transport',  'Au transport'],
+    ['stockage',   'Au stockage'],
+    ['autre',      'Autre'],
+  ],
+  rivet: [
+    ['pose',       'À la pose'],
+    ['impression', "À l'impression"],
+    ['lamination', 'À la lamination'],
+    ['transport',  'Au transport'],
+    ['stockage',   'Au stockage'],
+    ['autre',      'Autre'],
+  ],
+};
 // Causes proposées en suggestion (datalist) — la cause est en saisie libre.
 // Sert aussi à réafficher en clair une cause enregistrée sous l'ancien code.
 const CAUSES_ENDO = [
@@ -2602,7 +2637,12 @@ function ouvrirPopupEndommagement(){
             </div>
             <div>
               <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Étape *</label>
-              <select class="form-control endo-etape" style="margin-top:4px">${opt(ETAPES_ENDO, d.etape)}</select>
+              <select class="form-control endo-etape" style="margin-top:4px">${opt(
+                (g.objet === 'film' && d.etape === 'pose')
+                  ? [['pose','Pose (ancien)'], ...ETAPES_ENDO.film]
+                  : (ETAPES_ENDO[g.objet] || ETAPES_ENDO.rivet),
+                d.etape
+              )}</select>
             </div>
             <div>
               <label style="font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase">Cause *</label>
