@@ -201,7 +201,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             "SELECT cs.nomenclature_id, cs.quantite AS requis, cs.optionnel, n.code, n.libelle,
                     COUNT(e.id) AS stock_disponible
              FROM configurations_site cs JOIN nomenclatures n ON n.id=cs.nomenclature_id
-             LEFT JOIN equipements e ON e.nomenclature_id=cs.nomenclature_id AND e.actif=1 AND e.site_id IS NULL AND e.etat IN ('neuf','bon')
+             LEFT JOIN equipements e ON e.nomenclature_id=cs.nomenclature_id AND e.actif=1 AND e.site_id IS NULL AND e.etat IN ('neuf','bon','fonctionnel')
              WHERE cs.type_site=? GROUP BY cs.nomenclature_id, cs.quantite, cs.optionnel, n.code, n.libelle", [$type_site]
         );
         if (empty($besoins)) json_response(false, "Aucune configuration définie pour «$type_site».");
@@ -295,7 +295,7 @@ $all_sites_list = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY 
 $stock_dispo = db_fetch_all(
     "SELECT n.id, n.code, n.libelle, COUNT(e.id) AS dispo
      FROM nomenclatures n
-     LEFT JOIN equipements e ON e.nomenclature_id=n.id AND e.actif=1 AND e.site_id IS NULL AND e.etat IN ('neuf','bon')
+     LEFT JOIN equipements e ON e.nomenclature_id=n.id AND e.actif=1 AND e.site_id IS NULL AND e.etat IN ('neuf','bon','fonctionnel')
      GROUP BY n.id ORDER BY n.libelle"
 );
 $sites_inconnus_emuci = db_fetch_all(

@@ -40,6 +40,15 @@ $sites_list  = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom
 $nomenclatures     = db_fetch_all("SELECT id,code,libelle,categorie,duree_vie_mois FROM nomenclatures WHERE categorie=? ORDER BY libelle", [$f_categorie]);
 $all_nomenclatures = db_fetch_all("SELECT id,libelle,categorie FROM nomenclatures ORDER BY categorie,libelle");
 $can_create  = can($perm_module,'can_create');
+// Utilisateur de l'équipement = agent de l'Annuaire (agents), pas un compte
+// applicatif : la plupart des porteurs d'équipement n'ont pas de compte.
+// Colonne equipements.agent_id (sql/migration_equipements_agent_fonctionnel.sql),
+// ignorée tant qu'elle n'existe pas.
+$equip_agent = db_colonne_existe('equipements', 'agent_id');
+$agents_list = $equip_agent
+    ? db_fetch_all("SELECT id, nom, prenom, matricule, fonction FROM agents
+                    WHERE COALESCE(statut,'actif') = 'actif' ORDER BY nom, prenom")
+    : [];
 $can_update  = can($perm_module,'can_update');
 
 // ── Amortissements OHADA (durées standard en mois)
@@ -56,6 +65,12 @@ $ohada_durees = [
 // recréé lors de la migration vers PostgreSQL du 2026-07-21 : le champ
 // restait vide à la création faute d'équivalent côté base. Séquence par
 // nomenclature (comme l'original), pas globale.
+// Libellé d'un agent dans la liste « Utilisateur » : unique grâce au matricule.
+function agent_libelle_equip(array $a): string {
+    $nom = trim(($a['nom'] ?? '') . ' ' . ($a['prenom'] ?? ''));
+    return $nom . (!empty($a['matricule']) ? " ({$a['matricule']})" : " (#{$a['id']})");
+}
+
 function _prochain_numero_serie(int $nomenclature_id): string {
     $code = $nomenclature_id
         ? (db_fetch_value("SELECT code FROM nomenclatures WHERE id=?", [$nomenclature_id]) ?: 'EQP')
@@ -142,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !is_ajax() && isset($_FILES['fichie
                 $nse_fichier = [];
 
                 $duree_mois_cat = $ohada_durees[$f_categorie] ?? $ohada_durees['default'];
-                $etats_valides  = ['neuf','bon','usage','endommage','hs'];
+                $etats_valides  = ['neuf','bon','fonctionnel','usage','endommage','hs'];
 
                 $nb_ok = 0; $erreurs = [];
                 db_begin();
@@ -175,7 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !is_ajax() && isset($_FILES['fichie
 
                         $etat = strtolower($get($row, 'État')) ?: 'neuf';
                         if (!in_array($etat, $etats_valides, true)) {
-                            $erreurs[] = "Ligne $ln : état \"$etat\" invalide (neuf/bon/usage/endommage/hs)."; continue;
+                            $erreurs[] = "Ligne $ln : état \"$etat\" invalide (neuf/bon/fonctionnel/usage/endommage/hs)."; continue;
                         }
 
                         $date_raw = $get($row, 'Date acquisition');
@@ -334,6 +349,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $site_id      = (int)($_POST['site_id']             ?? 0) ?: null;
         $emplacement  = trim($_POST['emplacement']           ?? '');
         $etat         = trim($_POST['etat']                 ?? 'neuf');
+        if (!in_array($etat, ['neuf','bon','fonctionnel','usage','endommage','hs'], true))
+            json_response(false, 'État invalide.');
+        $agent_id     = (int)($_POST['agent_id']            ?? 0) ?: null;
+        if ($agent_id && !db_fetch_value("SELECT id FROM agents WHERE id=?", [$agent_id]))
+            json_response(false, "Utilisateur introuvable dans l'annuaire des agents.");
         $date_achat   = trim($_POST['date_achat']           ?? '');
         $prix_achat   = (float)($_POST['prix_achat']        ?? 0);
         // statut_stock dérivé automatiquement — pas du formulaire
@@ -367,6 +387,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                  $site_id,$emplacement ?: null,$etat,$statut_stock,$date_achat ?: null,$prix_achat,$date_fin_cycle,$duree_mois]
             );
             $id = (int)db_last_id();
+            if ($equip_agent) db_query("UPDATE equipements SET agent_id=? WHERE id=?", [$agent_id, $id]);
             audit_log($user['id'],'CREATE','equipements',$id,"Création équipement: $label");
             json_response(true,'Équipement créé.', ['id'=>$id]);
         } else {
@@ -379,6 +400,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 [$marque,$modele,$nom_id ?: null,$nsi,$nse,
                  $site_id,$emplacement ?: null,$etat,$statut_stock,$date_achat ?: null,$prix_achat,$date_fin_cycle,$duree_mois,$id]
             );
+            if ($equip_agent) db_query("UPDATE equipements SET agent_id=? WHERE id=?", [$agent_id, $id]);
             audit_log($user['id'],'UPDATE','equipements',$id,"Modification équipement: $label");
             json_response(true,'Équipement mis à jour.');
         }
@@ -403,15 +425,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 // ── DONNÉES
 $where = ["e.categorie=?","e.actif=1"]; $params = [$f_categorie];
 if ($f_site)   { $where[] = "e.site_id=?";          $params[] = $f_site; }
-if ($f_etat === 'ok') { $where[] = "e.etat IN ('neuf','bon')"; }
+if ($f_etat === 'ok') { $where[] = "e.etat IN ('neuf','bon','fonctionnel')"; }
 elseif ($f_etat)      { $where[] = "e.etat=?";       $params[] = $f_etat; }
 if ($f_type)   { $where[] = "e.nomenclature_id=?";   $params[] = $f_type; }
-if ($f_search) { $where[] = "(e.numero_serie_interne ILIKE ? OR e.marque ILIKE ? OR e.modele ILIKE ?)"; $params[] = "%$f_search%"; $params[] = "%$f_search%"; $params[] = "%$f_search%"; }
+if ($f_search) {
+    $cond = "e.numero_serie_interne ILIKE ? OR e.marque ILIKE ? OR e.modele ILIKE ?";
+    $params[] = "%$f_search%"; $params[] = "%$f_search%"; $params[] = "%$f_search%";
+    if ($equip_agent) {
+        $cond .= " OR e.agent_id IN (SELECT id FROM agents WHERE CONCAT(nom,' ',prenom) ILIKE ? OR matricule ILIKE ?)";
+        $params[] = "%$f_search%"; $params[] = "%$f_search%";
+    }
+    $where[] = "($cond)";
+}
 if ($f_statut_stock) { $where[] = "e.statut_stock=?"; $params[] = $f_statut_stock; }
 if ($f_fin_cycle)    { $where[] = "e.date_fin_cycle IS NOT NULL AND e.date_fin_cycle < (CURRENT_DATE + INTERVAL '30 days')"; }
 
 $equipements = db_fetch_all(
     "SELECT e.*, s.nom AS site_nom, n.libelle AS type_nom,
+            " . ($equip_agent ? "TRIM(CONCAT(ag.nom,' ',ag.prenom)) AS agent_nom, ag.matricule AS agent_matricule," : "NULL AS agent_nom, NULL AS agent_matricule,") . "
             -- Taux de pannes : interventions correctives / total interventions × 100
             (SELECT COUNT(*) FROM interventions_maintenance i WHERE i.equipement_id=e.id AND i.type_action='maintenance_corrective') AS nb_curative,
             (SELECT COUNT(*) FROM interventions_maintenance i WHERE i.equipement_id=e.id) AS nb_interventions_total,
@@ -425,6 +456,7 @@ $equipements = db_fetch_all(
      FROM equipements e
      LEFT JOIN sites s ON s.id=e.site_id
      LEFT JOIN nomenclatures n ON n.id=e.nomenclature_id
+     " . ($equip_agent ? "LEFT JOIN agents ag ON ag.id=e.agent_id" : "") . "
      WHERE ".implode(' AND ',$where)."
      ORDER BY e.etat='hs' DESC, e.date_fin_cycle ASC, e.numero_serie_interne",
     $params
@@ -434,7 +466,7 @@ $equipements = db_fetch_all(
 $blocs_site_cond = $site_force ? "AND e.site_id=$site_force" : "";
 $blocs_type = db_fetch_all(
     "SELECT n.libelle, COUNT(e.id) AS nb_total,
-            SUM(CASE WHEN e.etat IN ('neuf','bon') THEN 1 ELSE 0 END) AS nb_ok,
+            SUM(CASE WHEN e.etat IN ('neuf','bon','fonctionnel') THEN 1 ELSE 0 END) AS nb_ok,
             SUM(CASE WHEN e.etat='hs' THEN 1 ELSE 0 END) AS nb_hs,
             SUM(CASE WHEN e.statut_stock='en_stock' THEN 1 ELSE 0 END) AS nb_stock
      FROM nomenclatures n
@@ -458,7 +490,7 @@ if ($f_type)   { $where_kpi[] = "e.nomenclature_id=?";  $params_kpi[] = $f_type;
 if ($f_search) { $where_kpi[] = "(e.numero_serie_interne ILIKE ? OR e.marque ILIKE ? OR e.modele ILIKE ?)"; $params_kpi[] = "%$f_search%"; $params_kpi[] = "%$f_search%"; $params_kpi[] = "%$f_search%"; }
 $kpi = db_fetch_one(
     "SELECT COUNT(*) AS total,
-            SUM(CASE WHEN e.etat IN ('neuf','bon') THEN 1 ELSE 0 END) AS ok,
+            SUM(CASE WHEN e.etat IN ('neuf','bon','fonctionnel') THEN 1 ELSE 0 END) AS ok,
             SUM(CASE WHEN e.etat='hs' THEN 1 ELSE 0 END) AS hs,
             SUM(CASE WHEN e.statut_stock='en_stock' THEN 1 ELSE 0 END) AS stock,
             SUM(CASE WHEN e.date_fin_cycle IS NOT NULL AND e.date_fin_cycle < (CURRENT_DATE + INTERVAL '30 days') THEN 1 ELSE 0 END) AS fin_cycle
@@ -502,10 +534,10 @@ if (isset($_GET['export'])) {
     $sp = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
     $ws = $sp->getActiveSheet();
     $ws->setTitle('Équipements');
-    $etats = ['neuf'=>'Neuf','bon'=>'Bon état','usage'=>'Usagé','endommage'=>'Endommagé','hs'=>'Hors service'];
+    $etats = ['neuf'=>'Neuf','bon'=>'Bon état','fonctionnel'=>'Fonctionnel','usage'=>'Usagé','endommage'=>'Endommagé','hs'=>'Hors service'];
     $headers = ['N° Série','Type','Marque','Modèle','Site','Emplacement','État','Statut stock',
                 'Date acq.','Prix achat','Valeur résiduelle','Amort. %',
-                'Fin de cycle','Nb interventions','Taux curative %'];
+                'Fin de cycle','Nb interventions','Taux curative %','Utilisateur'];
     foreach ($headers as $i => $h) {
         $cell = $ws->getCell([$i+1, 1]);
         $cell->setValue($h);
@@ -533,6 +565,7 @@ if (isset($_GET['export'])) {
         $ws->setCellValue([13, $row], $e['date_fin_cycle'] ?? '');
         $ws->setCellValue([14, $row], (int)$e['nb_interventions_total']);
         $ws->setCellValue([15, $row], $taux_curative);
+        $ws->setCellValue([16, $row], trim(($e['agent_nom'] ?? '') . ($e['agent_matricule'] ? " ({$e['agent_matricule']})" : '')));
         $row++;
     }
     foreach (range(1, count($headers)) as $col)
@@ -562,6 +595,7 @@ include __DIR__ . '/../templates/header.php';
 .etat-neuf{background:#d1fae5;color:#065f46} .etat-bon{background:#dbeafe;color:#1d4ed8}
 .etat-usage{background:#fef3c7;color:#92400e} .etat-endomage,.etat-endommage{background:#fee2e2;color:#991b1b}
 .etat-hs{background:#1a1a1a;color:white}
+.etat-fonctionnel{background:#dcfce7;color:#166534}
 .taux-ok{color:var(--success-d);font-weight:700} .taux-warn{color:#f39c12;font-weight:700} .taux-danger{color:var(--danger-d);font-weight:700}
 </style>
 
@@ -652,9 +686,10 @@ include __DIR__ . '/../templates/header.php';
 
   <select name="etat" onchange="equipFiltrer(this.form)" aria-label="Filtrer par état" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
     <option value="">Tous états</option>
-    <option value="ok"        <?= $f_etat==='ok'?'selected':''        ?>>Opérationnel (neuf/bon)</option>
+    <option value="ok"        <?= $f_etat==='ok'?'selected':''        ?>>Opérationnel (neuf/bon/fonctionnel)</option>
     <option value="neuf"      <?= $f_etat==='neuf'?'selected':''      ?>>Neuf</option>
     <option value="bon"       <?= $f_etat==='bon'?'selected':''       ?>>Bon état</option>
+    <option value="fonctionnel" <?= $f_etat==='fonctionnel'?'selected':'' ?>>Fonctionnel</option>
     <option value="usage"     <?= $f_etat==='usage'?'selected':''     ?>>Usagé</option>
     <option value="endommage" <?= $f_etat==='endommage'?'selected':'' ?>>Endommagé</option>
     <option value="hs"        <?= $f_etat==='hs'?'selected':''        ?>>H.S.</option>
@@ -788,7 +823,7 @@ include __DIR__ . '/../templates/header.php';
           <td style="font-weight:600;color:var(--navy)"><?= h($e['numero_serie_interne']??'—') ?></td>
           <td style="font-size:12px"><?= h($e['type_nom']??'—') ?></td>
           <td style="font-family:monospace;font-size:12px"><?= h($e['numero_serie_interne']??'—') ?></td>
-          <td><?= h($e['site_nom']??'Non affecté') ?><?php if(!empty($e['emplacement'])): ?><div style="font-size:12px;color:var(--muted)"><?= h($e['emplacement']) ?></div><?php endif; ?></td>
+          <td><?= h($e['site_nom']??'Non affecté') ?><?php if(!empty($e['emplacement'])): ?><div style="font-size:12px;color:var(--muted)"><?= h($e['emplacement']) ?></div><?php endif; ?><?php if(!empty($e['agent_nom'])): ?><div style="font-size:12px;color:var(--navy);font-weight:600"><i class="ph ph-user" aria-hidden="true"></i> <?= h($e['agent_nom']) ?></div><?php endif; ?></td>
           <td style="text-align:center"><span class="etat-badge etat-<?= $e['etat'] ?>"><?= ucfirst($e['etat']) ?></span></td>
           <td style="text-align:center">
             <?php if($nb_int > 0): ?>
@@ -886,11 +921,26 @@ include __DIR__ . '/../templates/header.php';
         <select class="form-control" id="eEtat">
           <option value="neuf">Neuf</option>
           <option value="bon">Bon état</option>
+          <option value="fonctionnel">Fonctionnel</option>
           <option value="usage">Usagé</option>
           <option value="endommage">Endommagé</option>
           <option value="hs">Hors service</option>
         </select>
       </div>
+      <?php if($equip_agent): ?>
+      <div class="form-group">
+        <label>Utilisateur</label>
+        <input type="text" class="form-control" id="eAgent" list="agentsList" autocomplete="off"
+               placeholder="Tapez un nom ou un matricule…" oninput="choisirAgent()">
+        <input type="hidden" id="eAgentId">
+        <div id="eAgentInfo" style="font-size:12px;color:var(--muted);margin-top:3px">Agent de l'annuaire qui utilise l'équipement (facultatif)</div>
+        <datalist id="agentsList">
+          <?php foreach($agents_list as $a): ?>
+          <option value="<?= h(agent_libelle_equip($a)) ?>"></option>
+          <?php endforeach; ?>
+        </datalist>
+      </div>
+      <?php endif; ?>
       <div class="form-group">
         <label>Statut stock</label>
         <select class="form-control" id="eStatutStock">
@@ -980,12 +1030,32 @@ function equipEffacer(ev){
 window.addEventListener('popstate', function(ev){ if(ev.state && ev.state.equip) location.reload(); });
 function toast(m,t='success'){let el=document.getElementById('toast-live');if(!el){el=document.createElement('div');el.id='toast-live';el.setAttribute('role','status');el.setAttribute('aria-live','polite');el.setAttribute('aria-atomic','true');document.body.appendChild(el);}clearTimeout(el._hideTimer);el.style.cssText=`position:fixed;top:20px;right:20px;z-index:9999;padding:12px 20px;border-radius:12px;font-size:13px;font-weight:600;background:${t==='success'?'#27ae60':'#e74c3c'};color:white`;el.textContent=m;el._hideTimer=setTimeout(()=>{el.style.display='none';},3500);}
 
+// Libellé affiché -> id de l'agent (Annuaire des agents)
+const AGENTS_EQUIP = <?= json_encode(array_combine(
+    array_map('agent_libelle_equip', $agents_list), array_map(fn($a) => (int)$a['id'], $agents_list)) ?: new stdClass(), JSON_UNESCAPED_UNICODE) ?>;
+const AGENTS_PAR_ID = Object.fromEntries(Object.entries(AGENTS_EQUIP).map(([l, id]) => [id, l]));
+function choisirAgent(){
+  const inp = document.getElementById('eAgent'); if (!inp) return;
+  const id  = AGENTS_EQUIP[inp.value.trim()] || '';
+  document.getElementById('eAgentId').value = id;
+  const info = document.getElementById('eAgentInfo');
+  if (!inp.value.trim()) { info.textContent = "Agent de l'annuaire qui utilise l'équipement (facultatif)"; info.style.color = 'var(--muted)'; }
+  else if (id)           { info.textContent = '✔ Agent sélectionné'; info.style.color = '#166534'; }
+  else                   { info.textContent = 'Choisissez un agent dans la liste proposée'; info.style.color = 'var(--danger-d)'; }
+}
+function remplirAgent(id){
+  const inp = document.getElementById('eAgent'); if (!inp) return;
+  inp.value = id ? (AGENTS_PAR_ID[id] || '') : '';
+  choisirAgent();
+}
+
 function ouvrirCreation(){
   document.getElementById('titleModal').textContent='Nouvel équipement';
   document.getElementById('eAction').value='creer';
   document.getElementById('eId').value='';
   ['eMarque','eModele','eNsi','eNse','ePrix','eEmplacement'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('eEtat').value='neuf';
+  remplirAgent(null);
   document.getElementById('eStatutStock').value='affecte';
   document.getElementById('eAlert').innerHTML='';
   document.getElementById('modalEquip').style.display='flex';
@@ -1001,6 +1071,7 @@ function modifierEquip(e){
   document.getElementById('eSite').value=e.site_id||'';
   document.getElementById('eEmplacement').value=e.emplacement||'';
   document.getElementById('eEtat').value=e.etat||'bon';
+  remplirAgent(e.agent_id||null);
   document.getElementById('eStatutStock').value=e.statut_stock||'affecte';
   document.getElementById('eDate').value=e.date_acquisition||'';
   document.getElementById('ePrix').value=e.prix_achat||0;
@@ -1020,6 +1091,11 @@ async function sauvegarder(){
     document.getElementById('eAlert').innerHTML = '<div class="alert alert-danger">Le type (nomenclature) est obligatoire.</div>';
     return;
   }
+  const agInp = document.getElementById('eAgent');
+  if (agInp && agInp.value.trim() && !document.getElementById('eAgentId').value) {
+    document.getElementById('eAlert').innerHTML = '<div class="alert alert-danger">Utilisateur inconnu : choisissez un agent dans la liste proposée, ou laissez le champ vide.</div>';
+    return;
+  }
   const btn = document.getElementById('btnSave');
   btn.disabled = true;
   btn.textContent = '⏳ Enregistrement…';
@@ -1035,6 +1111,7 @@ async function sauvegarder(){
       site_id             : document.getElementById('eSite').value,
       emplacement         : document.getElementById('eEmplacement').value.trim(),
       etat                : document.getElementById('eEtat').value,
+      agent_id            : document.getElementById('eAgentId')?.value || '',
       statut_stock        : document.getElementById('eStatutStock').value,
       date_achat          : document.getElementById('eDate').value,
       prix_achat          : document.getElementById('ePrix').value,

@@ -92,7 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $stats = db_fetch_one(
             "SELECT
                COUNT(*) AS total,
-               SUM(CASE WHEN etat IN ('neuf','bon') THEN 1 ELSE 0 END) AS ok,
+               SUM(CASE WHEN etat IN ('neuf','bon','fonctionnel') THEN 1 ELSE 0 END) AS ok,
                SUM(CASE WHEN etat='hs' THEN 1 ELSE 0 END) AS hs,
                SUM(CASE WHEN etat='maintenance' THEN 1 ELSE 0 END) AS en_maint
              FROM equipements
