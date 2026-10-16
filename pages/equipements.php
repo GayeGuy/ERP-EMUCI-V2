@@ -821,7 +821,7 @@ include __DIR__ . '/../templates/header.php';
     </h3>
   </div>
   <div class="table-wrap">
-    <table>
+    <table data-paginer="25">
       <thead><tr>
         <th>Équipement</th><th>Type</th><th>N° Série</th><th>Site</th>
         <th style="text-align:center">État</th>

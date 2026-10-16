@@ -363,7 +363,7 @@ include __DIR__ . '/../templates/header.php';
 
   <div class="card">
     <div class="table-wrap">
-      <table>
+      <table data-paginer="25">
         <thead><tr>
           <th>Périodicité</th><th>Dates</th><th>Libellé</th><th style="text-align:center">Sites</th>
           <th style="text-align:center">Avancement</th><th>Statut</th><th>Ouverte par</th><th></th>
