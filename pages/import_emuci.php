@@ -128,6 +128,14 @@ function logger_site_inconnu(string $nom_emuci, string $type_import): void {
     );
 }
 
+// L'index unique de l'upsert OptoPlate existe-t-il, et est-il utilisable ?
+// (migration_optoplate_desactivations.sql — absent si sa création a échoué sur des doublons)
+function _optoplate_index_unique_ok(): bool {
+    return (bool)db_fetch_value(
+        "SELECT COUNT(*) FROM pg_class c JOIN pg_index i ON i.indexrelid = c.oid
+         WHERE c.relname = 'idx_optoplate_num_consommable' AND i.indisunique AND i.indisvalid");
+}
+
 // Vérifie la cohérence entre les plaques OptoPlate (in_use) et le PJ coordinateur.
 // Une plaque posée = statut 'in_use' uniquement. 'reserved' = en attente, ne compte pas.
 // Comparaison au niveau site : COUNT(in_use) EMUCI vs total_plaques déclarées dans le PJ.
@@ -294,6 +302,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                     // plaque posée hier puis désactivée aujourd'hui perdrait sa pose).
                     $peut_upsert = db_colonne_existe('import_optoplate', 'type_desactivation');
 
+                    // L'upsert (ON CONFLICT) exige l'index unique créé par la même migration.
+                    // Si l'historique contenait déjà des doublons de N°Consommable, ce
+                    // CREATE UNIQUE INDEX a échoué alors que les colonnes, elles, ont été
+                    // ajoutées : l'import démarrait puis tombait sur « no unique or exclusion
+                    // constraint matching the ON CONFLICT specification ». On s'arrête avant
+                    // de toucher à quoi que ce soit, avec la marche à suivre.
+                    if ($peut_upsert && !_optoplate_index_unique_ok()) {
+                        $msg_optoplate = ['type'=>'danger','text'=>
+                            "La migration OptoPlate « désactivations » est incomplète sur cette base : les colonnes existent mais "
+                            ."l'index unique idx_optoplate_num_consommable est absent (sa création échoue lorsque l'historique contient "
+                            ."des doublons de N°Consommable). Faites exécuter sql/correctif_optoplate_doublons.sql par l'administrateur "
+                            ."de la base, puis recommencez. Rien n'a été importé ni modifié."];
+                        $peut_upsert = null;
+                    }
+
+                    if ($peut_upsert !== null) {
                     // Créer session
                     db_query("INSERT INTO import_sessions_emuci (id,date_import,type_import,statut,importe_par) VALUES (?,?,'optoplate','en_cours',?)",
                         [$session_id,$date_import,$user['id']]);
@@ -390,6 +414,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'impor
                         // reste en transaction annulée (25P02) pour toute la page.
                         db_rollback();
                         $msg_optoplate = ['type'=>'danger','text'=>'Erreur import : '.$e->getMessage()];
+                    }
                     }
                 }
             }
