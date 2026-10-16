@@ -518,7 +518,7 @@ for ($i = 5; $i >= 0; $i--) {
 // dans « disponible » : elle reste visible au lieu de gonfler le taux.
 $eq = db_fetch_one(
     "SELECT COUNT(*)                                                    AS total,
-            COUNT(*) FILTER (WHERE etat IN ('ok','neuf','bon','fonctionnel','usage')) AS ok,
+            COUNT(*) FILTER (WHERE etat IN ('ok','neuf','bon','usage')) AS ok,
             COUNT(*) FILTER (WHERE etat IN ('hs','reforme','endommage')) AS hs,
             COUNT(*) FILTER (WHERE etat = 'maintenance')                AS maint,
             COUNT(*) FILTER (WHERE statut_stock = 'affecte')            AS affectes

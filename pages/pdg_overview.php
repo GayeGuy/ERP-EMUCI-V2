@@ -680,7 +680,7 @@ $eq_type = (int)($_GET['eq'] ?? 0);      // nomenclature_id, 0 = tous
 // Trois états seulement : ce qui tourne, ce qui est récupérable,
 // ce qui est mort. La nuance neuf/bon/usagé ne change pas la décision.
 $eq_sel = "COUNT(*) AS total,
-           COALESCE(SUM(CASE WHEN e.etat IN ('neuf','bon','fonctionnel','usage') THEN 1 ELSE 0 END),0) AS op,
+           COALESCE(SUM(CASE WHEN e.etat IN ('neuf','bon','usage') THEN 1 ELSE 0 END),0) AS op,
            COALESCE(SUM(CASE WHEN e.etat = 'maintenance'           THEN 1 ELSE 0 END),0) AS mt,
            COALESCE(SUM(CASE WHEN e.etat = 'hs'                    THEN 1 ELSE 0 END),0) AS hs";
 $eq_where  = "e.actif = 1 AND e.categorie = 'informatique'";

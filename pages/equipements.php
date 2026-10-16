@@ -157,7 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !is_ajax() && isset($_FILES['fichie
                 $nse_fichier = [];
 
                 $duree_mois_cat = $ohada_durees[$f_categorie] ?? $ohada_durees['default'];
-                $etats_valides  = ['neuf','bon','fonctionnel','usage','endommage','hs'];
+                $etats_valides  = ['neuf','bon','usage','endommage','hs'];
 
                 $nb_ok = 0; $erreurs = [];
                 db_begin();
@@ -190,7 +190,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !is_ajax() && isset($_FILES['fichie
 
                         $etat = strtolower($get($row, 'État')) ?: 'neuf';
                         if (!in_array($etat, $etats_valides, true)) {
-                            $erreurs[] = "Ligne $ln : état \"$etat\" invalide (neuf/bon/fonctionnel/usage/endommage/hs)."; continue;
+                            $erreurs[] = "Ligne $ln : état \"$etat\" invalide (neuf/bon/usage/endommage/hs)."; continue;
                         }
 
                         $date_raw = $get($row, 'Date acquisition');
@@ -349,7 +349,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $site_id      = (int)($_POST['site_id']             ?? 0) ?: null;
         $emplacement  = trim($_POST['emplacement']           ?? '');
         $etat         = trim($_POST['etat']                 ?? 'neuf');
-        if (!in_array($etat, ['neuf','bon','fonctionnel','usage','endommage','hs'], true))
+        if (!in_array($etat, ['neuf','bon','usage','endommage','hs'], true))
             json_response(false, 'État invalide.');
         $agent_id     = (int)($_POST['agent_id']            ?? 0) ?: null;
         if ($agent_id && !db_fetch_value("SELECT id FROM agents WHERE id=?", [$agent_id]))
@@ -425,7 +425,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 // ── DONNÉES
 $where = ["e.categorie=?","e.actif=1"]; $params = [$f_categorie];
 if ($f_site)   { $where[] = "e.site_id=?";          $params[] = $f_site; }
-if ($f_etat === 'ok') { $where[] = "e.etat IN ('neuf','bon','fonctionnel')"; }
+if ($f_etat === 'ok') { $where[] = "e.etat IN ('neuf','bon')"; }
 elseif ($f_etat)      { $where[] = "e.etat=?";       $params[] = $f_etat; }
 if ($f_type)   { $where[] = "e.nomenclature_id=?";   $params[] = $f_type; }
 if ($f_search) {
@@ -466,7 +466,7 @@ $equipements = db_fetch_all(
 $blocs_site_cond = $site_force ? "AND e.site_id=$site_force" : "";
 $blocs_type = db_fetch_all(
     "SELECT n.libelle, COUNT(e.id) AS nb_total,
-            SUM(CASE WHEN e.etat IN ('neuf','bon','fonctionnel') THEN 1 ELSE 0 END) AS nb_ok,
+            SUM(CASE WHEN e.etat IN ('neuf','bon') THEN 1 ELSE 0 END) AS nb_ok,
             SUM(CASE WHEN e.etat='hs' THEN 1 ELSE 0 END) AS nb_hs,
             SUM(CASE WHEN e.statut_stock='en_stock' THEN 1 ELSE 0 END) AS nb_stock
      FROM nomenclatures n
@@ -490,7 +490,7 @@ if ($f_type)   { $where_kpi[] = "e.nomenclature_id=?";  $params_kpi[] = $f_type;
 if ($f_search) { $where_kpi[] = "(e.numero_serie_interne ILIKE ? OR e.marque ILIKE ? OR e.modele ILIKE ?)"; $params_kpi[] = "%$f_search%"; $params_kpi[] = "%$f_search%"; $params_kpi[] = "%$f_search%"; }
 $kpi = db_fetch_one(
     "SELECT COUNT(*) AS total,
-            SUM(CASE WHEN e.etat IN ('neuf','bon','fonctionnel') THEN 1 ELSE 0 END) AS ok,
+            SUM(CASE WHEN e.etat IN ('neuf','bon') THEN 1 ELSE 0 END) AS ok,
             SUM(CASE WHEN e.etat='hs' THEN 1 ELSE 0 END) AS hs,
             SUM(CASE WHEN e.statut_stock='en_stock' THEN 1 ELSE 0 END) AS stock,
             SUM(CASE WHEN e.date_fin_cycle IS NOT NULL AND e.date_fin_cycle < (CURRENT_DATE + INTERVAL '30 days') THEN 1 ELSE 0 END) AS fin_cycle
@@ -534,7 +534,7 @@ if (isset($_GET['export'])) {
     $sp = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
     $ws = $sp->getActiveSheet();
     $ws->setTitle('Équipements');
-    $etats = ['neuf'=>'Neuf','bon'=>'Bon état','fonctionnel'=>'Fonctionnel','usage'=>'Usagé','endommage'=>'Endommagé','hs'=>'Hors service'];
+    $etats = ['neuf'=>'Neuf','bon'=>'Bon état','usage'=>'Usagé','endommage'=>'Endommagé','hs'=>'Hors service'];
     $headers = ['N° Série','Type','Marque','Modèle','Site','Emplacement','État','Statut stock',
                 'Date acq.','Prix achat','Valeur résiduelle','Amort. %',
                 'Fin de cycle','Nb interventions','Taux curative %','Utilisateur'];
@@ -595,7 +595,6 @@ include __DIR__ . '/../templates/header.php';
 .etat-neuf{background:#d1fae5;color:#065f46} .etat-bon{background:#dbeafe;color:#1d4ed8}
 .etat-usage{background:#fef3c7;color:#92400e} .etat-endomage,.etat-endommage{background:#fee2e2;color:#991b1b}
 .etat-hs{background:#1a1a1a;color:white}
-.etat-fonctionnel{background:#dcfce7;color:#166534}
 .taux-ok{color:var(--success-d);font-weight:700} .taux-warn{color:#f39c12;font-weight:700} .taux-danger{color:var(--danger-d);font-weight:700}
 </style>
 
@@ -686,10 +685,9 @@ include __DIR__ . '/../templates/header.php';
 
   <select name="etat" onchange="equipFiltrer(this.form)" aria-label="Filtrer par état" style="padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;background:white;outline:none">
     <option value="">Tous états</option>
-    <option value="ok"        <?= $f_etat==='ok'?'selected':''        ?>>Opérationnel (neuf/bon/fonctionnel)</option>
+    <option value="ok"        <?= $f_etat==='ok'?'selected':''        ?>>Opérationnel (neuf/bon)</option>
     <option value="neuf"      <?= $f_etat==='neuf'?'selected':''      ?>>Neuf</option>
     <option value="bon"       <?= $f_etat==='bon'?'selected':''       ?>>Bon état</option>
-    <option value="fonctionnel" <?= $f_etat==='fonctionnel'?'selected':'' ?>>Fonctionnel</option>
     <option value="usage"     <?= $f_etat==='usage'?'selected':''     ?>>Usagé</option>
     <option value="endommage" <?= $f_etat==='endommage'?'selected':'' ?>>Endommagé</option>
     <option value="hs"        <?= $f_etat==='hs'?'selected':''        ?>>H.S.</option>
@@ -921,7 +919,6 @@ include __DIR__ . '/../templates/header.php';
         <select class="form-control" id="eEtat">
           <option value="neuf">Neuf</option>
           <option value="bon">Bon état</option>
-          <option value="fonctionnel">Fonctionnel</option>
           <option value="usage">Usagé</option>
           <option value="endommage">Endommagé</option>
           <option value="hs">Hors service</option>

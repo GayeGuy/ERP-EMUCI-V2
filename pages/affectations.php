@@ -99,7 +99,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
 // Équipements non affectés
 $non_affectes_count = (int)db_fetch_value(
-    "SELECT COUNT(*) FROM equipements WHERE actif=1 AND site_id IS NULL AND etat IN ('neuf','bon','fonctionnel')"
+    "SELECT COUNT(*) FROM equipements WHERE actif=1 AND site_id IS NULL AND etat IN ('neuf','bon')"
 );
 
 $sites_list = db_fetch_all("SELECT id,nom,type FROM sites WHERE actif=1 ORDER BY nom");

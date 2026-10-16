@@ -1,13 +1,11 @@
 -- ============================================================
---  Équipements : utilisateur (agent de l'annuaire) + état « Fonctionnel »
+--  Équipements : utilisateur (agent de l'annuaire)
 --  Idempotente. 2026-10-16
 -- ============================================================
 --  - equipements.agent_id : l'agent (Annuaire des agents) qui utilise
 --    l'équipement. Distinct de utilisateur_id (compte applicatif, utilisé
 --    par les affectations) : la plupart des porteurs d'équipement n'ont pas
 --    de compte StockApp.
---  - L'état « fonctionnel » est une simple nouvelle valeur de
---    equipements.etat (colonne texte sans contrainte) : rien à migrer.
 --  Tant que cette migration n'est pas passée, le champ Utilisateur
 --  n'apparaît pas dans le formulaire.
 -- ============================================================

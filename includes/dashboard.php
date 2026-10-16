@@ -828,9 +828,9 @@ function dash_registre(): array {
         },
         'rendu' => function (array $d) {
             if (!$d) { dash_vide('Aucun équipement actif sur ce périmètre.'); return; }
-            $teintes = ['neuf' => '#1B75BC', 'bon' => '#16a34a', 'fonctionnel' => '#0d9488',
+            $teintes = ['neuf' => '#1B75BC', 'bon' => '#16a34a',
                         'usage' => '#d97706', 'reforme' => '#dc2626'];
-            $noms    = ['neuf' => 'Neuf', 'bon' => 'Bon', 'fonctionnel' => 'Fonctionnel',
+            $noms    = ['neuf' => 'Neuf', 'bon' => 'Bon',
                         'usage' => 'Usagé', 'reforme' => 'Réformé'];
             $val = $coul = []; $leg = [];
             foreach ($d as $r) {
@@ -1268,9 +1268,9 @@ function dash_registre(): array {
         'rendu' => function (array $d) {
             $total = $d['total'];
             if ($total === 0) { dash_vide('Aucun équipement sur ce périmètre.'); return; }
-            $libelles = ['neuf'=>'Neuf','bon'=>'Bon état','fonctionnel'=>'Fonctionnel','usage'=>'Usagé',
+            $libelles = ['neuf'=>'Neuf','bon'=>'Bon état','usage'=>'Usagé',
                          'mauvais'=>'Mauvais état','hs'=>'Hors service','maintenance'=>'En maintenance'];
-            $teintes  = ['neuf'=>'#06033A','bon'=>'#1e40af','fonctionnel'=>'#0d9488','usage'=>'#f59e0b',
+            $teintes  = ['neuf'=>'#06033A','bon'=>'#1e40af','usage'=>'#f59e0b',
                          'mauvais'=>'#d97706','hs'=>'#dc2626','maintenance'=>'#6d28d9'];
             $parts = pct_entiers(array_map(fn($e) => (float)$e['total'], $d['etats']), (float)$total);
 
