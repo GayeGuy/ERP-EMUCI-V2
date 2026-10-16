@@ -199,6 +199,19 @@ function achParseJson(r) {
     try {
       return JSON.parse(t);
     } catch (e) {
+      // Avertissement ou notice PHP écrits avant la réponse : le serveur a
+      // bien répondu (et exécuté l'action), seule la lecture échouait — et le
+      // bouton restait muet. On récupère le JSON qui suit, et on signale la
+      // sortie parasite dans la console pour qu'elle soit corrigée.
+      const i = t.search(/\{\s*"success"\s*:/);
+      const j = t.lastIndexOf('}');
+      if (i > 0 && j > i) {
+        try {
+          const d = JSON.parse(t.slice(i, j + 1));
+          console.warn('Sortie inattendue du serveur avant la réponse :', t.slice(0, i).trim());
+          return d;
+        } catch (e2) { /* illisible : erreur ci-dessous */ }
+      }
       throw new Error(`Réponse serveur invalide (HTTP ${r.status}) : ${t.slice(0, 300)}`);
     }
   });
