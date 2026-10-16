@@ -535,9 +535,9 @@ if (isset($_GET['export'])) {
     $ws = $sp->getActiveSheet();
     $ws->setTitle('Équipements');
     $etats = ['neuf'=>'Neuf','bon'=>'Bon état','usage'=>'Usagé','endommage'=>'Endommagé','hs'=>'Hors service'];
-    $headers = ['N° Série','Type','Marque','Modèle','Site','Emplacement','État','Statut stock',
-                'Date acq.','Prix achat','Valeur résiduelle','Amort. %',
-                'Fin de cycle','Nb interventions','Taux curative %','Utilisateur'];
+    $headers = ['N° Série','Type','Marque','Modèle','Site','Emplacement','Utilisateur','Matricule',
+                'État','Statut stock','Date acq.','Prix achat','Valeur résiduelle','Amort. %',
+                'Fin de cycle','Nb interventions','Taux curative %'];
     foreach ($headers as $i => $h) {
         $cell = $ws->getCell([$i+1, 1]);
         $cell->setValue($h);
@@ -556,16 +556,17 @@ if (isset($_GET['export'])) {
         $ws->setCellValue([4,  $row], $e['modele'] ?? '');
         $ws->setCellValue([5,  $row], $e['site_nom'] ?? '');
         $ws->setCellValue([6,  $row], $e['emplacement'] ?? '');
-        $ws->setCellValue([7,  $row], $etats[$e['etat']] ?? $e['etat']);
-        $ws->setCellValue([8,  $row], $e['statut_stock'] ?? '');
-        $ws->setCellValue([9,  $row], $e['date_acquisition'] ?? '');
-        $ws->setCellValue([10, $row], $e['prix_achat'] ? (float)$e['prix_achat'] : '');
-        $ws->setCellValue([11, $row], $e['valeur_residuelle'] !== null ? (float)$e['valeur_residuelle'] : '');
-        $ws->setCellValue([12, $row], $e['pct_amorti'] !== null ? (float)$e['pct_amorti'] : '');
-        $ws->setCellValue([13, $row], $e['date_fin_cycle'] ?? '');
-        $ws->setCellValue([14, $row], (int)$e['nb_interventions_total']);
-        $ws->setCellValue([15, $row], $taux_curative);
-        $ws->setCellValue([16, $row], trim(($e['agent_nom'] ?? '') . ($e['agent_matricule'] ? " ({$e['agent_matricule']})" : '')));
+        $ws->setCellValue([7,  $row], $e['agent_nom'] ?? '');
+        $ws->setCellValueExplicit([8, $row], (string)($e['agent_matricule'] ?? ''), \PhpOffice\PhpSpreadsheet\Cell\DataType::TYPE_STRING);
+        $ws->setCellValue([9,  $row], $etats[$e['etat']] ?? $e['etat']);
+        $ws->setCellValue([10, $row], $e['statut_stock'] ?? '');
+        $ws->setCellValue([11, $row], $e['date_acquisition'] ?? '');
+        $ws->setCellValue([12, $row], $e['prix_achat'] ? (float)$e['prix_achat'] : '');
+        $ws->setCellValue([13, $row], $e['valeur_residuelle'] !== null ? (float)$e['valeur_residuelle'] : '');
+        $ws->setCellValue([14, $row], $e['pct_amorti'] !== null ? (float)$e['pct_amorti'] : '');
+        $ws->setCellValue([15, $row], $e['date_fin_cycle'] ?? '');
+        $ws->setCellValue([16, $row], (int)$e['nb_interventions_total']);
+        $ws->setCellValue([17, $row], $taux_curative);
         $row++;
     }
     foreach (range(1, count($headers)) as $col)
