@@ -37,6 +37,9 @@ $f_site   = (int)($_GET['site']   ?? 0);
 $f_type   = trim($_GET['type']    ?? '');
 $f_statut = trim($_GET['statut']  ?? '');   // en_cours | en_stock | (vide=tous)
 $export   = trim($_GET['export']  ?? '');   // csv | xlsx | pptx
+// Mode intégré : affiché dans la fenêtre « Détail » de la Couverture de stock
+// (Vue Exécutive), sans menu ni pied de page. Filtres et exports inchangés.
+$embed    = !empty($_GET['embed']);
 
 // ── REQUÊTE BASE ─────────────────────────────────────────────
 $where  = ["b.statut IN ('en_cours','en_stock')"];
@@ -653,7 +656,26 @@ if ($export === 'pdf') {
 // ============================================================
 //  VUE HTML
 // ============================================================
-include __DIR__ . '/../templates/header.php';
+if ($embed):
+?><!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vue Stock Bobines</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Manrope:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@phosphor-icons/web@2.1.1/src/index.js"></script>
+  <style>
+    :root{--navy:#06033A;--blue:#1B75BC;--border:#e2e8f0;--muted:#94a3b8}
+    *{box-sizing:border-box}
+    body{margin:0;padding:16px;background:#f5f7fc;font-family:'Manrope',system-ui,sans-serif;color:#06033A}
+  </style>
+</head>
+<body>
+<?php
+else:
+    include __DIR__ . '/../templates/header.php';
+endif;
 ?>
 <style>
 /* ── Table ── */
@@ -813,6 +835,7 @@ include __DIR__ . '/../templates/header.php';
 <!-- FILTRES -->
 <div class="filter-bar">
   <form method="GET" style="display:contents">
+    <?php if ($embed): ?><input type="hidden" name="embed" value="1"><?php endif; ?>
     <select name="site" class="fsel" aria-label="Filtrer par site" onchange="this.form.submit()">
       <option value="">🏢 Tous les sites</option>
       <?php foreach ($sites_list as $s): ?>
@@ -947,4 +970,7 @@ include __DIR__ . '/../templates/header.php';
 </div>
 <?php endif; ?>
 
-<?php include __DIR__ . '/../templates/footer.php'; ?>
+<?php if ($embed): ?>
+</body>
+</html>
+<?php else: include __DIR__ . '/../templates/footer.php'; endif; ?>

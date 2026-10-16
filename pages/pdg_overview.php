@@ -1008,6 +1008,12 @@ include __DIR__ . '/../templates/header.php';
           <div class="biz-card-t">Couverture de stock</div>
           <div class="biz-card-s">Jours de film restants au rythme observé · repère à <?= $seuil_couv_bas ?> j</div>
         </div>
+        <?php if (can('stock_bobines', 'can_read')): ?>
+        <button type="button" onclick="ouvrirStockSites(this)" data-site="<?= (int)$site_id ?>" title="Stock de bobines par site"
+          style="padding:4px 11px;border:1.5px solid #e2e8f0;border-radius:16px;background:#f8fafc;font-size:12px;font-weight:700;color:#06033A;cursor:pointer;font-family:inherit;white-space:nowrap">
+          <i class="ph-duotone ph-arrows-out"></i> Détail
+        </button>
+        <?php endif; ?>
         <?php if ($couv_critiques > 0): ?>
           <span class="alrt-pill alrt-warn"><i class="ph-duotone ph-warning-circle"></i>
             <?= $couv_critiques ?> site<?= $couv_critiques > 1 ? 's' : '' ?> sous <?= $seuil_couv_bas ?> j</span>
@@ -1651,6 +1657,40 @@ include __DIR__ . '/../templates/header.php';
     </div>
   </div>
 </div>
+
+<?php if (can('stock_bobines', 'can_read')): ?>
+<!-- Détail Couverture de stock : tableau « Vue stock par site » des bobines,
+     avec ses filtres et ses exports (CSV, Excel, PDF, PowerPoint). -->
+<div id="modal-stock-sites" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(6,3,58,.5);align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:white;border-radius:18px;width:100%;max-width:1200px;height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <div style="display:flex;align-items:center;gap:12px;padding:18px 22px;border-bottom:1px solid #e2e8f0;flex-shrink:0">
+      <div style="width:36px;height:36px;border-radius:12px;background:#eef0f8;display:flex;align-items:center;justify-content:center;color:#06033A;font-size:18px"><i class="ph-duotone ph-film-strip"></i></div>
+      <div>
+        <div style="font-weight:800;font-size:14px;color:#06033A">Stock de bobines par site</div>
+        <div style="font-size:12px;color:#5a6678">Synthèse par site et par type · exports CSV, Excel, PDF, PowerPoint</div>
+      </div>
+      <a id="lien-stock-sites" href="stock_bobines_vue.php" target="_blank" rel="noopener" title="Ouvrir la page complète"
+         style="margin-left:auto;font-size:12px;font-weight:700;color:#1B75BC;text-decoration:none;white-space:nowrap"><i class="ph ph-arrow-square-out"></i> Ouvrir la page</a>
+      <button onclick="document.getElementById('modal-stock-sites').style.display='none'" style="background:none;border:none;cursor:pointer;color:#5a6678;font-size:24px;line-height:1;padding:4px 8px">&times;</button>
+    </div>
+    <iframe id="frame-stock-sites" title="Stock de bobines par site" style="flex:1;width:100%;border:0;background:#f5f7fc"></iframe>
+  </div>
+</div>
+<script>
+// Le site vient du bouton (re-rendu à chaque changement de filtre de la
+// Vue Exécutive) : le tableau suit toujours le filtre en cours.
+function ouvrirStockSites(btn){
+  const site = parseInt(btn && btn.dataset.site) || 0;
+  const qs   = site ? 'site=' + site : '';
+  const f    = document.getElementById('frame-stock-sites');
+  const src  = 'stock_bobines_vue.php?embed=1' + (qs ? '&' + qs : '');
+  // Rechargé seulement si le filtre a changé depuis la dernière ouverture.
+  if (f.dataset.src !== src) { f.src = src; f.dataset.src = src; }
+  document.getElementById('lien-stock-sites').href = 'stock_bobines_vue.php' + (qs ? '?' + qs : '');
+  document.getElementById('modal-stock-sites').style.display = 'flex';
+}
+</script>
+<?php endif; ?>
 
 <div id="modal-ops" style="display:none;position:fixed;inset:0;z-index:2000;background:rgba(6,3,58,.5);align-items:center;justify-content:center;padding:20px" onclick="if(event.target===this)this.style.display='none'">
   <div style="background:white;border-radius:18px;width:100%;max-width:900px;max-height:88vh;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.25)">
