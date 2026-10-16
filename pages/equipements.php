@@ -93,11 +93,15 @@ require_once __DIR__ . '/../includes/import_helpers.php';
 
 if (($_GET['modele'] ?? '') === '1') {
     require_once __DIR__ . '/../vendor/autoload.php';
-    import_generer_modele(
-        ['Marque','Modèle','Type','N° Série externe','Site','État','Date acquisition','Prix achat','Emplacement'],
-        ['HP','LaserJet Pro', $nomenclatures[0]['libelle'] ?? '', 'SN123456', $sites_list[0]['nom'] ?? '', 'neuf', date('d/m/Y'), '150000', 'Bureau RH, 2e étage'],
-        'modele_equipements_' . $f_categorie . '.xlsx'
-    );
+    $mod_entetes = ['Marque','Modèle','Type','N° Série externe','Site','État','Date acquisition','Prix achat','Emplacement'];
+    $mod_exemple = ['HP','LaserJet Pro', $nomenclatures[0]['libelle'] ?? '', 'SN123456', $sites_list[0]['nom'] ?? '', 'neuf', date('d/m/Y'), '150000', 'Bureau RH, 2e étage'];
+    // Utilisateur = matricule (de préférence) ou « NOM Prénom » d'un agent de l'annuaire
+    if ($equip_agent) {
+        $mod_entetes[] = 'Utilisateur';
+        $a0 = $agents_list[0] ?? null;
+        $mod_exemple[] = $a0 ? ($a0['matricule'] ?: trim($a0['nom'] . ' ' . $a0['prenom'])) : '';
+    }
+    import_generer_modele($mod_entetes, $mod_exemple, 'modele_equipements_' . $f_categorie . '.xlsx');
 }
 
 $import_result = null;
@@ -159,6 +163,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !is_ajax() && isset($_FILES['fichie
                 $duree_mois_cat = $ohada_durees[$f_categorie] ?? $ohada_durees['default'];
                 $etats_valides  = ['neuf','bon','usage','endommage','hs'];
 
+                // Colonne « Utilisateur » : matricule, « NOM Prénom », « Prénom NOM »
+                // ou le libellé du formulaire « NOM Prénom (matricule) ». Un nom
+                // porté par plusieurs agents est refusé : il faut le matricule.
+                $agent_par_cle = [];
+                foreach ($agents_list as $a) {
+                    $cles = [trim($a['nom'] . ' ' . $a['prenom']), trim($a['prenom'] . ' ' . $a['nom']), agent_libelle_equip($a)];
+                    if (!empty($a['matricule'])) $cles[] = $a['matricule'];
+                    foreach (array_unique(array_map(fn($c) => mb_strtolower(preg_replace('/\s+/', ' ', $c)), $cles)) as $c)
+                        $agent_par_cle[$c][] = (int)$a['id'];
+                }
+
                 $nb_ok = 0; $erreurs = [];
                 db_begin();
                 try {
@@ -215,20 +230,28 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !is_ajax() && isset($_FILES['fichie
                         $emplacement = $get($row, 'Emplacement');
                         $prix_achat  = (float)str_replace([' ', ','], ['', '.'], $get($row, 'Prix achat') ?: '0');
 
+                        $agent_id = null;
+                        $agent_raw = $equip_agent ? $get($row, 'Utilisateur') : '';
+                        if ($agent_raw !== '') {
+                            $ids = array_values(array_unique($agent_par_cle[mb_strtolower(preg_replace('/\s+/', ' ', $agent_raw))] ?? []));
+                            if (!$ids) { $erreurs[] = "Ligne $ln : utilisateur \"$agent_raw\" introuvable dans l'annuaire des agents."; continue; }
+                            if (count($ids) > 1) { $erreurs[] = "Ligne $ln : plusieurs agents s'appellent \"$agent_raw\" — indiquez le matricule."; continue; }
+                            $agent_id = $ids[0];
+                        }
+
                         $statut_stock   = $etat === 'hs' ? 'hs' : (!$site_id ? 'en_stock' : 'affecte');
                         $date_fin_cycle = $date_achat ? date('Y-m-d', strtotime($date_achat . " +{$duree_mois_cat} months")) : null;
 
                         $numero_chrono_next++;
                         $nsi = $prochain_numero($code_nom);
 
-                        db_query(
-                            "INSERT INTO equipements
-                             (marque,modele,categorie,nomenclature_id,numero_serie_interne,numero_chrono,numero_serie_origine,
-                              site_id,emplacement,etat,statut_stock,date_acquisition,prix_achat,date_fin_cycle,duree_amortissement_mois,actif)
-                             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1)",
-                            [$marque,$modele,$f_categorie,$nom_id,$nsi,$numero_chrono_next,$nse ?: null,
-                             $site_id,$emplacement ?: null,$etat,$statut_stock,$date_achat,$prix_achat,$date_fin_cycle,$duree_mois_cat]
-                        );
+                        $cols_imp = 'marque,modele,categorie,nomenclature_id,numero_serie_interne,numero_chrono,numero_serie_origine,
+                              site_id,emplacement,etat,statut_stock,date_acquisition,prix_achat,date_fin_cycle,duree_amortissement_mois,actif';
+                        $vals_imp = [$marque,$modele,$f_categorie,$nom_id,$nsi,$numero_chrono_next,$nse ?: null,
+                                     $site_id,$emplacement ?: null,$etat,$statut_stock,$date_achat,$prix_achat,$date_fin_cycle,$duree_mois_cat,1];
+                        if ($equip_agent) { $cols_imp .= ',agent_id'; $vals_imp[] = $agent_id; }
+                        db_query("INSERT INTO equipements ($cols_imp)
+                                  VALUES (" . implode(',', array_fill(0, count($vals_imp), '?')) . ")", $vals_imp);
                         $nb_ok++;
                     }
                     audit_log($user['id'], 'CREATE', 'equipements', null,
@@ -645,7 +668,7 @@ include __DIR__ . '/../templates/header.php';
       <button onclick="document.getElementById('modalImport').style.display='none'" style="background:none;border:none;font-size:22px;cursor:pointer"><i class="ph ph-x" aria-hidden="true"></i></button>
     </div>
     <p style="font-size:13px;color:var(--muted);margin-bottom:14px">
-      Fichier Excel (.xlsx/.xls) ou CSV. Colonnes attendues : <strong>Type (obligatoire, doit exister au catalogue)</strong>, Marque ou Modèle (au moins l'un des deux), N° Série externe, Site, État, Date acquisition, Prix achat, Emplacement — téléchargez le modèle pour les exemples.
+      Fichier Excel (.xlsx/.xls) ou CSV. Colonnes attendues : <strong>Type (obligatoire, doit exister au catalogue)</strong>, Marque ou Modèle (au moins l'un des deux), N° Série externe, Site, État, Date acquisition, Prix achat, Emplacement<?= $equip_agent ? ", Utilisateur (matricule de préférence, ou « NOM Prénom » de l'annuaire des agents)" : '' ?> — téléchargez le modèle pour les exemples.
       Une ligne dont le N° Série externe existe déjà (en base ou plus haut dans le fichier) est ignorée comme doublon.
       Le numéro de série interne est généré automatiquement.
     </p>
