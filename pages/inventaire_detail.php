@@ -18,6 +18,7 @@ require_once __DIR__ . '/../includes/audit.php';
 require_once __DIR__ . '/../includes/helpers.php';
 require_once __DIR__ . '/../includes/notifications.php';
 require_once __DIR__ . '/../includes/upload.php';
+require_once __DIR__ . '/../includes/inventaire.php';
 
 require_auth();
 $_tmp_user = current_user();
@@ -68,14 +69,22 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         $stock_physique = $_POST['stock_physique'] !== '' ? (int)$_POST['stock_physique'] : null;
         $notes          = trim($_POST['notes'] ?? '');
 
+        // Écart mesuré contre la quantité ERP actuelle — même référence que
+        // « Tout sauvegarder », que le calcul à la frappe (data-sys) et que
+        // l'ajustement appliqué à la validation (inv_valider_bobines()).
+        // Mesuré contre OptoTrace, un comptage égal au chiffre d'OptoTrace
+        // donnait « 0 écart » alors que l'ERP restait faux.
         $det = db_fetch_one(
-            "SELECT d.*, b.stock_systeme FROM inventaire_details_bobines d
+            "SELECT d.*, b.films_restants AS erp_actuel FROM inventaire_details_bobines d
              JOIN op_bobines b ON b.id=d.bobine_id WHERE d.id=? AND d.inventaire_id=?",
             [$detail_id, $inv_id]
         );
         if (!$det) json_response(false,'Ligne introuvable.');
 
-        $stock_sys    = (int)$det['stock_systeme'];
+        // Stock au comptage : ERP actuel + films retirés depuis par les
+        // points datés d'après l'inventaire (cf. inv_conso_apres()).
+        $stock_sys    = (int)$det['erp_actuel']
+                      + (inv_conso_apres((int)$inv['site_id'], (string)$inv['date_inventaire'], 'films')[(int)$det['bobine_id']] ?? 0);
         $stock_phy    = $stock_physique !== null ? $stock_physique : (int)$det['stock_physique'];
         $ecart_connu  = (int)($det['ecart_connu_avant'] ?? 0);
         $ecart_mesure = $stock_phy - $stock_sys;       // écart détecté lors de l'inventaire
@@ -255,11 +264,11 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         }
 
         $det = db_fetch_one(
-            "SELECT d.*, b.stock_systeme, b.numero FROM inventaire_details_bobines d
+            "SELECT d.*, b.films_restants AS erp_actuel, b.numero FROM inventaire_details_bobines d
              JOIN op_bobines b ON b.id=d.bobine_id WHERE d.id=?",
             [$corr['detail_id']]
         );
-        $stock_sys    = (int)$det['stock_systeme'];
+        $stock_sys    = (int)$det['erp_actuel'];   // référence ERP, cf. sauver_ligne
         $ecart_mesure = $valeur_finale - $stock_sys;
         $conso_moy    = (float)$det['conso_quotidienne_moy'];
         $jours_phy    = $conso_moy > 0 ? (int)ceil($valeur_finale / $conso_moy) : null;
@@ -295,6 +304,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
         if (!$can_edit) json_response(false,'Inventaire non modifiable.');
         $lignes_data = json_decode($_POST['lignes'] ?? '[]', true);
         $saved = 0; $errors = 0;
+        $conso_inv = inv_conso_apres((int)$inv['site_id'], (string)$inv['date_inventaire'], 'films');
         db_begin();
         try {
             foreach ($lignes_data as $ld) {
@@ -304,15 +314,16 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
                 if ($phy_val === null) continue;
 
                 $det = db_fetch_one(
-                    "SELECT d.*, b.stock_systeme AS b_stock_systeme, b.films_restants
+                    "SELECT d.*, b.films_restants AS erp_actuel
                      FROM inventaire_details_bobines d
                      JOIN op_bobines b ON b.id=d.bobine_id WHERE d.id=? AND d.inventaire_id=?",
                     [$detail_id, $inv_id]
                 );
                 if (!$det) continue;
 
-                // Utiliser films_restants comme référence (valeur réelle affichée)
-                $stock_sys  = (int)($det['films_restants'] ?: $det['b_stock_systeme']);
+                // Référence ERP, cf. sauver_ligne (plus de repli sur OptoTrace
+                // quand l'ERP est à zéro : zéro est une quantité comme une autre)
+                $stock_sys  = (int)$det['erp_actuel'] + ($conso_inv[(int)$det['bobine_id']] ?? 0);
                 $ecart_mes  = $phy_val - $stock_sys;
                 $conso_moy  = (float)$det['conso_quotidienne_moy'];
                 $jours_phy  = $conso_moy > 0 ? (int)ceil($phy_val / $conso_moy) : null;
@@ -332,62 +343,10 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
     // ── VALIDER L'INVENTAIRE
     if ($action==='valider') {
         if (!$can_validate) json_response(false,'Seul le GSB ou un administrateur peut valider l\'inventaire.');
-        $lignes = db_fetch_all("SELECT * FROM inventaire_details_bobines WHERE inventaire_id=?",[$inv_id]);
-        $nb_ecarts = 0;
-        $total_physique = 0;
         db_begin();
         try {
-            foreach ($lignes as $l) {
-                // Ignorer les lignes sans stock physique déclaré. La colonne est
-                // NOT NULL (défaut 0 à la création, cf. inventaire_bobines.php),
-                // donc le seul moyen fiable de distinguer « jamais saisi » de
-                // « saisi à zéro » est le même critère que le récap de
-                // validation (n° 18) : stock_physique>0 OU un écart déjà stocké.
-                // Un test sur === null/'' ne se déclenche jamais et laissait
-                // passer toutes les lignes non saisies avec physique=0, ce qui
-                // vidait à tort le stock système de chaque bobine non comptée.
-                if ((int)$l['stock_physique'] <= 0 && (int)$l['ecart'] == 0) continue;
-                $phy     = (int)$l['stock_physique'];
-                $sys_inv = (int)$l['stock_systeme']; // snapshot au moment de la saisie
-                $total_physique += $phy;
-
-                // Toujours appliquer le stock physique déclaré — source de vérité
-                db_query(
-                    "UPDATE op_bobines SET films_restants=?, stock_systeme=?,
-                     statut=CASE WHEN ? > 0 THEN (CASE WHEN statut IN('retiree') THEN 'retiree' ELSE (CASE WHEN statut='en_cours' THEN 'en_cours' ELSE 'en_stock' END) END) ELSE 'epuisee' END
-                     WHERE id=?",
-                    [$phy, $phy, $phy, $l['bobine_id']]
-                );
-
-                // Fermer les écarts ouverts précédents
-                db_query("UPDATE ecarts_bobines SET statut='resolu', resolu_at=NOW(), resolu_par=?
-                          WHERE bobine_id=? AND statut='ouvert'",
-                    [$user['id'], $l['bobine_id']]);
-
-                // Recalculer l'écart réel (phy vs films_restants système actuel)
-                $ecart_reel = (int)db_fetch_value(
-                    "SELECT films_restants FROM op_bobines WHERE id=?", [$l['bobine_id']]
-                );
-                // L'écart = ce qu'on vient de poser vs ce qu'il y avait avant
-                $ecart_applique = $phy - $sys_inv;
-
-                if ($ecart_applique != 0) {
-                    $nb_ecarts++;
-                    db_query(
-                        "INSERT INTO mouvements_bobines (bobine_id,type,quantite,stock_avant,stock_apres,motif,ref_id,created_by)
-                         VALUES (?,?,?,?,?,?,?,?)",
-                        [$l['bobine_id'],'ajustement_inventaire',$ecart_applique,$sys_inv,$phy,"Inventaire #$inv_id",$inv_id,$user['id']]
-                    );
-                    db_query(
-                        "INSERT INTO ecarts_bobines (bobine_id,date_constat,stock_systeme,stock_physique,ecart,motif,source,inventaire_id,statut,resolu_at,resolu_par,created_by)
-                         VALUES (?,?,?,?,?,?,?,?,'resolu',NOW(),?,?)",
-                        [$l['bobine_id'],$inv['date_inventaire'],$sys_inv,$phy,$ecart_applique,
-                         $l['notes']??'','inventaire',$inv_id,$user['id'],$user['id']]
-                    );
-                }
-            }
-            db_query("UPDATE inventaires_bobines SET statut='valide',nb_ecarts=?,total_films_physique=?,valide_par=?,valide_at=NOW() WHERE id=?",
-                [$nb_ecarts,$total_physique,$user['id'],$inv_id]);
+            // Même validation que la liste des inventaires (includes/inventaire.php).
+            $nb_ecarts = inv_valider_bobines($inv, (int)$user['id'])['nb_ecarts'];
             audit_log($user['id'],'UPDATE','inventaire_bobines',$inv_id,"Validation inventaire #$inv_id — $nb_ecarts écart(s)");
             db_commit();
             json_response(true,"Inventaire validé. $nb_ecarts écart(s) traité(s).");
@@ -403,7 +362,7 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && is_ajax()) {
 $lignes = db_fetch_all(
     "SELECT d.*,
             b.numero, b.type_code, b.format, b.statut AS bob_statut,
-            b.stock_systeme AS stock_realtime,  -- stock actuel (temps réel)
+            b.films_restants AS stock_realtime,  -- quantité ERP actuelle (temps réel)
             s.nom AS site_nom,
             -- Consommation moyenne 30j glissants (dynamique)
             COALESCE(
@@ -496,7 +455,7 @@ if ($export === 'xlsx') {
     ]);
     $sh->getRowDimension(1)->setRowHeight(24);
 
-    $headers = ['Numéro','Type','Site','Qté Système','Qté Physique','Écart Mesuré','Conso/jour','Jours restants','Date épuisement','Statut Bobine','Notes'];
+    $headers = ['Numéro','Type','Site','Qté physique (déclarée)','Qté comptée','Écart Mesuré','Conso/jour','Jours restants','Date épuisement','Statut Bobine','Notes'];
     foreach ($headers as $i => $h) {
         $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($i + 1);
         $sh->setCellValue("{$col}2", $h);
@@ -617,8 +576,8 @@ if ($export === 'pdf') {
     <table>
       <thead><tr>
         <th>Numéro</th><th>Type</th><th>Site</th>
-        <th style="text-align:right">Qté Système</th>
-        <th style="text-align:right">Qté Physique</th>
+        <th style="text-align:right">Qté physique (déclarée)</th>
+        <th style="text-align:right">Qté comptée</th>
         <th style="text-align:right">Écart</th>
         <th style="text-align:center">Jours rest.</th>
         <th style="text-align:center">Date épuis.</th>
@@ -775,7 +734,7 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
   <div style="background:white;border-radius:16px;padding:22px 24px;width:100%;max-width:440px;box-shadow:0 20px 60px rgba(0,0,0,.25)">
     <h3 style="font-family:'Montserrat',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin:0 0 6px">↩ Répondre à la demande</h3>
     <p style="font-size:12.5px;color:var(--muted);margin:0 0 14px">
-      Corrigez d'abord la valeur dans la colonne « Qté physique », puis confirmez ici.
+      Corrigez d'abord la valeur dans la colonne « Qté comptée », puis confirmez ici.
     </p>
     <div id="repModifAlert"></div>
     <div class="form-group" style="margin-bottom:6px">
@@ -802,7 +761,7 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
 <!-- TABLEAU PRINCIPAL -->
 <?php if(!$is_coord): /* décrit les colonnes masquées au coordinateur */ ?>
 <div style="background:#e8f4fd;border:1px solid #90caf9;border-radius:10px;padding:10px 16px;margin-bottom:14px;font-size:13px;display:flex;gap:20px;flex-wrap:wrap">
-  <span><i class="ph ph-push-pin" aria-hidden="true"></i> <strong>Qté physique</strong> = photo figée à la date de l'inventaire</span>
+  <span><i class="ph ph-push-pin" aria-hidden="true"></i> <strong>Qté comptée</strong> = photo figée à la date de l'inventaire</span>
   <span style="border-left:1px solid #90caf9;padding-left:20px"><i class="ph ph-circle" aria-hidden="true"></i> <strong>Qté temps réel</strong> = stock actuel mis à jour en continu par les consommations</span>
   <span style="border-left:1px solid #90caf9;padding-left:20px;border-bottom:2px dashed #f39c12;padding-bottom:1px"><strong>Écart connu</strong> = différence connue avant l'inventaire</span>
 </div>
@@ -817,9 +776,9 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
           <th style="padding:10px 14px">Type</th>
           <th style="padding:10px 14px">Site</th>
           <?php if(!$is_coord): ?>
-          <th style="padding:10px 14px;text-align:right">Qté système <i class="ph ph-monitor" aria-hidden="true"></i></th>
+          <th style="padding:10px 14px;text-align:right">Qté physique (déclarée) <i class="ph ph-monitor" aria-hidden="true"></i></th>
           <?php endif; ?>
-          <th style="padding:10px 14px;text-align:right;border-right:1px solid rgba(255,255,255,.15)">Qté physique <i class="ph ph-push-pin" aria-hidden="true"></i></th>
+          <th style="padding:10px 14px;text-align:right;border-right:1px solid rgba(255,255,255,.15)">Qté comptée <i class="ph ph-push-pin" aria-hidden="true"></i></th>
           <?php if(!$is_coord): /* n° 2.3 CR PDG — les écarts, mais aussi tout
                le bloc « temps réel » : la quantité temps réel EST la valeur
                système, et jours restants / épuisement s'en déduisent. */ ?>
@@ -886,7 +845,7 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
         <td style="padding:9px 14px;font-size:12px;color:var(--muted)"><?= h($l['site_nom']??'—') ?></td>
 
         <?php if(!$is_coord): ?>
-        <!-- Qté système (figée — valeur au moment de l'inventaire) -->
+        <!-- Qté physique déclarée (figée — stock ERP déclaré à l'ouverture de l'inventaire, pas l'import OptoTrace) -->
         <td style="padding:9px 14px;text-align:right">
           <span style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;color:var(--navy)">
             <?= number_format((int)$l['stock_systeme']) ?>
@@ -894,7 +853,7 @@ input.saisie:disabled{background:#f1f5f9;color:#64748b;cursor:not-allowed;opacit
         </td>
         <?php endif; ?>
 
-        <!-- Qté physique (figée) -->
+        <!-- Qté comptée (figée) -->
         <td style="padding:9px 14px;text-align:right;border-right:1px solid #e2e8f0">
           <?php if($can_edit): ?>
           <?php /* n° 2.3 CR PDG — pour le coordinateur, ni data-sys ni
