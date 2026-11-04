@@ -18,6 +18,7 @@ require_once __DIR__ . '/../includes/achats.php';
 require_once __DIR__ . '/../includes/referentiels.php';
 // Lignes « bobine » : choix des bobines par le GSB, affectation à la réception.
 require_once __DIR__ . '/../includes/commande_bobines.php';
+require_once __DIR__ . '/../includes/articles_equipements.php';
 // Bon de livraison joint par le coordinateur à la réception.
 require_once __DIR__ . '/../includes/upload.php';
 
@@ -706,8 +707,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                    AND cl.article_id IS NOT NULL AND cl.quantite_livree > 0",
                 [$cmd_id]
             );
+            $nb_equip_op = 0;
             foreach ($lignes_rec as $lr) {
                 if ($lr['article_id'] && $lr['qte'] > 0) {
+                    // Matériel et outillage industriel : une fiche d'équipement
+                    // opérationnel par unité sur le site, pas du stock d'articles.
+                    if (art_est_equipement_op((int)$lr['article_id'])) {
+                        $nb_equip_op += count(art_creer_equipements_op((int)$lr['article_id'], (int)$cmd['site_id'],
+                            (int)$lr['qte'], (int)$user['id'], "Reçu via la commande {$cmd['numero_commande']}"));
+                        continue;
+                    }
                     db_query(
                         "INSERT INTO stock_site (article_id,site_id,quantite) VALUES (?,?,?)
                          ON CONFLICT (article_id,site_id) DO UPDATE SET quantite = stock_site.quantite + ?",
@@ -776,6 +785,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             );
             if ($nb_bob_rec > 0)
                 $msg .= " | Bobines : $nb_bob_rec, en stock sur le site (demande d'utilisation pour les utiliser)";
+            if ($nb_equip_op > 0)
+                $msg .= " | Équipements opérationnels créés : $nb_equip_op";
             json_response(true, $msg);
         } catch(Exception $e){ db_rollback(); json_response(false,$e->getMessage()); }
     }
