@@ -6,6 +6,10 @@
 --  'TL' / 'WSL' : ces rouleaux n'apparaissaient nulle part.
 --  On réaligne la série sur le catalogue op_types_bobines.
 -- ============================================================
+-- Colonne déclarée character(1) sur les anciennes bases : trop courte pour
+-- 'TL' / 'WSL' (même correctif que migration_op_bobines_serie_tl_wsl.sql).
+ALTER TABLE op_bobines ALTER COLUMN serie TYPE VARCHAR(4);
+
 UPDATE op_bobines b
    SET serie = TRIM(tb.serie)
   FROM op_types_bobines tb
