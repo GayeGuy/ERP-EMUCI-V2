@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../includes/audit.php';
 require_once __DIR__ . '/../../includes/helpers.php';
 require_once __DIR__ . '/../../includes/notifications.php';
 require_once __DIR__ . '/../../includes/point_emuci_corrections.php';
+require_once __DIR__ . '/../../includes/inventaire.php';
 require_once __DIR__ . '/../../includes/validation_stock.php';
 require_once __DIR__ . '/../../includes/optoplate_comparaison.php';
 
