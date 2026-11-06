@@ -13,6 +13,14 @@
 ALTER TABLE commande_lignes ADD COLUMN IF NOT EXISTS quantite_recue integer DEFAULT NULL;
 ALTER TABLE commande_lignes ADD COLUMN IF NOT EXISTS motif_reception text;
 
+-- Films de chaque rouleau à l'expédition (base du livré d'une ligne en films).
+-- La table n'existe que si migration_commande_ligne_bobines.sql est passée.
+DO $$ BEGIN
+  IF to_regclass('commande_ligne_bobines') IS NOT NULL THEN
+    ALTER TABLE commande_ligne_bobines ADD COLUMN IF NOT EXISTS films_expedies integer DEFAULT NULL;
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS commande_ecarts_reception (
     id serial PRIMARY KEY,
     commande_id integer NOT NULL REFERENCES commandes(id) ON DELETE CASCADE,
