@@ -258,6 +258,18 @@ function _groupes_def(): array {
                 ['label'=>"File d'attente équipements", 'icon'=>'ph-desktop-tower',
                  'url'=>'pages/achats/equipements_attente.php','active_keys'=>['achats_equipements_attente'],
                  'perm'=>['achats_suivi','can_read'], 'ou_n1'=>true],
+                // Finance : suivi des dossiers de l'ouverture CIL à la pose
+                // (migration_achats_24). Lecture = suivi ; création = imports
+                // et synchronisation API ; mise à jour = tarifs.
+                ['label'=>'Suivi des dossiers',     'icon'=>'ph-files',
+                 'url'=>'pages/achats/finance_dossiers.php','active_keys'=>['finance_dossiers'],
+                 'perm'=>['finance_dossiers','can_read']],
+                ['label'=>'Imports dossiers',       'icon'=>'ph-upload-simple',
+                 'url'=>'pages/achats/finance_import.php','active_keys'=>['finance_import'],
+                 'perm'=>['finance_dossiers','can_create']],
+                ['label'=>'Tarifs dossiers',        'icon'=>'ph-currency-circle-dollar',
+                 'url'=>'pages/achats/finance_tarifs.php','active_keys'=>['finance_tarifs'],
+                 'perm'=>['finance_dossiers','can_read']],
                 // RAF/DAF/PDG (lecteur) portent achats_param can_read/can_update
                 // uniquement pour le budget (migration_achats_13) : exclus des
                 // 4 autres écrans, qui restent à l'administration (même 403
