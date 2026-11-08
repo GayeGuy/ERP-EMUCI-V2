@@ -63,6 +63,30 @@ const FIN_ETAPES = [
 
 const FIN_CANAUX = ['CIL' => 'CIL', 'DGTTC' => 'DGTTC', 'FDS' => 'FDS', 'REIMMAT' => 'Reimmat', 'SPECIALE' => 'Opération spéciale'];
 
+// Catégorie affichée à la place du genre détaillé (le genre reste stocké :
+// les tarifs sont par genre). Moto : MOTOCYCLETTE, MOTO, MOTO TRICYCLE ;
+// Semi-remorque : SEMI REMORQUE (ROUTIER), REMORQUE ROUTIERE ; tout le reste
+// (voiture, camionnette, camion, citerne, tracteur, autocar, chariot…) : Auto.
+const FIN_CATEGORIES = ['AUTO' => 'Auto', 'MOTO' => 'Moto', 'SEMI' => 'Semi-remorque'];
+
+function fin_categorie(?string $genre): ?string {
+    if ($genre === null || $genre === '') return null;
+    if (str_starts_with($genre, 'MOTO')) return 'MOTO';
+    if (str_contains($genre, 'REMORQUE')) return 'SEMI';
+    return 'AUTO';
+}
+
+function fin_categorie_libelle(?string $genre): ?string {
+    $c = fin_categorie($genre);
+    return $c === null ? null : FIN_CATEGORIES[$c];
+}
+
+// Même règle en SQL, pour le filtre.
+function fin_categorie_sql(string $col): string {
+    return "CASE WHEN COALESCE($col, '') = '' THEN NULL WHEN $col LIKE 'MOTO%' THEN 'MOTO'"
+         . " WHEN $col LIKE '%REMORQUE%' THEN 'SEMI' ELSE 'AUTO' END";
+}
+
 // Tarifs « Opération spéciale », par genre. Modifiables dans Finance → Tarifs :
 // rangés dans fin_tarifs sous la clé « #SPECIALE:<genre> » (un genre ne commence
 // jamais par « # »), ce qui évite une migration. Sans tarif saisi : valeur par
@@ -850,7 +874,7 @@ function fin_filtres_sql(array $f): array {
     if (!empty($f['au']))   { $w[] = 'date_ref <= ?'; $p[] = $f['au']; }
     if (!empty($f['canal']) && isset(FIN_CANAUX[$f['canal']])) { $w[] = 'canal = ?'; $p[] = $f['canal']; }
     if (!empty($f['type'])) { $w[] = 'type_dossier = ?'; $p[] = $f['type']; }
-    if (!empty($f['genre'])) { $w[] = 'genre = ?'; $p[] = $f['genre']; }
+    if (!empty($f['genre']) && isset(FIN_CATEGORIES[$f['genre']])) { $w[] = fin_categorie_sql('genre') . ' = ?'; $p[] = $f['genre']; }
     if (!empty($f['etape']) && isset(FIN_ETAPES[$f['etape']])) { $w[] = 'etape = ?'; $p[] = $f['etape']; }
     if (!empty($f['anomalie'])) {
         if (isset(FIN_ANOMALIES[$f['anomalie']])) $w[] = $f['anomalie'];
@@ -915,6 +939,8 @@ function fin_couverture(): array {
 function fin_dossier_detail(string $cle): ?array {
     $d = db_fetch_one("SELECT * FROM fin_dossiers WHERE cle = ?", [$cle]);
     if (!$d) return null;
+    $d['categorie'] = fin_categorie_libelle($d['genre']);
+    $d['canal_libelle'] = FIN_CANAUX[$d['canal'] ?? ''] ?? $d['canal'];
     $vin = $d['vin'] ?: '#'; $ch = $d['chrono'] ?: '#'; $ns = $d['nsiiv'] ?: '#';
     $d['sources'] = [
         'api_cil' => db_fetch_all("SELECT * FROM fin_src_cil WHERE vin = ? OR chrono = ? ORDER BY date_paiement DESC", [$vin, $ch]),
@@ -973,7 +999,7 @@ function fin_export_colonnes(): array {
             ['Date de paiement', $si('est_ouvert', 'date_paiement'), 'date', 12],
             ['Chrono', $si('est_ouvert', 'chrono'), 'txt', 16],
             ['VIN', $si('est_ouvert', 'vin'), 'txt', 20],
-            ['Genre', $si('est_ouvert', 'genre'), 'txt', 20],
+            ['Genre', fn($d) => $d['est_ouvert'] ? fin_categorie_libelle($d['genre']) : null, 'txt', 14],
             ['Client', $si('est_ouvert', 'client'), 'txt', 30],
             ['Montant plaques', $si('est_ouvert', 'mt_plaques'), 'num', 12],
             ['Montant sécurisation pose', $si('est_ouvert', 'mt_secupose'), 'num', 13],
@@ -984,7 +1010,7 @@ function fin_export_colonnes(): array {
             ['Chrono (N° NSIIV si Reimmat)', fn($d) => $d['est_recu'] ? ($d['chrono'] ?: $d['nsiiv']) : null, 'txt', 18],
             ['N° NSIIV', $si('est_recu', 'nsiiv'), 'txt', 16],
             ['VIN', $si('est_recu', 'vin'), 'txt', 20],
-            ['Genre', $si('est_recu', 'genre'), 'txt', 20],
+            ['Genre', fn($d) => $d['est_recu'] ? fin_categorie_libelle($d['genre']) : null, 'txt', 14],
             ['Client', $si('est_recu', 'client'), 'txt', 30],
             ['Montant', $si('est_recu', 'montant_attendu'), 'num', 12],
         ]],

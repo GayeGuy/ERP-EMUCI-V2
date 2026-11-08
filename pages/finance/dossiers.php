@@ -128,7 +128,7 @@ if ($pret) {
          FROM fin_dossiers WHERE $where
          ORDER BY date_ref DESC NULLS LAST, cle LIMIT $par_page OFFSET " . (($page - 1) * $par_page), $params);
     $couverture = fin_couverture();
-    $genres = array_column(db_fetch_all("SELECT DISTINCT genre FROM fin_dossiers WHERE genre IS NOT NULL ORDER BY genre"), 'genre');
+    $genres = FIN_CATEGORIES;
 }
 $qs = array_filter($f, fn($v) => $v !== '');
 $base_url = 'dossiers.php?' . http_build_query($qs);
@@ -225,7 +225,7 @@ include __DIR__ . '/../../templates/header.php';
     </select></div>
   <div class="fin-fg"><label for="f-genre">Genre</label>
     <select id="f-genre" name="genre"><option value="">Tous</option>
-      <?php foreach ($genres as $g): ?><option <?= $f['genre'] === $g ? 'selected' : '' ?>><?= h($g) ?></option><?php endforeach; ?>
+      <?php foreach ($genres as $k => $g): ?><option value="<?= h($k) ?>" <?= $f['genre'] === $k ? 'selected' : '' ?>><?= h($g) ?></option><?php endforeach; ?>
     </select></div>
   <div class="fin-fg"><label for="f-etape">Étape</label>
     <select id="f-etape" name="etape"><option value="">Toutes</option>
@@ -344,7 +344,7 @@ include __DIR__ . '/../../templates/header.php';
         <td><div class="fin-mono"><?= h($l['vin'] ?? '—') ?></div>
             <div class="fin-sub fin-mono"><?= h(implode(' · ', array_filter([$l['chrono'], $l['nsiiv'], $l['immat']]))) ?></div></td>
         <td><?= h(FIN_CANAUX[$l['canal']] ?? '—') ?><div class="fin-sub"><?= h($l['type_dossier'] ?? '') ?></div></td>
-        <td><?= h($l['genre'] ?? '—') ?></td>
+        <td><?= h(fin_categorie_libelle($l['genre']) ?? '—') ?></td>
         <td><?= fmt_date($l['date_paiement']) ?></td>
         <td><?= fmt_date($l['date_reception']) ?></td>
         <td><?= fmt_date($l['date_pose']) ?></td>
@@ -425,8 +425,8 @@ function finRendre(d) {
   let html = `<div class="fin-timeline">${tl}</div>`;
   if (anomalies || d.paye_par_bon) html += `<div style="margin-bottom:12px">${anomalies}${d.paye_par_bon ? '<span class="fin-pill bon">Payé par bon</span>' : ''}</div>`;
   html += '<div class="fin-kv">'
-    + kv('Canal', finEsc(d.canal)) + kv('Type de dossier', finEsc(d.type_dossier)) + kv('Type CIL', finEsc(d.type_dossier_cil))
-    + kv('Genre', finEsc(d.genre)) + kv('Client', finEsc(d.client)) + kv('Centre', finEsc(d.centre))
+    + kv('Canal', finEsc(d.canal_libelle)) + kv('Type de dossier', finEsc(d.type_dossier)) + kv('Type CIL', finEsc(d.type_dossier_cil))
+    + kv('Genre', d.categorie ? finEsc(d.categorie) + `<div class="fin-sub">${finEsc(d.genre)}</div>` : null) + kv('Client', finEsc(d.client)) + kv('Centre', finEsc(d.centre))
     + kv('Mode de paiement', finEsc(d.mode_paiement)) + kv('N° reçu CIL', finEsc(d.numero_recu))
     + kv('Reçu PDF', d.pdf_recu && /^https:\/\//.test(d.pdf_recu) ? `<a href="${finEsc(d.pdf_recu)}" target="_blank" rel="noopener noreferrer">Ouvrir le reçu</a>` : '—')
     + kv('Montant plaques', finNb(d.mt_plaques)) + kv('Montant sécurisation pose', finNb(d.mt_secupose)) + kv('Montant du dossier', finNb(d.montant_dossier))
