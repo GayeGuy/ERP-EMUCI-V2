@@ -1,6 +1,6 @@
 <?php
 // ============================================================
-//  pages/achats/finance_tarifs.php — Finance : tarifs des dossiers
+//  pages/finance/tarifs.php — Finance : tarifs des dossiers
 //  Montant attendu (TTC) par genre de véhicule. Sans tarif, le montant
 //  attendu d'un dossier CIL est celui de l'API (plaques + sécurisation pose).
 //  Le montant réconcilié dans X3 est comparé au montant attendu : tout écart
@@ -16,7 +16,7 @@ require_once __DIR__ . '/../../includes/finance_dossiers.php';
 require_auth();
 $user = current_user();
 require_permission('finance_dossiers', 'can_read');
-$_SESSION['groupe_actif'] = 'ACHATS';
+$_SESSION['groupe_actif'] = 'FINANCE';
 $page_title  = 'Tarifs dossiers';
 $active_page = 'finance_tarifs';
 $pret = fin_module_pret();
@@ -76,7 +76,7 @@ include __DIR__ . '/../../templates/header.php';
 </style>
 
 <?php if (!$pret): ?>
-  <div class="alert alert-warning">Le module de suivi des dossiers n'est pas encore installé sur cette base (migration 24).</div>
+  <div class="alert alert-warning">Le module de suivi des dossiers n'est pas encore installé sur cette base (migration finance 01).</div>
 <?php else: ?>
 <div class="fin-card">
   <p class="aide">Montant attendu (TTC) par genre de véhicule. Le montant réconcilié dans X3 lui est comparé, et tout écart est signalé
@@ -127,7 +127,7 @@ if (btn) btn.addEventListener('click', async () => {
   btn.disabled = true; btn.textContent = 'Enregistrement et recalcul…';
   const fd = new FormData(); fd.append('action', 'enregistrer'); fd.append('tarifs', JSON.stringify(tarifs));
   try {
-    const r = await fetch('finance_tarifs.php', {method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}, body: fd}).then(achParseJson);
+    const r = await fetch('tarifs.php', {method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}, body: fd}).then(achParseJson);
     toast(r.message, r.success ? 'success' : 'danger');
     if (r.success) setTimeout(() => location.reload(), 900);
   } catch (e) { toast(e.message, 'danger'); }

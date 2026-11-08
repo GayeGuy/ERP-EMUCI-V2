@@ -1,6 +1,6 @@
 <?php
 // ============================================================
-//  pages/achats/finance_import.php — Finance : imports des dossiers
+//  pages/finance/imports.php — Finance : imports des dossiers
 //  Dépôt des exports (Brique, CGI, X3, Caisse, OptoPlate), reconnus à leurs
 //  colonnes, et synchronisation de l'API CIL. Réimporter un fichier met les
 //  lignes à jour sans doublon ; chaque import est suivi d'une consolidation
@@ -16,7 +16,7 @@ require_once __DIR__ . '/../../includes/finance_dossiers.php';
 require_auth();
 $user = current_user();
 require_permission('finance_dossiers', 'can_create');
-$_SESSION['groupe_actif'] = 'ACHATS';
+$_SESSION['groupe_actif'] = 'FINANCE';
 $page_title  = 'Imports dossiers';
 $active_page = 'finance_import';
 $pret = fin_module_pret();
@@ -24,7 +24,7 @@ $pret = fin_module_pret();
 // ── AJAX ────────────────────────────────────────────────────
 if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
-    if (!$pret) json_response(false, 'Module non installé : la migration 24 n\'a pas été passée.');
+    if (!$pret) json_response(false, 'Module non installé : la migration finance 01 n\'a pas été passée.');
     $action = $_POST['action'] ?? '';
     session_write_close();   // imports longs : ne pas bloquer les autres onglets
     @set_time_limit(300);
@@ -107,7 +107,7 @@ include __DIR__ . '/../../templates/header.php';
 <?php if (!$pret): ?>
   <div class="alert alert-warning">
     Le module de suivi des dossiers n'est pas encore installé sur cette base :
-    la migration <code>sql/migration_achats_24_finance_dossiers.sql</code> doit être passée par l'administrateur.
+    la migration <code>sql/migration_finance_01_dossiers.sql</code> doit être passée par l'administrateur.
   </div>
 <?php else: ?>
 
@@ -189,7 +189,7 @@ include __DIR__ . '/../../templates/header.php';
 const finEsc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const finNb = n => Number(n || 0).toLocaleString('fr-FR');
 function finPost(fd) {
-  return fetch('finance_import.php', {method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}, body: fd}).then(achParseJson);
+  return fetch('imports.php', {method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}, body: fd}).then(achParseJson);
 }
 function finBilan(b, titre) {
   const rej = b.rejets && b.rejets.length ? `<details style="margin-top:4px"><summary>${finNb(b.rejetees)} ligne(s) rejetée(s)</summary><div class="fin-sub" style="white-space:pre-line">${finEsc(b.rejets.join('\n'))}</div></details>` : '';

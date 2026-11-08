@@ -1,5 +1,6 @@
 -- ============================================================
---  Migration Achats 24 — Finance : suivi des dossiers (réception → pose)
+--  Migration Finance 01 — suivi des dossiers (réception → pose)
+--  Module Finance (pages/finance/), distinct du module Achats.
 --  PostgreSQL. Rejouable (IF NOT EXISTS / ON CONFLICT).
 --
 --  Un dossier est suivi de son ouverture chez CIL jusqu'à la pose de ses

@@ -17,7 +17,7 @@
 //  par ligne. Clé du dossier : le VIN ; à défaut le chrono CIL ou le n°
 //  NSIIV, rattachés au VIN dès qu'une autre source les relie.
 //
-//  Schéma : sql/migration_achats_24_finance_dossiers.sql.
+//  Schéma : sql/migration_finance_01_dossiers.sql.
 // ============================================================
 
 require_once __DIR__ . '/db.php';
@@ -73,7 +73,7 @@ const FIN_ANOMALIES = [
     'a_rejet'               => 'Rejet ou échec d\'enrôlement',
 ];
 
-// Le module est-il installé (migration 24 passée) ?
+// Le module est-il installé (migration finance 01 passée) ?
 function fin_module_pret(): bool {
     static $ok = null;
     if ($ok === null) {

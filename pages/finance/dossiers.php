@@ -1,9 +1,9 @@
 <?php
 // ============================================================
-//  pages/achats/finance_dossiers.php — Finance : suivi des dossiers
+//  pages/finance/dossiers.php — Finance : suivi des dossiers
 //  De l'ouverture du dossier chez CIL à la pose de ses plaques : étapes,
 //  montants, délais, anomalies, et fiche détaillée de chaque dossier.
-//  Données : includes/finance_dossiers.php (migration_achats_24).
+//  Données : includes/finance_dossiers.php (sql/migration_finance_01_dossiers.sql).
 // ============================================================
 require_once __DIR__ . '/../../includes/db.php';
 require_once __DIR__ . '/../../includes/session.php';
@@ -15,7 +15,7 @@ require_once __DIR__ . '/../../includes/finance_dossiers.php';
 require_auth();
 $user = current_user();
 require_permission('finance_dossiers', 'can_read');
-$_SESSION['groupe_actif'] = 'ACHATS';
+$_SESSION['groupe_actif'] = 'FINANCE';
 $page_title  = 'Suivi des dossiers';
 $active_page = 'finance_dossiers';
 
@@ -26,7 +26,7 @@ $peut_exporter = can('finance_dossiers', 'can_export');
 // ── AJAX ────────────────────────────────────────────────────
 if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
-    if (!$pret) json_response(false, 'Module non installé : la migration 24 n\'a pas été passée.');
+    if (!$pret) json_response(false, 'Module non installé : la migration finance 01 n\'a pas été passée.');
     $action = $_POST['action'] ?? '';
     // Une synchronisation peut durer : la session est libérée pour ne pas
     // bloquer les autres onglets de l'utilisateur pendant ce temps.
@@ -131,8 +131,8 @@ if ($pret) {
     $genres = array_column(db_fetch_all("SELECT DISTINCT genre FROM fin_dossiers WHERE genre IS NOT NULL ORDER BY genre"), 'genre');
 }
 $qs = array_filter($f, fn($v) => $v !== '');
-$base_url = 'finance_dossiers.php?' . http_build_query($qs);
-$lien = fn(array $sup) => 'finance_dossiers.php?' . http_build_query(array_filter(array_merge($f, $sup), fn($v) => $v !== ''));
+$base_url = 'dossiers.php?' . http_build_query($qs);
+$lien = fn(array $sup) => 'dossiers.php?' . http_build_query(array_filter(array_merge($f, $sup), fn($v) => $v !== ''));
 
 function fin_fcfa($n): string { return $n === null || $n === '' ? '—' : number_format((float)$n, 0, ',', ' '); }
 function fin_jours($n): string { return $n === null || $n === '' ? '—' : number_format((float)$n, 1, ',', ' ') . ' j'; }
@@ -206,7 +206,7 @@ include __DIR__ . '/../../templates/header.php';
 <?php if (!$pret): ?>
   <div class="alert alert-warning">
     Le module de suivi des dossiers n'est pas encore installé sur cette base :
-    la migration <code>sql/migration_achats_24_finance_dossiers.sql</code> doit être passée par l'administrateur.
+    la migration <code>sql/migration_finance_01_dossiers.sql</code> doit être passée par l'administrateur.
   </div>
 <?php else: ?>
 
@@ -239,7 +239,7 @@ include __DIR__ . '/../../templates/header.php';
     </select></div>
   <div class="fin-fg"><label for="f-q">VIN, chrono, NSIIV, immat.</label><input type="search" id="f-q" name="q" value="<?= h($f['q']) ?>" placeholder="Rechercher" style="width:180px"></div>
   <button type="submit" class="btn btn-primary">Filtrer</button>
-  <a href="finance_dossiers.php" class="btn btn-secondary">Réinitialiser</a>
+  <a href="dossiers.php" class="btn btn-secondary">Réinitialiser</a>
 </form>
 
 <div class="fin-flux" aria-label="Dossiers par étape">
@@ -312,7 +312,7 @@ include __DIR__ . '/../../templates/header.php';
     <?php endforeach; ?>
     </tbody>
   </table>
-  <?php if ($peut_importer): ?><div style="margin-top:8px"><a href="finance_import.php">Importer un export ou synchroniser l'API CIL</a></div><?php endif; ?>
+  <?php if ($peut_importer): ?><div style="margin-top:8px"><a href="imports.php">Importer un export ou synchroniser l'API CIL</a></div><?php endif; ?>
 </details>
 
 <div class="card" style="padding:0;overflow:hidden">
@@ -387,7 +387,7 @@ const finDate = d => d ? String(d).slice(0, 10).split('-').reverse().join('/') :
 function finPost(data) {
   const fd = new FormData();
   Object.entries(data).forEach(([k, v]) => fd.append(k, v));
-  return fetch('finance_dossiers.php', {method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}, body: fd}).then(achParseJson);
+  return fetch('dossiers.php', {method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}, body: fd}).then(achParseJson);
 }
 function finFermer() { document.getElementById('fin-modal').classList.remove('open'); }
 document.getElementById('fin-modal').addEventListener('click', e => { if (e.target === e.currentTarget) finFermer(); });

@@ -6,7 +6,7 @@
 
 define('TOUS_LES_GROUPES', [
     'DASHBOARD','OPERATIONS','BOBINES','STOCK',
-    'INFORMATIQUE','RAPPORTS','DEMANDES','ACHATS','ADMINISTRATION'
+    'INFORMATIQUE','RAPPORTS','DEMANDES','ACHATS','FINANCE','ADMINISTRATION'
 ]);
 
 function _groupes_def(): array {
@@ -258,18 +258,6 @@ function _groupes_def(): array {
                 ['label'=>"File d'attente équipements", 'icon'=>'ph-desktop-tower',
                  'url'=>'pages/achats/equipements_attente.php','active_keys'=>['achats_equipements_attente'],
                  'perm'=>['achats_suivi','can_read'], 'ou_n1'=>true],
-                // Finance : suivi des dossiers de l'ouverture CIL à la pose
-                // (migration_achats_24). Lecture = suivi ; création = imports
-                // et synchronisation API ; mise à jour = tarifs.
-                ['label'=>'Suivi des dossiers',     'icon'=>'ph-files',
-                 'url'=>'pages/achats/finance_dossiers.php','active_keys'=>['finance_dossiers'],
-                 'perm'=>['finance_dossiers','can_read']],
-                ['label'=>'Imports dossiers',       'icon'=>'ph-upload-simple',
-                 'url'=>'pages/achats/finance_import.php','active_keys'=>['finance_import'],
-                 'perm'=>['finance_dossiers','can_create']],
-                ['label'=>'Tarifs dossiers',        'icon'=>'ph-currency-circle-dollar',
-                 'url'=>'pages/achats/finance_tarifs.php','active_keys'=>['finance_tarifs'],
-                 'perm'=>['finance_dossiers','can_read']],
                 // RAF/DAF/PDG (lecteur) portent achats_param can_read/can_update
                 // uniquement pour le budget (migration_achats_13) : exclus des
                 // 4 autres écrans, qui restent à l'administration (même 403
@@ -293,6 +281,32 @@ function _groupes_def(): array {
                  'url'=>'pages/achats/param_general.php','active_keys'=>['achats_param_general'],
                  'perm'=>['achats_param','can_read'],
                  'roles_exclude'=>['raf','daf','lecteur']],
+            ],
+        ],
+
+        // ── FINANCE — suivi des dossiers de l'ouverture CIL à la pose des
+        //    plaques (sql/migration_finance_01_dossiers.sql). Module distinct
+        //    d'Achats. Droit unique `finance_dossiers` : lecture = suivi et
+        //    tarifs ; création = imports et synchronisation API ; mise à jour
+        //    = modification des tarifs. Le groupe n'apparaît qu'aux comptes
+        //    qui portent la lecture (cf. get_groupes_pour_role).
+        'FINANCE' => [
+            'icon'        => 'ph-coins',
+            'titre'       => 'Finance',
+            'description' => 'Suivi des dossiers, de l\'ouverture CIL à la pose des plaques',
+            'couleur'     => '#047857',
+            'gradient'    => 'linear-gradient(135deg, #047857 0%, #10B981 100%)',
+            'first_page'  => 'pages/finance/dossiers.php',
+            'nav' => [
+                ['label'=>'Suivi des dossiers',     'icon'=>'ph-files',
+                 'url'=>'pages/finance/dossiers.php','active_keys'=>['finance_dossiers'],
+                 'perm'=>['finance_dossiers','can_read']],
+                ['label'=>'Imports',                'icon'=>'ph-upload-simple',
+                 'url'=>'pages/finance/imports.php','active_keys'=>['finance_import'],
+                 'perm'=>['finance_dossiers','can_create']],
+                ['label'=>'Tarifs',                 'icon'=>'ph-currency-circle-dollar',
+                 'url'=>'pages/finance/tarifs.php','active_keys'=>['finance_tarifs'],
+                 'perm'=>['finance_dossiers','can_read']],
             ],
         ],
 
@@ -326,10 +340,14 @@ function _groupes_def(): array {
 
 // ── Groupes accessibles selon le rôle (9 → 7 groupes, plus de doublons)
 function get_groupes_pour_role(string $role_slug): array {
-    // Recette Achats : un seul groupe de menus, quel que soit le rôle. Les
-    // filtres par item de get_groupe_nav_items() continuent de s'appliquer,
-    // donc chacun ne voit que les écrans Achats de son périmètre.
-    if (defined('RECETTE_ACHATS') && RECETTE_ACHATS) return ['ACHATS'];
+    // Finance : groupe affiché à qui porte la lecture du suivi des dossiers
+    // (RAF, DAF, PDG, DG, ou tout rôle à qui l'admin l'ouvre), recette comprise.
+    // Recette Achats : le groupe Achats seul, plus Finance pour qui y a droit,
+    // quel que soit le rôle. Les filtres par item de get_groupe_nav_items()
+    // continuent de s'appliquer, donc chacun ne voit que les écrans de son
+    // périmètre.
+    $finance = function_exists('can') && can('finance_dossiers', 'can_read');
+    if (defined('RECETTE_ACHATS') && RECETTE_ACHATS) return $finance ? ['ACHATS', 'FINANCE'] : ['ACHATS'];
 
     $all = TOUS_LES_GROUPES;
     $map = [
@@ -371,6 +389,7 @@ function get_groupes_pour_role(string $role_slug): array {
     // achats_param).
     if (!in_array('DEMANDES', $groupes, true)) $groupes[] = 'DEMANDES';
     if (!in_array('ACHATS', $groupes, true)) $groupes[] = 'ACHATS';
+    if ($finance && !in_array('FINANCE', $groupes, true)) $groupes[] = 'FINANCE';
     return $groupes;
 }
 

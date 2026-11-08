@@ -141,7 +141,9 @@ function recette_achats_autorise(string $script): bool {
     foreach ($ouverts as $o) {
         if (substr($script, -strlen($o)) === $o) return true;
     }
-    return strpos($script, '/pages/achats/') !== false;
+    // Module Finance (suivi des dossiers) : testé sur le même site de recette.
+    return strpos($script, '/pages/achats/') !== false
+        || strpos($script, '/pages/finance/') !== false;
 }
 
 // ── Vérifier si l'utilisateur a un droit sur un module
