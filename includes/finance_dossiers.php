@@ -706,7 +706,7 @@ function fin_consolider(): array {
             'date_ouverture', 'date_paiement', 'mode_paiement', 'numero_recu', 'pdf_recu', 'mt_plaques', 'mt_secupose', 'montant_dossier',
             'date_reception', 'statut_brique', 'motif_rejet', 'date_enrolement', 'etat_cgi',
             'code_rec', 'n_facture', 'montant_reconcilie', 'montant_ht', 'montant_ttc', 'date_reconciliation', 'caisse_statut', 'n_bon',
-            'date_pose', 'plaque_avant', 'plaque_arriere', 'source_pose', 'montant_attendu', 'ecart',
+            'date_installation', 'date_pose', 'plaque_avant', 'plaque_arriere', 'source_pose', 'montant_attendu', 'ecart',
             'est_ouvert', 'est_recu', 'est_reconcilie', 'est_pose', 'paye_par_bon', 'etape',
             'a_ouvert_non_recu', 'a_pose_non_reconcilie', 'a_ecart', 'a_recu_sans_paiement', 'a_rejet', 'a_pose_sans_dossier',
             'date_ref', 'maj_le'];
@@ -716,7 +716,7 @@ function fin_consolider(): array {
                 z.date_ouverture, z.date_paiement, z.mode_paiement, z.numero_recu, z.pdf_recu, z.mt_plaques, z.mt_secupose, z.montant_dossier,
                 z.date_reception, z.statut_brique, z.motif_rejet, z.date_enrolement, z.etat_cgi,
                 z.code_rec, z.n_facture, z.montant_reconcilie, z.montant_ht, z.montant_ttc, z.date_reconciliation, z.caisse_statut, z.n_bon,
-                z.date_pose, z.plaque_avant, z.plaque_arriere, z.source_pose, z.montant_attendu,
+                z.date_installation, z.date_pose, z.plaque_avant, z.plaque_arriere, z.source_pose, z.montant_attendu,
                 CASE WHEN z.est_reconcilie AND COALESCE(z.montant_reconcilie, 0) > 0 AND z.montant_attendu IS NOT NULL
                      THEN z.montant_reconcilie - z.montant_attendu END,
                 z.est_ouvert, z.est_recu, z.est_reconcilie, z.est_pose, z.bon AND NOT z.est_reconcilie,
@@ -730,7 +730,7 @@ function fin_consolider(): array {
                 z.canal = 'CIL' AND z.est_recu AND NOT z.est_ouvert,
                 COALESCE(z.statut_brique ILIKE '%rejet%' OR z.statut_brique ILIKE '%chou%', false),
                 z.est_pose AND NOT z.est_recu,
-                COALESCE(z.date_reception::date, z.date_paiement, z.date_pose, z.date_ouverture),
+                COALESCE(z.date_reception::date, z.date_paiement, z.date_pose, z.date_ouverture, z.date_caisse::date),
                 CURRENT_TIMESTAMP
             FROM (
                 SELECT b.*, COALESCE(t.montant_ttc, b.montant_dossier) AS montant_attendu
@@ -765,8 +765,9 @@ function fin_consolider(): array {
                         g.date_creation AS date_enrolement, g.etat AS etat_cgi,
                         x.code_rec, x.n_facture, x.montant_reconcilie, x.montant_ht, x.montant_ttc,
                         COALESCE(c.date_encaissement::date, x.reconcilie_le) AS date_reconciliation,
-                        c.statut AS caisse_statut, c.n_bon,
-                        COALESCE(p.date_installation::date, x.date_pose) AS date_pose,
+                        c.statut AS caisse_statut, c.n_bon, c.date_creation AS date_caisse,
+                        p.date_installation,                              -- OptoPlate
+                        COALESCE(x.date_pose, p.date_installation::date) AS date_pose,   -- X3, sinon OptoPlate
                         COALESCE(p.avant, x.serie1) AS plaque_avant,
                         COALESCE(p.arriere, x.serie2) AS plaque_arriere,
                         CASE WHEN p.date_installation IS NOT NULL THEN 'optoplate' WHEN x.date_pose IS NOT NULL THEN 'x3' END AS source_pose,
@@ -918,4 +919,199 @@ function fin_tarifs_observes(): array {
         LEFT JOIN x3 ON x3.genre = g.genre
         LEFT JOIN fin_tarifs t ON t.genre = g.genre
         ORDER BY nb DESC, g.genre");
+}
+
+// ── Export Excel au format du tableau de bord finance ─────────
+
+// Groupes de colonnes : [titre du groupe, [[en-tête, valeur, type, largeur], …]].
+// La valeur est une colonne de fin_dossiers ou une fonction du dossier ;
+// type : txt, num (montant) ou date.
+function fin_export_colonnes(): array {
+    $si = fn(string $drapeau, string $col) => fn(array $d) => $d[$drapeau] ? $d[$col] : null;
+    return [
+        // Identifiants présents pour tout dossier, même seulement posé : les
+        // colonnes VIN des sections ne sont remplies qu'à l'étape concernée.
+        ['Dossier', [
+            ['VIN', 'vin', 'txt', 20],
+            ['Immatriculation', 'immat', 'txt', 12],
+        ]],
+        ['Dossier ouvert CIL', [
+            ["Date d'ouverture", $si('est_ouvert', 'date_ouverture'), 'date', 12],
+            ['Date de paiement', $si('est_ouvert', 'date_paiement'), 'date', 12],
+            ['Chrono', $si('est_ouvert', 'chrono'), 'txt', 16],
+            ['VIN', $si('est_ouvert', 'vin'), 'txt', 20],
+            ['Genre', $si('est_ouvert', 'genre'), 'txt', 20],
+            ['Client', $si('est_ouvert', 'client'), 'txt', 30],
+            ['Montant plaques', $si('est_ouvert', 'mt_plaques'), 'num', 12],
+            ['Montant sécurisation pose', $si('est_ouvert', 'mt_secupose'), 'num', 13],
+            ['Montant', $si('est_ouvert', 'montant_dossier'), 'num', 12],
+        ]],
+        ['Dossier reçu', [
+            ['Date de création', $si('est_recu', 'date_reception'), 'date', 12],
+            ['Chrono (N° NSIIV si Reimmat)', fn($d) => $d['est_recu'] ? ($d['chrono'] ?: $d['nsiiv']) : null, 'txt', 18],
+            ['N° NSIIV', $si('est_recu', 'nsiiv'), 'txt', 16],
+            ['VIN', $si('est_recu', 'vin'), 'txt', 20],
+            ['Genre', $si('est_recu', 'genre'), 'txt', 20],
+            ['Client', $si('est_recu', 'client'), 'txt', 30],
+            ['Montant', $si('est_recu', 'montant_attendu'), 'num', 12],
+        ]],
+        ['', [
+            ['Type enrôlement', fn($d) => FIN_CANAUX[$d['canal']] ?? null, 'txt', 12],
+            ['Type de dossier', 'type_dossier', 'txt', 11],
+        ]],
+        ['Réconciliation', [
+            ['VIN réconcilié', $si('est_reconcilie', 'vin'), 'txt', 20],
+            ['Montant réconcilié', $si('est_reconcilie', 'montant_reconcilie'), 'num', 12],
+            ['Date réconciliée', $si('est_reconcilie', 'date_reconciliation'), 'date', 12],
+            ['Code rec.', 'code_rec', 'txt', 16],
+            ['N° facture', 'n_facture', 'txt', 18],
+            ['Payé par bon', fn($d) => $d['paye_par_bon'] ? 'Oui' : null, 'txt', 8],
+        ]],
+        ['Production', [
+            ["Date d'installation", 'date_installation', 'date', 12],
+            ['Statut', 'statut_brique', 'txt', 26],
+            ['Plaque avant', 'plaque_avant', 'txt', 13],
+            ['Plaque arrière', 'plaque_arriere', 'txt', 13],
+            ['Date pose', 'date_pose', 'date', 12],
+        ]],
+        ['Contrôle', [
+            ['Montant attendu', 'montant_attendu', 'num', 12],
+            ['Écart', 'ecart', 'num', 10],
+            ['Étape', fn($d) => FIN_ETAPES[$d['etape']] ?? null, 'txt', 12],
+            ['Anomalies', fn($d) => implode(' ; ', array_keys(array_filter(
+                array_combine(array_values(FIN_ANOMALIES), array_map(fn($k) => (bool)$d[$k], array_keys(FIN_ANOMALIES)))))), 'txt', 40],
+        ]],
+    ];
+}
+
+function fin_xlsx_lettre(int $i): string {
+    $s = '';
+    for ($i++; $i > 0; $i = intdiv($i - 1, 26)) $s = chr(65 + ($i - 1) % 26) . $s;
+    return $s;
+}
+
+function fin_xlsx_cellule(string $ref, $v, string $type, int $style = 0): string {
+    if ($v === null || $v === '' || $v === false) return '';
+    if ($type === 'date') {
+        $d = DateTime::createFromFormat('!Y-m-d', substr((string)$v, 0, 10), new DateTimeZone('UTC'));
+        return $d ? "<c r=\"$ref\" s=\"3\"><v>" . (intdiv($d->getTimestamp(), 86400) + 25569) . '</v></c>' : '';
+    }
+    if ($type === 'num' && is_numeric($v)) return "<c r=\"$ref\" s=\"4\"><v>" . (0 + $v) . '</v></c>';
+    $t = htmlspecialchars(preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', '', (string)$v), ENT_XML1 | ENT_QUOTES, 'UTF-8');
+    return "<c r=\"$ref\" t=\"inlineStr\"" . ($style ? " s=\"$style\"" : '') . "><is><t xml:space=\"preserve\">$t</t></is></c>";
+}
+
+// Écrit l'export des dossiers filtrés dans un .xlsx, ligne à ligne : plus de
+// 200 000 dossiers ne tiennent pas en mémoire dans PhpSpreadsheet.
+// Renvoie [chemin du fichier temporaire, nombre de dossiers].
+function fin_exporter_xlsx(string $where, array $params): array {
+    @set_time_limit(300);
+    $groupes  = fin_export_colonnes();
+    $colonnes = array_merge(...array_map(fn($g) => $g[1], $groupes));
+    $derniere = fin_xlsx_lettre(count($colonnes) - 1);
+
+    $feuille = tempnam(sys_get_temp_dir(), 'finx_');
+    $f = fopen($feuille, 'wb');
+    fwrite($f, '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+        . '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        . '<sheetViews><sheetView workbookViewId="0"><pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>'
+        . '<sheetFormatPr defaultRowHeight="15"/><cols>');
+    foreach ($colonnes as $i => $c) fwrite($f, '<col min="' . ($i + 1) . '" max="' . ($i + 1) . '" width="' . $c[3] . '" customWidth="1"/>');
+    fwrite($f, '</cols><sheetData>');
+
+    // Ligne 1 : groupes (fusionnés) ; ligne 2 : en-têtes.
+    $l1 = $l2 = ''; $fusions = []; $i = 0;
+    foreach ($groupes as [$titre, $cols]) {
+        $deb = $i;
+        foreach ($cols as $c) {
+            $ref = fin_xlsx_lettre($i);
+            $l1 .= ($i === $deb && $titre !== '') ? fin_xlsx_cellule($ref . '1', $titre, 'txt', 1) : "<c r=\"{$ref}1\" s=\"1\"/>";
+            $l2 .= fin_xlsx_cellule($ref . '2', $c[0], 'txt', 2);
+            $i++;
+        }
+        if (count($cols) > 1 && $titre !== '') $fusions[] = fin_xlsx_lettre($deb) . '1:' . fin_xlsx_lettre($i - 1) . '1';
+    }
+    fwrite($f, '<row r="1" ht="20" customHeight="1">' . $l1 . '</row><row r="2" ht="30" customHeight="1">' . $l2 . '</row>');
+
+    // Dossiers par lots de 5 000, du plus récent au plus ancien (pagination
+    // par clé : date de référence puis clé du dossier).
+    $r = 2; $curseur = null;
+    do {
+        $cond = $where; $p = $params;
+        if ($curseur) {
+            $cond .= " AND (COALESCE(date_ref, DATE '1900-01-01'), cle) < (CAST(? AS date), CAST(? AS varchar))";
+            array_push($p, $curseur[0], $curseur[1]);
+        }
+        $lot = db_fetch_all("SELECT *, COALESCE(date_ref, DATE '1900-01-01') AS _tri FROM fin_dossiers WHERE $cond
+                             ORDER BY COALESCE(date_ref, DATE '1900-01-01') DESC, cle DESC LIMIT 5000", $p);
+        foreach ($lot as $d) {
+            $r++;
+            $x = '';
+            foreach ($colonnes as $k => $c) {
+                $v = is_callable($c[1]) ? $c[1]($d) : ($d[$c[1]] ?? null);
+                $x .= fin_xlsx_cellule(fin_xlsx_lettre($k) . $r, $v, $c[2]);
+            }
+            fwrite($f, "<row r=\"$r\">$x</row>");
+        }
+        if ($lot) { $der = end($lot); $curseur = [$der['_tri'], $der['cle']]; }
+    } while (count($lot) === 5000);
+
+    fwrite($f, '</sheetData><autoFilter ref="A2:' . $derniere . max(2, $r) . '"/>');
+    if ($fusions) fwrite($f, '<mergeCells count="' . count($fusions) . '">'
+        . implode('', array_map(fn($m) => "<mergeCell ref=\"$m\"/>", $fusions)) . '</mergeCells>');
+    fwrite($f, '</worksheet>');
+    fclose($f);
+
+    $xlsx = tempnam(sys_get_temp_dir(), 'finx_');
+    $zip = new ZipArchive();
+    if ($zip->open($xlsx, ZipArchive::OVERWRITE) !== true) { @unlink($feuille); throw new RuntimeException('Création du fichier Excel impossible.'); }
+    $xml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+    $zip->addFromString('[Content_Types].xml', $xml
+        . '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+        . '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+        . '<Default Extension="xml" ContentType="application/xml"/>'
+        . '<Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        . '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>'
+        . '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'
+        . '</Types>');
+    $zip->addFromString('_rels/.rels', $xml
+        . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>'
+        . '</Relationships>');
+    $zip->addFromString('xl/workbook.xml', $xml
+        . '<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">'
+        . '<sheets><sheet name="Dossiers" sheetId="1" r:id="rId1"/></sheets>'
+        . '<definedNames><definedName name="_xlnm._FilterDatabase" localSheetId="0" hidden="1">Dossiers!$A$2:$' . $derniere . '$' . max(2, $r) . '</definedName></definedNames>'
+        . '</workbook>');
+    $zip->addFromString('xl/_rels/workbook.xml.rels', $xml
+        . '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        . '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/>'
+        . '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>'
+        . '</Relationships>');
+    // Styles : 1 groupe (blanc sur marine), 2 en-tête (marine sur bleu pâle),
+    // 3 date jj/mm/aaaa, 4 montant avec séparateur de milliers.
+    $bord = '<left style="thin"><color rgb="FFCBD5E1"/></left><right style="thin"><color rgb="FFCBD5E1"/></right>'
+          . '<top style="thin"><color rgb="FFCBD5E1"/></top><bottom style="thin"><color rgb="FFCBD5E1"/></bottom><diagonal/>';
+    $zip->addFromString('xl/styles.xml', $xml
+        . '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
+        . '<numFmts count="1"><numFmt numFmtId="164" formatCode="dd/mm/yyyy"/></numFmts>'
+        . '<fonts count="3"><font><sz val="10"/><name val="Calibri"/></font>'
+        . '<font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>'
+        . '<font><b/><sz val="10"/><color rgb="FF06033A"/><name val="Calibri"/></font></fonts>'
+        . '<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>'
+        . '<fill><patternFill patternType="solid"><fgColor rgb="FF06033A"/><bgColor indexed="64"/></patternFill></fill>'
+        . '<fill><patternFill patternType="solid"><fgColor rgb="FFE8ECF7"/><bgColor indexed="64"/></patternFill></fill></fills>'
+        . '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border>' . $bord . '</border></borders>'
+        . '<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
+        . '<cellXfs count="5"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
+        . '<xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf>'
+        . '<xf numFmtId="0" fontId="2" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>'
+        . '<xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>'
+        . '<xf numFmtId="3" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs>'
+        . '<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
+        . '</styleSheet>');
+    $zip->addFile($feuille, 'xl/worksheets/sheet1.xml');
+    $zip->close();
+    @unlink($feuille);
+    return [$xlsx, $r - 2];
 }

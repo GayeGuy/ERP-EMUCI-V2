@@ -214,6 +214,7 @@ CREATE TABLE IF NOT EXISTS fin_dossiers (
     date_reconciliation date,
     caisse_statut       varchar(30),
     n_bon               varchar(60),
+    date_installation   timestamp,
     date_pose           date,
     plaque_avant        varchar(40),
     plaque_arriere      varchar(40),
@@ -235,6 +236,8 @@ CREATE TABLE IF NOT EXISTS fin_dossiers (
     date_ref            date,
     maj_le              timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+-- Ajoutée après la première écriture du module : bases déjà migrées.
+ALTER TABLE fin_dossiers ADD COLUMN IF NOT EXISTS date_installation timestamp;
 CREATE INDEX IF NOT EXISTS idx_fin_dossiers_date_ref ON fin_dossiers (date_ref);
 CREATE INDEX IF NOT EXISTS idx_fin_dossiers_etape ON fin_dossiers (etape);
 CREATE INDEX IF NOT EXISTS idx_fin_dossiers_vin ON fin_dossiers (vin);

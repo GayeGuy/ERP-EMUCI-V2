@@ -21,6 +21,7 @@ $active_page = 'finance_dossiers';
 
 $pret          = fin_module_pret();
 $peut_importer = can('finance_dossiers', 'can_create');
+$peut_exporter = can('finance_dossiers', 'can_export');
 
 // ── AJAX ────────────────────────────────────────────────────
 if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -89,6 +90,28 @@ $f = [
 // formulaire renvoie toujours la période affichée, qui cacherait un dossier
 // ancien.
 if ($f['q'] !== '') { $f['du'] = ''; $f['au'] = ''; }
+
+// ── Export Excel des dossiers filtrés, au format du tableau de bord finance
+if (($_GET['export'] ?? '') === 'xlsx') {
+    if (!$pret || !$peut_exporter) { http_response_code(403); include __DIR__ . '/../../templates/403.php'; exit; }
+    session_write_close();
+    [$where, $params] = fin_filtres_sql($f);
+    try {
+        [$fichier, $nb] = fin_exporter_xlsx($where, $params);
+    } catch (Throwable $e) {
+        http_response_code(500);
+        exit('Export impossible : ' . h($e->getMessage()));
+    }
+    audit_log((int)$user['id'], 'EXPORT', 'finance_dossiers', null, "Export Excel des dossiers : $nb dossier(s)");
+    $nom = 'suivi_dossiers_' . ($f['du'] ?: 'debut') . '_' . ($f['au'] ?: date('Y-m-d')) . '.xlsx';
+    header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    header('Content-Disposition: attachment; filename="' . $nom . '"');
+    header('Content-Length: ' . filesize($fichier));
+    header('Cache-Control: no-store');
+    readfile($fichier);
+    @unlink($fichier);
+    exit;
+}
 
 $par_page = 50;
 $page = max(1, (int)($_GET['page'] ?? 1));
@@ -295,7 +318,14 @@ include __DIR__ . '/../../templates/header.php';
 <div class="card" style="padding:0;overflow:hidden">
   <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
     <div style="font-weight:800;color:var(--navy)">Dossiers <span class="fin-sub">(<?= fin_fcfa($total) ?>)</span></div>
-    <div class="fin-sub">Date de référence : réception, sinon paiement CIL, sinon pose</div>
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div class="fin-sub">Date de référence : réception, sinon paiement CIL, sinon pose</div>
+      <?php if ($peut_exporter && $total): ?>
+      <a class="btn btn-secondary btn-sm" href="<?= h($lien(['export' => 'xlsx', 'page' => ''])) ?>"
+         onclick="toast('Préparation de l\'export (<?= fin_fcfa($total) ?> dossiers)…', 'info')">
+        <i class="ph ph-file-xls" aria-hidden="true"></i> Exporter Excel</a>
+      <?php endif; ?>
+    </div>
   </div>
   <div class="table-wrap">
   <table class="fin-table">
