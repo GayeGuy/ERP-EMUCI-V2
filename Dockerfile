@@ -35,7 +35,16 @@ WORKDIR /var/www/html
 COPY . .
 
 # Installer les dépendances PHP
-RUN composer install --optimize-autoloader --no-dev --no-interaction --ignore-platform-reqs
+# Les archives des paquets viennent de api.github.com, qui coupe parfois les
+# téléchargements anonymes depuis les IP partagées de Render (curl error 28,
+# build en échec). On réessaie 3 fois, puis on passe par un clone git
+# (github.com), qui n'a pas la même limite.
+ENV COMPOSER_MAX_PARALLEL_HTTP=4
+RUN for i in 1 2 3; do \
+        composer install --optimize-autoloader --no-dev --no-interaction --ignore-platform-reqs && exit 0; \
+        echo "composer install : échec, nouvel essai ($i/3)"; sleep 15; \
+    done; \
+    composer install --prefer-source --optimize-autoloader --no-dev --no-interaction --ignore-platform-reqs
 
 EXPOSE 8080
 
