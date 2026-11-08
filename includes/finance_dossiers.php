@@ -125,6 +125,16 @@ function fin_module_pret(): bool {
     return $ok;
 }
 
+// Services et formules installés (migration finance 02) ?
+function fin_services_pret(): bool {
+    static $ok = null;
+    if ($ok === null) {
+        try { $ok = (bool)db_fetch_value("SELECT to_regclass('public.fin_formules') IS NOT NULL"); }
+        catch (Throwable $e) { $ok = false; }
+    }
+    return $ok;
+}
+
 // ── Normalisation des valeurs ──────────────────────────────────
 
 // Texte UTF-8 encodé deux fois (« NÂ° CIL », « crÃ©ation ») : l'export
@@ -752,6 +762,46 @@ function fin_consolider(): array {
             'est_ouvert', 'est_recu', 'est_reconcilie', 'est_pose', 'paye_par_bon', 'etape',
             'a_ouvert_non_recu', 'a_pose_non_reconcilie', 'a_ecart', 'a_recu_sans_paiement', 'a_rejet', 'a_pose_sans_dossier',
             'date_ref', 'maj_le'];
+        $services = fin_services_pret();
+        if ($services) array_push($cols, 'site', 'formule_id', 'montant_variable');
+        // Formules : services fixes additionnés par catégorie (prix manquant pour
+        // un service = montant inconnu) ; un service variable (reliquat) accepte
+        // le complément réconcilié au-delà. La formule la plus précise l'emporte
+        // (site, puis canal, puis catégorie).
+        if ($services) {
+            db_query("CREATE TEMP TABLE fin_t_form ON COMMIT DROP AS
+                SELECT f.id, f.sites, f.canaux, f.categories,
+                       (CASE WHEN f.sites IS NOT NULL THEN 4 ELSE 0 END + CASE WHEN f.canaux IS NOT NULL THEN 2 ELSE 0 END
+                        + CASE WHEN f.categories IS NOT NULL THEN 1 ELSE 0 END) AS prec,
+                       COALESCE(bool_or(s.variable), false) AS variable
+                FROM fin_formules f
+                LEFT JOIN fin_formule_services fs ON fs.formule_id = f.id
+                LEFT JOIN fin_services s ON s.id = fs.service_id AND s.actif
+                WHERE f.actif GROUP BY f.id");
+            db_query("CREATE TEMP TABLE fin_t_form_prix ON COMMIT DROP AS
+                SELECT fs.formule_id, c.cat,
+                       CASE WHEN COUNT(*) FILTER (WHERE NOT s.variable AND p.montant_ttc IS NULL) = 0
+                            THEN COALESCE(SUM(p.montant_ttc) FILTER (WHERE NOT s.variable), 0) END AS montant
+                FROM fin_formule_services fs
+                JOIN fin_services s ON s.id = fs.service_id AND s.actif
+                CROSS JOIN (VALUES ('AUTO'), ('MOTO'), ('SEMI')) c (cat)
+                LEFT JOIN fin_service_prix p ON p.service_id = s.id AND p.categorie = c.cat
+                GROUP BY 1, 2");
+            $cat_b = fin_categorie_sql('b.genre');
+            $formule = "LEFT JOIN LATERAL (
+                    SELECT f.id, f.variable, fp.montant FROM fin_t_form f
+                    LEFT JOIN fin_t_form_prix fp ON fp.formule_id = f.id AND fp.cat = $cat_b
+                    WHERE (f.sites IS NULL OR b.site = ANY (f.sites))
+                      AND (f.canaux IS NULL OR b.canal = ANY (f.canaux))
+                      AND (f.categories IS NULL OR $cat_b = ANY (f.categories))
+                    ORDER BY f.prec DESC, f.id LIMIT 1) fo ON true";
+        } else {
+            $formule = "LEFT JOIN LATERAL (SELECT NULL::integer AS id, false AS variable, NULL::integer AS montant) fo ON true";
+        }
+        // Montant réconcilié comparable au montant attendu ; au-delà, complément
+        // accepté si la formule a un service variable.
+        $comparable = "z.est_reconcilie AND COALESCE(z.montant_reconcilie, 0) > 0 AND z.montant_attendu IS NOT NULL";
+        $complement = "(z.variable AND z.montant_reconcilie > z.montant_attendu)";
         // Opération spéciale (Abobo) : repérée dans le CGI par le site d'enrôlement
         // ou le concessionnaire, ou dossier Primo sans N° CIL ni source requête.
         $speciale = "COALESCE(g.site_enrolement ILIKE 'ABOBO PREFECTURE POLICE%' OR g.concessionnaire ILIKE 'OPERATION ABOBO%'
@@ -764,24 +814,25 @@ function fin_consolider(): array {
                 z.date_reception, z.statut_brique, z.motif_rejet, z.date_enrolement, z.etat_cgi,
                 z.code_rec, z.n_facture, z.montant_reconcilie, z.montant_ht, z.montant_ttc, z.date_reconciliation, z.caisse_statut, z.n_bon,
                 z.date_installation, z.date_pose, z.plaque_avant, z.plaque_arriere, z.source_pose, z.montant_attendu,
-                CASE WHEN z.est_reconcilie AND COALESCE(z.montant_reconcilie, 0) > 0 AND z.montant_attendu IS NOT NULL
-                     THEN z.montant_reconcilie - z.montant_attendu END,
+                CASE WHEN $comparable THEN CASE WHEN $complement THEN 0 ELSE z.montant_reconcilie - z.montant_attendu END END,
                 z.est_ouvert, z.est_recu, z.est_reconcilie, z.est_pose, z.bon AND NOT z.est_reconcilie,
                 -- Dossier connu seulement de la Caisse : il est arrivé chez EMUCI.
                 CASE WHEN z.est_pose THEN 'pose' WHEN z.est_reconcilie THEN 'reconcilie' WHEN z.est_ouvert AND NOT z.est_recu THEN 'ouvert' ELSE 'recu' END,
                 z.est_ouvert AND NOT z.est_recu AND NOT z.est_pose
                     AND COALESCE(z.date_paiement, z.date_ouverture) < CURRENT_DATE - $delai,
                 z.est_pose AND NOT z.est_reconcilie AND NOT z.bon,
-                z.est_reconcilie AND COALESCE(z.montant_reconcilie, 0) > 0 AND z.montant_attendu IS NOT NULL
-                    AND z.montant_reconcilie <> z.montant_attendu,
+                $comparable AND z.montant_reconcilie <> z.montant_attendu AND NOT $complement,
                 COALESCE(z.canal, '') = 'CIL' AND z.est_recu AND NOT z.est_ouvert,
                 COALESCE(z.statut_brique ILIKE '%rejet%' OR z.statut_brique ILIKE '%chou%', false),
                 z.est_pose AND NOT z.est_recu,
                 COALESCE(z.date_reception::date, z.date_paiement, z.date_pose, z.date_ouverture, z.date_caisse::date),
-                CURRENT_TIMESTAMP
+                CURRENT_TIMESTAMP" . ($services ? ",
+                z.site, z.formule_id, CASE WHEN $comparable AND $complement THEN z.montant_reconcilie - z.montant_attendu END" : '') . "
             FROM (
-                SELECT b.*, CASE WHEN b.canal = 'SPECIALE' THEN COALESCE(ts.montant_ttc, $tarif_speciale_defaut, t.montant_ttc)
-                                 ELSE COALESCE(t.montant_ttc, b.montant_dossier) END AS montant_attendu
+                SELECT b.*, fo.id AS formule_id, COALESCE(fo.variable, false) AS variable,
+                       CASE WHEN fo.id IS NOT NULL THEN fo.montant
+                            WHEN b.canal = 'SPECIALE' THEN COALESCE(ts.montant_ttc, $tarif_speciale_defaut, t.montant_ttc)
+                            ELSE COALESCE(t.montant_ttc, b.montant_dossier) END AS montant_attendu
                 FROM (
                     SELECT k.cle,
                         COALESCE(a.vin, r.vin, g.vin, x.vin, c.vin, CASE WHEN k.cle NOT LIKE '#%' THEN k.cle END) AS vin,
@@ -808,6 +859,9 @@ function fin_consolider(): array {
                                  CASE x.genre WHEN 'MOTO' THEN 'MOTOCYCLETTE' ELSE x.genre END) AS genre,
                         COALESCE(g.site_enrolement,
                                  substring(COALESCE(a.chrono, r.chrono, g.chrono, x.chrono, c.chrono) FROM '^[A-Z]{2,3}')) AS centre,
+                        -- Site des formules : préfixe du chrono (BKE, ABJ…), sinon site d'enrôlement.
+                        COALESCE(substring(COALESCE(a.chrono, r.chrono, g.chrono, x.chrono, c.chrono) FROM '^[A-Z]{2,3}'),
+                                 g.site_enrolement) AS site,
                         COALESCE(a.client, g.client, x.client, c.concessionnaire) AS client,
                         a.type_client,
                         a.date_ouverture, a.date_paiement, a.mode_paiement, a.numero_recu, a.pdf_recu, a.mt_plaques, a.mt_secupose,
@@ -845,6 +899,7 @@ function fin_consolider(): array {
                 ) b
                 LEFT JOIN fin_tarifs t ON t.genre = " . fin_categorie_sql('b.genre') . "
                 LEFT JOIN fin_tarifs ts ON b.canal = 'SPECIALE' AND ts.genre = " . get_db()->quote(FIN_TARIF_SPECIALE_PREFIXE) . " || " . fin_categorie_sql('b.genre') . "
+                $formule
             ) z");
         db_query("CREATE INDEX ON fin_t_new (cle)");
         $supprimes = db_query("DELETE FROM fin_dossiers d WHERE NOT EXISTS (SELECT 1 FROM fin_t_new n WHERE n.cle = d.cle)")->rowCount();
@@ -941,6 +996,15 @@ function fin_dossier_detail(string $cle): ?array {
     if (!$d) return null;
     $d['categorie'] = fin_categorie_libelle($d['genre']);
     $d['canal_libelle'] = FIN_CANAUX[$d['canal'] ?? ''] ?? $d['canal'];
+    $d['formule'] = null; $d['services'] = [];
+    if (fin_services_pret() && !empty($d['formule_id'])) {
+        $d['formule'] = db_fetch_value("SELECT libelle FROM fin_formules WHERE id = ?", [(int)$d['formule_id']]);
+        $d['services'] = db_fetch_all("SELECT s.libelle, s.variable, p.montant_ttc FROM fin_formule_services fs
+            JOIN fin_services s ON s.id = fs.service_id AND s.actif
+            LEFT JOIN fin_service_prix p ON p.service_id = s.id AND p.categorie = ?
+            WHERE fs.formule_id = ? ORDER BY s.variable, s.ordre, s.libelle",
+            [fin_categorie($d['genre']) ?? '', (int)$d['formule_id']]);
+    }
     $vin = $d['vin'] ?: '#'; $ch = $d['chrono'] ?: '#'; $ns = $d['nsiiv'] ?: '#';
     $d['sources'] = [
         'api_cil' => db_fetch_all("SELECT * FROM fin_src_cil WHERE vin = ? OR chrono = ? ORDER BY date_paiement DESC", [$vin, $ch]),
@@ -980,6 +1044,155 @@ function fin_tarifs_observes(): array {
         LEFT JOIN fin_tarifs t ON t.genre = g.genre
         LEFT JOIN fin_tarifs ts ON ts.genre = " . get_db()->quote(FIN_TARIF_SPECIALE_PREFIXE) . " || g.genre
         ORDER BY g.ordre");
+}
+
+// ── Services et formules (Finance → Tarifs) ───────────────────
+
+// Services avec leurs prix par catégorie et le nombre de formules qui les utilisent.
+function fin_services_liste(): array {
+    $l = db_fetch_all("SELECT s.*, (SELECT COUNT(*) FROM fin_formule_services fs WHERE fs.service_id = s.id) AS nb_formules
+                       FROM fin_services s ORDER BY s.actif DESC, s.ordre, s.libelle");
+    $prix = db_fetch_all("SELECT service_id, categorie, montant_ttc FROM fin_service_prix");
+    foreach ($l as &$s) {
+        $s['prix'] = [];
+        foreach ($prix as $p) if ((int)$p['service_id'] === (int)$s['id']) $s['prix'][$p['categorie']] = (int)$p['montant_ttc'];
+    }
+    return $l;
+}
+
+// Formules avec leurs services, le montant fixe par catégorie et le nombre de dossiers.
+function fin_formules_liste(): array {
+    $l = db_fetch_all("SELECT f.id, f.libelle, f.actif, array_to_json(f.sites) AS sites, array_to_json(f.canaux) AS canaux,
+            array_to_json(f.categories) AS categories,
+            (SELECT COUNT(*) FROM fin_dossiers d WHERE d.formule_id = f.id) AS nb_dossiers
+        FROM fin_formules f ORDER BY f.actif DESC, f.libelle");
+    $liens = db_fetch_all("SELECT formule_id, service_id FROM fin_formule_services");
+    $services = [];
+    foreach (fin_services_liste() as $s) $services[(int)$s['id']] = $s;
+    foreach ($l as &$f) {
+        foreach (['sites', 'canaux', 'categories'] as $c) $f[$c] = $f[$c] ? json_decode($f[$c], true) : [];
+        $f['services'] = [];
+        foreach ($liens as $x) if ((int)$x['formule_id'] === (int)$f['id']) $f['services'][] = (int)$x['service_id'];
+        // Montant fixe par catégorie : null si un service fixe actif n'a pas de prix.
+        $f['montants'] = []; $f['variable'] = false;
+        foreach (FIN_CATEGORIES as $cat => $_) {
+            $m = 0;
+            foreach ($f['services'] as $sid) {
+                $s = $services[$sid] ?? null;
+                if (!$s || !$s['actif']) continue;
+                if ($s['variable']) { $f['variable'] = true; continue; }
+                if (!isset($s['prix'][$cat])) { $m = null; break; }
+                $m += $s['prix'][$cat];
+            }
+            $f['montants'][$cat] = $m;
+        }
+    }
+    return $l;
+}
+
+// Sites des dossiers (préfixe du chrono, sinon site d'enrôlement), par fréquence.
+function fin_sites_connus(): array {
+    return db_fetch_all("SELECT site, COUNT(*) AS nb FROM fin_dossiers WHERE COALESCE(site, '') <> '' GROUP BY site ORDER BY nb DESC, site");
+}
+
+// Liste de valeurs autorisées → tableau PostgreSQL littéral, ou null (= tous).
+function fin_pg_tableau(array $v): ?string {
+    $v = array_values(array_unique(array_filter(array_map('strval', $v), fn($x) => $x !== '')));
+    if (!$v) return null;
+    return '{' . implode(',', array_map(fn($x) => '"' . str_replace(['\\', '"'], ['\\\\', '\\"'], $x) . '"', $v)) . '}';
+}
+
+// Actions AJAX de l'écran des tarifs → [message, recalcul nécessaire].
+function fin_tarifs_action_services(string $action, array $post, int $uid): array {
+    $id = (int)($post['id'] ?? 0);
+    switch ($action) {
+    case 'service_enregistrer':
+        $lib = fin_txt($post['libelle'] ?? null, 80);
+        if ($lib === null) throw new RuntimeException('Libellé du service obligatoire.');
+        $variable = !empty($post['variable']) && $post['variable'] !== '0';
+        $actif = !isset($post['actif']) || $post['actif'] !== '0';
+        $prix = json_decode((string)($post['prix'] ?? '{}'), true);
+        if (!is_array($prix)) throw new RuntimeException('Prix invalides.');
+        if (db_fetch_value("SELECT 1 FROM fin_services WHERE lower(libelle) = lower(?) AND id <> ?", [$lib, $id]))
+            throw new RuntimeException("Un service « $lib » existe déjà.");
+        db_begin();
+        if ($id) {
+            if (!db_query("UPDATE fin_services SET libelle = ?, variable = ?, actif = ?, maj_par = ?, maj_le = CURRENT_TIMESTAMP WHERE id = ?",
+                          [$lib, $variable ? 't' : 'f', $actif ? 't' : 'f', $uid, $id])->rowCount())
+                throw new RuntimeException('Service introuvable.');
+        } else {
+            db_query("INSERT INTO fin_services (libelle, variable, actif, ordre, maj_par)
+                      VALUES (?, ?, ?, (SELECT COALESCE(MAX(ordre), 0) + 1 FROM fin_services), ?)",
+                     [$lib, $variable ? 't' : 'f', $actif ? 't' : 'f', $uid]);
+            $id = (int)db_fetch_value("SELECT id FROM fin_services WHERE libelle = ?", [$lib]);
+        }
+        db_query("DELETE FROM fin_service_prix WHERE service_id = ?", [$id]);
+        $detail = [];
+        if (!$variable) foreach (FIN_CATEGORIES as $cat => $libcat) {
+            $brut = trim(str_replace(' ', '', (string)($prix[$cat] ?? '')));
+            if ($brut === '') continue;
+            $m = fin_entier($brut);
+            if ($m === null || $m < 0 || $m > 10000000) throw new RuntimeException("Prix invalide pour $libcat.");
+            db_query("INSERT INTO fin_service_prix (service_id, categorie, montant_ttc) VALUES (?, ?, ?)", [$id, $cat, $m]);
+            $detail[] = "$libcat " . number_format($m, 0, ',', ' ');
+        }
+        db_commit();
+        audit_log($uid, 'UPDATE', 'finance_dossiers', $id, "Service tarif « $lib » : "
+            . ($variable ? 'montant variable' : ($detail ? implode(', ', $detail) : 'sans prix')) . ($actif ? '' : ' (inactif)'));
+        $utilise = (bool)db_fetch_value("SELECT 1 FROM fin_formule_services WHERE service_id = ?", [$id]);
+        return ["Service « $lib » enregistré.", $utilise];
+
+    case 'service_supprimer':
+        $lib = db_fetch_value("SELECT libelle FROM fin_services WHERE id = ?", [$id]);
+        if ($lib === null) throw new RuntimeException('Service introuvable.');
+        $utilise = (bool)db_fetch_value("SELECT 1 FROM fin_formule_services WHERE service_id = ?", [$id]);
+        db_query("DELETE FROM fin_services WHERE id = ?", [$id]);
+        audit_log($uid, 'DELETE', 'finance_dossiers', $id, "Service tarif « $lib » supprimé");
+        return ["Service « $lib » supprimé.", $utilise];
+
+    case 'formule_enregistrer':
+        $lib = fin_txt($post['libelle'] ?? null, 120);
+        if ($lib === null) throw new RuntimeException('Libellé de la formule obligatoire.');
+        $liste = function (string $k, ?array $permis = null) use ($post): array {
+            $v = json_decode((string)($post[$k] ?? '[]'), true);
+            if (!is_array($v)) throw new RuntimeException('Données invalides.');
+            $v = array_map(fn($x) => mb_substr(trim((string)$x), 0, 120), $v);
+            return $permis === null ? $v : array_values(array_intersect($v, $permis));
+        };
+        $sites = $liste('sites');
+        $canaux = $liste('canaux', array_keys(FIN_CANAUX));
+        $cats = $liste('categories', array_keys(FIN_CATEGORIES));
+        $sids = array_values(array_unique(array_map('intval', $liste('services'))));
+        if (!$sids) throw new RuntimeException('Choisissez au moins un service.');
+        if ((int)db_fetch_value("SELECT COUNT(*) FROM fin_services WHERE id IN (" . implode(',', $sids) . ")") !== count($sids))
+            throw new RuntimeException('Service inconnu.');
+        $actif = !isset($post['actif']) || $post['actif'] !== '0';
+        $p = [$lib, fin_pg_tableau($sites), fin_pg_tableau($canaux), fin_pg_tableau($cats), $actif ? 't' : 'f', $uid];
+        db_begin();
+        if ($id) {
+            if (!db_query("UPDATE fin_formules SET libelle = ?, sites = ?::text[], canaux = ?::text[], categories = ?::text[], actif = ?,
+                           maj_par = ?, maj_le = CURRENT_TIMESTAMP WHERE id = ?", array_merge($p, [$id]))->rowCount())
+                throw new RuntimeException('Formule introuvable.');
+        } else {
+            $id = (int)db_fetch_value("INSERT INTO fin_formules (libelle, sites, canaux, categories, actif, maj_par)
+                                       VALUES (?, ?::text[], ?::text[], ?::text[], ?, ?) RETURNING id", $p);
+        }
+        db_query("DELETE FROM fin_formule_services WHERE formule_id = ?", [$id]);
+        foreach ($sids as $sid) db_query("INSERT INTO fin_formule_services (formule_id, service_id) VALUES (?, ?)", [$id, $sid]);
+        db_commit();
+        $c = fn(array $v) => $v ? implode(', ', $v) : 'tous';
+        audit_log($uid, 'UPDATE', 'finance_dossiers', $id, "Formule tarif « $lib » : sites " . $c($sites) . ', canaux ' . $c($canaux)
+            . ', catégories ' . $c($cats) . ', ' . count($sids) . ' service(s)' . ($actif ? '' : ' (inactive)'));
+        return ["Formule « $lib » enregistrée.", true];
+
+    case 'formule_supprimer':
+        $lib = db_fetch_value("SELECT libelle FROM fin_formules WHERE id = ?", [$id]);
+        if ($lib === null) throw new RuntimeException('Formule introuvable.');
+        db_query("DELETE FROM fin_formules WHERE id = ?", [$id]);
+        audit_log($uid, 'DELETE', 'finance_dossiers', $id, "Formule tarif « $lib » supprimée");
+        return ["Formule « $lib » supprimée.", true];
+    }
+    throw new RuntimeException('Action inconnue.');
 }
 
 // ── Export Excel au format du tableau de bord finance ─────────

@@ -26,7 +26,23 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
     if (!$pret) json_response(false, 'Module non installé.');
     if (!$peut_modifier) json_response(false, 'Action réservée.');
-    if (($_POST['action'] ?? '') !== 'enregistrer') json_response(false, 'Action inconnue.');
+    $action = (string)($_POST['action'] ?? '');
+    if (str_starts_with($action, 'service_') || str_starts_with($action, 'formule_')) {
+        if (!fin_services_pret()) json_response(false, 'Services non installés (migration finance 02).');
+        session_write_close();
+        try {
+            [$msg, $recalcul] = fin_tarifs_action_services($action, $_POST, (int)$user['id']);
+        } catch (Throwable $e) {
+            if (get_db()->inTransaction()) db_rollback();
+            json_response(false, $e instanceof RuntimeException ? $e->getMessage() : 'Enregistrement impossible.');
+        }
+        if ($recalcul) {
+            try { fin_consolider(); } catch (Throwable $e) { json_response(false, "$msg Recalcul impossible, relancez « Recalculer le suivi »."); }
+            $msg .= ' Montants attendus recalculés.';
+        }
+        json_response(true, $msg);
+    }
+    if ($action !== 'enregistrer') json_response(false, 'Action inconnue.');
     $tarifs = json_decode((string)($_POST['tarifs'] ?? '[]'), true);
     if (!is_array($tarifs)) json_response(false, 'Données invalides.');
     session_write_close();
@@ -65,6 +81,10 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $lignes = $pret ? fin_tarifs_observes() : [];
+$avec_services = $pret && fin_services_pret();
+$services = $avec_services ? fin_services_liste() : [];
+$formules = $avec_services ? fin_formules_liste() : [];
+$sites    = $avec_services ? fin_sites_connus() : [];
 include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
@@ -75,6 +95,27 @@ include __DIR__ . '/../../templates/header.php';
 .fin-table td.n{text-align:right;font-variant-numeric:tabular-nums}
 .fin-table input{width:130px;padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;text-align:right;font-family:inherit}
 .fin-table input.modifie{border-color:#6366f1;background:#eef2ff}
+.fin-entete{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:6px}
+.fin-entete h3,.fin-modal h3{margin:0;font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy)}
+.fin-table .srv-lib{width:200px;text-align:left}
+.fin-table .srv-prix{width:100px}
+.fin-table input:disabled{background:#f8fafc;color:#94a3b8}
+.fin-table input[type=checkbox]{width:auto}
+.fin-note{font-size:11.5px;color:#64748b}
+.fin-crit{font-size:12px;line-height:1.6}.fin-crit span{color:#64748b;display:inline-block;min-width:74px}
+.fin-actions{white-space:nowrap;text-align:right}
+tr.fin-inactif td{opacity:.55}
+.fin-modal-bg{display:none;position:fixed;inset:0;background:rgba(6,3,58,.45);z-index:2000;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto}
+.fin-modal-bg.open{display:flex}
+.fin-modal{background:white;border-radius:16px;padding:24px;width:100%;max-width:640px;box-shadow:0 20px 60px rgba(0,0,0,.2);display:flex;flex-direction:column;gap:14px}
+.fin-modal fieldset{border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin:0}
+.fin-modal legend{font-size:12.5px;font-weight:700;color:var(--navy);padding:0 4px}.fin-modal legend small,.fin-choix small{font-weight:400;color:#64748b}
+.fin-choix{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:13px;max-height:180px;overflow-y:auto}
+.fin-choix label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.fin-champ{display:flex;flex-direction:column;gap:5px;font-size:12.5px;font-weight:700;color:var(--navy)}
+.fin-champ input[type=text]{padding:8px 11px;border:1.5px solid var(--border);border-radius:8px;font-size:13.5px;font-family:inherit;font-weight:400}
+.fin-champ.fin-ligne{flex-direction:row;align-items:center;font-weight:400}
+.fin-pied{display:flex;gap:10px;align-items:center}
 .fin-utiliser{background:none;border:none;color:#4338ca;cursor:pointer;font-size:12px;padding:0;text-decoration:underline}
 </style>
 
@@ -82,7 +123,7 @@ include __DIR__ . '/../../templates/header.php';
   <div class="alert alert-warning">Le module de suivi des dossiers n'est pas encore installé sur cette base (migration finance 01).</div>
 <?php else: ?>
 <div class="fin-card">
-  <p class="aide">Montant attendu (TTC) par catégorie de véhicule. Le montant réconcilié dans X3 lui est comparé, et tout écart est signalé
+  <p class="aide">Montant attendu (TTC) par catégorie de véhicule, pour les dossiers sans formule de services (voir plus bas). Le montant réconcilié dans X3 lui est comparé, et tout écart est signalé
     dans le suivi des dossiers. Sans tarif, le montant attendu d'un dossier CIL est celui de l'API (plaques + sécurisation pose) ;
     les dossiers DGTTC, FDS et Reimmat n'ont alors pas de montant attendu.
     Les montants « habituels » sont les plus fréquents dans les données importées.
@@ -124,6 +165,175 @@ include __DIR__ . '/../../templates/header.php';
   </div>
   <?php endif; ?>
 </div>
+
+<?php if (!$avec_services): ?>
+  <div class="alert alert-warning" style="margin-top:16px">Les services et formules ne sont pas encore installés sur cette base (migration finance 02).</div>
+<?php else: ?>
+<div class="fin-card" style="margin-top:16px">
+  <div class="fin-entete"><h3>Services</h3>
+    <?php if ($peut_modifier): ?><button type="button" class="btn btn-secondary btn-sm" id="srv-ajouter">Ajouter un service</button><?php endif; ?></div>
+  <p class="aide">Prix TTC de chaque service par catégorie. Un service « variable » (reliquat) n'a pas de prix : c'est le complément
+    réconcilié au-delà des services fixes de la formule, accepté sans écart.</p>
+  <div class="table-wrap">
+  <table class="fin-table" id="srv-table">
+    <thead><tr><th>Service</th><?php foreach (FIN_CATEGORIES as $libcat): ?><th><?= h($libcat) ?></th><?php endforeach; ?>
+      <th>Variable</th><th>Actif</th><th></th></tr></thead>
+    <tbody>
+    <?php foreach ($services as $s): ?>
+      <tr data-id="<?= (int)$s['id'] ?>">
+        <td><input type="text" class="srv-lib" value="<?= h($s['libelle']) ?>" maxlength="80" aria-label="Libellé du service" <?= $peut_modifier ? '' : 'disabled' ?>>
+          <?php if ((int)$s['nb_formules']): ?><div class="fin-note"><?= (int)$s['nb_formules'] ?> formule(s)</div><?php endif; ?></td>
+        <?php foreach (FIN_CATEGORIES as $cat => $libcat): ?>
+        <td><input type="text" inputmode="numeric" class="srv-prix" data-cat="<?= h($cat) ?>" value="<?= isset($s['prix'][$cat]) ? (int)$s['prix'][$cat] : '' ?>"
+                   aria-label="Prix <?= h($libcat) ?>" <?= $peut_modifier && !$s['variable'] ? '' : 'disabled' ?>></td>
+        <?php endforeach; ?>
+        <td><input type="checkbox" class="srv-var" <?= $s['variable'] ? 'checked' : '' ?> aria-label="Montant variable" <?= $peut_modifier ? '' : 'disabled' ?>></td>
+        <td><input type="checkbox" class="srv-actif" <?= $s['actif'] ? 'checked' : '' ?> aria-label="Service actif" <?= $peut_modifier ? '' : 'disabled' ?>></td>
+        <td class="fin-actions"><?php if ($peut_modifier): ?><button type="button" class="btn btn-primary btn-sm srv-ok">Enregistrer</button>
+          <button type="button" class="btn btn-danger btn-sm srv-suppr">Supprimer</button><?php endif; ?></td>
+      </tr>
+    <?php endforeach; ?>
+    <?php if (!$services): ?><tr class="srv-vide"><td colspan="<?= count(FIN_CATEGORIES) + 4 ?>" style="text-align:center;color:#64748b;padding:20px">Aucun service. Ajoutez-en un (plaque, sécurisation, pose, service mobile, délocalisée, reliquat…).</td></tr><?php endif; ?>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="fin-card" style="margin-top:16px">
+  <div class="fin-entete"><h3>Formules</h3>
+    <?php if ($peut_modifier): ?><button type="button" class="btn btn-secondary btn-sm" id="frm-ajouter" <?= $services ? '' : 'disabled' ?>>Nouvelle formule</button><?php endif; ?></div>
+  <p class="aide">Une formule regroupe les services payés par un dossier selon son site (préfixe du chrono : BKE, ABJ, KGO…, sinon site d'enrôlement),
+    son canal et sa catégorie ; un critère vide vaut pour tous. Si plusieurs formules conviennent, la plus précise l'emporte (site, puis canal,
+    puis catégorie). Montant attendu = somme des services fixes. Un dossier sans formule garde le tarif par catégorie ci-dessus.</p>
+  <div class="table-wrap">
+  <table class="fin-table">
+    <thead><tr><th>Formule</th><th>Critères</th><th>Services</th>
+      <?php foreach (FIN_CATEGORIES as $libcat): ?><th style="text-align:right"><?= h($libcat) ?></th><?php endforeach; ?>
+      <th style="text-align:right">Dossiers</th><th></th></tr></thead>
+    <tbody>
+    <?php $nom_srv = array_column($services, 'libelle', 'id'); ?>
+    <?php foreach ($formules as $f): ?>
+      <tr class="<?= $f['actif'] ? '' : 'fin-inactif' ?>">
+        <td><strong><?= h($f['libelle']) ?></strong><?= $f['actif'] ? '' : '<div class="fin-note">inactive</div>' ?></td>
+        <td class="fin-crit">
+          <div><span>Sites</span> <?= $f['sites'] ? h(implode(', ', $f['sites'])) : 'tous' ?></div>
+          <div><span>Canaux</span> <?= $f['canaux'] ? h(implode(', ', array_map(fn($c) => FIN_CANAUX[$c] ?? $c, $f['canaux']))) : 'tous' ?></div>
+          <div><span>Catégories</span> <?= $f['categories'] ? h(implode(', ', array_map(fn($c) => FIN_CATEGORIES[$c] ?? $c, $f['categories']))) : 'toutes' ?></div></td>
+        <td><?= h(implode(' + ', array_map(fn($sid) => $nom_srv[$sid] ?? '?', $f['services']))) ?></td>
+        <?php foreach (FIN_CATEGORIES as $cat => $_): ?>
+        <td class="n"><?php if ($f['categories'] && !in_array($cat, $f['categories'], true)): ?><span class="fin-note">—</span>
+          <?php elseif ($f['montants'][$cat] === null): ?><span class="fin-note" title="Un service fixe n'a pas de prix pour cette catégorie">prix manquant</span>
+          <?php else: ?><?= number_format($f['montants'][$cat], 0, ',', ' ') ?><?= $f['variable'] ? ' <span class="fin-note">+ variable</span>' : '' ?><?php endif; ?></td>
+        <?php endforeach; ?>
+        <td class="n"><?= number_format((int)$f['nb_dossiers'], 0, ',', ' ') ?></td>
+        <td class="fin-actions"><?php if ($peut_modifier): ?><button type="button" class="btn btn-secondary btn-sm frm-modif" data-id="<?= (int)$f['id'] ?>">Modifier</button><?php endif; ?></td>
+      </tr>
+    <?php endforeach; ?>
+    <?php if (!$formules): ?><tr><td colspan="<?= count(FIN_CATEGORIES) + 5 ?>" style="text-align:center;color:#64748b;padding:20px">Aucune formule : tous les dossiers suivent le tarif par catégorie.</td></tr><?php endif; ?>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<?php if ($peut_modifier): ?>
+<div class="fin-modal-bg" id="frm-modal">
+  <div class="fin-modal" role="dialog" aria-modal="true" aria-labelledby="frm-titre">
+    <h3 id="frm-titre">Formule</h3>
+    <label class="fin-champ">Libellé<input type="text" id="frm-lib" maxlength="120" placeholder="ex. BKE moto"></label>
+    <fieldset><legend>Sites <small>(aucun coché = tous)</small></legend><div class="fin-choix">
+      <?php foreach ($sites as $s): ?><label><input type="checkbox" name="sites" value="<?= h($s['site']) ?>"> <?= h($s['site']) ?> <small><?= number_format((int)$s['nb'], 0, ',', ' ') ?></small></label><?php endforeach; ?>
+    </div></fieldset>
+    <fieldset><legend>Canaux <small>(aucun coché = tous)</small></legend><div class="fin-choix">
+      <?php foreach (FIN_CANAUX as $k => $c): ?><label><input type="checkbox" name="canaux" value="<?= h($k) ?>"> <?= h($c) ?></label><?php endforeach; ?>
+    </div></fieldset>
+    <fieldset><legend>Catégories <small>(aucune cochée = toutes)</small></legend><div class="fin-choix">
+      <?php foreach (FIN_CATEGORIES as $k => $c): ?><label><input type="checkbox" name="categories" value="<?= h($k) ?>"> <?= h($c) ?></label><?php endforeach; ?>
+    </div></fieldset>
+    <fieldset><legend>Services payés</legend><div class="fin-choix">
+      <?php foreach ($services as $s): ?><label><input type="checkbox" name="services" value="<?= (int)$s['id'] ?>"> <?= h($s['libelle']) ?><?= $s['variable'] ? ' <small>variable</small>' : '' ?><?= $s['actif'] ? '' : ' <small>inactif</small>' ?></label><?php endforeach; ?>
+    </div></fieldset>
+    <label class="fin-champ fin-ligne"><input type="checkbox" id="frm-actif" checked> Formule active</label>
+    <div class="fin-pied">
+      <button type="button" class="btn btn-danger btn-sm" id="frm-suppr">Supprimer</button>
+      <span style="flex:1"></span>
+      <button type="button" class="btn btn-secondary" id="frm-annuler">Annuler</button>
+      <button type="button" class="btn btn-primary" id="frm-ok">Enregistrer</button>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+<script>
+const FIN_FORMULES = <?= json_encode(array_map(fn($f) => ['id' => (int)$f['id'], 'libelle' => $f['libelle'], 'actif' => (bool)$f['actif'],
+    'sites' => $f['sites'], 'canaux' => $f['canaux'], 'categories' => $f['categories'], 'services' => $f['services']], $formules),
+    JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
+async function finPost(data, bouton) {
+  const fd = new FormData(); Object.entries(data).forEach(([k, v]) => fd.append(k, v));
+  const texte = bouton ? bouton.textContent : '';
+  if (bouton) { bouton.disabled = true; bouton.textContent = 'Enregistrement…'; }
+  try {
+    const r = await fetch('tarifs.php', {method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}, body: fd}).then(achParseJson);
+    toast(r.message, r.success ? 'success' : 'danger');
+    if (r.success) { setTimeout(() => location.reload(), 900); return; }
+  } catch (e) { toast(e.message, 'danger'); }
+  if (bouton) { bouton.disabled = false; bouton.textContent = texte; }
+}
+const srvTable = document.getElementById('srv-table');
+function srvLier(tr) {
+  const v = tr.querySelector('.srv-var');
+  if (v) v.addEventListener('change', () => tr.querySelectorAll('.srv-prix').forEach(i => { i.disabled = v.checked; if (v.checked) i.value = ''; }));
+  const ok = tr.querySelector('.srv-ok');
+  if (ok) ok.addEventListener('click', () => {
+    const prix = {}; tr.querySelectorAll('.srv-prix').forEach(i => prix[i.dataset.cat] = i.value.replace(/\s/g, ''));
+    finPost({action: 'service_enregistrer', id: tr.dataset.id || 0, libelle: tr.querySelector('.srv-lib').value,
+             variable: v.checked ? 1 : 0, actif: tr.querySelector('.srv-actif').checked ? 1 : 0, prix: JSON.stringify(prix)}, ok);
+  });
+  const sup = tr.querySelector('.srv-suppr');
+  if (sup) sup.addEventListener('click', () => {
+    if (!tr.dataset.id) { tr.remove(); return; }
+    const lib = tr.querySelector('.srv-lib').value;
+    if (confirm(`Supprimer le service « ${lib} » ? Il sera retiré des formules qui l'utilisent.`)) finPost({action: 'service_supprimer', id: tr.dataset.id}, sup);
+  });
+}
+if (srvTable) srvTable.querySelectorAll('tbody tr[data-id]').forEach(srvLier);
+const srvAjout = document.getElementById('srv-ajouter');
+if (srvAjout) srvAjout.addEventListener('click', () => {
+  const vide = srvTable.querySelector('.srv-vide'); if (vide) vide.remove();
+  const tr = document.createElement('tr'); tr.dataset.id = '';
+  tr.innerHTML = `<td><input type="text" class="srv-lib" maxlength="80" placeholder="ex. Service mobile" aria-label="Libellé du service"></td>`
+    + <?= json_encode(array_keys(FIN_CATEGORIES)) ?>.map(c => `<td><input type="text" inputmode="numeric" class="srv-prix" data-cat="${c}" aria-label="Prix ${c}"></td>`).join('')
+    + `<td><input type="checkbox" class="srv-var" aria-label="Montant variable"></td><td><input type="checkbox" class="srv-actif" checked aria-label="Service actif"></td>`
+    + `<td class="fin-actions"><button type="button" class="btn btn-primary btn-sm srv-ok">Enregistrer</button> <button type="button" class="btn btn-danger btn-sm srv-suppr">Retirer</button></td>`;
+  srvTable.querySelector('tbody').appendChild(tr); srvLier(tr); tr.querySelector('.srv-lib').focus();
+});
+const frmModal = document.getElementById('frm-modal');
+let frmId = 0;
+function frmOuvrir(f) {
+  frmId = f ? f.id : 0;
+  document.getElementById('frm-titre').textContent = f ? 'Modifier la formule' : 'Nouvelle formule';
+  document.getElementById('frm-lib').value = f ? f.libelle : '';
+  document.getElementById('frm-actif').checked = f ? f.actif : true;
+  document.getElementById('frm-suppr').style.display = f ? '' : 'none';
+  ['sites', 'canaux', 'categories', 'services'].forEach(n => frmModal.querySelectorAll(`input[name="${n}"]`)
+    .forEach(i => i.checked = !!f && f[n].map(String).includes(i.value)));
+  frmModal.classList.add('open'); document.getElementById('frm-lib').focus();
+}
+function frmFermer() { frmModal.classList.remove('open'); }
+if (frmModal) {
+  document.getElementById('frm-ajouter').addEventListener('click', () => frmOuvrir(null));
+  document.querySelectorAll('.frm-modif').forEach(b => b.addEventListener('click', () => frmOuvrir(FIN_FORMULES.find(f => f.id === Number(b.dataset.id)))));
+  document.getElementById('frm-annuler').addEventListener('click', frmFermer);
+  frmModal.addEventListener('click', e => { if (e.target === frmModal) frmFermer(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && frmModal.classList.contains('open')) frmFermer(); });
+  const coches = n => JSON.stringify([...frmModal.querySelectorAll(`input[name="${n}"]:checked`)].map(i => i.value));
+  document.getElementById('frm-ok').addEventListener('click', e => finPost({action: 'formule_enregistrer', id: frmId,
+    libelle: document.getElementById('frm-lib').value, sites: coches('sites'), canaux: coches('canaux'), categories: coches('categories'),
+    services: coches('services'), actif: document.getElementById('frm-actif').checked ? 1 : 0}, e.currentTarget));
+  document.getElementById('frm-suppr').addEventListener('click', e => {
+    if (confirm('Supprimer cette formule ? Ses dossiers reviendront au tarif par catégorie.')) finPost({action: 'formule_supprimer', id: frmId}, e.currentTarget);
+  });
+}
+</script>
+<?php endif; ?>
 
 <script>
 document.querySelectorAll('.fin-tarif').forEach(i => i.addEventListener('input', () => i.classList.toggle('modifie', i.value.trim() !== i.dataset.init)));

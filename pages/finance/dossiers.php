@@ -430,7 +430,10 @@ function finRendre(d) {
     + kv('Mode de paiement', finEsc(d.mode_paiement)) + kv('N° reçu CIL', finEsc(d.numero_recu))
     + kv('Reçu PDF', d.pdf_recu && /^https:\/\//.test(d.pdf_recu) ? `<a href="${finEsc(d.pdf_recu)}" target="_blank" rel="noopener noreferrer">Ouvrir le reçu</a>` : '—')
     + kv('Montant plaques', finNb(d.mt_plaques)) + kv('Montant sécurisation pose', finNb(d.mt_secupose)) + kv('Montant du dossier', finNb(d.montant_dossier))
-    + kv('Montant attendu', finNb(d.montant_attendu)) + kv('Réconcilié (X3)', finNb(d.montant_reconcilie)) + kv('Écart', ecart)
+    + kv('Montant attendu', finNb(d.montant_attendu))
+    + (d.formule ? kv('Formule', finEsc(d.formule) + `<div class="fin-sub">${(d.services || []).map(s => finEsc(s.libelle) + ' : '
+        + (s.variable ? (d.montant_variable !== null ? finNb(d.montant_variable) : 'variable') : (s.montant_ttc !== null ? finNb(s.montant_ttc) : 'prix manquant'))).join(' · ')}</div>`) : '')
+    +kv('Réconcilié (X3)', finNb(d.montant_reconcilie)) + kv('Écart', ecart)
     + kv('HT / TTC (X3)', finNb(d.montant_ht) + ' / ' + finNb(d.montant_ttc)) + kv('N° facture', finEsc(d.n_facture)) + kv('Caisse', finEsc(d.caisse_statut))
     + '</div>';
   // Seuls les dossiers CIL existent dans l'API (DGTTC et FDS portent un N° CIL sans y figurer).
