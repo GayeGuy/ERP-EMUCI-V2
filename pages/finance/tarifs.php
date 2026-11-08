@@ -33,6 +33,18 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $changes = [];
     db_begin();
     try {
+        if (isset($_POST['speciale'])) {
+            $brut = preg_replace('/\s+/', '', (string)$_POST['speciale']);
+            $m = fin_entier($brut);
+            if ($brut === '' || $m === null || $m < 0 || $m > 10000000) throw new RuntimeException('Tarif « Opération spéciale » invalide.');
+            [$avant] = fin_tarif_speciale();
+            if ($m !== $avant) {
+                db_query("INSERT INTO fin_tarifs (genre, montant_ttc, maj_par, maj_le) VALUES (?,?,?,CURRENT_TIMESTAMP)
+                          ON CONFLICT (genre) DO UPDATE SET montant_ttc = EXCLUDED.montant_ttc, maj_par = EXCLUDED.maj_par, maj_le = CURRENT_TIMESTAMP",
+                         [FIN_TARIF_SPECIALE_CLE, $m, (int)$user['id']]);
+                $changes[] = 'Opération spéciale : ' . number_format($avant, 0, ',', ' ') . ' → ' . number_format($m, 0, ',', ' ');
+            }
+        }
         foreach ($tarifs as $t) {
             $genre = fin_genre($t['genre'] ?? null);
             if (!$genre) continue;
@@ -62,6 +74,8 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $lignes = $pret ? fin_tarifs_observes() : [];
+[$tarif_speciale] = $pret ? fin_tarif_speciale() : [FIN_TARIF_SPECIALE_DEFAUT];
+$nb_speciale = $pret ? (int)db_fetch_value("SELECT COUNT(*) FROM fin_dossiers WHERE canal = 'SPECIALE'") : 0;
 include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
@@ -78,10 +92,19 @@ include __DIR__ . '/../../templates/header.php';
 <?php if (!$pret): ?>
   <div class="alert alert-warning">Le module de suivi des dossiers n'est pas encore installé sur cette base (migration finance 01).</div>
 <?php else: ?>
+<div class="fin-card" style="margin-bottom:18px">
+  <h3 style="margin:0 0 6px;font-size:15px">Opération spéciale</h3>
+  <p class="aide">Montant attendu (TTC) de chaque dossier de l'opération spéciale (Abobo), quel que soit le genre du véhicule.
+    <?= number_format($nb_speciale, 0, ',', ' ') ?> dossier(s) concerné(s).</p>
+  <label for="fin-speciale" style="font-size:13px;margin-right:8px">Tarif attendu (TTC)</label>
+  <input type="text" inputmode="numeric" id="fin-speciale" class="fin-speciale" data-init="<?= (int)$tarif_speciale ?>"
+         value="<?= (int)$tarif_speciale ?>" style="width:130px;padding:7px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;text-align:right;font-family:inherit"
+         <?= $peut_modifier ? '' : 'disabled' ?>>
+</div>
 <div class="fin-card">
-  <p class="aide">Montant attendu (TTC) par genre de véhicule. Le montant réconcilié dans X3 lui est comparé, et tout écart est signalé
+  <p class="aide">Montant attendu (TTC) par genre de véhicule (hors opération spéciale). Le montant réconcilié dans X3 lui est comparé, et tout écart est signalé
     dans le suivi des dossiers. Sans tarif, le montant attendu d'un dossier CIL est celui de l'API (plaques + sécurisation pose) ;
-    les dossiers DGTTC, FDS et de guichet n'ont alors pas de montant attendu.
+    les dossiers DGTTC, FDS et Reimmat n'ont alors pas de montant attendu.
     Les montants « habituels » sont les plus fréquents dans les données importées.</p>
   <div class="table-wrap">
   <table class="fin-table">
@@ -107,7 +130,7 @@ include __DIR__ . '/../../templates/header.php';
     </tbody>
   </table>
   </div>
-  <?php if ($peut_modifier && $lignes): ?>
+  <?php if ($peut_modifier): ?>
   <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px">
     <button type="button" class="btn btn-primary" id="fin-enregistrer">Enregistrer les tarifs</button>
   </div>
@@ -115,7 +138,7 @@ include __DIR__ . '/../../templates/header.php';
 </div>
 
 <script>
-document.querySelectorAll('.fin-tarif').forEach(i => i.addEventListener('input', () => i.classList.toggle('modifie', i.value.trim() !== i.dataset.init)));
+document.querySelectorAll('.fin-tarif, .fin-speciale').forEach(i => i.addEventListener('input', () => i.classList.toggle('modifie', i.value.trim() !== i.dataset.init)));
 document.querySelectorAll('.fin-utiliser').forEach(b => b.addEventListener('click', () => {
   const i = b.closest('tr').querySelector('.fin-tarif'); i.value = b.dataset.v; i.dispatchEvent(new Event('input'));
 }));
@@ -123,9 +146,12 @@ const btn = document.getElementById('fin-enregistrer');
 if (btn) btn.addEventListener('click', async () => {
   const tarifs = [...document.querySelectorAll('.fin-tarif')].filter(i => i.value.trim() !== i.dataset.init)
     .map(i => ({genre: i.dataset.genre, montant: i.value.replace(/\s/g, '')}));
-  if (!tarifs.length) { toast('Aucun changement.', 'info'); return; }
+  const sp = document.getElementById('fin-speciale');
+  const spChange = sp && sp.value.trim() !== sp.dataset.init;
+  if (!tarifs.length && !spChange) { toast('Aucun changement.', 'info'); return; }
   btn.disabled = true; btn.textContent = 'Enregistrement et recalcul…';
   const fd = new FormData(); fd.append('action', 'enregistrer'); fd.append('tarifs', JSON.stringify(tarifs));
+  if (spChange) fd.append('speciale', sp.value);
   try {
     const r = await fetch('tarifs.php', {method: 'POST', headers: {'X-Requested-With': 'XMLHttpRequest'}, body: fd}).then(achParseJson);
     toast(r.message, r.success ? 'success' : 'danger');

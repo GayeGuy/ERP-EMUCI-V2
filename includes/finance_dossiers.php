@@ -61,7 +61,18 @@ const FIN_ETAPES = [
     'pose'       => 'Posé',
 ];
 
-const FIN_CANAUX = ['CIL' => 'CIL', 'DGTTC' => 'DGTTC', 'FDS' => 'FDS', 'GUICHET' => 'Guichet'];
+const FIN_CANAUX = ['CIL' => 'CIL', 'DGTTC' => 'DGTTC', 'FDS' => 'FDS', 'REIMMAT' => 'Reimmat', 'SPECIALE' => 'Opération spéciale'];
+
+// Tarif d'un dossier « Opération spéciale », quel que soit le genre. Modifiable
+// dans Finance → Tarifs : il est rangé dans fin_tarifs sous cette clé (un genre
+// ne commence jamais par « # »), ce qui évite une migration.
+const FIN_TARIF_SPECIALE_CLE    = '#SPECIALE';
+const FIN_TARIF_SPECIALE_DEFAUT = 6300;
+
+function fin_tarif_speciale(): array {
+    $v = db_fetch_value("SELECT montant_ttc FROM fin_tarifs WHERE genre = ?", [FIN_TARIF_SPECIALE_CLE]);
+    return $v === false || $v === null ? [FIN_TARIF_SPECIALE_DEFAUT, false] : [(int)$v, true];
+}
 
 // Anomalies : colonne booléenne de fin_dossiers => libellé.
 const FIN_ANOMALIES = [
@@ -710,6 +721,11 @@ function fin_consolider(): array {
             'est_ouvert', 'est_recu', 'est_reconcilie', 'est_pose', 'paye_par_bon', 'etape',
             'a_ouvert_non_recu', 'a_pose_non_reconcilie', 'a_ecart', 'a_recu_sans_paiement', 'a_rejet', 'a_pose_sans_dossier',
             'date_ref', 'maj_le'];
+        // Opération spéciale (Abobo) : repérée dans le CGI par le site d'enrôlement
+        // ou le concessionnaire, ou dossier Primo sans N° CIL ni source requête.
+        $speciale = "COALESCE(g.site_enrolement ILIKE 'ABOBO PREFECTURE POLICE%' OR g.concessionnaire ILIKE 'OPERATION ABOBO%'
+                      OR (g.cle IS NOT NULL AND g.type_dossier = 'Primo' AND g.chrono IS NULL AND COALESCE(g.source, '') = ''), false)";
+        $tarif_speciale = (int)fin_tarif_speciale()[0];
         db_query("CREATE TEMP TABLE fin_t_new (LIKE fin_dossiers INCLUDING DEFAULTS) ON COMMIT DROP");
         db_query("INSERT INTO fin_t_new (" . implode(', ', $cols) . ")
             SELECT z.cle, z.vin, z.chrono, z.nsiiv, z.immat, z.canal, z.type_dossier, z.type_dossier_cil, z.genre, z.centre, z.client, z.type_client,
@@ -733,24 +749,29 @@ function fin_consolider(): array {
                 COALESCE(z.date_reception::date, z.date_paiement, z.date_pose, z.date_ouverture, z.date_caisse::date),
                 CURRENT_TIMESTAMP
             FROM (
-                SELECT b.*, COALESCE(t.montant_ttc, b.montant_dossier) AS montant_attendu
+                SELECT b.*, CASE WHEN b.canal = 'SPECIALE' THEN $tarif_speciale
+                                 ELSE COALESCE(t.montant_ttc, b.montant_dossier) END AS montant_attendu
                 FROM (
                     SELECT k.cle,
                         COALESCE(a.vin, r.vin, g.vin, x.vin, c.vin, CASE WHEN k.cle NOT LIKE '#%' THEN k.cle END) AS vin,
                         COALESCE(a.chrono, r.chrono, g.chrono, x.chrono, c.chrono) AS chrono,
                         COALESCE(g.nsiiv, r.nsiiv, x.nsiiv, p.nsiiv) AS nsiiv,
                         COALESCE(g.immat, r.immat, p.immat) AS immat,
-                        CASE WHEN COALESCE(r.source, g.source) LIKE 'DGTTC_FDS%' THEN 'FDS'
-                             WHEN COALESCE(r.source, g.source) LIKE 'DGTTC%' THEN 'DGTTC'
-                             WHEN COALESCE(r.source, g.source) = 'CIL' OR a.chrono IS NOT NULL THEN 'CIL'
-                             WHEN g.nsiiv IS NOT NULL OR (x.nsiiv IS NOT NULL AND x.chrono IS NULL) THEN 'GUICHET' END AS canal,
-                        -- Type : CGI d'abord ; sinon déduit du type de dossier CIL
-                        -- (Re-Immatriculation… → Reimmat, le reste en primo-immatriculation).
+                        -- Canal : export CGI (source principale), sinon Brique pour un
+                        -- dossier pas encore enrôlé. Source requête vide au CGI :
+                        -- Reimmat / Post → Reimmat, Primo sans N° CIL → opération spéciale.
+                        CASE WHEN $speciale THEN 'SPECIALE'
+                             WHEN COALESCE(g.source, r.source) LIKE 'DGTTC_FDS%' THEN 'FDS'
+                             WHEN COALESCE(g.source, r.source) LIKE 'DGTTC%' THEN 'DGTTC'
+                             WHEN COALESCE(g.source, r.source) = 'CIL' THEN 'CIL'
+                             WHEN g.type_dossier IN ('Reimmat', 'Post') THEN 'REIMMAT'
+                             WHEN a.chrono IS NOT NULL THEN 'CIL' END AS canal,
+                        -- Type : CGI uniquement. Un dossier connu seulement de CIL est
+                        -- une primo-immatriculation (les réimmatriculations n'ont pas de N° CIL).
                         CASE WHEN g.type_enrolement ILIKE '%diplo%' OR r.type_plaque ILIKE '%DIPLO%'
                                   OR a.type_dossier ILIKE '%diplomati%' THEN 'Diplo'
                              WHEN g.type_dossier IS NOT NULL THEN g.type_dossier
-                             WHEN a.type_dossier ILIKE 're%immat%' THEN 'Reimmat'
-                             WHEN a.cle IS NOT NULL THEN 'Primo' END AS type_dossier,
+                             WHEN a.cle IS NOT NULL OR r.source = 'CIL' THEN 'Primo' END AS type_dossier,
                         a.type_dossier AS type_dossier_cil,
                         COALESCE(a.genre, g.genre, r.genre, c.genre,
                                  CASE x.genre WHEN 'MOTO' THEN 'MOTOCYCLETTE' ELSE x.genre END) AS genre,
@@ -771,7 +792,7 @@ function fin_consolider(): array {
                         COALESCE(p.avant, x.serie1) AS plaque_avant,
                         COALESCE(p.arriere, x.serie2) AS plaque_arriere,
                         CASE WHEN p.date_installation IS NOT NULL THEN 'optoplate' WHEN x.date_pose IS NOT NULL THEN 'x3' END AS source_pose,
-                        (a.cle IS NOT NULL) AS est_ouvert,
+                        (a.cle IS NOT NULL AND NOT $speciale) AS est_ouvert,
                         (r.cle IS NOT NULL OR g.cle IS NOT NULL) AS est_recu,
                         (x.code_rec IS NOT NULL OR COALESCE(x.montant_reconcilie, 0) > 0
                             OR COALESCE(c.statut, '') = 'ENCAISSER') AS est_reconcilie,
@@ -913,7 +934,7 @@ function fin_tarifs_observes(): array {
                     ORDER BY genre, c DESC)
         SELECT g.genre, t.montant_ttc, COALESCE(n.nb, 0) AS nb, api.v AS api_habituel,
                x3.v AS x3_habituel, COALESCE(n.nb_ecarts, 0) AS nb_ecarts
-        FROM (SELECT genre FROM n UNION SELECT genre FROM fin_tarifs) g
+        FROM (SELECT genre FROM n UNION SELECT genre FROM fin_tarifs WHERE genre NOT LIKE '#%') g
         LEFT JOIN n ON n.genre = g.genre
         LEFT JOIN api ON api.genre = g.genre
         LEFT JOIN x3 ON x3.genre = g.genre
