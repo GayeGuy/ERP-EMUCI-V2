@@ -63,15 +63,22 @@ const FIN_ETAPES = [
 
 const FIN_CANAUX = ['CIL' => 'CIL', 'DGTTC' => 'DGTTC', 'FDS' => 'FDS', 'REIMMAT' => 'Reimmat', 'SPECIALE' => 'Opération spéciale'];
 
-// Tarif d'un dossier « Opération spéciale », quel que soit le genre. Modifiable
-// dans Finance → Tarifs : il est rangé dans fin_tarifs sous cette clé (un genre
-// ne commence jamais par « # »), ce qui évite une migration.
-const FIN_TARIF_SPECIALE_CLE    = '#SPECIALE';
-const FIN_TARIF_SPECIALE_DEFAUT = 6300;
+// Tarifs « Opération spéciale », par genre. Modifiables dans Finance → Tarifs :
+// rangés dans fin_tarifs sous la clé « #SPECIALE:<genre> » (un genre ne commence
+// jamais par « # »), ce qui évite une migration. Sans tarif saisi : valeur par
+// défaut ci-dessous, sinon tarif normal du genre.
+const FIN_TARIF_SPECIALE_PREFIXE = '#SPECIALE:';
+const FIN_TARIF_SPECIALE_DEFAUTS = ['MOTOCYCLETTE' => 6300];
 
-function fin_tarif_speciale(): array {
-    $v = db_fetch_value("SELECT montant_ttc FROM fin_tarifs WHERE genre = ?", [FIN_TARIF_SPECIALE_CLE]);
-    return $v === false || $v === null ? [FIN_TARIF_SPECIALE_DEFAUT, false] : [(int)$v, true];
+function fin_tarif_speciale_cle(string $genre): string {
+    return mb_substr(FIN_TARIF_SPECIALE_PREFIXE . $genre, 0, 60);
+}
+
+// CASE SQL des valeurs par défaut, pour la colonne genre $col.
+function fin_tarif_speciale_defaut_sql(string $col): string {
+    $w = '';
+    foreach (FIN_TARIF_SPECIALE_DEFAUTS as $g => $m) $w .= " WHEN $col = " . get_db()->quote($g) . ' THEN ' . (int)$m;
+    return $w === '' ? 'NULL' : "CASE$w END";
 }
 
 // Anomalies : colonne booléenne de fin_dossiers => libellé.
@@ -725,7 +732,7 @@ function fin_consolider(): array {
         // ou le concessionnaire, ou dossier Primo sans N° CIL ni source requête.
         $speciale = "COALESCE(g.site_enrolement ILIKE 'ABOBO PREFECTURE POLICE%' OR g.concessionnaire ILIKE 'OPERATION ABOBO%'
                       OR (g.cle IS NOT NULL AND g.type_dossier = 'Primo' AND g.chrono IS NULL AND COALESCE(g.source, '') = ''), false)";
-        $tarif_speciale = (int)fin_tarif_speciale()[0];
+        $tarif_speciale_defaut = fin_tarif_speciale_defaut_sql('b.genre');
         db_query("CREATE TEMP TABLE fin_t_new (LIKE fin_dossiers INCLUDING DEFAULTS) ON COMMIT DROP");
         db_query("INSERT INTO fin_t_new (" . implode(', ', $cols) . ")
             SELECT z.cle, z.vin, z.chrono, z.nsiiv, z.immat, z.canal, z.type_dossier, z.type_dossier_cil, z.genre, z.centre, z.client, z.type_client,
@@ -743,13 +750,13 @@ function fin_consolider(): array {
                 z.est_pose AND NOT z.est_reconcilie AND NOT z.bon,
                 z.est_reconcilie AND COALESCE(z.montant_reconcilie, 0) > 0 AND z.montant_attendu IS NOT NULL
                     AND z.montant_reconcilie <> z.montant_attendu,
-                z.canal = 'CIL' AND z.est_recu AND NOT z.est_ouvert,
+                COALESCE(z.canal, '') = 'CIL' AND z.est_recu AND NOT z.est_ouvert,
                 COALESCE(z.statut_brique ILIKE '%rejet%' OR z.statut_brique ILIKE '%chou%', false),
                 z.est_pose AND NOT z.est_recu,
                 COALESCE(z.date_reception::date, z.date_paiement, z.date_pose, z.date_ouverture, z.date_caisse::date),
                 CURRENT_TIMESTAMP
             FROM (
-                SELECT b.*, CASE WHEN b.canal = 'SPECIALE' THEN $tarif_speciale
+                SELECT b.*, CASE WHEN b.canal = 'SPECIALE' THEN COALESCE(ts.montant_ttc, $tarif_speciale_defaut, t.montant_ttc)
                                  ELSE COALESCE(t.montant_ttc, b.montant_dossier) END AS montant_attendu
                 FROM (
                     SELECT k.cle,
@@ -764,7 +771,7 @@ function fin_consolider(): array {
                              WHEN COALESCE(g.source, r.source) LIKE 'DGTTC_FDS%' THEN 'FDS'
                              WHEN COALESCE(g.source, r.source) LIKE 'DGTTC%' THEN 'DGTTC'
                              WHEN COALESCE(g.source, r.source) = 'CIL' THEN 'CIL'
-                             WHEN g.type_dossier IN ('Reimmat', 'Post') THEN 'REIMMAT'
+                             WHEN g.type_dossier = 'Reimmat' THEN 'REIMMAT'
                              WHEN a.chrono IS NOT NULL THEN 'CIL' END AS canal,
                         -- Type : CGI uniquement. Un dossier connu seulement de CIL est
                         -- une primo-immatriculation (les réimmatriculations n'ont pas de N° CIL).
@@ -813,6 +820,7 @@ function fin_consolider(): array {
                     LEFT JOIN fin_t_pos p ON p.cle = k.cle
                 ) b
                 LEFT JOIN fin_tarifs t ON t.genre = b.genre
+                LEFT JOIN fin_tarifs ts ON b.canal = 'SPECIALE' AND ts.genre = " . get_db()->quote(FIN_TARIF_SPECIALE_PREFIXE) . " || b.genre
             ) z");
         db_query("CREATE INDEX ON fin_t_new (cle)");
         $supprimes = db_query("DELETE FROM fin_dossiers d WHERE NOT EXISTS (SELECT 1 FROM fin_t_new n WHERE n.cle = d.cle)")->rowCount();
@@ -922,7 +930,8 @@ function fin_dossier_detail(string $cle): ?array {
 // Genres connus et montants observés, pour le paramétrage des tarifs.
 function fin_tarifs_observes(): array {
     return db_fetch_all("
-        WITH n AS (SELECT genre, COUNT(*) AS nb, COUNT(*) FILTER (WHERE a_ecart) AS nb_ecarts
+        WITH n AS (SELECT genre, COUNT(*) AS nb, COUNT(*) FILTER (WHERE a_ecart) AS nb_ecarts,
+                          COUNT(*) FILTER (WHERE canal = 'SPECIALE') AS nb_speciale
                    FROM fin_dossiers WHERE genre IS NOT NULL GROUP BY genre),
              api AS (SELECT DISTINCT ON (genre) genre, montant_dossier AS v
                      FROM (SELECT genre, montant_dossier, COUNT(*) AS c FROM fin_dossiers
@@ -933,12 +942,15 @@ function fin_tarifs_observes(): array {
                           WHERE genre IS NOT NULL AND montant_reconcilie > 0 GROUP BY 1, 2) s
                     ORDER BY genre, c DESC)
         SELECT g.genre, t.montant_ttc, COALESCE(n.nb, 0) AS nb, api.v AS api_habituel,
-               x3.v AS x3_habituel, COALESCE(n.nb_ecarts, 0) AS nb_ecarts
+               x3.v AS x3_habituel, COALESCE(n.nb_ecarts, 0) AS nb_ecarts,
+               COALESCE(n.nb_speciale, 0) AS nb_speciale, ts.montant_ttc AS montant_speciale,
+               " . fin_tarif_speciale_defaut_sql('g.genre') . " AS defaut_speciale
         FROM (SELECT genre FROM n UNION SELECT genre FROM fin_tarifs WHERE genre NOT LIKE '#%') g
         LEFT JOIN n ON n.genre = g.genre
         LEFT JOIN api ON api.genre = g.genre
         LEFT JOIN x3 ON x3.genre = g.genre
         LEFT JOIN fin_tarifs t ON t.genre = g.genre
+        LEFT JOIN fin_tarifs ts ON ts.genre = " . get_db()->quote(FIN_TARIF_SPECIALE_PREFIXE) . " || g.genre
         ORDER BY nb DESC, g.genre");
 }
 
