@@ -63,8 +63,12 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     if ($action === 'consolider') {
-        try { json_response(true, '', fin_consolider()); }
+        try { $c = fin_consolider(); }
         catch (Throwable $e) { json_response(false, $e->getMessage()); }
+        if (($_POST['manuel'] ?? '') === '1')
+            audit_log((int)$user['id'], 'UPDATE', 'finance_dossiers', null,
+                "Recalcul du suivi : {$c['dossiers']} dossier(s), {$c['modifies']} modifié(s)");
+        json_response(true, '', $c);
     }
     json_response(false, 'Action inconnue.');
 }
@@ -146,7 +150,14 @@ include __DIR__ . '/../../templates/header.php';
 </div>
 
 <div class="fin-card" style="margin-bottom:18px">
-  <h3>Période couverte par chaque source</h3>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+    <div>
+      <h3>Période couverte par chaque source</h3>
+      <p class="aide" style="margin:0">Le suivi est recalculé après chaque import. Après une correction faite directement dans la base, relancez-le ici.</p>
+    </div>
+    <button type="button" class="btn btn-secondary" id="r-btn"><i class="ph ph-arrows-clockwise" aria-hidden="true"></i> Recalculer le suivi</button>
+  </div>
+  <div id="r-bilan" aria-live="polite"></div>
   <table class="fin-table" style="margin-top:8px">
     <thead><tr><th>Source</th><th>Lignes</th><th>Du</th><th>Au</th><th>Dernier import</th></tr></thead>
     <tbody>
@@ -241,6 +252,18 @@ document.getElementById('s-btn').addEventListener('click', async ev => {
 });
 
 // Historique : un mois par appel, consolidation une seule fois à la fin.
+document.getElementById('r-btn').addEventListener('click', async ev => {
+  const b = ev.currentTarget, zone = document.getElementById('r-bilan');
+  b.disabled = true; const lib = b.innerHTML; b.textContent = 'Recalcul en cours…';
+  const fd = new FormData(); fd.append('action', 'consolider'); fd.append('manuel', '1');
+  let r;
+  try { r = await finPost(fd); } catch (e) { r = {success: false, message: e.message}; }
+  zone.innerHTML = r.success
+    ? `<div class="fin-sub" style="margin-top:8px">${finNb(r.data.dossiers)} dossiers recalculés, ${finNb(r.data.modifies)} modifié(s), ${finNb(r.data.supprimes)} retiré(s), en ${finNb(Math.round(r.data.duree_ms / 100) / 10)} s.</div>`
+    : finErreur(r.message);
+  b.disabled = false; b.innerHTML = lib;
+});
+
 document.getElementById('h-btn').addEventListener('click', async ev => {
   const b = ev.currentTarget, depuis = document.getElementById('h-du').value;
   if (!depuis) return;
