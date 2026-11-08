@@ -1,7 +1,7 @@
 <?php
 // ============================================================
 //  pages/finance/tarifs.php — Finance : tarifs des dossiers
-//  Montant attendu (TTC) par genre de véhicule. Sans tarif, le montant
+//  Montant attendu (TTC) par catégorie de véhicule (Moto, Auto, Semi-remorque). Sans tarif, le montant
 //  attendu d'un dossier CIL est celui de l'API (plaques + sécurisation pose).
 //  Le montant réconcilié dans X3 est comparé au montant attendu : tout écart
 //  est signalé dans le suivi des dossiers.
@@ -34,11 +34,11 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     db_begin();
     try {
         foreach ($tarifs as $t) {
-            $g = fin_genre($t['genre'] ?? null);
-            if (!$g) continue;
+            $g = (string)($t['genre'] ?? '');
+            if (!isset(FIN_CATEGORIES[$g])) continue;
             $sp = ($t['champ'] ?? '') === 'speciale';
             $genre = $sp ? fin_tarif_speciale_cle($g) : $g;
-            $lib = $sp ? "$g (opération spéciale)" : $g;
+            $lib = FIN_CATEGORIES[$g] . ($sp ? ' (opération spéciale)' : '');
             $brut = trim((string)($t['montant'] ?? ''));
             if ($brut === '') {
                 if (db_query("DELETE FROM fin_tarifs WHERE genre = ?", [$genre])->rowCount()) $changes[] = "$lib : tarif retiré";
@@ -82,21 +82,21 @@ include __DIR__ . '/../../templates/header.php';
   <div class="alert alert-warning">Le module de suivi des dossiers n'est pas encore installé sur cette base (migration finance 01).</div>
 <?php else: ?>
 <div class="fin-card">
-  <p class="aide">Montant attendu (TTC) par genre de véhicule. Le montant réconcilié dans X3 lui est comparé, et tout écart est signalé
+  <p class="aide">Montant attendu (TTC) par catégorie de véhicule. Le montant réconcilié dans X3 lui est comparé, et tout écart est signalé
     dans le suivi des dossiers. Sans tarif, le montant attendu d'un dossier CIL est celui de l'API (plaques + sécurisation pose) ;
     les dossiers DGTTC, FDS et Reimmat n'ont alors pas de montant attendu.
     Les montants « habituels » sont les plus fréquents dans les données importées.
     Les dossiers de l'opération spéciale (Abobo) ont leur propre tarif ; vide, c'est la valeur par défaut affichée en grisé,
-    sinon le tarif normal du genre.</p>
+    sinon le tarif normal de la catégorie.</p>
   <div class="table-wrap">
   <table class="fin-table">
-    <thead><tr><th>Genre</th><th style="text-align:right">Dossiers</th><th style="text-align:right">Montant API habituel</th>
+    <thead><tr><th>Catégorie</th><th style="text-align:right">Dossiers</th><th style="text-align:right">Montant API habituel</th>
       <th style="text-align:right">Réconcilié X3 habituel</th><th style="text-align:right">Écarts actuels</th><th>Tarif attendu (TTC)</th><th>Opération spéciale (TTC)</th></tr></thead>
     <tbody>
     <?php if (!$lignes): ?><tr><td colspan="7" style="text-align:center;color:#64748b;padding:24px">Aucun dossier importé pour l'instant.</td></tr><?php endif; ?>
     <?php foreach ($lignes as $l): ?>
       <tr>
-        <td><strong><?= h($l['genre']) ?></strong></td>
+        <td><strong><?= h(FIN_CATEGORIES[$l['genre']]) ?></strong></td>
         <td class="n"><?= number_format((int)$l['nb'], 0, ',', ' ') ?></td>
         <td class="n"><?= $l['api_habituel'] !== null ? number_format((float)$l['api_habituel'], 0, ',', ' ') : '—' ?></td>
         <td class="n"><?php if ($l['x3_habituel'] !== null): ?><?= number_format((float)$l['x3_habituel'], 0, ',', ' ') ?>
@@ -105,13 +105,13 @@ include __DIR__ . '/../../templates/header.php';
         <td class="n"><?= number_format((int)$l['nb_ecarts'], 0, ',', ' ') ?></td>
         <td><input type="text" inputmode="numeric" class="fin-tarif" data-genre="<?= h($l['genre']) ?>"
                    data-init="<?= $l['montant_ttc'] !== null ? (int)$l['montant_ttc'] : '' ?>"
-                   value="<?= $l['montant_ttc'] !== null ? (int)$l['montant_ttc'] : '' ?>" placeholder="API" aria-label="Tarif attendu pour <?= h($l['genre']) ?>"
+                   value="<?= $l['montant_ttc'] !== null ? (int)$l['montant_ttc'] : '' ?>" placeholder="API" aria-label="Tarif attendu pour <?= h(FIN_CATEGORIES[$l['genre']]) ?>"
                    <?= $peut_modifier ? '' : 'disabled' ?>></td>
         <td><input type="text" inputmode="numeric" class="fin-tarif" data-champ="speciale" data-genre="<?= h($l['genre']) ?>"
                    data-init="<?= $l['montant_speciale'] !== null ? (int)$l['montant_speciale'] : '' ?>"
                    value="<?= $l['montant_speciale'] !== null ? (int)$l['montant_speciale'] : '' ?>"
                    placeholder="<?= $l['defaut_speciale'] !== null ? (int)$l['defaut_speciale'] : 'normal' ?>"
-                   aria-label="Tarif opération spéciale pour <?= h($l['genre']) ?>" <?= $peut_modifier ? '' : 'disabled' ?>>
+                   aria-label="Tarif opération spéciale pour <?= h(FIN_CATEGORIES[$l['genre']]) ?>" <?= $peut_modifier ? '' : 'disabled' ?>>
           <?php if ((int)$l['nb_speciale'] > 0): ?><div style="font-size:11.5px;color:#64748b;margin-top:3px"><?= number_format((int)$l['nb_speciale'], 0, ',', ' ') ?> dossier(s)</div><?php endif; ?></td>
       </tr>
     <?php endforeach; ?>

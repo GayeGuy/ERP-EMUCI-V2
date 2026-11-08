@@ -426,7 +426,7 @@ function finRendre(d) {
   if (anomalies || d.paye_par_bon) html += `<div style="margin-bottom:12px">${anomalies}${d.paye_par_bon ? '<span class="fin-pill bon">Payé par bon</span>' : ''}</div>`;
   html += '<div class="fin-kv">'
     + kv('Canal', finEsc(d.canal_libelle)) + kv('Type de dossier', finEsc(d.type_dossier)) + kv('Type CIL', finEsc(d.type_dossier_cil))
-    + kv('Genre', d.categorie ? finEsc(d.categorie) + `<div class="fin-sub">${finEsc(d.genre)}</div>` : null) + kv('Client', finEsc(d.client)) + kv('Centre', finEsc(d.centre))
+    + kv('Genre', finEsc(d.categorie)) + kv('Client', finEsc(d.client)) + kv('Centre', finEsc(d.centre))
     + kv('Mode de paiement', finEsc(d.mode_paiement)) + kv('N° reçu CIL', finEsc(d.numero_recu))
     + kv('Reçu PDF', d.pdf_recu && /^https:\/\//.test(d.pdf_recu) ? `<a href="${finEsc(d.pdf_recu)}" target="_blank" rel="noopener noreferrer">Ouvrir le reçu</a>` : '—')
     + kv('Montant plaques', finNb(d.mt_plaques)) + kv('Montant sécurisation pose', finNb(d.mt_secupose)) + kv('Montant du dossier', finNb(d.montant_dossier))

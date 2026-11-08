@@ -63,8 +63,8 @@ const FIN_ETAPES = [
 
 const FIN_CANAUX = ['CIL' => 'CIL', 'DGTTC' => 'DGTTC', 'FDS' => 'FDS', 'REIMMAT' => 'Reimmat', 'SPECIALE' => 'Opération spéciale'];
 
-// Catégorie affichée à la place du genre détaillé (le genre reste stocké :
-// les tarifs sont par genre). Moto : MOTOCYCLETTE, MOTO, MOTO TRICYCLE ;
+// Catégorie affichée à la place du genre détaillé, et clé des tarifs (le genre
+// détaillé reste stocké). Moto : MOTOCYCLETTE, MOTO, MOTO TRICYCLE ;
 // Semi-remorque : SEMI REMORQUE (ROUTIER), REMORQUE ROUTIERE ; tout le reste
 // (voiture, camionnette, camion, citerne, tracteur, autocar, chariot…) : Auto.
 const FIN_CATEGORIES = ['AUTO' => 'Auto', 'MOTO' => 'Moto', 'SEMI' => 'Semi-remorque'];
@@ -87,15 +87,15 @@ function fin_categorie_sql(string $col): string {
          . " WHEN $col LIKE '%REMORQUE%' THEN 'SEMI' ELSE 'AUTO' END";
 }
 
-// Tarifs « Opération spéciale », par genre. Modifiables dans Finance → Tarifs :
-// rangés dans fin_tarifs sous la clé « #SPECIALE:<genre> » (un genre ne commence
-// jamais par « # »), ce qui évite une migration. Sans tarif saisi : valeur par
-// défaut ci-dessous, sinon tarif normal du genre.
+// Tarifs par catégorie (fin_tarifs.genre = AUTO / MOTO / SEMI ; les anciennes
+// lignes par genre détaillé sont ignorées). Opération spéciale : clé
+// « #SPECIALE:<catégorie> », sans migration. Sans tarif saisi : valeur par
+// défaut ci-dessous, sinon tarif normal de la catégorie.
 const FIN_TARIF_SPECIALE_PREFIXE = '#SPECIALE:';
-const FIN_TARIF_SPECIALE_DEFAUTS = ['MOTOCYCLETTE' => 6300];
+const FIN_TARIF_SPECIALE_DEFAUTS = ['MOTO' => 6300];
 
-function fin_tarif_speciale_cle(string $genre): string {
-    return mb_substr(FIN_TARIF_SPECIALE_PREFIXE . $genre, 0, 60);
+function fin_tarif_speciale_cle(string $categorie): string {
+    return FIN_TARIF_SPECIALE_PREFIXE . $categorie;
 }
 
 // CASE SQL des valeurs par défaut, pour la colonne genre $col.
@@ -756,7 +756,7 @@ function fin_consolider(): array {
         // ou le concessionnaire, ou dossier Primo sans N° CIL ni source requête.
         $speciale = "COALESCE(g.site_enrolement ILIKE 'ABOBO PREFECTURE POLICE%' OR g.concessionnaire ILIKE 'OPERATION ABOBO%'
                       OR (g.cle IS NOT NULL AND g.type_dossier = 'Primo' AND g.chrono IS NULL AND COALESCE(g.source, '') = ''), false)";
-        $tarif_speciale_defaut = fin_tarif_speciale_defaut_sql('b.genre');
+        $tarif_speciale_defaut = fin_tarif_speciale_defaut_sql(fin_categorie_sql('b.genre'));
         db_query("CREATE TEMP TABLE fin_t_new (LIKE fin_dossiers INCLUDING DEFAULTS) ON COMMIT DROP");
         db_query("INSERT INTO fin_t_new (" . implode(', ', $cols) . ")
             SELECT z.cle, z.vin, z.chrono, z.nsiiv, z.immat, z.canal, z.type_dossier, z.type_dossier_cil, z.genre, z.centre, z.client, z.type_client,
@@ -843,8 +843,8 @@ function fin_consolider(): array {
                     LEFT JOIN fin_t_cai c ON c.cle = k.cle
                     LEFT JOIN fin_t_pos p ON p.cle = k.cle
                 ) b
-                LEFT JOIN fin_tarifs t ON t.genre = b.genre
-                LEFT JOIN fin_tarifs ts ON b.canal = 'SPECIALE' AND ts.genre = " . get_db()->quote(FIN_TARIF_SPECIALE_PREFIXE) . " || b.genre
+                LEFT JOIN fin_tarifs t ON t.genre = " . fin_categorie_sql('b.genre') . "
+                LEFT JOIN fin_tarifs ts ON b.canal = 'SPECIALE' AND ts.genre = " . get_db()->quote(FIN_TARIF_SPECIALE_PREFIXE) . " || " . fin_categorie_sql('b.genre') . "
             ) z");
         db_query("CREATE INDEX ON fin_t_new (cle)");
         $supprimes = db_query("DELETE FROM fin_dossiers d WHERE NOT EXISTS (SELECT 1 FROM fin_t_new n WHERE n.cle = d.cle)")->rowCount();
@@ -956,28 +956,30 @@ function fin_dossier_detail(string $cle): ?array {
 // Genres connus et montants observés, pour le paramétrage des tarifs.
 function fin_tarifs_observes(): array {
     return db_fetch_all("
-        WITH n AS (SELECT genre, COUNT(*) AS nb, COUNT(*) FILTER (WHERE a_ecart) AS nb_ecarts,
+        WITH d AS (SELECT " . fin_categorie_sql('genre') . " AS genre, canal, a_ecart, montant_dossier, montant_reconcilie
+                   FROM fin_dossiers WHERE COALESCE(genre, '') <> ''),
+             n AS (SELECT genre, COUNT(*) AS nb, COUNT(*) FILTER (WHERE a_ecart) AS nb_ecarts,
                           COUNT(*) FILTER (WHERE canal = 'SPECIALE') AS nb_speciale
-                   FROM fin_dossiers WHERE genre IS NOT NULL GROUP BY genre),
+                   FROM d GROUP BY genre),
              api AS (SELECT DISTINCT ON (genre) genre, montant_dossier AS v
-                     FROM (SELECT genre, montant_dossier, COUNT(*) AS c FROM fin_dossiers
-                           WHERE genre IS NOT NULL AND montant_dossier > 0 GROUP BY 1, 2) s
+                     FROM (SELECT genre, montant_dossier, COUNT(*) AS c FROM d
+                           WHERE montant_dossier > 0 AND canal <> 'SPECIALE' GROUP BY 1, 2) s
                      ORDER BY genre, c DESC),
              x3 AS (SELECT DISTINCT ON (genre) genre, montant_reconcilie AS v
-                    FROM (SELECT genre, montant_reconcilie, COUNT(*) AS c FROM fin_dossiers
-                          WHERE genre IS NOT NULL AND montant_reconcilie > 0 GROUP BY 1, 2) s
+                    FROM (SELECT genre, montant_reconcilie, COUNT(*) AS c FROM d
+                          WHERE montant_reconcilie > 0 AND canal <> 'SPECIALE' GROUP BY 1, 2) s
                     ORDER BY genre, c DESC)
         SELECT g.genre, t.montant_ttc, COALESCE(n.nb, 0) AS nb, api.v AS api_habituel,
                x3.v AS x3_habituel, COALESCE(n.nb_ecarts, 0) AS nb_ecarts,
                COALESCE(n.nb_speciale, 0) AS nb_speciale, ts.montant_ttc AS montant_speciale,
                " . fin_tarif_speciale_defaut_sql('g.genre') . " AS defaut_speciale
-        FROM (SELECT genre FROM n UNION SELECT genre FROM fin_tarifs WHERE genre NOT LIKE '#%') g
+        FROM (VALUES ('MOTO', 1), ('AUTO', 2), ('SEMI', 3)) g (genre, ordre)
         LEFT JOIN n ON n.genre = g.genre
         LEFT JOIN api ON api.genre = g.genre
         LEFT JOIN x3 ON x3.genre = g.genre
         LEFT JOIN fin_tarifs t ON t.genre = g.genre
         LEFT JOIN fin_tarifs ts ON ts.genre = " . get_db()->quote(FIN_TARIF_SPECIALE_PREFIXE) . " || g.genre
-        ORDER BY nb DESC, g.genre");
+        ORDER BY g.ordre");
 }
 
 // ── Export Excel au format du tableau de bord finance ─────────
