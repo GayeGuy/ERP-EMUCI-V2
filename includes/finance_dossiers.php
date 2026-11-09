@@ -745,14 +745,15 @@ function fin_consolider(): array {
             SELECT cle, MIN(date_installation) AS date_installation,
                    MAX(num_consommable) FILTER (WHERE position IN ('front', 'avant')) AS avant,
                    MAX(num_consommable) FILTER (WHERE position IN ('rear', 'arriere', 'arrière')) AS arriere,
-                   MAX(immat) AS immat, MAX(nsiiv) AS nsiiv
+                   MAX(immat) AS immat, MAX(nsiiv) AS nsiiv,
+                   (array_agg(site ORDER BY date_installation DESC NULLS LAST) FILTER (WHERE COALESCE(site, '') <> ''))[1] AS site_pose
             FROM (
-                SELECT " . $cle('s', false, true) . " AS cle, s.date_installation, s.position, s.num_consommable, s.immat, s.nsiiv
+                SELECT " . $cle('s', false, true) . " AS cle, s.date_installation, s.position, s.num_consommable, s.immat, s.nsiiv, s.site
                 FROM fin_src_pose s WHERE COALESCE(s.statut_plaque, 'in_use') = 'in_use'"
                 . ($opto ? "
                 UNION ALL
                 SELECT COALESCE(NULLIF(upper(trim(o.vin)), ''), (SELECT vin FROM fin_t_map WHERE k = 'N:' || o.numero_dossier), '#' || o.numero_dossier),
-                       o.date_installation, lower(o.position), o.num_consommable, upper(o.immatriculation), o.numero_dossier
+                       o.date_installation, lower(o.position), o.num_consommable, upper(o.immatriculation), o.numero_dossier, o.site_nom_emuci
                 FROM import_optoplate o WHERE o.statut_plaque = 'in_use'" : '') . "
             ) p WHERE cle IS NOT NULL AND cle <> '#' GROUP BY cle");
 
@@ -793,7 +794,20 @@ function fin_consolider(): array {
                 LEFT JOIN fin_service_prix p ON p.service_id = s.id AND p.categorie = c.cat
                 GROUP BY 1, 2");
             $cat_b = fin_categorie_sql('b.genre');
-            $formule = "LEFT JOIN fin_site_codes sc ON sc.code = b.site
+            // Site ERP du dossier : rattachement manuel du code, sinon automatique
+            // (nom du site, puis code du site, puis préfixe du code « XXX-01 »).
+            db_query("CREATE TEMP TABLE fin_t_site_auto ON COMMIT DROP AS
+                SELECT DISTINCT ON (k) k, id AS site_id FROM (
+                    SELECT upper(trim(nom)) AS k, id, 1 AS prio, actif FROM sites
+                    UNION ALL SELECT upper(trim(code)), id, 2, actif FROM sites
+                    UNION ALL SELECT upper(regexp_replace(trim(code), '-01$', '')), id, 3, actif FROM sites WHERE code LIKE '%-01'
+                ) x ORDER BY k, prio, actif DESC, id");
+            db_query("CREATE TEMP TABLE fin_t_site ON COMMIT DROP AS
+                SELECT m.code, m.site_id FROM fin_site_codes m
+                UNION ALL SELECT a.k, a.site_id FROM fin_t_site_auto a
+                WHERE NOT EXISTS (SELECT 1 FROM fin_site_codes m WHERE upper(m.code) = a.k)");
+            db_query("CREATE INDEX ON fin_t_site (upper(code))");
+            $formule = "LEFT JOIN LATERAL (SELECT site_id FROM fin_t_site WHERE upper(code) = upper(trim(b.site)) LIMIT 1) sc ON true
                 LEFT JOIN LATERAL (
                     SELECT f.id, f.variable, fp.montant FROM fin_t_form f
                     LEFT JOIN fin_t_form_prix fp ON fp.formule_id = f.id AND fp.cat = $cat_b
@@ -867,8 +881,9 @@ function fin_consolider(): array {
                                  CASE x.genre WHEN 'MOTO' THEN 'MOTOCYCLETTE' ELSE x.genre END) AS genre,
                         COALESCE(g.site_enrolement,
                                  substring(COALESCE(a.chrono, r.chrono, g.chrono, x.chrono, c.chrono) FROM '^[A-Z]{2,3}')) AS centre,
-                        -- Site des formules : préfixe du chrono (BKE, ABJ…), sinon site d'enrôlement.
-                        COALESCE(substring(COALESCE(a.chrono, r.chrono, g.chrono, x.chrono, c.chrono) FROM '^[A-Z]{2,3}'),
+                        -- Site : celui de la pose (OptoPlate) s'il est connu, sinon celui de
+                        -- l'enrôlement (préfixe du chrono : BKE, ABJ… ; sinon site CGI).
+                        COALESCE(p.site_pose, substring(COALESCE(a.chrono, r.chrono, g.chrono, x.chrono, c.chrono) FROM '^[A-Z]{2,3}'),
                                  g.site_enrolement) AS site,
                         COALESCE(a.client, g.client, x.client, c.concessionnaire) AS client,
                         a.type_client,
@@ -1006,7 +1021,7 @@ function fin_dossier_detail(string $cle): ?array {
     $d['canal_libelle'] = FIN_CANAUX[$d['canal'] ?? ''] ?? $d['canal'];
     $d['formule'] = null; $d['services'] = []; $d['site_nom'] = null;
     if (fin_services_pret() && !empty($d['site_id']))
-        $d['site_nom'] = db_fetch_value("SELECT nom FROM fin_sites WHERE id = ?", [(int)$d['site_id']]);
+        $d['site_nom'] = db_fetch_value("SELECT nom FROM sites WHERE id = ?", [(int)$d['site_id']]);
     if (fin_services_pret() && !empty($d['formule_id'])) {
         $d['formule'] = db_fetch_value("SELECT libelle FROM fin_formules WHERE id = ?", [(int)$d['formule_id']]);
         $d['services'] = db_fetch_all("SELECT s.libelle, s.variable, p.montant_ttc FROM fin_formule_services fs
@@ -1100,25 +1115,20 @@ function fin_formules_liste(): array {
     return $l;
 }
 
-// Codes de site reconnus dans les dossiers (préfixe du chrono, sinon site
-// d'enrôlement), par fréquence, avec le site auquel ils sont rattachés.
+// Codes de site trouvés dans les dossiers (site de pose OptoPlate, sinon
+// préfixe du chrono ou site d'enrôlement CGI), par fréquence, avec le site ERP
+// retenu au dernier calcul et le rattachement manuel éventuel.
 function fin_codes_site(): array {
-    return db_fetch_all("SELECT d.site AS code, COUNT(*) AS nb, sc.site_id
+    return db_fetch_all("SELECT d.site AS code, COUNT(*) AS nb, MAX(d.site_id) AS site_id, MAX(sc.site_id) AS site_manuel
         FROM fin_dossiers d LEFT JOIN fin_site_codes sc ON sc.code = d.site
-        WHERE COALESCE(d.site, '') <> '' GROUP BY d.site, sc.site_id ORDER BY nb DESC, d.site");
+        WHERE COALESCE(d.site, '') <> '' GROUP BY d.site ORDER BY nb DESC, d.site");
 }
 
-// Sites nommés, avec leurs codes et leur nombre de dossiers.
+// Sites de l'ERP (Administration → Sites), avec leur nombre de dossiers.
 function fin_sites_liste(): array {
-    $l = db_fetch_all("SELECT s.id, s.nom, (SELECT COUNT(*) FROM fin_dossiers d WHERE d.site_id = s.id) AS nb_dossiers,
-            (SELECT COUNT(*) FROM fin_formules f WHERE s.id = ANY (f.site_ids)) AS nb_formules
-        FROM fin_sites s ORDER BY s.nom");
-    $codes = db_fetch_all("SELECT code, site_id FROM fin_site_codes ORDER BY code");
-    foreach ($l as &$s) {
-        $s['codes'] = [];
-        foreach ($codes as $c) if ((int)$c['site_id'] === (int)$s['id']) $s['codes'][] = $c['code'];
-    }
-    return $l;
+    return db_fetch_all("SELECT s.id, s.code, s.nom, s.actif, COALESCE(n.nb, 0) AS nb_dossiers
+        FROM sites s LEFT JOIN (SELECT site_id, COUNT(*) AS nb FROM fin_dossiers WHERE site_id IS NOT NULL GROUP BY site_id) n ON n.site_id = s.id
+        ORDER BY s.actif DESC, s.nom");
 }
 
 // Liste de valeurs autorisées → tableau PostgreSQL littéral, ou null (= tous).
@@ -1132,39 +1142,21 @@ function fin_pg_tableau(array $v): ?string {
 function fin_tarifs_action_services(string $action, array $post, int $uid): array {
     $id = (int)($post['id'] ?? 0);
     switch ($action) {
-    case 'site_enregistrer':
-        $nom = fin_txt($post['nom'] ?? null, 120);
-        if ($nom === null) throw new RuntimeException('Nom du site obligatoire.');
-        $codes = json_decode((string)($post['codes'] ?? '[]'), true);
-        if (!is_array($codes)) throw new RuntimeException('Données invalides.');
-        $codes = array_values(array_unique(array_filter(array_map(fn($x) => mb_substr(trim((string)$x), 0, 120), $codes), 'strlen')));
-        if (!$codes) throw new RuntimeException('Rattachez au moins un code au site.');
-        if (db_fetch_value("SELECT 1 FROM fin_sites WHERE lower(nom) = lower(?) AND id <> ?", [$nom, $id]))
-            throw new RuntimeException("Un site « $nom » existe déjà.");
-        db_begin();
-        if ($id) {
-            if (!db_query("UPDATE fin_sites SET nom = ?, maj_par = ?, maj_le = CURRENT_TIMESTAMP WHERE id = ?", [$nom, $uid, $id])->rowCount())
-                throw new RuntimeException('Site introuvable.');
-        } else {
-            $id = (int)db_fetch_value("INSERT INTO fin_sites (nom, maj_par) VALUES (?, ?) RETURNING id", [$nom, $uid]);
+    case 'site_code':
+        // Rattache un code à un site ERP ; site 0 = rattachement automatique.
+        $code = fin_txt($post['code'] ?? null, 120);
+        if ($code === null) throw new RuntimeException('Code manquant.');
+        $sid = (int)($post['site_id'] ?? 0);
+        if ($sid) {
+            $nom = db_fetch_value("SELECT nom FROM sites WHERE id = ?", [$sid]);
+            if ($nom === null) throw new RuntimeException('Site inconnu.');
+            db_query("INSERT INTO fin_site_codes (code, site_id) VALUES (?, ?) ON CONFLICT (code) DO UPDATE SET site_id = EXCLUDED.site_id", [$code, $sid]);
+            audit_log($uid, 'UPDATE', 'finance_dossiers', $sid, "Code site « $code » rattaché à « $nom »");
+            return ["« $code » rattaché à « $nom ».", true];
         }
-        // Un code n'appartient qu'à un site : il est déplacé s'il était ailleurs.
-        db_query("DELETE FROM fin_site_codes WHERE site_id = ?", [$id]);
-        foreach ($codes as $c) db_query("INSERT INTO fin_site_codes (code, site_id) VALUES (?, ?)
-                                         ON CONFLICT (code) DO UPDATE SET site_id = EXCLUDED.site_id", [$c, $id]);
-        db_commit();
-        audit_log($uid, 'UPDATE', 'finance_dossiers', $id, "Site tarif « $nom » : codes " . implode(', ', $codes));
-        return ["Site « $nom » enregistré.", true];
-
-    case 'site_supprimer':
-        $nom = db_fetch_value("SELECT nom FROM fin_sites WHERE id = ?", [$id]);
-        if ($nom === null) throw new RuntimeException('Site introuvable.');
-        db_begin();
-        db_query("UPDATE fin_formules SET site_ids = NULLIF(array_remove(site_ids, ?::integer), '{}') WHERE ?::integer = ANY (site_ids)", [$id, $id]);
-        db_query("DELETE FROM fin_sites WHERE id = ?", [$id]);
-        db_commit();
-        audit_log($uid, 'DELETE', 'finance_dossiers', $id, "Site tarif « $nom » supprimé");
-        return ["Site « $nom » supprimé.", true];
+        db_query("DELETE FROM fin_site_codes WHERE code = ?", [$code]);
+        audit_log($uid, 'UPDATE', 'finance_dossiers', null, "Code site « $code » : rattachement automatique");
+        return ["« $code » : rattachement automatique.", true];
 
     case 'service_enregistrer':
         $lib = fin_txt($post['libelle'] ?? null, 80);
@@ -1223,7 +1215,7 @@ function fin_tarifs_action_services(string $action, array $post, int $uid): arra
         $site_ids = array_values(array_unique(array_filter(array_map('intval', $liste('sites')))));
         if ($mode === 'site') {
             if (!$site_ids) throw new RuntimeException('Choisissez au moins un site, ou passez la formule en mode « par dossier ».');
-            if ((int)db_fetch_value("SELECT COUNT(*) FROM fin_sites WHERE id IN (" . implode(',', $site_ids) . ")") !== count($site_ids))
+            if ((int)db_fetch_value("SELECT COUNT(*) FROM sites WHERE id IN (" . implode(',', $site_ids) . ")") !== count($site_ids))
                 throw new RuntimeException('Site inconnu.');
             $types = [];
         } else {
@@ -1251,7 +1243,7 @@ function fin_tarifs_action_services(string $action, array $post, int $uid): arra
         foreach ($sids as $sid) db_query("INSERT INTO fin_formule_services (formule_id, service_id) VALUES (?, ?)", [$id, $sid]);
         db_commit();
         $c = fn(array $v) => $v ? implode(', ', $v) : 'tous';
-        $noms = $site_ids ? array_column(db_fetch_all("SELECT nom FROM fin_sites WHERE id IN (" . implode(',', $site_ids) . ") ORDER BY nom"), 'nom') : [];
+        $noms = $site_ids ? array_column(db_fetch_all("SELECT nom FROM sites WHERE id IN (" . implode(',', $site_ids) . ") ORDER BY nom"), 'nom') : [];
         audit_log($uid, 'UPDATE', 'finance_dossiers', $id, "Formule tarif « $lib » (" . mb_strtolower(FIN_MODES_FORMULE[$mode]) . ') : '
             . ($mode === 'site' ? 'sites ' . $c($noms) : 'types ' . $c($types)) . ', canaux ' . $c($canaux) . ', catégories ' . $c($cats) . ', ' . count($sids) . ' service(s)' . ($actif ? '' : ' (inactive)'));
         return ["Formule « $lib » enregistrée.", true];

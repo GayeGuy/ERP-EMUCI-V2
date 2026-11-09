@@ -1,8 +1,10 @@
 -- ============================================================
 --  Finance 02 : sites, services et formules de tarification (PostgreSQL)
 --
---  Sites : nom libre, rattaché à un ou plusieurs codes reconnus dans les
---  données (préfixe du chrono : BKE, ABJ… ; sinon site d'enrôlement CGI).
+--  Sites : ceux de l'ERP (table sites). Le site d'un dossier est celui de la
+--  pose (OptoPlate), sinon celui de l'enrôlement (préfixe du chrono : BKE,
+--  ABJ… ; sinon site CGI). Ce code est rattaché automatiquement à un site ERP
+--  (nom, code, ou code « XXX-01 ») ; fin_site_codes force un autre rattachement.
 --  Services : prix TTC par catégorie (MOTO / AUTO / SEMI) ; un service
 --  « variable » (reliquat) n'a pas de prix fixe : c'est le complément
 --  réconcilié au-delà des services fixes.
@@ -15,16 +17,9 @@
 --  À passer après migration_finance_01_dossiers.sql. Rejouable.
 -- ============================================================
 
-CREATE TABLE IF NOT EXISTS fin_sites (
-    id       serial       PRIMARY KEY,
-    nom      varchar(120) NOT NULL UNIQUE,
-    maj_par  integer,
-    maj_le   timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
 CREATE TABLE IF NOT EXISTS fin_site_codes (
     code     varchar(120) PRIMARY KEY,
-    site_id  integer      NOT NULL REFERENCES fin_sites (id) ON DELETE CASCADE
+    site_id  integer      NOT NULL REFERENCES sites (id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS fin_services (
