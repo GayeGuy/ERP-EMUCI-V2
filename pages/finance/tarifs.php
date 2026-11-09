@@ -27,7 +27,7 @@ if (is_ajax() && $_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$pret) json_response(false, 'Module non installé.');
     if (!$peut_modifier) json_response(false, 'Action réservée.');
     $action = (string)($_POST['action'] ?? '');
-    if (str_starts_with($action, 'service_') || str_starts_with($action, 'formule_')) {
+    if (preg_match('/^(site|service|formule)_/', $action)) {
         if (!fin_services_pret()) json_response(false, 'Services non installés (migration finance 02).');
         session_write_close();
         try {
@@ -84,7 +84,8 @@ $lignes = $pret ? fin_tarifs_observes() : [];
 $avec_services = $pret && fin_services_pret();
 $services = $avec_services ? fin_services_liste() : [];
 $formules = $avec_services ? fin_formules_liste() : [];
-$sites    = $avec_services ? fin_sites_connus() : [];
+$sites    = $avec_services ? fin_sites_liste() : [];
+$codes_site = $avec_services ? fin_codes_site() : [];
 include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
@@ -170,6 +171,32 @@ tr.fin-inactif td{opacity:.55}
   <div class="alert alert-warning" style="margin-top:16px">Les services et formules ne sont pas encore installés sur cette base (migration finance 02).</div>
 <?php else: ?>
 <div class="fin-card" style="margin-top:16px">
+  <div class="fin-entete"><h3>Sites</h3>
+    <?php if ($peut_modifier): ?><button type="button" class="btn btn-secondary btn-sm" id="site-ajouter">Nouveau site</button><?php endif; ?></div>
+  <p class="aide">Nom libre, rattaché à un ou plusieurs codes reconnus dans les données : préfixe du chrono (BKE, ABJ, KGO…) ou,
+    sans chrono, site d'enrôlement du CGI. Un code n'appartient qu'à un site.</p>
+  <div class="table-wrap">
+  <table class="fin-table">
+    <thead><tr><th>Site</th><th>Codes rattachés</th><th style="text-align:right">Dossiers</th><th style="text-align:right">Formules</th><th></th></tr></thead>
+    <tbody>
+    <?php foreach ($sites as $s): ?>
+      <tr>
+        <td><strong><?= h($s['nom']) ?></strong></td>
+        <td><?= h(implode(', ', $s['codes'])) ?></td>
+        <td class="n"><?= number_format((int)$s['nb_dossiers'], 0, ',', ' ') ?></td>
+        <td class="n"><?= (int)$s['nb_formules'] ?></td>
+        <td class="fin-actions"><?php if ($peut_modifier): ?><button type="button" class="btn btn-secondary btn-sm site-modif" data-id="<?= (int)$s['id'] ?>">Modifier</button><?php endif; ?></td>
+      </tr>
+    <?php endforeach; ?>
+    <?php if (!$sites): ?><tr><td colspan="5" style="text-align:center;color:#64748b;padding:20px">Aucun site nommé.</td></tr><?php endif; ?>
+    </tbody>
+  </table>
+  </div>
+  <?php $libres = array_filter($codes_site, fn($c) => $c['site_id'] === null); ?>
+  <?php if ($libres): ?><p class="fin-note" style="margin:10px 0 0">Codes sans site : <?= h(implode(', ', array_map(fn($c) => $c['code'] . ' (' . number_format((int)$c['nb'], 0, ',', ' ') . ')', $libres))) ?></p><?php endif; ?>
+</div>
+
+<div class="fin-card" style="margin-top:16px">
   <div class="fin-entete"><h3>Services</h3>
     <?php if ($peut_modifier): ?><button type="button" class="btn btn-secondary btn-sm" id="srv-ajouter">Ajouter un service</button><?php endif; ?></div>
   <p class="aide">Prix TTC de chaque service par catégorie. Un service « variable » (reliquat) n'a pas de prix : c'est le complément
@@ -202,21 +229,27 @@ tr.fin-inactif td{opacity:.55}
 <div class="fin-card" style="margin-top:16px">
   <div class="fin-entete"><h3>Formules</h3>
     <?php if ($peut_modifier): ?><button type="button" class="btn btn-secondary btn-sm" id="frm-ajouter" <?= $services ? '' : 'disabled' ?>>Nouvelle formule</button><?php endif; ?></div>
-  <p class="aide">Une formule regroupe les services payés par un dossier selon son site (préfixe du chrono : BKE, ABJ, KGO…, sinon site d'enrôlement),
-    son canal et sa catégorie ; un critère vide vaut pour tous. Si plusieurs formules conviennent, la plus précise l'emporte (site, puis canal,
-    puis catégorie). Montant attendu = somme des services fixes. Un dossier sans formule garde le tarif par catégorie ci-dessus.</p>
+  <p class="aide">Une formule regroupe les services payés par un dossier. <strong>Par site</strong> : elle s'applique aux dossiers des sites choisis
+    (affinée par canal et catégorie). <strong>Par dossier</strong> : elle s'applique selon le canal, le type et la catégorie du dossier, quel que soit
+    son site. Un critère vide vaut pour tous. Une formule par site l'emporte sur une formule par dossier, puis la plus précise.
+    Montant attendu = somme des services fixes. Un dossier sans formule garde le tarif par catégorie ci-dessus.</p>
   <div class="table-wrap">
   <table class="fin-table">
     <thead><tr><th>Formule</th><th>Critères</th><th>Services</th>
       <?php foreach (FIN_CATEGORIES as $libcat): ?><th style="text-align:right"><?= h($libcat) ?></th><?php endforeach; ?>
       <th style="text-align:right">Dossiers</th><th></th></tr></thead>
     <tbody>
-    <?php $nom_srv = array_column($services, 'libelle', 'id'); ?>
+    <?php $nom_srv = array_column($services, 'libelle', 'id'); $nom_site = array_column($sites, 'nom', 'id'); ?>
     <?php foreach ($formules as $f): ?>
       <tr class="<?= $f['actif'] ? '' : 'fin-inactif' ?>">
         <td><strong><?= h($f['libelle']) ?></strong><?= $f['actif'] ? '' : '<div class="fin-note">inactive</div>' ?></td>
         <td class="fin-crit">
-          <div><span>Sites</span> <?= $f['sites'] ? h(implode(', ', $f['sites'])) : 'tous' ?></div>
+          <div><span>Mode</span> <?= h(FIN_MODES_FORMULE[$f['mode']] ?? $f['mode']) ?></div>
+          <?php if ($f['mode'] === 'site'): ?>
+          <div><span>Sites</span> <?= $f['site_ids'] ? h(implode(', ', array_map(fn($i) => $nom_site[$i] ?? '?', $f['site_ids']))) : '<em>aucun : formule sans effet</em>' ?></div>
+          <?php else: ?>
+          <div><span>Types</span> <?= $f['types'] ? h(implode(', ', $f['types'])) : 'tous' ?></div>
+          <?php endif; ?>
           <div><span>Canaux</span> <?= $f['canaux'] ? h(implode(', ', array_map(fn($c) => FIN_CANAUX[$c] ?? $c, $f['canaux']))) : 'tous' ?></div>
           <div><span>Catégories</span> <?= $f['categories'] ? h(implode(', ', array_map(fn($c) => FIN_CATEGORIES[$c] ?? $c, $f['categories']))) : 'toutes' ?></div></td>
         <td><?= h(implode(' + ', array_map(fn($sid) => $nom_srv[$sid] ?? '?', $f['services']))) ?></td>
@@ -239,9 +272,16 @@ tr.fin-inactif td{opacity:.55}
 <div class="fin-modal-bg" id="frm-modal">
   <div class="fin-modal" role="dialog" aria-modal="true" aria-labelledby="frm-titre">
     <h3 id="frm-titre">Formule</h3>
-    <label class="fin-champ">Libellé<input type="text" id="frm-lib" maxlength="120" placeholder="ex. BKE moto"></label>
-    <fieldset><legend>Sites <small>(aucun coché = tous)</small></legend><div class="fin-choix">
-      <?php foreach ($sites as $s): ?><label><input type="checkbox" name="sites" value="<?= h($s['site']) ?>"> <?= h($s['site']) ?> <small><?= number_format((int)$s['nb'], 0, ',', ' ') ?></small></label><?php endforeach; ?>
+    <label class="fin-champ">Libellé<input type="text" id="frm-lib" maxlength="120" placeholder="ex. Bouaké moto"></label>
+    <fieldset><legend>Paramétrage</legend><div class="fin-choix">
+      <?php foreach (FIN_MODES_FORMULE as $k => $m): ?><label><input type="radio" name="mode" value="<?= h($k) ?>"> <?= h($m) ?></label><?php endforeach; ?>
+    </div></fieldset>
+    <fieldset data-mode="site"><legend>Sites <small>(au moins un)</small></legend><div class="fin-choix">
+      <?php foreach ($sites as $s): ?><label><input type="checkbox" name="sites" value="<?= (int)$s['id'] ?>"> <?= h($s['nom']) ?></label><?php endforeach; ?>
+      <?php if (!$sites): ?><span class="fin-note">Aucun site nommé : créez-en dans la section Sites.</span><?php endif; ?>
+    </div></fieldset>
+    <fieldset data-mode="dossier"><legend>Types de dossier <small>(aucun coché = tous)</small></legend><div class="fin-choix">
+      <?php foreach (FIN_TYPES as $t): ?><label><input type="checkbox" name="types" value="<?= h($t) ?>"> <?= h($t) ?></label><?php endforeach; ?>
     </div></fieldset>
     <fieldset><legend>Canaux <small>(aucun coché = tous)</small></legend><div class="fin-choix">
       <?php foreach (FIN_CANAUX as $k => $c): ?><label><input type="checkbox" name="canaux" value="<?= h($k) ?>"> <?= h($c) ?></label><?php endforeach; ?>
@@ -261,10 +301,28 @@ tr.fin-inactif td{opacity:.55}
     </div>
   </div>
 </div>
+<div class="fin-modal-bg" id="site-modal">
+  <div class="fin-modal" role="dialog" aria-modal="true" aria-labelledby="site-titre">
+    <h3 id="site-titre">Site</h3>
+    <label class="fin-champ">Nom du site<input type="text" id="site-nom" maxlength="120" placeholder="ex. Bouaké"></label>
+    <fieldset><legend>Codes rattachés <small>(nombre de dossiers ; un code déjà pris sera déplacé)</small></legend><div class="fin-choix">
+      <?php foreach ($codes_site as $c): ?><label><input type="checkbox" name="codes" value="<?= h($c['code']) ?>"> <?= h($c['code']) ?>
+        <small><?= number_format((int)$c['nb'], 0, ',', ' ') ?><?= $c['site_id'] !== null ? ' · ' . h($nom_site[$c['site_id']] ?? '') : '' ?></small></label><?php endforeach; ?>
+    </div></fieldset>
+    <div class="fin-pied">
+      <button type="button" class="btn btn-danger btn-sm" id="site-suppr">Supprimer</button>
+      <span style="flex:1"></span>
+      <button type="button" class="btn btn-secondary fin-annuler">Annuler</button>
+      <button type="button" class="btn btn-primary" id="site-ok">Enregistrer</button>
+    </div>
+  </div>
+</div>
 <?php endif; ?>
 <script>
 const FIN_FORMULES = <?= json_encode(array_map(fn($f) => ['id' => (int)$f['id'], 'libelle' => $f['libelle'], 'actif' => (bool)$f['actif'],
-    'sites' => $f['sites'], 'canaux' => $f['canaux'], 'categories' => $f['categories'], 'services' => $f['services']], $formules),
+    'mode' => $f['mode'], 'sites' => $f['site_ids'], 'types' => $f['types'], 'canaux' => $f['canaux'], 'categories' => $f['categories'],
+    'services' => $f['services']], $formules), JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
+const FIN_SITES = <?= json_encode(array_map(fn($s) => ['id' => (int)$s['id'], 'nom' => $s['nom'], 'codes' => $s['codes']], $sites),
     JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
 async function finPost(data, bouton) {
   const fd = new FormData(); Object.entries(data).forEach(([k, v]) => fd.append(k, v));
@@ -313,23 +371,59 @@ function frmOuvrir(f) {
   document.getElementById('frm-lib').value = f ? f.libelle : '';
   document.getElementById('frm-actif').checked = f ? f.actif : true;
   document.getElementById('frm-suppr').style.display = f ? '' : 'none';
-  ['sites', 'canaux', 'categories', 'services'].forEach(n => frmModal.querySelectorAll(`input[name="${n}"]`)
+  ['sites', 'types', 'canaux', 'categories', 'services'].forEach(n => frmModal.querySelectorAll(`input[name="${n}"]`)
     .forEach(i => i.checked = !!f && f[n].map(String).includes(i.value)));
+  const mode = f ? f.mode : (FIN_SITES.length ? 'site' : 'dossier');
+  frmModal.querySelectorAll('input[name="mode"]').forEach(i => i.checked = i.value === mode);
+  frmMode();
   frmModal.classList.add('open'); document.getElementById('frm-lib').focus();
 }
-function frmFermer() { frmModal.classList.remove('open'); }
+// Sites visibles en mode « par site », types en mode « par dossier ».
+function frmMode() {
+  const m = (frmModal.querySelector('input[name="mode"]:checked') || {}).value;
+  frmModal.querySelectorAll('fieldset[data-mode]').forEach(fs => fs.hidden = fs.dataset.mode !== m);
+}
+function finModalLier(modal) {
+  const fermer = () => modal.classList.remove('open');
+  modal.querySelectorAll('.fin-annuler, #frm-annuler').forEach(b => b.addEventListener('click', fermer));
+  modal.addEventListener('click', e => { if (e.target === modal) fermer(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && modal.classList.contains('open')) fermer(); });
+}
+const coches = (modal, n) => JSON.stringify([...modal.querySelectorAll(`input[name="${n}"]:checked`)].map(i => i.value));
 if (frmModal) {
+  finModalLier(frmModal);
+  frmModal.querySelectorAll('input[name="mode"]').forEach(i => i.addEventListener('change', frmMode));
   document.getElementById('frm-ajouter').addEventListener('click', () => frmOuvrir(null));
   document.querySelectorAll('.frm-modif').forEach(b => b.addEventListener('click', () => frmOuvrir(FIN_FORMULES.find(f => f.id === Number(b.dataset.id)))));
-  document.getElementById('frm-annuler').addEventListener('click', frmFermer);
-  frmModal.addEventListener('click', e => { if (e.target === frmModal) frmFermer(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && frmModal.classList.contains('open')) frmFermer(); });
-  const coches = n => JSON.stringify([...frmModal.querySelectorAll(`input[name="${n}"]:checked`)].map(i => i.value));
-  document.getElementById('frm-ok').addEventListener('click', e => finPost({action: 'formule_enregistrer', id: frmId,
-    libelle: document.getElementById('frm-lib').value, sites: coches('sites'), canaux: coches('canaux'), categories: coches('categories'),
-    services: coches('services'), actif: document.getElementById('frm-actif').checked ? 1 : 0}, e.currentTarget));
+  document.getElementById('frm-ok').addEventListener('click', e => {
+    const mode = (frmModal.querySelector('input[name="mode"]:checked') || {}).value || 'site';
+    finPost({action: 'formule_enregistrer', id: frmId, libelle: document.getElementById('frm-lib').value, mode,
+      sites: mode === 'site' ? coches(frmModal, 'sites') : '[]', types: mode === 'dossier' ? coches(frmModal, 'types') : '[]',
+      canaux: coches(frmModal, 'canaux'), categories: coches(frmModal, 'categories'), services: coches(frmModal, 'services'),
+      actif: document.getElementById('frm-actif').checked ? 1 : 0}, e.currentTarget);
+  });
   document.getElementById('frm-suppr').addEventListener('click', e => {
     if (confirm('Supprimer cette formule ? Ses dossiers reviendront au tarif par catégorie.')) finPost({action: 'formule_supprimer', id: frmId}, e.currentTarget);
+  });
+}
+const siteModal = document.getElementById('site-modal');
+let siteId = 0;
+function siteOuvrir(s) {
+  siteId = s ? s.id : 0;
+  document.getElementById('site-titre').textContent = s ? 'Modifier le site' : 'Nouveau site';
+  document.getElementById('site-nom').value = s ? s.nom : '';
+  document.getElementById('site-suppr').style.display = s ? '' : 'none';
+  siteModal.querySelectorAll('input[name="codes"]').forEach(i => i.checked = !!s && s.codes.includes(i.value));
+  siteModal.classList.add('open'); document.getElementById('site-nom').focus();
+}
+if (siteModal) {
+  finModalLier(siteModal);
+  document.getElementById('site-ajouter').addEventListener('click', () => siteOuvrir(null));
+  document.querySelectorAll('.site-modif').forEach(b => b.addEventListener('click', () => siteOuvrir(FIN_SITES.find(s => s.id === Number(b.dataset.id)))));
+  document.getElementById('site-ok').addEventListener('click', e => finPost({action: 'site_enregistrer', id: siteId,
+    nom: document.getElementById('site-nom').value, codes: coches(siteModal, 'codes')}, e.currentTarget));
+  document.getElementById('site-suppr').addEventListener('click', e => {
+    if (confirm('Supprimer ce site ? Il sera retiré des formules par site qui l\'utilisent.')) finPost({action: 'site_supprimer', id: siteId}, e.currentTarget);
   });
 }
 </script>

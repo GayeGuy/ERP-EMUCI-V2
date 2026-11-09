@@ -1,16 +1,31 @@
 -- ============================================================
---  Finance 02 : services et formules de tarification (PostgreSQL)
+--  Finance 02 : sites, services et formules de tarification (PostgreSQL)
 --
---  Un dossier paie un ou plusieurs services (plaque, sécurisation, pose,
---  service mobile, délocalisée, reliquat…). Chaque service a un prix TTC par
---  catégorie (MOTO / AUTO / SEMI) ; un service « variable » (reliquat) n'a pas
---  de prix fixe : c'est le complément réconcilié au-delà des services fixes.
---  Une formule regroupe des services et s'applique aux dossiers selon le site
---  (préfixe du chrono, sinon site d'enrôlement CGI), le canal et la catégorie ;
---  critère vide = tous. La formule la plus précise l'emporte.
+--  Sites : nom libre, rattaché à un ou plusieurs codes reconnus dans les
+--  données (préfixe du chrono : BKE, ABJ… ; sinon site d'enrôlement CGI).
+--  Services : prix TTC par catégorie (MOTO / AUTO / SEMI) ; un service
+--  « variable » (reliquat) n'a pas de prix fixe : c'est le complément
+--  réconcilié au-delà des services fixes.
+--  Formules : un ensemble de services, appliqué
+--    · par site   (mode 'site')    : sites choisis, + canaux et catégories ;
+--    · par dossier (mode 'dossier') : canaux, types et catégories, sans site.
+--  Critère vide = tous. Une formule par site l'emporte sur une formule par
+--  dossier, puis la plus précise.
 --
 --  À passer après migration_finance_01_dossiers.sql. Rejouable.
 -- ============================================================
+
+CREATE TABLE IF NOT EXISTS fin_sites (
+    id       serial       PRIMARY KEY,
+    nom      varchar(120) NOT NULL UNIQUE,
+    maj_par  integer,
+    maj_le   timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS fin_site_codes (
+    code     varchar(120) PRIMARY KEY,
+    site_id  integer      NOT NULL REFERENCES fin_sites (id) ON DELETE CASCADE
+);
 
 CREATE TABLE IF NOT EXISTS fin_services (
     id        serial       PRIMARY KEY,
@@ -32,8 +47,10 @@ CREATE TABLE IF NOT EXISTS fin_service_prix (
 CREATE TABLE IF NOT EXISTS fin_formules (
     id         serial       PRIMARY KEY,
     libelle    varchar(120) NOT NULL,
-    sites      text[],
+    mode       varchar(10)  NOT NULL DEFAULT 'site' CHECK (mode IN ('site', 'dossier')),
+    site_ids   integer[],
     canaux     text[],
+    types      text[],
     categories text[],
     actif      boolean      NOT NULL DEFAULT true,
     maj_par    integer,
@@ -47,6 +64,8 @@ CREATE TABLE IF NOT EXISTS fin_formule_services (
 );
 
 ALTER TABLE fin_dossiers ADD COLUMN IF NOT EXISTS site             varchar(120);
+ALTER TABLE fin_dossiers ADD COLUMN IF NOT EXISTS site_id          integer;
 ALTER TABLE fin_dossiers ADD COLUMN IF NOT EXISTS formule_id       integer;
 ALTER TABLE fin_dossiers ADD COLUMN IF NOT EXISTS montant_variable numeric(14,2);
 CREATE INDEX IF NOT EXISTS idx_fin_dossiers_formule ON fin_dossiers (formule_id);
+CREATE INDEX IF NOT EXISTS idx_fin_dossiers_site ON fin_dossiers (site_id);

@@ -69,6 +69,11 @@ const FIN_CANAUX = ['CIL' => 'CIL', 'DGTTC' => 'DGTTC', 'FDS' => 'FDS', 'REIMMAT
 // (voiture, camionnette, camion, citerne, tracteur, autocar, chariot…) : Auto.
 const FIN_CATEGORIES = ['AUTO' => 'Auto', 'MOTO' => 'Moto', 'SEMI' => 'Semi-remorque'];
 
+const FIN_TYPES = ['Primo', 'Post', 'Reimmat', 'Diplo'];
+
+// Mode d'application d'une formule de services.
+const FIN_MODES_FORMULE = ['site' => 'Par site', 'dossier' => 'Par dossier'];
+
 function fin_categorie(?string $genre): ?string {
     if ($genre === null || $genre === '') return null;
     if (str_starts_with($genre, 'MOTO')) return 'MOTO';
@@ -763,16 +768,16 @@ function fin_consolider(): array {
             'a_ouvert_non_recu', 'a_pose_non_reconcilie', 'a_ecart', 'a_recu_sans_paiement', 'a_rejet', 'a_pose_sans_dossier',
             'date_ref', 'maj_le'];
         $services = fin_services_pret();
-        if ($services) array_push($cols, 'site', 'formule_id', 'montant_variable');
+        if ($services) array_push($cols, 'site', 'site_id', 'formule_id', 'montant_variable');
         // Formules : services fixes additionnés par catégorie (prix manquant pour
         // un service = montant inconnu) ; un service variable (reliquat) accepte
-        // le complément réconcilié au-delà. La formule la plus précise l'emporte
-        // (site, puis canal, puis catégorie).
+        // le complément réconcilié au-delà. Une formule par site l'emporte sur une
+        // formule par dossier, puis la plus précise (canal, type, catégorie).
         if ($services) {
             db_query("CREATE TEMP TABLE fin_t_form ON COMMIT DROP AS
-                SELECT f.id, f.sites, f.canaux, f.categories,
-                       (CASE WHEN f.sites IS NOT NULL THEN 4 ELSE 0 END + CASE WHEN f.canaux IS NOT NULL THEN 2 ELSE 0 END
-                        + CASE WHEN f.categories IS NOT NULL THEN 1 ELSE 0 END) AS prec,
+                SELECT f.id, f.mode, f.site_ids, f.canaux, f.types, f.categories,
+                       (CASE WHEN f.mode = 'site' THEN 8 ELSE 0 END + CASE WHEN f.canaux IS NOT NULL THEN 4 ELSE 0 END
+                        + CASE WHEN f.types IS NOT NULL THEN 2 ELSE 0 END + CASE WHEN f.categories IS NOT NULL THEN 1 ELSE 0 END) AS prec,
                        COALESCE(bool_or(s.variable), false) AS variable
                 FROM fin_formules f
                 LEFT JOIN fin_formule_services fs ON fs.formule_id = f.id
@@ -788,15 +793,18 @@ function fin_consolider(): array {
                 LEFT JOIN fin_service_prix p ON p.service_id = s.id AND p.categorie = c.cat
                 GROUP BY 1, 2");
             $cat_b = fin_categorie_sql('b.genre');
-            $formule = "LEFT JOIN LATERAL (
+            $formule = "LEFT JOIN fin_site_codes sc ON sc.code = b.site
+                LEFT JOIN LATERAL (
                     SELECT f.id, f.variable, fp.montant FROM fin_t_form f
                     LEFT JOIN fin_t_form_prix fp ON fp.formule_id = f.id AND fp.cat = $cat_b
-                    WHERE (f.sites IS NULL OR b.site = ANY (f.sites))
+                    WHERE (f.mode = 'dossier' OR sc.site_id = ANY (f.site_ids))
                       AND (f.canaux IS NULL OR b.canal = ANY (f.canaux))
+                      AND (f.types IS NULL OR b.type_dossier = ANY (f.types))
                       AND (f.categories IS NULL OR $cat_b = ANY (f.categories))
                     ORDER BY f.prec DESC, f.id LIMIT 1) fo ON true";
         } else {
-            $formule = "LEFT JOIN LATERAL (SELECT NULL::integer AS id, false AS variable, NULL::integer AS montant) fo ON true";
+            $formule = "LEFT JOIN LATERAL (SELECT NULL::integer AS site_id) sc ON true
+                LEFT JOIN LATERAL (SELECT NULL::integer AS id, false AS variable, NULL::integer AS montant) fo ON true";
         }
         // Montant réconcilié comparable au montant attendu ; au-delà, complément
         // accepté si la formule a un service variable.
@@ -827,9 +835,9 @@ function fin_consolider(): array {
                 z.est_pose AND NOT z.est_recu,
                 COALESCE(z.date_reception::date, z.date_paiement, z.date_pose, z.date_ouverture, z.date_caisse::date),
                 CURRENT_TIMESTAMP" . ($services ? ",
-                z.site, z.formule_id, CASE WHEN $comparable AND $complement THEN z.montant_reconcilie - z.montant_attendu END" : '') . "
+                z.site, z.site_id, z.formule_id, CASE WHEN $comparable AND $complement THEN z.montant_reconcilie - z.montant_attendu END" : '') . "
             FROM (
-                SELECT b.*, fo.id AS formule_id, COALESCE(fo.variable, false) AS variable,
+                SELECT b.*, sc.site_id, fo.id AS formule_id, COALESCE(fo.variable, false) AS variable,
                        CASE WHEN fo.id IS NOT NULL THEN fo.montant
                             WHEN b.canal = 'SPECIALE' THEN COALESCE(ts.montant_ttc, $tarif_speciale_defaut, t.montant_ttc)
                             ELSE COALESCE(t.montant_ttc, b.montant_dossier) END AS montant_attendu
@@ -996,7 +1004,9 @@ function fin_dossier_detail(string $cle): ?array {
     if (!$d) return null;
     $d['categorie'] = fin_categorie_libelle($d['genre']);
     $d['canal_libelle'] = FIN_CANAUX[$d['canal'] ?? ''] ?? $d['canal'];
-    $d['formule'] = null; $d['services'] = [];
+    $d['formule'] = null; $d['services'] = []; $d['site_nom'] = null;
+    if (fin_services_pret() && !empty($d['site_id']))
+        $d['site_nom'] = db_fetch_value("SELECT nom FROM fin_sites WHERE id = ?", [(int)$d['site_id']]);
     if (fin_services_pret() && !empty($d['formule_id'])) {
         $d['formule'] = db_fetch_value("SELECT libelle FROM fin_formules WHERE id = ?", [(int)$d['formule_id']]);
         $d['services'] = db_fetch_all("SELECT s.libelle, s.variable, p.montant_ttc FROM fin_formule_services fs
@@ -1062,15 +1072,15 @@ function fin_services_liste(): array {
 
 // Formules avec leurs services, le montant fixe par catégorie et le nombre de dossiers.
 function fin_formules_liste(): array {
-    $l = db_fetch_all("SELECT f.id, f.libelle, f.actif, array_to_json(f.sites) AS sites, array_to_json(f.canaux) AS canaux,
-            array_to_json(f.categories) AS categories,
+    $l = db_fetch_all("SELECT f.id, f.libelle, f.mode, f.actif, array_to_json(f.site_ids) AS site_ids, array_to_json(f.canaux) AS canaux,
+            array_to_json(f.types) AS types, array_to_json(f.categories) AS categories,
             (SELECT COUNT(*) FROM fin_dossiers d WHERE d.formule_id = f.id) AS nb_dossiers
         FROM fin_formules f ORDER BY f.actif DESC, f.libelle");
     $liens = db_fetch_all("SELECT formule_id, service_id FROM fin_formule_services");
     $services = [];
     foreach (fin_services_liste() as $s) $services[(int)$s['id']] = $s;
     foreach ($l as &$f) {
-        foreach (['sites', 'canaux', 'categories'] as $c) $f[$c] = $f[$c] ? json_decode($f[$c], true) : [];
+        foreach (['site_ids', 'canaux', 'types', 'categories'] as $c) $f[$c] = $f[$c] ? json_decode($f[$c], true) : [];
         $f['services'] = [];
         foreach ($liens as $x) if ((int)$x['formule_id'] === (int)$f['id']) $f['services'][] = (int)$x['service_id'];
         // Montant fixe par catégorie : null si un service fixe actif n'a pas de prix.
@@ -1090,9 +1100,25 @@ function fin_formules_liste(): array {
     return $l;
 }
 
-// Sites des dossiers (préfixe du chrono, sinon site d'enrôlement), par fréquence.
-function fin_sites_connus(): array {
-    return db_fetch_all("SELECT site, COUNT(*) AS nb FROM fin_dossiers WHERE COALESCE(site, '') <> '' GROUP BY site ORDER BY nb DESC, site");
+// Codes de site reconnus dans les dossiers (préfixe du chrono, sinon site
+// d'enrôlement), par fréquence, avec le site auquel ils sont rattachés.
+function fin_codes_site(): array {
+    return db_fetch_all("SELECT d.site AS code, COUNT(*) AS nb, sc.site_id
+        FROM fin_dossiers d LEFT JOIN fin_site_codes sc ON sc.code = d.site
+        WHERE COALESCE(d.site, '') <> '' GROUP BY d.site, sc.site_id ORDER BY nb DESC, d.site");
+}
+
+// Sites nommés, avec leurs codes et leur nombre de dossiers.
+function fin_sites_liste(): array {
+    $l = db_fetch_all("SELECT s.id, s.nom, (SELECT COUNT(*) FROM fin_dossiers d WHERE d.site_id = s.id) AS nb_dossiers,
+            (SELECT COUNT(*) FROM fin_formules f WHERE s.id = ANY (f.site_ids)) AS nb_formules
+        FROM fin_sites s ORDER BY s.nom");
+    $codes = db_fetch_all("SELECT code, site_id FROM fin_site_codes ORDER BY code");
+    foreach ($l as &$s) {
+        $s['codes'] = [];
+        foreach ($codes as $c) if ((int)$c['site_id'] === (int)$s['id']) $s['codes'][] = $c['code'];
+    }
+    return $l;
 }
 
 // Liste de valeurs autorisées → tableau PostgreSQL littéral, ou null (= tous).
@@ -1106,6 +1132,40 @@ function fin_pg_tableau(array $v): ?string {
 function fin_tarifs_action_services(string $action, array $post, int $uid): array {
     $id = (int)($post['id'] ?? 0);
     switch ($action) {
+    case 'site_enregistrer':
+        $nom = fin_txt($post['nom'] ?? null, 120);
+        if ($nom === null) throw new RuntimeException('Nom du site obligatoire.');
+        $codes = json_decode((string)($post['codes'] ?? '[]'), true);
+        if (!is_array($codes)) throw new RuntimeException('Données invalides.');
+        $codes = array_values(array_unique(array_filter(array_map(fn($x) => mb_substr(trim((string)$x), 0, 120), $codes), 'strlen')));
+        if (!$codes) throw new RuntimeException('Rattachez au moins un code au site.');
+        if (db_fetch_value("SELECT 1 FROM fin_sites WHERE lower(nom) = lower(?) AND id <> ?", [$nom, $id]))
+            throw new RuntimeException("Un site « $nom » existe déjà.");
+        db_begin();
+        if ($id) {
+            if (!db_query("UPDATE fin_sites SET nom = ?, maj_par = ?, maj_le = CURRENT_TIMESTAMP WHERE id = ?", [$nom, $uid, $id])->rowCount())
+                throw new RuntimeException('Site introuvable.');
+        } else {
+            $id = (int)db_fetch_value("INSERT INTO fin_sites (nom, maj_par) VALUES (?, ?) RETURNING id", [$nom, $uid]);
+        }
+        // Un code n'appartient qu'à un site : il est déplacé s'il était ailleurs.
+        db_query("DELETE FROM fin_site_codes WHERE site_id = ?", [$id]);
+        foreach ($codes as $c) db_query("INSERT INTO fin_site_codes (code, site_id) VALUES (?, ?)
+                                         ON CONFLICT (code) DO UPDATE SET site_id = EXCLUDED.site_id", [$c, $id]);
+        db_commit();
+        audit_log($uid, 'UPDATE', 'finance_dossiers', $id, "Site tarif « $nom » : codes " . implode(', ', $codes));
+        return ["Site « $nom » enregistré.", true];
+
+    case 'site_supprimer':
+        $nom = db_fetch_value("SELECT nom FROM fin_sites WHERE id = ?", [$id]);
+        if ($nom === null) throw new RuntimeException('Site introuvable.');
+        db_begin();
+        db_query("UPDATE fin_formules SET site_ids = NULLIF(array_remove(site_ids, ?::integer), '{}') WHERE ?::integer = ANY (site_ids)", [$id, $id]);
+        db_query("DELETE FROM fin_sites WHERE id = ?", [$id]);
+        db_commit();
+        audit_log($uid, 'DELETE', 'finance_dossiers', $id, "Site tarif « $nom » supprimé");
+        return ["Site « $nom » supprimé.", true];
+
     case 'service_enregistrer':
         $lib = fin_txt($post['libelle'] ?? null, 80);
         if ($lib === null) throw new RuntimeException('Libellé du service obligatoire.');
@@ -1159,7 +1219,17 @@ function fin_tarifs_action_services(string $action, array $post, int $uid): arra
             $v = array_map(fn($x) => mb_substr(trim((string)$x), 0, 120), $v);
             return $permis === null ? $v : array_values(array_intersect($v, $permis));
         };
-        $sites = $liste('sites');
+        $mode = isset(FIN_MODES_FORMULE[$post['mode'] ?? '']) ? $post['mode'] : 'site';
+        $site_ids = array_values(array_unique(array_filter(array_map('intval', $liste('sites')))));
+        if ($mode === 'site') {
+            if (!$site_ids) throw new RuntimeException('Choisissez au moins un site, ou passez la formule en mode « par dossier ».');
+            if ((int)db_fetch_value("SELECT COUNT(*) FROM fin_sites WHERE id IN (" . implode(',', $site_ids) . ")") !== count($site_ids))
+                throw new RuntimeException('Site inconnu.');
+            $types = [];
+        } else {
+            $site_ids = [];
+            $types = $liste('types', FIN_TYPES);
+        }
         $canaux = $liste('canaux', array_keys(FIN_CANAUX));
         $cats = $liste('categories', array_keys(FIN_CATEGORIES));
         $sids = array_values(array_unique(array_map('intval', $liste('services'))));
@@ -1167,22 +1237,23 @@ function fin_tarifs_action_services(string $action, array $post, int $uid): arra
         if ((int)db_fetch_value("SELECT COUNT(*) FROM fin_services WHERE id IN (" . implode(',', $sids) . ")") !== count($sids))
             throw new RuntimeException('Service inconnu.');
         $actif = !isset($post['actif']) || $post['actif'] !== '0';
-        $p = [$lib, fin_pg_tableau($sites), fin_pg_tableau($canaux), fin_pg_tableau($cats), $actif ? 't' : 'f', $uid];
+        $p = [$lib, $mode, fin_pg_tableau($site_ids), fin_pg_tableau($canaux), fin_pg_tableau($types), fin_pg_tableau($cats), $actif ? 't' : 'f', $uid];
         db_begin();
         if ($id) {
-            if (!db_query("UPDATE fin_formules SET libelle = ?, sites = ?::text[], canaux = ?::text[], categories = ?::text[], actif = ?,
-                           maj_par = ?, maj_le = CURRENT_TIMESTAMP WHERE id = ?", array_merge($p, [$id]))->rowCount())
+            if (!db_query("UPDATE fin_formules SET libelle = ?, mode = ?, site_ids = ?::integer[], canaux = ?::text[], types = ?::text[],
+                           categories = ?::text[], actif = ?, maj_par = ?, maj_le = CURRENT_TIMESTAMP WHERE id = ?", array_merge($p, [$id]))->rowCount())
                 throw new RuntimeException('Formule introuvable.');
         } else {
-            $id = (int)db_fetch_value("INSERT INTO fin_formules (libelle, sites, canaux, categories, actif, maj_par)
-                                       VALUES (?, ?::text[], ?::text[], ?::text[], ?, ?) RETURNING id", $p);
+            $id = (int)db_fetch_value("INSERT INTO fin_formules (libelle, mode, site_ids, canaux, types, categories, actif, maj_par)
+                                       VALUES (?, ?, ?::integer[], ?::text[], ?::text[], ?::text[], ?, ?) RETURNING id", $p);
         }
         db_query("DELETE FROM fin_formule_services WHERE formule_id = ?", [$id]);
         foreach ($sids as $sid) db_query("INSERT INTO fin_formule_services (formule_id, service_id) VALUES (?, ?)", [$id, $sid]);
         db_commit();
         $c = fn(array $v) => $v ? implode(', ', $v) : 'tous';
-        audit_log($uid, 'UPDATE', 'finance_dossiers', $id, "Formule tarif « $lib » : sites " . $c($sites) . ', canaux ' . $c($canaux)
-            . ', catégories ' . $c($cats) . ', ' . count($sids) . ' service(s)' . ($actif ? '' : ' (inactive)'));
+        $noms = $site_ids ? array_column(db_fetch_all("SELECT nom FROM fin_sites WHERE id IN (" . implode(',', $site_ids) . ") ORDER BY nom"), 'nom') : [];
+        audit_log($uid, 'UPDATE', 'finance_dossiers', $id, "Formule tarif « $lib » (" . mb_strtolower(FIN_MODES_FORMULE[$mode]) . ') : '
+            . ($mode === 'site' ? 'sites ' . $c($noms) : 'types ' . $c($types)) . ', canaux ' . $c($canaux) . ', catégories ' . $c($cats) . ', ' . count($sids) . ' service(s)' . ($actif ? '' : ' (inactive)'));
         return ["Formule « $lib » enregistrée.", true];
 
     case 'formule_supprimer':
