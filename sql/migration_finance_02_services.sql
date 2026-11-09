@@ -1,10 +1,11 @@
 -- ============================================================
 --  Finance 02 : sites, services et formules de tarification (PostgreSQL)
 --
---  Sites : ceux de l'ERP (table sites). Le site d'un dossier est celui de la
---  pose (OptoPlate), sinon celui de l'enrôlement (préfixe du chrono : BKE,
---  ABJ… ; sinon site CGI). Ce code est rattaché automatiquement à un site ERP
---  (nom, code, ou code « XXX-01 ») ; fin_site_codes force un autre rattachement.
+--  Sites : ceux de l'ERP (table sites), de pose ou mixtes. Le code de site d'un
+--  dossier est celui de la pose (OptoPlate), sinon celui de l'enrôlement
+--  (préfixe du chrono : BKE, ABJ… ; sinon site CGI). Ce code est rattaché
+--  automatiquement à un site ERP (nom, code, ou code « XXX-01 ») ;
+--  fin_site_codes le rattache à la main à un ou plusieurs sites.
 --  Services : prix TTC par catégorie (MOTO / AUTO / SEMI) ; un service
 --  « variable » (reliquat) n'a pas de prix fixe : c'est le complément
 --  réconcilié au-delà des services fixes.
@@ -18,8 +19,9 @@
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS fin_site_codes (
-    code     varchar(120) PRIMARY KEY,
-    site_id  integer      NOT NULL REFERENCES sites (id) ON DELETE CASCADE
+    code     varchar(120) NOT NULL,
+    site_id  integer      NOT NULL REFERENCES sites (id) ON DELETE CASCADE,
+    PRIMARY KEY (code, site_id)
 );
 
 CREATE TABLE IF NOT EXISTS fin_services (
@@ -59,8 +61,8 @@ CREATE TABLE IF NOT EXISTS fin_formule_services (
 );
 
 ALTER TABLE fin_dossiers ADD COLUMN IF NOT EXISTS site             varchar(120);
-ALTER TABLE fin_dossiers ADD COLUMN IF NOT EXISTS site_id          integer;
+ALTER TABLE fin_dossiers ADD COLUMN IF NOT EXISTS site_ids         integer[];
 ALTER TABLE fin_dossiers ADD COLUMN IF NOT EXISTS formule_id       integer;
 ALTER TABLE fin_dossiers ADD COLUMN IF NOT EXISTS montant_variable numeric(14,2);
 CREATE INDEX IF NOT EXISTS idx_fin_dossiers_formule ON fin_dossiers (formule_id);
-CREATE INDEX IF NOT EXISTS idx_fin_dossiers_site ON fin_dossiers (site_id);
+CREATE INDEX IF NOT EXISTS idx_fin_dossiers_sites ON fin_dossiers USING gin (site_ids);

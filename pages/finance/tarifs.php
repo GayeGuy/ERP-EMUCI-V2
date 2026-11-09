@@ -108,6 +108,7 @@ include __DIR__ . '/../../templates/header.php';
 tr.fin-inactif td,label.fin-inactif{opacity:.55}
 .fin-table select{padding:6px 9px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-family:inherit;max-width:340px}
 tr.fin-sans-site td:first-child strong{color:#b45309}
+.fin-grise{opacity:.5}
 .fin-alerte{margin:0 0 12px;padding:9px 12px;border-radius:8px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:12.5px}
 .fin-modal-bg{display:none;position:fixed;inset:0;background:rgba(6,3,58,.45);z-index:2000;align-items:flex-start;justify-content:center;padding:24px 16px;overflow-y:auto}
 .fin-modal-bg.open{display:flex}
@@ -175,26 +176,27 @@ tr.fin-sans-site td:first-child strong{color:#b45309}
 <?php else: ?>
 <div class="fin-card" style="margin-top:16px">
   <div class="fin-entete"><h3>Sites des dossiers</h3></div>
-  <p class="aide">Les sites sont ceux de l'ERP (Administration → Sites : un site manquant se crée là). Le site d'un dossier est celui de la pose
-    (OptoPlate) s'il est connu, sinon celui de l'enrôlement (préfixe du chrono : BKE, ABJ, KGO… ; sans chrono, site d'enrôlement du CGI).
-    Chaque code trouvé est rattaché automatiquement au site ERP de même nom ou de même code ; choisissez un site pour forcer un autre rattachement.</p>
-  <?php $nom_site = array_column($sites, 'nom', 'id'); $nb_sans = count(array_filter($codes_site, fn($c) => $c['site_id'] === null)); ?>
+  <p class="aide">Les sites sont ceux de l'ERP de type pose ou mixte (Administration → Sites : un site manquant se crée là). Le code de site d'un
+    dossier est celui de la pose (OptoPlate) s'il est connu, sinon celui de l'enrôlement (préfixe du chrono : BKE, ABJ, KGO… ; sans chrono, site
+    d'enrôlement du CGI). Chaque code est rattaché automatiquement au site de même nom ou de même code ; « Modifier » permet de le rattacher
+    à un ou plusieurs sites (un site peut aussi recevoir plusieurs codes). Un dossier rattaché à plusieurs sites suit la formule de l'un d'eux.</p>
+  <?php $nom_site = array_column($sites, 'nom', 'id'); $nb_sans = count(array_filter($codes_site, fn($c) => !$c['sites'])); ?>
   <?php if ($nb_sans): ?><p class="fin-alerte"><?= $nb_sans ?> code(s) sans site ERP : leurs dossiers ne profitent d'aucune formule par site.</p><?php endif; ?>
   <div class="table-wrap">
   <table class="fin-table">
-    <thead><tr><th>Code trouvé dans les données</th><th style="text-align:right">Dossiers</th><th>Site ERP</th></tr></thead>
+    <thead><tr><th>Code trouvé dans les données</th><th style="text-align:right">Dossiers</th><th>Sites ERP</th><th></th></tr></thead>
     <tbody>
-    <?php foreach ($codes_site as $c): $auto = $c['site_manuel'] === null; ?>
-      <tr class="<?= $c['site_id'] === null ? 'fin-sans-site' : '' ?>">
+    <?php foreach ($codes_site as $c): ?>
+      <tr class="<?= $c['sites'] ? '' : 'fin-sans-site' ?>">
         <td><strong><?= h($c['code']) ?></strong></td>
         <td class="n"><?= number_format((int)$c['nb'], 0, ',', ' ') ?></td>
-        <td><select class="site-code" data-code="<?= h($c['code']) ?>" aria-label="Site ERP pour <?= h($c['code']) ?>" <?= $peut_modifier ? '' : 'disabled' ?>>
-          <option value="0" <?= $auto ? 'selected' : '' ?>>Automatique : <?= $auto ? ($c['site_id'] !== null ? h($nom_site[$c['site_id']] ?? '?') : 'aucun site trouvé') : 'nom ou code identique' ?></option>
-          <?php foreach ($sites as $s): ?><option value="<?= (int)$s['id'] ?>" <?= !$auto && (int)$c['site_manuel'] === (int)$s['id'] ? 'selected' : '' ?>><?= h($s['nom']) ?> (<?= h($s['code']) ?>)<?= $s['actif'] ? '' : ' – inactif' ?></option><?php endforeach; ?>
-        </select></td>
+        <td><?= $c['sites'] ? h(implode(', ', array_map(fn($i) => $nom_site[$i] ?? '?', $c['sites']))) : '<span class="fin-note">aucun site trouvé</span>' ?>
+          <div class="fin-note"><?= $c['manuels'] ? 'rattachement manuel' : 'automatique' ?></div></td>
+        <td class="fin-actions"><?php if ($peut_modifier): ?><button type="button" class="btn btn-secondary btn-sm site-modif"
+          data-code="<?= h($c['code']) ?>" data-sites="<?= h(json_encode($c['manuels'] ?: $c['sites'])) ?>" data-manuel="<?= $c['manuels'] ? 1 : 0 ?>">Modifier</button><?php endif; ?></td>
       </tr>
     <?php endforeach; ?>
-    <?php if (!$codes_site): ?><tr><td colspan="3" style="text-align:center;color:#64748b;padding:20px">Aucun dossier importé pour l'instant.</td></tr><?php endif; ?>
+    <?php if (!$codes_site): ?><tr><td colspan="4" style="text-align:center;color:#64748b;padding:20px">Aucun dossier importé pour l'instant.</td></tr><?php endif; ?>
     </tbody>
   </table>
   </div>
@@ -305,6 +307,22 @@ tr.fin-sans-site td:first-child strong{color:#b45309}
     </div>
   </div>
 </div>
+<div class="fin-modal-bg" id="site-modal">
+  <div class="fin-modal" role="dialog" aria-modal="true" aria-labelledby="site-titre">
+    <h3 id="site-titre">Code</h3>
+    <label class="fin-champ fin-ligne"><input type="radio" name="site-mode" value="auto"> Automatique (site de même nom ou de même code)</label>
+    <label class="fin-champ fin-ligne"><input type="radio" name="site-mode" value="manuel"> Rattacher aux sites choisis</label>
+    <fieldset id="site-liste"><legend>Sites ERP de pose ou mixtes</legend><div class="fin-choix">
+      <?php foreach ($sites as $s): ?><label class="<?= $s['actif'] ? '' : 'fin-inactif' ?>"><input type="checkbox" name="site-ids" value="<?= (int)$s['id'] ?>"> <?= h($s['nom']) ?>
+        <small><?= h($s['code']) ?><?= $s['actif'] ? '' : ' · inactif' ?></small></label><?php endforeach; ?>
+    </div></fieldset>
+    <div class="fin-pied">
+      <span style="flex:1"></span>
+      <button type="button" class="btn btn-secondary fin-annuler">Annuler</button>
+      <button type="button" class="btn btn-primary" id="site-ok">Enregistrer</button>
+    </div>
+  </div>
+</div>
 <?php endif; ?>
 <script>
 const FIN_FORMULES = <?= json_encode(array_map(fn($f) => ['id' => (int)$f['id'], 'libelle' => $f['libelle'], 'actif' => (bool)$f['actif'],
@@ -392,11 +410,32 @@ if (frmModal) {
     if (confirm('Supprimer cette formule ? Ses dossiers reviendront au tarif par catégorie.')) finPost({action: 'formule_supprimer', id: frmId}, e.currentTarget);
   });
 }
-// Rattachement d'un code à un site ERP : enregistré dès le choix.
-document.querySelectorAll('.site-code').forEach(sel => sel.addEventListener('change', () => {
-  sel.disabled = true;
-  finPost({action: 'site_code', code: sel.dataset.code, site_id: sel.value}).finally(() => { sel.disabled = false; });
-}));
+// Rattachement d'un code à un ou plusieurs sites ERP (aucun = automatique).
+const siteModal = document.getElementById('site-modal');
+let siteCode = '';
+function siteMode() {
+  const manuel = siteModal.querySelector('input[name="site-mode"][value="manuel"]').checked;
+  siteModal.querySelectorAll('input[name="site-ids"]').forEach(i => i.disabled = !manuel);
+  document.getElementById('site-liste').classList.toggle('fin-grise', !manuel);
+}
+if (siteModal) {
+  finModalLier(siteModal);
+  siteModal.querySelectorAll('input[name="site-mode"]').forEach(i => i.addEventListener('change', siteMode));
+  document.querySelectorAll('.site-modif').forEach(b => b.addEventListener('click', () => {
+    siteCode = b.dataset.code;
+    document.getElementById('site-titre').textContent = 'Sites du code « ' + siteCode + ' »';
+    const ids = JSON.parse(b.dataset.sites || '[]').map(String);
+    siteModal.querySelectorAll('input[name="site-ids"]').forEach(i => i.checked = ids.includes(i.value));
+    siteModal.querySelectorAll('input[name="site-mode"]').forEach(i => i.checked = i.value === (b.dataset.manuel === '1' ? 'manuel' : 'auto'));
+    siteMode(); siteModal.classList.add('open');
+  }));
+  document.getElementById('site-ok').addEventListener('click', e => {
+    const manuel = siteModal.querySelector('input[name="site-mode"][value="manuel"]').checked;
+    const ids = manuel ? JSON.parse(coches(siteModal, 'site-ids')) : [];
+    if (manuel && !ids.length) { toast('Cochez au moins un site, ou choisissez « Automatique ».', 'danger'); return; }
+    finPost({action: 'site_code', code: siteCode, site_ids: JSON.stringify(ids)}, e.currentTarget);
+  });
+}
 </script>
 <?php endif; ?>
 
