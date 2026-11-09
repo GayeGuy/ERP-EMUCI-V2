@@ -1337,7 +1337,7 @@ function fin_export_colonnes(): array {
             ['Montant attendu', 'montant_attendu', 'num', 12],
             ['Écart', 'ecart', 'num', 10],
             ['Étape', fn($d) => FIN_ETAPES[$d['etape']] ?? null, 'txt', 12],
-            ['Anomalies', fn($d) => implode(' ; ', array_keys(array_filter(
+            ['Exceptions', fn($d) => implode(' ; ', array_keys(array_filter(
                 array_combine(array_values(FIN_ANOMALIES), array_map(fn($k) => (bool)$d[$k], array_keys(FIN_ANOMALIES)))))), 'txt', 40],
         ]],
     ];

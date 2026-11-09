@@ -2,7 +2,7 @@
 // ============================================================
 //  pages/finance/dossiers.php — Finance : suivi des dossiers
 //  De l'ouverture du dossier chez CIL à la pose de ses plaques : étapes,
-//  montants, délais, anomalies, et fiche détaillée de chaque dossier.
+//  montants, délais, exceptions, et fiche détaillée de chaque dossier.
 //  Données : includes/finance_dossiers.php (sql/migration_finance_01_dossiers.sql).
 // ============================================================
 require_once __DIR__ . '/../../includes/db.php';
@@ -231,9 +231,9 @@ include __DIR__ . '/../../templates/header.php';
     <select id="f-etape" name="etape"><option value="">Toutes</option>
       <?php foreach (FIN_ETAPES as $k => $l): ?><option value="<?= $k ?>" <?= $f['etape'] === $k ? 'selected' : '' ?>><?= h($l) ?></option><?php endforeach; ?>
     </select></div>
-  <div class="fin-fg"><label for="f-anomalie">Anomalie</label>
+  <div class="fin-fg"><label for="f-anomalie">Exception</label>
     <select id="f-anomalie" name="anomalie"><option value="">—</option>
-      <option value="toutes" <?= $f['anomalie'] === 'toutes' ? 'selected' : '' ?>>Toutes les anomalies</option>
+      <option value="toutes" <?= $f['anomalie'] === 'toutes' ? 'selected' : '' ?>>Toutes les exceptions</option>
       <?php foreach (FIN_ANOMALIES as $k => $l): ?><option value="<?= $k ?>" <?= $f['anomalie'] === $k ? 'selected' : '' ?>><?= h($l) ?></option><?php endforeach; ?>
       <option value="bon" <?= $f['anomalie'] === 'bon' ? 'selected' : '' ?>>Payés par bon</option>
     </select></div>
@@ -285,7 +285,7 @@ include __DIR__ . '/../../templates/header.php';
   </div>
 </div>
 
-<div class="fin-ttl">Anomalies</div>
+<div class="fin-ttl">Les exceptions</div>
 <div class="fin-grid">
   <?php foreach (FIN_ANOMALIES as $k => $l): $n = (int)($kpi[$k] ?? 0); ?>
   <a class="fin-alerte <?= $n === 0 ? 'zero' : '' ?> <?= $f['anomalie'] === $k ? 'actif' : '' ?>" href="<?= h($lien(['anomalie' => $f['anomalie'] === $k ? '' : $k, 'page' => ''])) ?>">
@@ -301,7 +301,7 @@ include __DIR__ . '/../../templates/header.php';
 
 <details class="fin-cov">
   <summary>Période couverte par chaque source</summary>
-  <div style="margin-top:6px;color:#64748b">Une anomalie n'a de sens que sur les dates couvertes par toutes les sources : un dossier payé chez CIL
+  <div style="margin-top:6px;color:#64748b">Une exception n'a de sens que sur les dates couvertes par toutes les sources : un dossier payé chez CIL
     en août paraît « non reçu » tant que l'export Brique d'août n'a pas été importé.</div>
   <table>
     <thead><tr><th>Source</th><th>Lignes</th><th>Du</th><th>Au</th><th>Dernier import</th></tr></thead>
