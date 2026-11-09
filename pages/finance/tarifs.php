@@ -86,6 +86,7 @@ $services = $avec_services ? fin_services_liste() : [];
 $formules = $avec_services ? fin_formules_liste() : [];
 $sites    = $avec_services ? fin_sites_liste() : [];
 $codes_site = $avec_services ? fin_codes_site() : [];
+$nb_attente = $avec_services ? (int)db_fetch_value("SELECT COUNT(*) FROM fin_dossiers WHERE formule_attente") : 0;
 include __DIR__ . '/../../templates/header.php';
 ?>
 <style>
@@ -238,7 +239,9 @@ tr.fin-sans-site td:first-child strong{color:#b45309}
   <p class="aide">Une formule regroupe les services payés par un dossier. <strong>Par site</strong> : elle s'applique aux dossiers des sites choisis
     (affinée par canal et catégorie). <strong>Par dossier</strong> : elle s'applique selon le canal, le type et la catégorie du dossier, quel que soit
     son site. Un critère vide vaut pour tous. Une formule par site l'emporte sur une formule par dossier, puis la plus précise.
-    Montant attendu = somme des services fixes. Un dossier sans formule garde le tarif par catégorie ci-dessus.</p>
+    Montant attendu = somme des services fixes. Un dossier sans formule garde le tarif par catégorie ci-dessus.
+    Un dossier rattaché à plusieurs sites et pas encore posé attend la pose pour recevoir sa formule par site.</p>
+  <?php if ($nb_attente): ?><p class="fin-alerte"><?= number_format($nb_attente, 0, ',', ' ') ?> dossier(s) en attente de la pose (plusieurs sites possibles) : pas encore de montant attendu.</p><?php endif; ?>
   <div class="table-wrap">
   <table class="fin-table">
     <thead><tr><th>Formule</th><th>Critères</th><th>Services</th>

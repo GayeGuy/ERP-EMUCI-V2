@@ -772,7 +772,7 @@ function fin_consolider(): array {
             'a_ouvert_non_recu', 'a_pose_non_reconcilie', 'a_ecart', 'a_recu_sans_paiement', 'a_rejet', 'a_pose_sans_dossier',
             'date_ref', 'maj_le'];
         $services = fin_services_pret();
-        if ($services) array_push($cols, 'site', 'site_ids', 'formule_id', 'montant_variable');
+        if ($services) array_push($cols, 'site', 'site_ids', 'formule_id', 'montant_variable', 'formule_attente');
         // Formules : services fixes additionnés par catégorie (prix manquant pour
         // un service = montant inconnu) ; un service variable (reliquat) accepte
         // le complément réconcilié au-delà. Une formule par site l'emporte sur une
@@ -816,7 +816,7 @@ function fin_consolider(): array {
             db_query("CREATE INDEX ON fin_t_site (k)");
             $formule = "LEFT JOIN fin_t_site sc ON sc.k = upper(trim(b.site))
                 LEFT JOIN LATERAL (
-                    SELECT f.id, f.variable, fp.montant FROM fin_t_form f
+                    SELECT f.id, f.mode, f.variable, fp.montant FROM fin_t_form f
                     LEFT JOIN fin_t_form_prix fp ON fp.formule_id = f.id AND fp.cat = $cat_b
                     WHERE (f.mode = 'dossier' OR sc.site_ids && f.site_ids)
                       AND (f.canaux IS NULL OR b.canal = ANY (f.canaux))
@@ -825,7 +825,7 @@ function fin_consolider(): array {
                     ORDER BY f.prec DESC, f.id LIMIT 1) fo ON true";
         } else {
             $formule = "LEFT JOIN LATERAL (SELECT NULL::integer[] AS site_ids) sc ON true
-                LEFT JOIN LATERAL (SELECT NULL::integer AS id, false AS variable, NULL::integer AS montant) fo ON true";
+                LEFT JOIN LATERAL (SELECT NULL::integer AS id, NULL::varchar AS mode, false AS variable, NULL::integer AS montant) fo ON true";
         }
         // Montant réconcilié comparable au montant attendu ; au-delà, complément
         // accepté si la formule a un service variable.
@@ -856,10 +856,17 @@ function fin_consolider(): array {
                 z.est_pose AND NOT z.est_recu,
                 COALESCE(z.date_reception::date, z.date_paiement, z.date_pose, z.date_ouverture, z.date_caisse::date),
                 CURRENT_TIMESTAMP" . ($services ? ",
-                z.site, z.site_ids, z.formule_id, CASE WHEN $comparable AND $complement THEN z.montant_reconcilie - z.montant_attendu END" : '') . "
+                z.site, z.site_ids, z.formule_id, CASE WHEN $comparable AND $complement THEN z.montant_reconcilie - z.montant_attendu END,
+                z.formule_attente" : '') . "
             FROM (
-                SELECT b.*, sc.site_ids, fo.id AS formule_id, COALESCE(fo.variable, false) AS variable,
-                       CASE WHEN fo.id IS NOT NULL THEN fo.montant
+                -- Dossier rattaché à plusieurs sites (pas encore posé) dont la
+                -- formule retenue est une formule par site : il attend la pose,
+                -- qui fixera son site, pour recevoir sa formule et son montant.
+                SELECT b.*, sc.site_ids, fa.attente AS formule_attente,
+                       CASE WHEN NOT fa.attente THEN fo.id END AS formule_id,
+                       COALESCE(fo.variable AND NOT fa.attente, false) AS variable,
+                       CASE WHEN fa.attente THEN NULL
+                            WHEN fo.id IS NOT NULL THEN fo.montant
                             WHEN b.canal = 'SPECIALE' THEN COALESCE(ts.montant_ttc, $tarif_speciale_defaut, t.montant_ttc)
                             ELSE COALESCE(t.montant_ttc, b.montant_dossier) END AS montant_attendu
                 FROM (
@@ -930,6 +937,7 @@ function fin_consolider(): array {
                 LEFT JOIN fin_tarifs t ON t.genre = " . fin_categorie_sql('b.genre') . "
                 LEFT JOIN fin_tarifs ts ON b.canal = 'SPECIALE' AND ts.genre = " . get_db()->quote(FIN_TARIF_SPECIALE_PREFIXE) . " || " . fin_categorie_sql('b.genre') . "
                 $formule
+                CROSS JOIN LATERAL (SELECT COALESCE(fo.mode = 'site' AND cardinality(sc.site_ids) > 1, false) AS attente) fa
             ) z");
         db_query("CREATE INDEX ON fin_t_new (cle)");
         $supprimes = db_query("DELETE FROM fin_dossiers d WHERE NOT EXISTS (SELECT 1 FROM fin_t_new n WHERE n.cle = d.cle)")->rowCount();

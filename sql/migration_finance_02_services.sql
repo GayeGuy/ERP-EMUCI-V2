@@ -64,5 +64,7 @@ ALTER TABLE fin_dossiers ADD COLUMN IF NOT EXISTS site             varchar(120);
 ALTER TABLE fin_dossiers ADD COLUMN IF NOT EXISTS site_ids         integer[];
 ALTER TABLE fin_dossiers ADD COLUMN IF NOT EXISTS formule_id       integer;
 ALTER TABLE fin_dossiers ADD COLUMN IF NOT EXISTS montant_variable numeric(14,2);
+-- Plusieurs sites possibles avant la pose : la formule par site attend la pose.
+ALTER TABLE fin_dossiers ADD COLUMN IF NOT EXISTS formule_attente  boolean NOT NULL DEFAULT false;
 CREATE INDEX IF NOT EXISTS idx_fin_dossiers_formule ON fin_dossiers (formule_id);
 CREATE INDEX IF NOT EXISTS idx_fin_dossiers_sites ON fin_dossiers USING gin (site_ids);

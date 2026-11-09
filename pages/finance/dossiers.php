@@ -431,6 +431,7 @@ function finRendre(d) {
     + kv('Reçu PDF', d.pdf_recu && /^https:\/\//.test(d.pdf_recu) ? `<a href="${finEsc(d.pdf_recu)}" target="_blank" rel="noopener noreferrer">Ouvrir le reçu</a>` : '—')
     + kv('Montant plaques', finNb(d.mt_plaques)) + kv('Montant sécurisation pose', finNb(d.mt_secupose)) + kv('Montant du dossier', finNb(d.montant_dossier))
     + kv('Montant attendu', finNb(d.montant_attendu))
+    + (d.formule_attente && d.formule_attente !== 'f' ? kv('Formule', 'En attente de la pose<div class="fin-sub">Plusieurs sites possibles : la formule et le montant attendu seront fixés par le site de pose.</div>') : '')
     + (d.formule ? kv('Formule', finEsc(d.formule) + `<div class="fin-sub">${(d.services || []).map(s => finEsc(s.libelle) + ' : '
         + (s.variable ? (d.montant_variable !== null ? finNb(d.montant_variable) : 'variable') : (s.montant_ttc !== null ? finNb(s.montant_ttc) : 'prix manquant'))).join(' · ')}</div>`) : '')
     +kv('Réconcilié (X3)', finNb(d.montant_reconcilie)) + kv('Écart', ecart)
