@@ -32,6 +32,12 @@ if (!$can_valider && !$is_coord) {
 
 $sites_list = db_fetch_all("SELECT id,nom FROM sites WHERE actif=1 ORDER BY nom");
 
+// Un coordinateur ne consulte ni ne modifie que son site.
+function _vsm_site_ok(int $site_id): bool {
+    global $is_coord, $site_force;
+    return !$is_coord || ($site_force > 0 && $site_id === $site_force);
+}
+
 // ============================================================
 // AJAX
 // ============================================================
@@ -45,6 +51,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             $site_id = (int)($_POST['site_id'] ?? 0);
             $date    = trim($_POST['date'] ?? date('Y-m-d'));
             if (!$site_id) json_response(false, 'Site obligatoire.');
+            if (!_vsm_site_ok($site_id)) json_response(false, 'Accès refusé.');
 
             // ── Source unique : point 18h validé par le superviseur
             // (sql/vs_calculer_ecarts_site — includes/validation_stock.php).
@@ -166,6 +173,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
 
     // ── VALIDER AUTO (écart = 0)
     if ($action === 'valider_auto') {
+        if (!$can_valider) json_response(false, 'Accès refusé.');
         $site_id = (int)($_POST['site_id'] ?? 0);
         $date    = trim($_POST['date'] ?? date('Y-m-d'));
         // Une décision du GSB (dont un réajustement en attente de la réponse
@@ -692,6 +700,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     if ($action === 'coord_repond_reajust') {
         if (!$is_coord) json_response(false, 'Accès refusé.');
         $site_id     = (int)($_POST['site_id'] ?? 0);
+        if (!_vsm_site_ok($site_id)) json_response(false, "Accès refusé : ce site n'est pas le vôtre.");
         $date        = trim($_POST['date'] ?? date('Y-m-d'));
         $bobines_raw = $_POST['bobines_json'] ?? '[]';
         $bobines     = json_decode($bobines_raw, true) ?: [];
@@ -704,6 +713,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 $films_correct = (int)($b['films_correct'] ?? 0);
                 $motif_coord   = trim($b['motif_coord'] ?? '');
                 if (!$bobine_id) continue;
+                if ($films_correct < 0) json_response(false, 'Le nombre de films ne peut pas être négatif.');
+                if (!db_fetch_value("SELECT 1 FROM op_bobines WHERE id=? AND site_id=?", [$bobine_id, $site_id]))
+                    json_response(false, 'Bobine introuvable sur votre site.');
                 if (!$motif_coord) json_response(false, 'Le motif est obligatoire pour chaque bobine.');
 
                 // Ne pas re-soumettre une bobine déjà validée par le GSB
@@ -778,6 +790,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     if ($action === 'get_bobines_detail') {
         $site_id = (int)($_POST['site_id'] ?? 0);
         if (!$site_id) json_response(false,'Site obligatoire.');
+        if (!_vsm_site_ok($site_id)) json_response(false, 'Accès refusé.');
         $bobines = db_fetch_all(
             "SELECT b.id, b.numero, b.type_code, b.serie,
                     b.films_restants, b.stock_systeme, b.statut, b.format
