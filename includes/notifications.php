@@ -291,17 +291,126 @@ function notif_check_stock_bas(): int {
     return $nb;
 }
 
-function mailer_send($to, string $subject, string $body): bool {
+// ============================================================
+//  Envoi de mails (SMTP, PHPMailer)
+//
+//  Configuration par variables d'environnement :
+//    MAIL_ENABLED  1 pour activer les envois (sinon rien ne part)
+//    MAIL_HOST     serveur SMTP            MAIL_PORT   587 (défaut)
+//    MAIL_SECURE   tls (STARTTLS, défaut) | ssl (SMTPS, port 465) | none
+//    MAIL_USER / MAIL_PASS  identifiants (vides si le serveur n'en demande pas)
+//    MAIL_FROM     adresse expéditrice     MAIL_FROM_NAME  nom affiché
+//
+//  Les notifications sont doublées d'un mail par file d'attente :
+//  notifications.mail_statut vaut 'attente' à la création (valeur par défaut
+//  de la colonne, INSERT directs compris) et cron_mails.php, appelé toutes les
+//  5 minutes par GitHub Actions, les envoie. Un mail ne part donc jamais pour
+//  une action annulée (rollback), et une panne SMTP ne ralentit pas les pages.
+// ============================================================
+
+/** Les envois de mail sont-ils activés et configurés ? */
+function mail_actif(): bool {
+    return in_array(strtolower((string)env('MAIL_ENABLED', '')), ['1', 'true', 'oui', 'yes', 'on'], true)
+        && (string)env('MAIL_HOST', '') !== '';
+}
+
+/** Dernier message d'erreur de mailer_send() ('' si le dernier envoi a réussi). */
+function mailer_derniere_erreur(?string $set = null): string {
+    static $err = '';
+    if ($set !== null) $err = $set;
+    return $err;
+}
+
+function mailer_send($to, string $subject, string $body, ?string $texte = null): bool {
+    mailer_derniere_erreur('');
     $autoload = __DIR__ . '/../vendor/autoload.php';
-    if (!file_exists($autoload)) { error_log('PHPMailer non installé'); return false; }
+    if (!file_exists($autoload)) { mailer_derniere_erreur('PHPMailer non installé'); error_log('Mailer: PHPMailer non installé'); return false; }
     require_once $autoload;
+    if ((string)env('MAIL_HOST', '') === '') { mailer_derniere_erreur('MAIL_HOST non renseigné'); return false; }
     try {
         $mail = new \PHPMailer\PHPMailer\PHPMailer(true);
-        $mail->isSMTP(); $mail->Host = defined('MAIL_HOST') ? MAIL_HOST : 'localhost';
-        $mail->SMTPAuth = false; $mail->Port = 587;
-        $mail->setFrom(defined('MAIL_FROM') ? MAIL_FROM : 'noreply@emuci.ci', APP_NAME);
+        $mail->CharSet = 'UTF-8';
+        $mail->isSMTP();
+        $mail->Host    = (string)env('MAIL_HOST');
+        $mail->Port    = (int)env('MAIL_PORT', '587');
+        $mail->Timeout = 15;
+        $secure = strtolower((string)env('MAIL_SECURE', 'tls'));
+        if ($secure === 'ssl')     $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_SMTPS;
+        elseif ($secure === 'tls') $mail->SMTPSecure = \PHPMailer\PHPMailer\PHPMailer::ENCRYPTION_STARTTLS;
+        else { $mail->SMTPSecure = ''; $mail->SMTPAutoTLS = false; }
+        if ((string)env('MAIL_USER', '') !== '') {
+            $mail->SMTPAuth = true;
+            $mail->Username = (string)env('MAIL_USER');
+            $mail->Password = (string)env('MAIL_PASS', '');
+        }
+        $mail->setFrom((string)env('MAIL_FROM', 'noreply@emuci.ci'), (string)env('MAIL_FROM_NAME', APP_NAME));
         foreach ((array)$to as $addr) $mail->addAddress($addr);
-        $mail->isHTML(true); $mail->Subject = $subject; $mail->Body = $body;
-        $mail->send(); return true;
-    } catch (Exception $e) { error_log('Mailer: '.$e->getMessage()); return false; }
+        $mail->isHTML(true);
+        $mail->Subject = $subject;
+        $mail->Body    = $body;
+        $mail->AltBody = $texte ?? trim(html_entity_decode(strip_tags(str_replace(['<br>', '<br/>', '</p>'], "\n", $body)), ENT_QUOTES, 'UTF-8'));
+        $mail->send();
+        return true;
+    } catch (\Throwable $e) {
+        mailer_derniere_erreur($e->getMessage());
+        error_log('Mailer: ' . $e->getMessage());
+        return false;
+    }
+}
+
+const MAIL_NOTIF_TENTATIVES = 3;    // abandon après 3 échecs d'envoi
+const MAIL_NOTIF_AGE_MAX_H  = 48;   // une notification plus ancienne n'est plus envoyée par mail
+
+/** Corps HTML d'un mail de notification : titre, message, bouton vers la page. */
+function mail_notification_html(string $prenom, string $titre, string $message, string $lien): string {
+    $h   = fn($t) => htmlspecialchars((string)$t, ENT_QUOTES, 'UTF-8');
+    $url = $lien !== '' ? rtrim((string)APP_URL, '/') . '/' . ltrim($lien, '/') : '';
+    return '<div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;color:#1e293b">'
+         . '<p>Bonjour' . ($prenom !== '' ? ' ' . $h($prenom) : '') . ',</p>'
+         . '<p style="font-size:16px;font-weight:bold;color:#06033A;margin:16px 0 8px">' . $h($titre) . '</p>'
+         . '<p style="margin:0 0 18px;line-height:1.5">' . nl2br($h($message)) . '</p>'
+         . ($url !== '' ? '<p><a href="' . $h($url) . '" style="background:#1B75BC;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;display:inline-block">Ouvrir dans ' . $h(APP_NAME) . '</a></p>' : '')
+         . '<p style="color:#94a3b8;font-size:12px;margin-top:24px">Notification automatique de ' . $h(APP_NAME) . '. Ne répondez pas à ce message.</p>'
+         . '</div>';
+}
+
+/**
+ * Envoie les notifications en attente de mail. Ignorées (sans mail) :
+ * notification déjà lue, sans destinataire, destinataire inactif ou sans
+ * adresse valide, ou plus ancienne que MAIL_NOTIF_AGE_MAX_H.
+ * Renvoie ['envoyes' => n, 'ignores' => n, 'echecs' => n].
+ */
+function mail_envoyer_notifications(int $max = 100): array {
+    $r = ['envoyes' => 0, 'ignores' => 0, 'echecs' => 0];
+    if (!db_colonne_existe('notifications', 'mail_statut')) return $r;
+    $limite = date('Y-m-d H:i:s', time() - MAIL_NOTIF_AGE_MAX_H * 3600);
+    $rows = db_fetch_all(
+        "SELECT n.id, n.titre, n.message, n.lien, n.lu, n.created_at, n.mail_tentatives,
+                u.email, u.prenom, u.actif
+           FROM notifications n LEFT JOIN users u ON u.id = n.user_id
+          WHERE n.mail_statut = 'attente' ORDER BY n.id LIMIT " . (int)$max);
+    $echecs_de_suite = 0;
+    foreach ($rows as $n) {
+        $email = trim((string)($n['email'] ?? ''));
+        if ($email === '' || !(int)$n['actif'] || (int)$n['lu'] === 1 || $n['created_at'] < $limite
+            || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            db_query("UPDATE notifications SET mail_statut='ignore' WHERE id=?", [$n['id']]);
+            $r['ignores']++;
+            continue;
+        }
+        $ok = mailer_send($email, $n['titre'],
+                          mail_notification_html((string)$n['prenom'], $n['titre'], $n['message'], (string)$n['lien']));
+        if ($ok) {
+            db_query("UPDATE notifications SET mail_statut='envoye' WHERE id=?", [$n['id']]);
+            $r['envoyes']++; $echecs_de_suite = 0;
+        } else {
+            $t = (int)$n['mail_tentatives'] + 1;
+            db_query("UPDATE notifications SET mail_tentatives=?, mail_statut=? WHERE id=?",
+                     [$t, $t >= MAIL_NOTIF_TENTATIVES ? 'echec' : 'attente', $n['id']]);
+            $r['echecs']++;
+            // Serveur SMTP injoignable : inutile d'insister pour tout le lot.
+            if (++$echecs_de_suite >= 3) break;
+        }
+    }
+    return $r;
 }

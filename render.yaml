@@ -30,3 +30,19 @@ services:
         sync: false
       - key: APP_TIMEZONE
         value: Africa/Abidjan
+      - key: MAIL_ENABLED
+        sync: false
+      - key: MAIL_HOST
+        sync: false
+      - key: MAIL_PORT
+        sync: false
+      - key: MAIL_SECURE
+        sync: false
+      - key: MAIL_USER
+        sync: false
+      - key: MAIL_PASS
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: CRON_TOKEN
+        sync: false

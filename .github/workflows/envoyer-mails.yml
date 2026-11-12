@@ -1,0 +1,28 @@
+name: Envoi des mails de notification
+
+# Appelle l'application toutes les 5 minutes pour envoyer les notifications en
+# attente (cron_mails.php). Secrets à créer dans GitHub (Settings > Secrets and
+# variables > Actions) :
+#   APP_URL     adresse de l'application, sans slash final (ex. https://erp-emuci.onrender.com)
+#   CRON_TOKEN  même valeur que la variable CRON_TOKEN de Render (24 caractères minimum)
+# Le service Render gratuit s'endort : le premier appel peut mettre environ une minute.
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  envoyer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Déclencher l'envoi
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_TOKEN: ${{ secrets.CRON_TOKEN }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_TOKEN" ]; then echo "Secrets APP_URL / CRON_TOKEN non définis : rien à faire."; exit 0; fi
+          curl -fsS --max-time 150 --retry 2 --retry-delay 20 -X POST \
+            -H "X-Cron-Token: $CRON_TOKEN" "$APP_URL/cron_mails.php"
