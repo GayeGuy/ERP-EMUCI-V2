@@ -24,5 +24,10 @@ jobs:
           CRON_TOKEN: ${{ secrets.CRON_TOKEN }}
         run: |
           if [ -z "$APP_URL" ] || [ -z "$CRON_TOKEN" ]; then echo "Secrets APP_URL / CRON_TOKEN non définis : rien à faire."; exit 0; fi
-          curl -fsS --max-time 150 --retry 2 --retry-delay 20 -X POST \
-            -H "X-Cron-Token: $CRON_TOKEN" "$APP_URL/cron_mails.php"
+          # Le code HTTP et la réponse sont affichés (la réponse ne contient aucun secret) :
+          # 403 = jeton différent de celui de Render ; 404 = APP_URL incorrecte ;
+          # 5xx / délai = application en panne ou endormie.
+          code=$(curl -sS --max-time 150 --retry 2 --retry-delay 20 -X POST \
+            -H "X-Cron-Token: $CRON_TOKEN" -o reponse.txt -w '%{http_code}' "$APP_URL/cron_mails.php") || code="erreur réseau"
+          echo "HTTP $code"; cat reponse.txt 2>/dev/null; echo
+          [ "$code" = "200" ]
