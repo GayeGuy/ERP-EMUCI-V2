@@ -15,7 +15,12 @@ $attendu = (string)env('CRON_TOKEN', '');
 $recu    = (string)($_SERVER['HTTP_X_CRON_TOKEN'] ?? '');
 if ($_SERVER['REQUEST_METHOD'] !== 'POST' || $attendu === '' || strlen($attendu) < 24 || !hash_equals($attendu, $recu)) {
     http_response_code(403);
-    echo json_encode(['ok' => false]);
+    // La raison aide à configurer ; elle ne révèle aucun secret.
+    $raison = $_SERVER['REQUEST_METHOD'] !== 'POST' ? 'methode'
+            : ($attendu === '' ? 'serveur_sans_jeton'
+            : (strlen($attendu) < 24 ? 'jeton_serveur_trop_court'
+            : ($recu === '' ? 'en_tete_absent' : 'jeton_different')));
+    echo json_encode(['ok' => false, 'raison' => $raison]);
     exit;
 }
 if (!mail_actif()) { echo json_encode(['ok' => true, 'actif' => false]); exit; }
