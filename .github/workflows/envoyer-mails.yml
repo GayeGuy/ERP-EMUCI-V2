@@ -1,33 +1,45 @@
 name: Envoi des mails de notification
 
-# Appelle l'application toutes les 5 minutes pour envoyer les notifications en
-# attente (cron_mails.php). Secrets à créer dans GitHub (Settings > Secrets and
-# variables > Actions) :
-#   APP_URL     adresse de l'application, sans slash final (ex. https://erp-emuci.onrender.com)
-#   CRON_TOKEN  même valeur que la variable CRON_TOKEN de Render (24 caractères minimum)
-# Le service Render gratuit s'endort : le premier appel peut mettre environ une minute.
+# Toutes les 5 minutes : demande à l'application les notifications en attente,
+# les envoie par SMTP depuis GitHub (Render gratuit bloque le SMTP sortant),
+# puis rend le résultat à l'application. Voir .github/scripts/envoyer_mails.py.
+#
+# Secrets à créer dans GitHub (Settings > Secrets and variables > Actions) :
+#   APP_URL, CRON_TOKEN                    adresse de l'application (sans slash final) et jeton partagé avec Render
+#   MAIL_HOST, MAIL_PORT, MAIL_SECURE      serveur SMTP, port, tls | ssl | none
+#   MAIL_USER, MAIL_PASS, MAIL_FROM        identifiants de la boîte et adresse expéditrice
+#   MAIL_FROM_NAME (facultatif)            nom affiché
+# Variable Render : MAIL_ENABLED=1 (le serveur n'a pas besoin des identifiants SMTP).
 on:
   schedule:
     - cron: '*/5 * * * *'
   workflow_dispatch:
 
-permissions: {}
+permissions:
+  contents: read
+
+# Jamais deux envois en même temps : ils enverraient deux fois les mêmes mails.
+concurrency:
+  group: envoyer-mails
+  cancel-in-progress: false
 
 jobs:
   envoyer:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
-      - name: Déclencher l'envoi
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/scripts
+      - name: Envoyer les mails
         env:
           APP_URL: ${{ secrets.APP_URL }}
           CRON_TOKEN: ${{ secrets.CRON_TOKEN }}
-        run: |
-          if [ -z "$APP_URL" ] || [ -z "$CRON_TOKEN" ]; then echo "Secrets APP_URL / CRON_TOKEN non définis : rien à faire."; exit 0; fi
-          # Le code HTTP et la réponse sont affichés (la réponse ne contient aucun secret) :
-          # 403 = jeton différent de celui de Render ; 404 = APP_URL incorrecte ;
-          # 5xx / délai = application en panne ou endormie.
-          code=$(curl -sS --max-time 150 --retry 2 --retry-delay 20 -X POST \
-            -H "X-Cron-Token: $CRON_TOKEN" -o reponse.txt -w '%{http_code}' "$APP_URL/cron_mails.php") || code="erreur réseau"
-          echo "HTTP $code"; cat reponse.txt 2>/dev/null; echo
-          [ "$code" = "200" ]
+          MAIL_HOST: ${{ secrets.MAIL_HOST }}
+          MAIL_PORT: ${{ secrets.MAIL_PORT }}
+          MAIL_SECURE: ${{ secrets.MAIL_SECURE }}
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASS: ${{ secrets.MAIL_PASS }}
+          MAIL_FROM: ${{ secrets.MAIL_FROM }}
+          MAIL_FROM_NAME: ${{ secrets.MAIL_FROM_NAME }}
+        run: python3 .github/scripts/envoyer_mails.py

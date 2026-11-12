@@ -374,22 +374,33 @@ function mail_notification_html(string $prenom, string $titre, string $message, 
          . '</div>';
 }
 
+/** Envoi en file d'attente activé (sans exiger de SMTP sur ce serveur : voir mail_actif()) ? */
+function mail_file_active(): bool {
+    return in_array(strtolower((string)env('MAIL_ENABLED', '')), ['1', 'true', 'oui', 'yes', 'on'], true);
+}
+
+/** Version texte d'un mail de notification. */
+function mail_notification_texte(string $titre, string $message, string $lien): string {
+    $url = $lien !== '' ? rtrim((string)APP_URL, '/') . '/' . ltrim($lien, '/') : '';
+    return $titre . "\n\n" . $message . ($url !== '' ? "\n\nOuvrir dans " . APP_NAME . " : " . $url : '')
+         . "\n\n-- Notification automatique de " . APP_NAME . ". Ne répondez pas à ce message.";
+}
+
 /**
- * Envoie les notifications en attente de mail. Ignorées (sans mail) :
- * notification déjà lue, sans destinataire, destinataire inactif ou sans
- * adresse valide, ou plus ancienne que MAIL_NOTIF_AGE_MAX_H.
- * Renvoie ['envoyes' => n, 'ignores' => n, 'echecs' => n].
+ * Notifications à envoyer par mail : [['id','to','prenom','sujet','html','texte'], ...].
+ * Celles qui n'ont pas lieu d'être envoyées passent à 'ignore' : déjà lue,
+ * sans destinataire, destinataire inactif ou sans adresse valide, plus ancienne
+ * que MAIL_NOTIF_AGE_MAX_H. Les autres restent 'attente' jusqu'à
+ * mail_enregistrer_resultat(). Renvoie ['mails' => [...], 'ignores' => n].
  */
-function mail_envoyer_notifications(int $max = 100): array {
-    $r = ['envoyes' => 0, 'ignores' => 0, 'echecs' => 0];
+function mail_notifications_a_envoyer(int $max = 100): array {
+    $r = ['mails' => [], 'ignores' => 0];
     if (!db_colonne_existe('notifications', 'mail_statut')) return $r;
     $limite = date('Y-m-d H:i:s', time() - MAIL_NOTIF_AGE_MAX_H * 3600);
     $rows = db_fetch_all(
-        "SELECT n.id, n.titre, n.message, n.lien, n.lu, n.created_at, n.mail_tentatives,
-                u.email, u.prenom, u.actif
+        "SELECT n.id, n.titre, n.message, n.lien, n.lu, n.created_at, u.email, u.prenom, u.actif
            FROM notifications n LEFT JOIN users u ON u.id = n.user_id
           WHERE n.mail_statut = 'attente' ORDER BY n.id LIMIT " . (int)$max);
-    $echecs_de_suite = 0;
     foreach ($rows as $n) {
         $email = trim((string)($n['email'] ?? ''));
         if ($email === '' || !(int)$n['actif'] || (int)$n['lu'] === 1 || $n['created_at'] < $limite
@@ -398,19 +409,52 @@ function mail_envoyer_notifications(int $max = 100): array {
             $r['ignores']++;
             continue;
         }
-        $ok = mailer_send($email, $n['titre'],
-                          mail_notification_html((string)$n['prenom'], $n['titre'], $n['message'], (string)$n['lien']));
-        if ($ok) {
-            db_query("UPDATE notifications SET mail_statut='envoye' WHERE id=?", [$n['id']]);
-            $r['envoyes']++; $echecs_de_suite = 0;
-        } else {
-            $t = (int)$n['mail_tentatives'] + 1;
-            db_query("UPDATE notifications SET mail_tentatives=?, mail_statut=? WHERE id=?",
-                     [$t, $t >= MAIL_NOTIF_TENTATIVES ? 'echec' : 'attente', $n['id']]);
-            $r['echecs']++;
-            // Serveur SMTP injoignable : inutile d'insister pour tout le lot.
-            if (++$echecs_de_suite >= 3) break;
-        }
+        $r['mails'][] = [
+            'id'     => (int)$n['id'],
+            'to'     => $email,
+            'prenom' => (string)$n['prenom'],
+            'sujet'  => $n['titre'],
+            'html'   => mail_notification_html((string)$n['prenom'], $n['titre'], $n['message'], (string)$n['lien']),
+            'texte'  => mail_notification_texte($n['titre'], $n['message'], (string)$n['lien']),
+        ];
     }
     return $r;
+}
+
+/**
+ * Enregistre le résultat d'envoi. $envoyes : ids partis ; $echecs : ids refusés
+ * (nouvelle tentative au prochain passage, 'echec' après MAIL_NOTIF_TENTATIVES).
+ * Seules les notifications encore 'attente' sont touchées.
+ */
+function mail_enregistrer_resultat(array $envoyes, array $echecs): array {
+    $r = ['envoyes' => 0, 'echecs' => 0];
+    foreach (array_unique(array_map('intval', $envoyes)) as $id) {
+        $r['envoyes'] += db_query("UPDATE notifications SET mail_statut='envoye' WHERE id=? AND mail_statut='attente'", [$id])->rowCount();
+    }
+    foreach (array_unique(array_map('intval', $echecs)) as $id) {
+        $r['echecs'] += db_query(
+            "UPDATE notifications SET mail_tentatives = mail_tentatives + 1,
+                    mail_statut = CASE WHEN mail_tentatives + 1 >= " . MAIL_NOTIF_TENTATIVES . " THEN 'echec' ELSE 'attente' END
+              WHERE id=? AND mail_statut='attente'", [$id])->rowCount();
+    }
+    return $r;
+}
+
+/**
+ * Envoie directement par SMTP depuis ce serveur les notifications en attente
+ * (hébergement qui autorise le SMTP sortant). Renvoie ['envoyes','ignores','echecs'].
+ */
+function mail_envoyer_notifications(int $max = 100): array {
+    $a = mail_notifications_a_envoyer($max);
+    $ok = []; $ko = []; $de_suite = 0;
+    foreach ($a['mails'] as $m) {
+        if (mailer_send($m['to'], $m['sujet'], $m['html'], $m['texte'])) { $ok[] = $m['id']; $de_suite = 0; }
+        else {
+            $ko[] = $m['id'];
+            // Serveur SMTP injoignable : inutile d'insister pour tout le lot.
+            if (++$de_suite >= 3) break;
+        }
+    }
+    $r = mail_enregistrer_resultat($ok, $ko);
+    return ['envoyes' => $r['envoyes'], 'ignores' => $a['ignores'], 'echecs' => $r['echecs']];
 }
