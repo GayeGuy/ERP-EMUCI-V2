@@ -58,6 +58,28 @@ function vs_decisions_bobines_site(int $site_id, string $date): array {
     return $map;
 }
 
+// Condition SQL « ce point a réellement retiré du stock » (règle 18h : seul un
+// point validé avec stock_deduit >= 1 ; sans la colonne, tout point non rejeté).
+function _vsm_cond_deduit(string $alias = ''): string {
+    $p = $alias !== '' ? "$alias." : '';
+    return db_colonne_existe('op_points_journaliers', 'stock_deduit')
+        ? "{$p}stock_deduit >= 1" : "{$p}statut <> 'rejete'";
+}
+
+// Films retirés d'une bobine par les points postérieurs à $date.
+function vsm_films_retires_apres(int $bobine_id, string $date): int {
+    return (int)db_fetch_value(
+        "SELECT COALESCE(SUM(fu.films_utilises + fu.films_endommages),0)
+         FROM op_films_utilises fu JOIN op_points_journaliers p ON p.id = fu.point_id
+         WHERE fu.bobine_id=? AND p.date_point > ? AND " . _vsm_cond_deduit('p'), [$bobine_id, $date]);
+}
+
+// Points postérieurs à $date qui ont réellement retiré du stock du site.
+function vsm_points_posterieurs(int $site_id, string $date): int {
+    return (int)db_fetch_value(
+        "SELECT COUNT(*) FROM op_points_journaliers WHERE site_id=? AND date_point > ? AND " . _vsm_cond_deduit(), [$site_id, $date]);
+}
+
 // ── Écarts d'un site pour une date, pour l'affichage détaillé bobine par
 //    bobine côté GSB. Source unique : le point 18h validé par le
 //    superviseur. Aucun repli sur un autre point ou une autre table —
@@ -69,7 +91,10 @@ function vs_calculer_ecarts_site(int $site_id, string $date): array {
                 SUM(fu.films_endommages) AS films_endommages,
                 b.numero, b.type_code, b.format, b.serie,
                 b.stock_systeme, b.films_restants, b.statut,
-                pj.id AS point_id, pj.type_point
+                pj.id AS point_id, pj.type_point,
+                (SELECT io.quantity FROM import_optotrace io
+                  WHERE io.keyname = b.numero AND io.date_import = ?
+                  ORDER BY io.id DESC LIMIT 1) AS qte_import
          FROM op_films_utilises fu
          JOIN op_points_journaliers pj ON pj.id = fu.point_id
          JOIN op_bobines b ON b.id = fu.bobine_id
@@ -77,8 +102,11 @@ function vs_calculer_ecarts_site(int $site_id, string $date): array {
            AND pj.type_point='point_18h' AND pj.statut='valide'
          GROUP BY fu.bobine_id, b.numero, b.type_code, b.format, b.serie,
                   b.stock_systeme, b.films_restants, b.statut, pj.id, pj.type_point",
-        [$site_id, $date]
+        [$date, $site_id, $date]
     );
+    // Des points postérieurs ont déjà retiré des films : le stock ERP du soir
+    // de $date est reconstitué (restant actuel + films retirés depuis).
+    $reconstituer = vsm_points_posterieurs($site_id, $date) > 0;
     $dernier_import = db_fetch_value(
         "SELECT MAX(date_import) FROM import_optotrace WHERE site_id=? AND date_import=?",
         [$site_id, $date]
@@ -91,8 +119,12 @@ function vs_calculer_ecarts_site(int $site_id, string $date): array {
         // op_bobines.films_restants est déjà mis à jour par la validation du
         // PJ → ne pas re-soustraire les films du jour.
         $films_restants = (int)($b['films_restants'] ?? $b['stock_systeme']);
+        if ($reconstituer) $films_restants += vsm_films_retires_apres((int)$b['bobine_id'], $date);
         $stock_debut    = $films_restants + $films_total_pj;
-        $stock_emuci = (int)($b['stock_systeme'] ?? 0);
+        // Côté EMUCI : quantité de l'import de CETTE date (import_optotrace),
+        // et non op_bobines.stock_systeme qui ne garde que le dernier import.
+        // Bobine absente de l'import du jour : dernière quantité connue.
+        $stock_emuci = $b['qte_import'] !== null ? (int)$b['qte_import'] : (int)($b['stock_systeme'] ?? 0);
         $ecart_val   = $dernier_import ? ($films_restants - $stock_emuci) : 0;
         $has_ecart   = $dernier_import !== null && $ecart_val !== 0;
         $ligne = [
@@ -102,6 +134,7 @@ function vs_calculer_ecarts_site(int $site_id, string $date): array {
             'films_endommages' => $films_endommages, 'films_restants' => $films_restants,
             'stock_systeme' => $stock_emuci,
             'ecart' => $ecart_val, 'has_ecart' => $has_ecart,
+            'reconstitue' => $reconstituer,
         ];
         if ($has_ecart) {
             $ligne['causes'] = vs_causes_ecart($site_id, $date, $ligne);
@@ -163,7 +196,7 @@ function vs_causes_ecart(int $site_id, string $date, array $l): array {
          FROM op_films_utilises fu JOIN op_points_journaliers p ON p.id = fu.point_id
          WHERE fu.bobine_id=? AND p.date_point > ? AND "
         . ($regle_18h ? "p.stock_deduit >= 1" : "p.statut <> 'rejete'"), [$bobine_id, $date]);
-    if ($apres > 0)
+    if ($apres > 0 && empty($l['reconstitue']))
         $causes[] = ['films' => -$apres, 'texte' =>
             "$apres film(s) déjà retiré(s) de cette bobine par des points postérieurs au $jj : le stock ERP comparé est celui d'aujourd'hui."];
 

@@ -60,7 +60,7 @@ function _vsm_appliquer_correction(array $corr, string $date, $inv_recompte, int
     // Verrou : un point validé en même temps ne doit pas voir sa déduction écrasée.
     $stock_av = (int)db_fetch_value("SELECT films_restants FROM op_bobines WHERE id=? FOR UPDATE", [$bobine_id]);
     $nouveau  = $inv_recompte !== null ? $stock_av
-              : max(0, (int)$corr['films_final']);
+              : max(0, (int)$corr['films_final'] - vsm_films_retires_apres($bobine_id, $date));
     $diff     = $nouveau - $stock_av;
     db_query("UPDATE op_bobines SET films_restants=?,
          statut = CASE WHEN statut='epuisee' AND ? > 0 THEN 'en_cours'
@@ -380,8 +380,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             // Si réajustement : aligner films_restants sur la valeur EMUCI (stock_systeme)
             if ($decision === 'reajuste') {
                 foreach ($ecarts as $e) {
-                    $stock_av = max(0, (int)$e['films_restants']); // ERP EMUCI avant ajust.
-                    $nouveau  = max(0, (int)$e['stock_systeme']);   // cible = valeur EMUCI
+                    $stock_av = (int)db_fetch_value("SELECT films_restants FROM op_bobines WHERE id=? FOR UPDATE", [(int)$e['bobine_id']]);
+                    // Cible = valeur EMUCI du soir de $date, moins les films que des
+                    // points plus récents ont déjà retirés.
+                    $nouveau  = max(0, (int)$e['stock_systeme'] - vsm_films_retires_apres((int)$e['bobine_id'], $date));
                     $diff     = $nouveau - $stock_av;
                     // Statut recalculé : une bobine « épuisée » remise à 19 films
                     // restait épuisée, invisible des points journaliers.
