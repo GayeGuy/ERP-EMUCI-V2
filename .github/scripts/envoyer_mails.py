@@ -104,7 +104,7 @@ def main():
     except Exception as e:
         sys.exit("Connexion SMTP impossible : %s %s" % (type(e).__name__, e))
 
-    envoyes, echecs = [], []
+    envoyes, echecs, erreurs = [], [], {}
     for m in mails:
         try:
             smtp.send_message(construire(m))
@@ -114,13 +114,15 @@ def main():
             break
         except smtplib.SMTPException as e:
             echecs.append(m["id"])
+            # Le motif est affiché aux administrateurs (page Mails) ; le journal GitHub n'en garde que le type.
+            erreurs[str(m["id"])] = ("%s : %s" % (type(e).__name__, e))[:250]
             print("Refusé par le serveur SMTP : %s" % type(e).__name__)
     try:
         smtp.quit()
     except Exception:
         pass
 
-    bilan = appel("resultat", {"envoyes": envoyes, "echecs": echecs})
+    bilan = appel("resultat", {"envoyes": envoyes, "echecs": echecs, "erreurs": erreurs})
     print("Envoyés : %d, refusés : %d (enregistrés : %s)." % (len(envoyes), len(echecs), bilan))
     return 1 if echecs and not envoyes else 0
 

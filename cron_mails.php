@@ -27,7 +27,7 @@ $action = $_GET['action'] ?? 'envoyer';
 
 // ── Envoi par GitHub Actions (hébergement sans SMTP sortant, ex. Render gratuit) ──
 //  lister   : renvoie les mails à envoyer (le serveur n'a pas besoin de SMTP)
-//  resultat : corps JSON {"envoyes":[ids],"echecs":[ids]}
+//  resultat : corps JSON {"envoyes":[ids],"echecs":[ids],"erreurs":{id: message}}
 if ($action === 'lister' || $action === 'resultat') {
     if (!mail_file_active()) { echo json_encode(['ok' => true, 'actif' => false, 'mails' => []]); exit; }
     if ($action === 'lister') {
@@ -35,7 +35,7 @@ if ($action === 'lister' || $action === 'resultat') {
     } else {
         $b = json_decode((string)file_get_contents('php://input'), true);
         if (!is_array($b)) { http_response_code(400); echo json_encode(['ok' => false, 'raison' => 'corps_invalide']); exit; }
-        echo json_encode(['ok' => true] + mail_enregistrer_resultat((array)($b['envoyes'] ?? []), (array)($b['echecs'] ?? [])));
+        echo json_encode(['ok' => true] + mail_enregistrer_resultat((array)($b['envoyes'] ?? []), (array)($b['echecs'] ?? []), (array)($b['erreurs'] ?? [])));
     }
     exit;
 }
