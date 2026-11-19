@@ -30,3 +30,9 @@ ON CONFLICT (role_id, module) DO NOTHING;
 INSERT INTO permissions (role_id, module, can_read, can_create, can_update, can_delete, can_export)
 SELECT id, 'inventaire_equipements_valider', 0, 0, CASE WHEN slug IN ('superviseur_operation','gestionnaire_stock') THEN 1 ELSE 0 END, 0, 0 FROM roles
 ON CONFLICT (role_id, module) DO NOTHING;
+
+-- 4. Moment du comptage : comptage_matin (NULL = pas encore fixé, 1 = matin avant les activités)
+ALTER TABLE inventaires_bobines ADD COLUMN IF NOT EXISTS comptage_matin smallint;
+ALTER TABLE inventaires_rivets ADD COLUMN IF NOT EXISTS comptage_matin smallint;
+ALTER TABLE inventaires_pmma ADD COLUMN IF NOT EXISTS comptage_matin smallint;
+ALTER TABLE inventaires_equipements ADD COLUMN IF NOT EXISTS comptage_matin smallint;
