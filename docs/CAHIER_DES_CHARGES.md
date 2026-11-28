@@ -771,6 +771,19 @@ envoie un chauffeur (nom obligatoire) ; l'enlèvement débite le stock du site
 fournisseur et produit un bon de livraison. Le site demandeur réceptionne ; un
 manque remis en stock retourne au site fournisseur.
 
+**EF-CMD-12** — Un profil « Magasinier Entrepôt », rattaché à un entrepôt,
+prépare les lignes de commande servies par cet entrepôt (quantité préparée,
+motif d'écart) et peut choisir les bobines. Le gestionnaire de stock répartit
+les lignes entre dépôts et sorties diverses, et prépare celles du magasin.
+
+**EF-CMD-13** — Quand toutes les lignes sont préparées, le gestionnaire de
+stock désigne un livreur (profil « Livreur »). Le livreur récupère la
+commande — le stock des dépôts est débité à ce moment —, l'achemine et la
+livre au site en joignant la photo du bon de livraison signé par le site.
+
+**EF-CMD-14** — Le chef de site réceptionne la commande livrée, ligne par
+ligne ; la photo du livreur tient lieu de bon de livraison signé.
+
 **EF-CMD-11** — Traçabilité : chaque commande liée porte sa commande
 d'origine, chaque ligne d'origine liste ses sorties diverses (site, quantité,
 état), dans la liste, le détail et le bon de livraison, et chaque décision est

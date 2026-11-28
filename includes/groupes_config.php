@@ -224,7 +224,7 @@ function _groupes_def(): array {
                 ['label'=>'Commandes',              'icon'=>'ph-shopping-cart',
                  'url'=>'pages/commandes.php','active_keys'=>['commandes'],
                  'perm'=>['commandes','can_read'],
-                 'roles_include'=>['superviseur_operation','gestionnaire_operation']],
+                 'roles_include'=>['superviseur_operation','gestionnaire_operation','magasinier_entrepot','livreur']],
                 // EMUCI : réservé aux profils de supervision, pas au coordinateur
                 // n° 2.8 CR PDG — suivi des observations saisies dans le point
                 // journalier. Visible aussi du coordinateur : c'est lui qui
@@ -506,6 +506,10 @@ function get_groupes_pour_role(string $role_slug): array {
         'gestionnaire_operation'     => ['DASHBOARD','OPERATIONS'],
         // GSB (gestionnaire stock bobines)
         'gestionnaire_stock_bobines' => ['DASHBOARD','OPERATIONS','BOBINES','STOCK'],
+        // Magasinier d'entrepôt et livreur : les commandes à préparer / à
+        // livrer (écran Commandes, groupe OPERATIONS).
+        'magasinier_entrepot'        => ['DASHBOARD','OPERATIONS'],
+        'livreur'                    => ['DASHBOARD','OPERATIONS'],
         // Lecture seule : uniquement la vue PDG et les demandes à valider.
         // Les droits fins page par page (ex. resume_superviseur.php, qui
         // autorise explicitement 'lecteur') ne changent pas — seule la

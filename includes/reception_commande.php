@@ -156,13 +156,13 @@ function rcp_statut_ligne(string $cmd_statut, array $l): array {
     $dem  = (int)($l['quantite'] ?? 0);
     $liv  = ($l['quantite_livree'] ?? null) !== null ? (int)$l['quantite_livree'] : null;
     $rec  = ($l['quantite_recue'] ?? null) !== null ? (int)$l['quantite_recue'] : null;
-    $part = in_array($cmd_statut, ['en_cours_livraison', 'recu', 'livre'], true);
+    $part = in_array($cmd_statut, ['en_cours_livraison', 'livree_site', 'recu', 'livre'], true);
     if (!$part || $liv === null) return ['Validé', '#15803d'];
     if ($liv === 0)              return ['Non livré', '#dc2626'];
     if ($rec !== null && $rec < $liv)
         return [($liv < $dem ? 'Livré partiellement · ' : '') . ($rec === 0 ? 'Non reçu' : 'Reçu partiel'), '#b45309'];
     if ($liv < $dem)             return ['Livré partiellement', '#d97706'];
-    return $cmd_statut === 'en_cours_livraison' ? ['En livraison', '#1d4ed8'] : ['Livré', '#15803d'];
+    return in_array($cmd_statut, ['en_cours_livraison', 'livree_site'], true) ? ['En livraison', '#1d4ed8'] : ['Livré', '#15803d'];
 }
 
 // ── Réception ligne par ligne ──────────────────────────────────
@@ -479,6 +479,7 @@ function rcp_traiter(int $cmd_id, array $decisions, string $notes, array $user, 
                           VALUES (?,?,?,?,?,?,?,'valide')",
                     [$renvoi_id, $l['type_article'], $l['article_id'], $l['libelle'], $q, $l['unite'], $l['prix_unitaire'] ?? 0]);
             }
+            if (function_exists('cflux_repartition_defaut')) cflux_repartition_defaut($renvoi_id);
             $ids = implode(',', array_map('intval', array_keys(array_filter($a_faire, fn($d) => $d === 'renvoye'))));
             db_query("UPDATE commande_ecarts_reception SET commande_renvoi_id=? WHERE id IN ($ids)", [$renvoi_id]);
             audit_log($user['id'], 'CREATE', 'commandes', $renvoi_id, "Commande $renvoi_num : renvoi des manquants de {$cmd['numero_commande']}");

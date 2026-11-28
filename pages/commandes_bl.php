@@ -82,7 +82,7 @@ $f = [
     'q'    => trim((string)($_GET['q'] ?? '')),
     'bl'   => in_array($_GET['bl'] ?? '', ['base', 'manquant'], true) ? $_GET['bl'] : '',
 ];
-$w = ["c.statut IN ('en_cours_livraison','recu','livre')"]; $p = [];
+$w = ["c.statut IN ('en_cours_livraison','livree_site','recu','livre')"]; $p = [];
 if ($f['site']) { $w[] = 'c.site_id = ?'; $p[] = $f['site']; }
 if ($f['du'])   { $w[] = 'CAST(COALESCE(c.recu_at, c.livraison_at) AS date) >= ?'; $p[] = $f['du']; }
 if ($f['au'])   { $w[] = 'CAST(COALESCE(c.recu_at, c.livraison_at) AS date) <= ?'; $p[] = $f['au']; }

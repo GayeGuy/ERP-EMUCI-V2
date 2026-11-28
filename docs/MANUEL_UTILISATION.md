@@ -500,15 +500,35 @@ opérationnels. Les unités possibles sont UNITÉ, CARTON, BOBINE et BOÎTE.
 3. **Lignes bobines et vignettes** : le GSB ou le gestionnaire de stock choisit les rouleaux précis à
    l'entrepôt (la somme de leurs films doit égaler la quantité demandée),
    puis « Valider la sélection ». Ils restent à l'entrepôt, réservés.
-4. **Le gestionnaire expédie** : pour chaque ligne, il choisit le dépôt de
-   sortie (entrepôt ou magasin, stock affiché en direct) et la quantité
-   livrée. Le dépôt est débité à l'expédition. Le **bon de livraison**
-   (BL) s'imprime dès l'expédition.
-5. **Le coordinateur réceptionne**, ligne par ligne : tout reçu, partiel
+4. **La commande est préparée, ligne par ligne** (bouton « Répartir /
+   préparer » ou « Préparer ») :
+   - le **gestionnaire de stock** répartit : il choisit d'où sort chaque
+     ligne (entrepôt ou magasin ; une proposition est faite à la validation)
+     ou la fait servir par un autre site (sortie diverse), et prépare les
+     lignes du magasin ;
+   - le **magasinier de l'entrepôt** (profil « Magasinier Entrepôt »,
+     rattaché à son entrepôt) prépare les lignes de l'entrepôt et peut
+     choisir les bobines. Si l'entrepôt n'a pas de magasinier actif, le
+     gestionnaire les prépare ;
+   - préparer, c'est indiquer la quantité qui partira (motif obligatoire si
+     elle diffère). **Rien ne sort encore du stock.**
+   Quand toutes les lignes sont préparées, la commande passe **Prête à
+   enlever** et le gestionnaire est prévenu. Il peut aussi la rouvrir tant
+   qu'elle n'est pas récupérée.
+5. **Le gestionnaire désigne le livreur** (profil « Livreur »), qui est
+   prévenu. Le **bon de livraison** s'imprime dès ce moment.
+6. **Le livreur récupère la commande** (bouton « Récupérer ») : c'est là que
+   le stock des dépôts (ou du site fournisseur) est **débité**. La commande
+   passe **En livraison** et le site est prévenu.
+7. **Le livreur livre au site** (bouton « Livrer ») : il fait signer le BL par
+   le site et en joint la **photo**, obligatoire. La commande passe
+   **Livrée**.
+8. **Le coordinateur réceptionne**, ligne par ligne : tout reçu, partiel
    (avec la quantité) ou rien, en cochant les rouleaux arrivés. Tout manque
-   exige un motif, et le **BL signé** (PDF) est obligatoire. Le site n'est
-   crédité que de ce qu'il a reçu ; les bobines y arrivent **en stock**.
-6. **Chaque manque ouvre un écart**, traité par le gestionnaire (par le GSB
+   exige un motif. Le BL signé en PDF n'est plus demandé si le livreur en a
+   joint la photo. Le site n'est crédité que de ce qu'il a reçu ; les
+   bobines y arrivent **en stock**.
+9. **Chaque manque ouvre un écart**, traité par le gestionnaire (par le GSB
    pour les rouleaux) : remise au stock du dépôt d'origine, renvoi (nouvelle
    commande) ou perte.
 
@@ -516,8 +536,10 @@ opérationnels. Les unités possibles sont UNITÉ, CARTON, BOBINE et BOÎTE.
 |---|---|
 | **À valider** (« En attente de validation » pour le coordinateur) | Attend le superviseur |
 | **À corriger** | Lignes renvoyées au coordinateur |
-| **À préparer** (« En préparation ») | Validée, bobines à choisir puis expédition |
-| **En livraison** | Expédiée, à réceptionner |
+| **À préparer** (« En préparation ») | Validée ; répartition et préparation des lignes (« Préparation : 2 / 3 lignes ») |
+| **Prête à enlever** | Toutes les lignes préparées ; livreur à désigner, puis à récupérer |
+| **En livraison** | Récupérée par le livreur ; dépôts débités |
+| **Livrée** | Livrée au site avec la photo du BL signé ; à réceptionner |
 | **Reçu** | Réceptionnée par le site |
 | **Rejeté** / **Annulé** | Refusée, ou annulée avec motif |
 

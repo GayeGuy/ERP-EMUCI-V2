@@ -25,6 +25,8 @@ require_once __DIR__ . '/../includes/upload.php';
 require_once __DIR__ . '/../includes/commande_bl.php';
 // Commandes inter-sites : un site commande à un autre site de production.
 require_once __DIR__ . '/../includes/commande_inter_site.php';
+// Préparation par l'entrepôt, livraison par un livreur.
+require_once __DIR__ . '/../includes/commande_flux.php';
 
 require_auth();
 
@@ -44,6 +46,13 @@ $is_gsb        = in_array($role_slug, ['gestionnaire_stock_bobines','admin','sup
 $peut_choisir_bob = $is_gsb || $is_gestionnaire;
 // Commandes inter-sites disponibles (sql/migration_commandes_inter_site.sql).
 $cis_ok = cis_actif();
+// Préparation / livreur (sql/migration_commandes_preparation_livreur.sql).
+$flux_ok       = cflux_actif();
+$is_magasinier = $role_slug === CFLUX_ROLE_ENTREPOT;   // prépare les lignes de son entrepôt (users.site_id)
+$is_livreur    = $role_slug === CFLUX_ROLE_LIVREUR;    // récupère et livre les commandes qu'on lui confie
+$est_admin     = in_array($role_slug, ['admin', 'superadmin'], true);
+$ctx_prep      = ['admin' => $est_admin, 'gestionnaire' => $is_gestionnaire, 'magasinier' => $is_magasinier,
+                  'coord' => $is_coord, 'site_id' => (int)($user['site_id'] ?? 0)];
 $voir_prix     = !$is_coord; // coordinateur ne voit pas les prix
 
 $site_force    = ($is_coord && $user['site_id']) ? (int)$user['site_id'] : 0;
@@ -68,14 +77,23 @@ const CMD_DECISIONS_LIGNE = ['valide', 'rejete', 'modification_demandee'];
 // Commande lisible par l'utilisateur : le coordinateur, son site seulement —
 // celui qui reçoit, ou celui qui fournit une commande inter-site.
 function cmd_visible(?array $cmd, int $site_force): bool {
-    return $cmd && (!$site_force || (int)$cmd['site_id'] === $site_force
-                    || (int)($cmd['site_source_id'] ?? 0) === $site_force);
+    global $is_magasinier, $is_livreur, $user;
+    if (!$cmd) return false;
+    // Livreur : les commandes qu'on lui confie ; magasinier : celles dont une
+    // ligne est servie par son entrepôt.
+    if ($is_livreur)    return (int)($cmd['livreur_id'] ?? 0) === (int)$user['id'];
+    if ($is_magasinier) return isset($cmd['id']) && cflux_concerne_entrepot((int)$cmd['id'], (int)($user['site_id'] ?? 0));
+    return !$site_force || (int)$cmd['site_id'] === $site_force
+                        || (int)($cmd['site_source_id'] ?? 0) === $site_force;
 }
 
 // Qui choisit les bobines d'une commande : pour une commande inter-site, le
 // coordinateur du site fournisseur ou le GSB ; sinon le GSB ou le magasin.
 function cmd_peut_choisir_bob(array $cmd): bool {
-    global $is_gsb, $is_coord, $site_force, $peut_choisir_bob;
+    global $is_gsb, $is_coord, $site_force, $peut_choisir_bob, $is_magasinier, $user;
+    // Le magasinier de l'entrepôt choisit aussi les bobines (elles y sont).
+    if ($is_magasinier && empty($cmd['site_source_id']))
+        return (int)($user['site_id'] ?? 0) === cmdbob_entrepot_id();
     if (!empty($cmd['site_source_id']))
         // Sortie diverse : rien ne se prépare avant l'acceptation du site.
         return !empty($cmd['accepte_at'])
@@ -258,6 +276,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                      "Votre commande a été validée par le superviseur et est en cours de préparation.",
                      '/pages/commandes.php']);
             }
+            if ($flux_ok) cflux_repartition_defaut($cmd_id);
             $gests = array_map(fn($id) => ['id' => $id], users_fonction(FONCTION_MAGASIN));
             $_src  = (int)($cmd['site_source_id'] ?? 0);
             $_src_nom = $_src ? (db_fetch_value("SELECT nom FROM sites WHERE id=?", [$_src]) ?? '') : '';
@@ -397,7 +416,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     //      (includes/commande_bobines.php). Elles restent à l'entrepôt,
     //      réservées, jusqu'à la réception par le site.
     if ($action === 'get_bobines_ligne') {
-        if (!$peut_choisir_bob && !$is_coord) json_response(false, 'Accès refusé.');
+        if (!$peut_choisir_bob && !$is_coord && !$is_magasinier) json_response(false, 'Accès refusé.');
         if (!cmdbob_actif()) json_response(false, "Migration commande_ligne_bobines non jouée sur cette base.");
         $ligne_id = (int)($_POST['ligne_id'] ?? 0);
         $l = db_fetch_one("SELECT * FROM commande_lignes WHERE id=? AND type_article IN " . CMDBOB_TYPES_SQL, [$ligne_id]);
@@ -438,7 +457,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     }
 
     if ($action === 'assigner_bobines') {
-        if (!$peut_choisir_bob && !$is_coord) json_response(false, 'Accès refusé — GSB ou gestionnaire de stock requis.');
+        if (!$peut_choisir_bob && !$is_coord && !$is_magasinier) json_response(false, 'Accès refusé — GSB ou gestionnaire de stock requis.');
         if (!cmdbob_actif()) json_response(false, "Migration commande_ligne_bobines non jouée sur cette base.");
         $ligne_id = (int)($_POST['ligne_id'] ?? 0);
         $ids = array_values(array_unique(array_filter(array_map('intval', json_decode($_POST['bobine_ids'] ?? '[]', true) ?: []))));
@@ -464,8 +483,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $code = cmdbob_type_code((int)$l['article_id']);
         db_begin();
         try {
-            // Un nouveau choix remplace le précédent pour cette ligne.
+            // Un nouveau choix remplace le précédent pour cette ligne ; une
+            // ligne déjà préparée est à repréparer.
             db_query("DELETE FROM commande_ligne_bobines WHERE commande_ligne_id=? AND statut='assigne'", [$ligne_id]);
+            if ($flux_ok) db_query("UPDATE commande_lignes SET prepare_at=NULL, prepare_par=NULL WHERE id=?", [$ligne_id]);
             $numeros = [];
             $choix = [];
             foreach ($ids as $bid) {
@@ -505,7 +526,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         } catch (Exception $e) { db_rollback(); json_response(false, $e->getMessage()); }
         $somme = array_sum(array_map(fn($b) => (int)$b['stock_systeme'], $choix));
         json_response(true, count($ids) . " bobine(s) réservée(s) pour cette ligne ($somme films)."
-            . ($reste > 0 ? " Reste $reste ligne(s) bobine à traiter." : ($_src ? " La commande peut maintenant être enlevée par le chauffeur." : " La commande peut maintenant être expédiée.")));
+            . ($reste > 0 ? " Reste $reste ligne(s) bobine à traiter."
+               : ($flux_ok ? " Préparez maintenant la ligne (bouton « Préparer »)."
+               : ($_src ? " La commande peut maintenant être enlevée par le chauffeur." : " La commande peut maintenant être expédiée."))));
     }
 
     // ── Gestionnaire : renvoyer au GSB des bobines mal choisies, avec motif.
@@ -530,6 +553,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 foreach (db_fetch_all("SELECT DISTINCT assigne_par FROM commande_ligne_bobines WHERE commande_ligne_id=? AND statut='assigne' AND assigne_par IS NOT NULL", [$lid]) as $_a)
                     $choisi_par[(int)$_a['assigne_par']] = true;
                 db_query("DELETE FROM commande_ligne_bobines WHERE commande_ligne_id=? AND statut='assigne'", [$lid]);
+                if ($flux_ok) db_query("UPDATE commande_lignes SET prepare_at=NULL, prepare_par=NULL WHERE id=?", [$lid]);
                 audit_log($user['id'], 'UPDATE', 'commandes', $cmd_id, "Bobines à refaire [ligne {$lid}] « {$l['libelle']} » : {$motif}");
                 $libelles[] = $l['libelle'];
             }
@@ -652,7 +676,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     "Commande $enf_num : sortie diverse de {$cmd['numero_commande']} chez $src_nom");
                 $creees[] = "$qte chez $src_nom ($enf_num)";
             }
-            db_query("UPDATE commande_lignes SET quantite = quantite - ? WHERE id=?", [$total, $ligne_id]);
+            db_query("UPDATE commande_lignes SET quantite = quantite - ?" . ($flux_ok ? ", prepare_at=NULL, prepare_par=NULL" : "") . " WHERE id=?", [$total, $ligne_id]);
 
             // Tout est parti en sorties diverses : la commande d'origine n'a plus rien à expédier.
             $reste = (int)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM commande_lignes WHERE commande_id=? AND statut_ligne <> 'rejete'", [(int)$cmd['id']]);
@@ -685,11 +709,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                 $bob = cmdbob_lignes_a_choisir($cmd_id) > 0;
                 foreach ($gests as $_uid)
                     notif_create('info', "✅ Sortie diverse {$cmd['numero_commande']} acceptée",
-                        "$src_nom accepte" . ($bob ? " ; ses bobines restent à choisir avant l'enlèvement." : " : vous pouvez envoyer le chauffeur."),
+                        "$src_nom accepte" . ($flux_ok ? " et prépare la commande ; vous désignerez le livreur quand elle sera prête."
+                            : ($bob ? " ; ses bobines restent à choisir avant l'enlèvement." : " : vous pouvez envoyer le chauffeur.")),
                         (int)$_uid, '/pages/commandes.php');
                 audit_log($user['id'], 'UPDATE', 'commandes', $cmd_id, "Sortie diverse acceptée par $src_nom");
                 db_commit();
-                json_response(true, 'Sortie diverse acceptée.' . ($bob ? ' Choisissez maintenant les bobines à céder.' : ' Le gestionnaire de stock va envoyer un chauffeur.'));
+                json_response(true, 'Sortie diverse acceptée.' . ($bob ? ' Choisissez maintenant les bobines à céder' . ($flux_ok ? ', puis préparez la commande.' : '.')
+                    : ($flux_ok ? ' Préparez maintenant la commande (bouton « Préparer »).' : ' Le gestionnaire de stock va envoyer un chauffeur.')));
             }
             if ($motif === '') throw new Exception('Le motif du refus est obligatoire.');
             db_query("UPDATE commandes SET statut='rejete', motif_rejet_global=? WHERE id=?", [$motif, $cmd_id]);
@@ -709,8 +735,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     db_query("UPDATE commandes SET statut='en_attente_livraison', notes_livraison=NULL WHERE id=?", [(int)$orig['id']]);
                     $orig['statut'] = 'en_attente_livraison';
                 }
+                // Prête mais pas encore récupérée : elle redevient à préparer.
+                if ($orig['statut'] === 'prete_enlevement') {
+                    db_query("UPDATE commandes SET statut='en_attente_livraison', livreur_id=NULL WHERE id=?", [(int)$orig['id']]);
+                    $orig['statut'] = 'en_attente_livraison';
+                }
                 if ($orig['statut'] === 'en_attente_livraison') {
-                    db_query("UPDATE commande_lignes SET quantite = quantite + ? WHERE id=?", [$q, (int)$lo['id']]);
+                    db_query("UPDATE commande_lignes SET quantite = quantite + ?" . ($flux_ok ? ", prepare_at=NULL, prepare_par=NULL" : "") . " WHERE id=?", [$q, (int)$lo['id']]);
                     continue;
                 }
                 if (!$reprise_id) {
@@ -726,6 +757,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                           VALUES (?,?,?,?,?,?,?,'valide',?)",
                     [$reprise_id, $lo['type_article'], $lo['article_id'], $lo['libelle'], $q, $lo['unite'], $lo['prix_unitaire'] ?? 0, (int)$lo['id']]);
             }
+            if ($reprise_id && $flux_ok) cflux_repartition_defaut($reprise_id);
             foreach ($gests as $_uid)
                 notif_create('info', "❌ Sortie diverse {$cmd['numero_commande']} refusée",
                     "$src_nom refuse : $motif. " . ($reprise_num ? "La quantité est reprise par la commande $reprise_num, à expédier du dépôt."
@@ -983,11 +1015,155 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         } catch(Exception $e){ db_rollback(); json_response(false,$e->getMessage()); }
     }
 
+    // ══ Préparation, livreur, livraison (includes/commande_flux.php) ══
+
+    // ── Préparer : répartition (gestionnaire) et quantités préparées, ligne par ligne
+    if ($action === 'preparer') {
+        if (!$flux_ok) json_response(false, 'Migration commandes_preparation_livreur non jouée sur cette base.');
+        $cmd_id = (int)($_POST['cmd_id'] ?? 0);
+        $saisie = [];
+        foreach ((array)json_decode($_POST['lignes'] ?? '[]', true) as $s)
+            if (isset($s['ligne_id'])) $saisie[(int)$s['ligne_id']] = $s;
+        $depots_ok = array_map('intval', array_column($depots_list, 'id'));
+        $faites = 0; $prete = false; $a_prevenir = [];
+        db_begin();
+        try {
+            $cmd = db_fetch_one("SELECT * FROM commandes WHERE id=? FOR UPDATE", [$cmd_id]);
+            if (!$cmd || $cmd['statut'] !== 'en_attente_livraison') throw new Exception('Commande introuvable ou plus à préparer.');
+            if (!empty($cmd['site_source_id']) && empty($cmd['accepte_at'])) throw new Exception('Le site fournisseur doit d\'abord accepter la sortie diverse.');
+            $bobs = cmdbob_par_ligne($cmd_id);
+            foreach (db_fetch_all("SELECT * FROM commande_lignes WHERE commande_id=? ORDER BY id FOR UPDATE", [$cmd_id]) as $l) {
+                $s = $saisie[(int)$l['id']] ?? null;
+                if (!$s || $l['statut_ligne'] !== 'valide') continue;
+                // 1. Répartition : le gestionnaire choisit le dépôt d'une ligne pas encore préparée.
+                if (array_key_exists('depot_id', $s) && ($is_gestionnaire || $est_admin) && empty($cmd['site_source_id'])
+                    && cflux_ligne_a_depot($l) && !cmdbob_est_rouleau($l['type_article']) && empty($l['prepare_at'])) {
+                    $dep = (int)$s['depot_id'];
+                    if (!in_array($dep, $depots_ok, true)) throw new Exception("Choisissez d'où sort « {$l['libelle']} » (entrepôt ou magasin).");
+                    if ($dep !== (int)$l['depot_source_id']) {
+                        db_query("UPDATE commande_lignes SET depot_source_id=? WHERE id=?", [$dep, (int)$l['id']]);
+                        $l['depot_source_id'] = $dep;
+                        if (cflux_preparateur($cmd, $l) === 'entrepot') $a_prevenir[$dep][] = $l['libelle'];
+                    }
+                }
+                // 2. Préparation : la quantité qui partira.
+                if (empty($s['preparer']) || (int)$l['quantite'] <= 0) continue;
+                if (!cflux_peut_preparer($cmd, $l, $ctx_prep))
+                    throw new Exception("« {$l['libelle']} » est préparée par " . ['site' => 'le site fournisseur', 'entrepot' => "l'entrepôt", 'magasin' => 'le gestionnaire de stock'][cflux_preparateur($cmd, $l)] . '.');
+                if (cflux_ligne_a_depot($l) && !cflux_depot_ligne($cmd, $l)) throw new Exception("Choisissez d'où sort « {$l['libelle']} ».");
+                if (cmdbob_est_rouleau($l['type_article'])) {
+                    $b = $bobs[(int)$l['id']] ?? [];
+                    if (!$b) throw new Exception("Choisissez d'abord les bobines de « {$l['libelle']} ».");
+                    $q = cmdbob_qte_livree($l, $b, !empty($cmd['site_source_id']));
+                } else {
+                    if (!is_numeric($s['quantite'] ?? null)) throw new Exception("Quantité préparée manquante pour « {$l['libelle']} ».");
+                    $q = (int)$s['quantite'];
+                    if ($q < 0 || $q > (int)$l['quantite']) throw new Exception("« {$l['libelle']} » : préparé $q, entre 0 et {$l['quantite']}.");
+                }
+                $motif = trim((string)($s['motif'] ?? ''));
+                if ($q !== (int)$l['quantite'] && $motif === '')
+                    throw new Exception("Justification obligatoire pour « {$l['libelle']} » (commandé {$l['quantite']}, préparé $q).");
+                db_query("UPDATE commande_lignes SET quantite_livree=?, motif_ecart=?, prepare_par=?, prepare_at=NOW() WHERE id=?",
+                    [$q, $q !== (int)$l['quantite'] ? $motif : null, $user['id'], (int)$l['id']]);
+                $faites++;
+            }
+            foreach ($a_prevenir as $dep => $libs)
+                foreach (cflux_users_role(CFLUX_ROLE_ENTREPOT, (int)$dep) as $u)
+                    notif_create('info', "📦 Commande {$cmd['numero_commande']} à préparer",
+                        count($libs) . " ligne(s) à préparer à l'entrepôt : " . implode(', ', $libs) . '.', (int)$u['id'], '/pages/commandes.php');
+            if ($faites) audit_log($user['id'], 'UPDATE', 'commandes', $cmd_id, "$faites ligne(s) préparée(s)");
+            $prete = cflux_verifier_prete($cmd_id);
+            db_commit();
+        } catch (Exception $e) { db_rollback(); json_response(false, $e->getMessage()); }
+        json_response(true, ($faites ? "$faites ligne(s) préparée(s)." : 'Répartition enregistrée.')
+            . ($prete ? ' La commande est prête à enlever : le gestionnaire de stock va désigner le livreur.' : ''), ['prete' => $prete]);
+    }
+
+    // ── Désigner (ou changer) le livreur d'une commande prête
+    if ($action === 'affecter_livreur') {
+        if (!$flux_ok) json_response(false, 'Migration commandes_preparation_livreur non jouée sur cette base.');
+        if (!$is_gestionnaire && !$est_admin) json_response(false, 'Accès refusé — Gestionnaire Stock requis.');
+        $cmd_id = (int)($_POST['cmd_id'] ?? 0);
+        $lid    = (int)($_POST['livreur_id'] ?? 0);
+        $cmd = db_fetch_one("SELECT * FROM commandes WHERE id=? AND statut='prete_enlevement'", [$cmd_id]);
+        if (!$cmd) json_response(false, 'Commande introuvable ou pas prête à enlever.');
+        $liv = null;
+        foreach (cflux_users_role(CFLUX_ROLE_LIVREUR) as $u) if ((int)$u['id'] === $lid) $liv = $u;
+        if (!$liv) json_response(false, 'Livreur introuvable ou inactif.');
+        db_query("UPDATE commandes SET livreur_id=?, livreur_affecte_at=NOW() WHERE id=? AND statut='prete_enlevement'", [$lid, $cmd_id]);
+        $src = (int)($cmd['site_source_id'] ?? 0);
+        $ou  = $src ? 'chez ' . (db_fetch_value("SELECT nom FROM sites WHERE id=?", [$src]) ?? 'le site fournisseur') : 'au dépôt';
+        $dest = db_fetch_value("SELECT nom FROM sites WHERE id=?", [$cmd['site_id']]) ?? '';
+        notif_create('info', "🚚 Commande {$cmd['numero_commande']} à récupérer",
+            "Récupérez la commande $ou et livrez-la à $dest.", $lid, '/pages/commandes.php');
+        if ($src) foreach (cis_coordinateurs($src) as $_uid)
+            notif_create('info', "🚚 Sortie diverse {$cmd['numero_commande']} : enlèvement",
+                "{$liv['nom']} viendra la récupérer. Remettez-lui la marchandise et signez le bon de livraison.", $_uid, '/pages/commandes.php');
+        audit_log($user['id'], 'UPDATE', 'commandes', $cmd_id, "Livreur désigné : {$liv['nom']}");
+        json_response(true, "{$liv['nom']} est désigné : il est prévenu.");
+    }
+
+    // ── Rouvrir la préparation d'une commande prête (pas encore récupérée)
+    if ($action === 'rouvrir_preparation') {
+        if (!$flux_ok) json_response(false, 'Migration commandes_preparation_livreur non jouée sur cette base.');
+        if (!$is_gestionnaire && !$est_admin) json_response(false, 'Accès refusé — Gestionnaire Stock requis.');
+        $cmd_id = (int)($_POST['cmd_id'] ?? 0);
+        db_begin();
+        try {
+            $maj = db_query("UPDATE commandes SET statut='en_attente_livraison', livreur_id=NULL, livreur_affecte_at=NULL WHERE id=? AND statut='prete_enlevement'", [$cmd_id]);
+            if ($maj->rowCount() !== 1) throw new Exception('Commande introuvable, ou déjà récupérée par le livreur.');
+            db_query("UPDATE commande_lignes SET prepare_at=NULL, prepare_par=NULL WHERE commande_id=?", [$cmd_id]);
+            audit_log($user['id'], 'UPDATE', 'commandes', $cmd_id, 'Préparation rouverte');
+            db_commit();
+        } catch (Exception $e) { db_rollback(); json_response(false, $e->getMessage()); }
+        json_response(true, 'Préparation rouverte : les lignes sont à préparer de nouveau.');
+    }
+
+    // ── Le livreur récupère la commande : les dépôts sont débités
+    if ($action === 'recuperer') {
+        if (!$flux_ok) json_response(false, 'Migration commandes_preparation_livreur non jouée sur cette base.');
+        $cmd_id = (int)($_POST['cmd_id'] ?? 0);
+        db_begin();
+        try {
+            $cmd = db_fetch_one("SELECT * FROM commandes WHERE id=? FOR UPDATE", [$cmd_id]);
+            if (!$cmd || $cmd['statut'] !== 'prete_enlevement') throw new Exception('Commande introuvable ou pas prête à enlever.');
+            if (!$est_admin && !($is_livreur && (int)$cmd['livreur_id'] === (int)$user['id']))
+                throw new Exception('Seul le livreur désigné récupère cette commande.');
+            $msg = cflux_enlever($cmd, $user);
+            db_commit();
+        } catch (Exception $e) { db_rollback(); json_response(false, $e->getMessage()); }
+        json_response(true, $msg);
+    }
+
+    // ── Le livreur livre au site, avec la photo du BL signé par le site
+    if ($action === 'livrer') {
+        if (!$flux_ok) json_response(false, 'Migration commandes_preparation_livreur non jouée sur cette base.');
+        $cmd_id = (int)($_POST['cmd_id'] ?? 0);
+        $cmd = db_fetch_one("SELECT * FROM commandes WHERE id=? AND statut='en_cours_livraison'", [$cmd_id]);
+        if (!$cmd) json_response(false, 'Commande introuvable ou pas en livraison.');
+        if (!$est_admin && !($is_livreur && (int)$cmd['livreur_id'] === (int)$user['id']))
+            json_response(false, 'Seul le livreur désigné livre cette commande.');
+        $up = upload_document('photo_livraison', 'bl', 'photo_livraison_cmd_' . $cmd_id, true);
+        if (!$up['success']) json_response(false, $up['message'] === 'Le document bon de livraison est obligatoire.'
+            ? 'La photo du bon de livraison signé par le site est obligatoire.' : $up['message']);
+        $maj = db_query("UPDATE commandes SET statut='livree_site', livree_at=NOW(), photo_livraison=? WHERE id=? AND statut='en_cours_livraison'",
+            [$up['filename'], $cmd_id]);
+        if ($maj->rowCount() !== 1) json_response(false, 'Cette commande vient déjà d\'être livrée.');
+        foreach (cis_coordinateurs((int)$cmd['site_id']) as $uid)
+            notif_create('info', "📦 Commande {$cmd['numero_commande']} livrée",
+                "Le livreur a livré votre commande : contrôlez-la et réceptionnez-la ligne par ligne.", $uid, '/pages/commandes.php');
+        audit_log($user['id'], 'UPDATE', 'commandes', $cmd_id, 'Commande livrée au site (photo du BL signé jointe)');
+        json_response(true, 'Livraison enregistrée. Le chef de site va réceptionner la commande.');
+    }
+
     // ── 4. Réceptionner (coordinateur confirme réception)
     if ($action === 'receptionner') {
         $cmd_id = (int)($_POST['cmd_id'] ?? 0);
-        $cmd    = db_fetch_one("SELECT * FROM commandes WHERE id=? AND statut='en_cours_livraison'",[$cmd_id]);
+        $cmd    = db_fetch_one("SELECT * FROM commandes WHERE id=? AND statut IN ('en_cours_livraison','livree_site')",[$cmd_id]);
         if (!$cmd) json_response(false,'Commande introuvable ou statut incorrect.');
+        // Confiée à un livreur : elle se réceptionne une fois livrée.
+        if ($cmd['statut'] === 'en_cours_livraison' && !empty($cmd['livreur_id']))
+            json_response(false, 'Le livreur n\'a pas encore confirmé la livraison de cette commande.');
         // La réception se fait sur le site qui reçoit : pas par le gestionnaire
         // qui vient d'expédier.
         if (!$is_coord) json_response(false,'Seul le coordinateur du site destinataire peut réceptionner la commande.');
@@ -1006,10 +1182,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             try { $plan_rec = rcp_preparer($cmd_id, $saisie); }
             catch (Exception $e) { json_response(false, $e->getMessage()); }
         }
-        // Bon de livraison signé, en PDF, obligatoire pour réceptionner.
-        $up = upload_document('bl_reception', 'bl', 'bl_reception_cmd_' . $cmd_id, true);
+        // Bon de livraison signé, en PDF, obligatoire pour réceptionner — sauf
+        // si le livreur a déjà joint la photo du BL signé.
+        $up = upload_document('bl_reception', 'bl', 'bl_reception_cmd_' . $cmd_id, empty($cmd['photo_livraison']));
         if (!$up['success']) json_response(false, $up['message']);
-        if (!str_ends_with($up['filename'], '.pdf')) {
+        if ($up['filename'] && !str_ends_with($up['filename'], '.pdf')) {
             upload_delete($up['filename'], 'bl');
             json_response(false, 'Le bon de livraison doit être un fichier PDF.');
         }
@@ -1018,11 +1195,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             // Sous condition du statut : de deux envois simultanés (double
             // clic, renvoi après une erreur réseau), un seul crédite le site.
             $maj = db_query("UPDATE commandes SET statut='recu',recu_par=?,recu_at=NOW(),bl_reception=?
-                             WHERE id=? AND statut='en_cours_livraison'",[$user['id'],$up['filename'],$cmd_id]);
+                             WHERE id=? AND statut IN ('en_cours_livraison','livree_site')",[$user['id'],$up['filename'],$cmd_id]);
             if ($maj->rowCount() !== 1) throw new Exception('Cette commande vient déjà d\'être réceptionnée.');
             // BL signé archivé dans la base (le disque de Render est effacé à
             // chaque déploiement) ; le fichier temporaire est supprimé après.
-            $bl_en_base = blc_disponible();
+            $bl_en_base = blc_disponible() && $up['filename'];
             if ($bl_en_base) blc_enregistrer($cmd_id, UPLOAD_BL_DIR . $up['filename'], $up['filename'], (int)$user['id']);
             // Quantités reçues et écarts d'abord : les rouleaux non reçus
             // sortent de la liste 'assigne' et ne passent donc pas au site.
@@ -1103,7 +1280,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         } catch(Exception $e){
             db_rollback();
             // Réception refusée : le bon de livraison envoyé ne sert à rien.
-            upload_delete($up['filename'], 'bl');
+            if ($up['filename']) upload_delete($up['filename'], 'bl');
             json_response(false,$e->getMessage());
         }
     }
@@ -1111,7 +1288,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
     // ── Lignes à déclarer dans la fenêtre de réception (coordinateur)
     if ($action === 'get_reception') {
         $cmd_id = (int)($_POST['cmd_id'] ?? 0);
-        $cmd    = db_fetch_one("SELECT * FROM commandes WHERE id=? AND statut='en_cours_livraison'", [$cmd_id]);
+        $cmd    = db_fetch_one("SELECT * FROM commandes WHERE id=? AND statut IN ('en_cours_livraison','livree_site')", [$cmd_id]);
         if (!$cmd) json_response(false, 'Commande introuvable ou statut incorrect.');
         if (!$is_coord || $cmd['site_id'] != $site_force) json_response(false, 'Accès refusé.');
         json_response(true, '', ['par_ligne' => rcp_disponible(), 'lignes' => rcp_lignes_a_recevoir($cmd_id)]);
@@ -1177,7 +1354,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
                     CONCAT(u.prenom,' ',u.nom) AS agent,
                     CASE WHEN uv.id IS NOT NULL THEN CONCAT(uv.prenom,' ',uv.nom) ELSE '' END AS validateur_nom,
                     f.numero AS feb_numero, " . ($cis_ok ? "src.nom" : "NULL") . " AS site_source_nom,
-                    " . ($cis_ok ? "co.numero_commande" : "NULL") . " AS origine_numero
+                    " . ($cis_ok ? "co.numero_commande" : "NULL") . " AS origine_numero,
+                    " . ($flux_ok ? "(SELECT CONCAT(lv.prenom,' ',lv.nom) FROM users lv WHERE lv.id = c.livreur_id)" : "NULL") . " AS livreur_nom
              FROM commandes c
              LEFT JOIN sites s  ON s.id  = c.site_id
              LEFT JOIN users u  ON u.id  = c.created_by
@@ -1193,6 +1371,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         $_bl_base = blc_disponible() && db_fetch_value("SELECT 1 FROM commande_bl WHERE commande_id=?", [$cmd_id]);
         $det['bl_etat'] = blc_etat($det, (bool)$_bl_base);
         $det['bl_reception_url'] = in_array($det['bl_etat'], ['base', 'disque'], true) ? 'commandes_bl.php?id=' . $cmd_id : null;
+        $det['photo_livraison_url'] = !empty($det['photo_livraison']) ? 'fichier.php?d=bl&f=' . rawurlencode($det['photo_livraison']) : null;
         $lgns = db_fetch_all("SELECT * FROM commande_lignes WHERE commande_id=? ORDER BY id", [$cmd_id]);
         // Le coordinateur ne voit pas les prix (cf. $voir_prix).
         if (!$voir_prix) foreach ($lgns as &$_l) unset($_l['prix_unitaire']);
@@ -1232,6 +1411,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             if ($_l['bobines']) $_l['qte_bobines'] = cmdbob_qte_livree($_l, $_l['bobines'], !empty($_cmd_v['site_source_id']));
             // Sorties diverses déjà décidées sur la ligne, et si elle peut encore en avoir.
             $_l['sorties'] = $cis_ok ? cis_sorties_ligne((int)$_l['id']) : [];
+            if ($flux_ok) {
+                $_dep = cflux_depot_ligne($_cmd_v, $_l);
+                $_l['a_depot']       = cflux_ligne_a_depot($_l);
+                $_l['depot_effectif'] = $_dep;
+                $_l['depot_nom']     = $_dep ? db_fetch_value("SELECT nom FROM sites WHERE id=?", [$_dep]) : null;
+                $_l['preparateur']   = cflux_preparateur($_cmd_v, $_l);
+                $_l['peut_preparer'] = $_cmd_v['statut'] === 'en_attente_livraison' && cflux_peut_preparer($_cmd_v, $_l, $ctx_prep);
+                $_l['peut_repartir'] = $_cmd_v['statut'] === 'en_attente_livraison' && ($is_gestionnaire || $est_admin)
+                    && empty($_cmd_v['site_source_id']) && $_l['a_depot'] && !cmdbob_est_rouleau($_l['type_article'])
+                    && empty($_l['prepare_at']) && $_l['statut_ligne'] === 'valide';
+                $_l['prepare_par_nom'] = $_l['prepare_par'] ? db_fetch_value("SELECT CONCAT(prenom,' ',nom) FROM users WHERE id=?", [(int)$_l['prepare_par']]) : null;
+            }
             $_l['peut_sd'] = $cis_ok && $is_gestionnaire && empty($_cmd_v['site_source_id'])
                 && $_cmd_v['statut'] === 'en_attente_livraison' && $_l['statut_ligne'] === 'valide'
                 && (int)$_l['quantite'] > 0 && cis_controle_ligne($_l) === null && !$_l['bobines'];
@@ -1370,6 +1561,7 @@ if (isset($_GET['bl'], $_GET['id'])) {
     if ($is_coord) { http_response_code(403); include __DIR__ . '/../templates/403.php'; exit; }
     $cmd = db_fetch_one(
         "SELECT c.*, s.nom AS site_nom, d.nom AS depot_nom, d.type AS depot_type,
+                " . ($flux_ok ? "(SELECT CONCAT(lv.prenom,' ',lv.nom) FROM users lv WHERE lv.id = c.livreur_id)" : "NULL") . " AS livreur_nom,
                 " . ($cis_ok ? "(SELECT co.numero_commande FROM commandes co WHERE co.id = c.commande_origine_id)" : "NULL") . " AS origine_numero,
                 CONCAT(u.prenom,' ',u.nom) AS agent,
                 CONCAT(ul.prenom,' ',ul.nom) AS expediteur_nom, ul.signature AS expediteur_signature,
@@ -1381,8 +1573,8 @@ if (isset($_GET['bl'], $_GET['id'])) {
          LEFT JOIN users ul ON ul.id = c.livraison_par
          LEFT JOIN users ur ON ur.id = c.recu_par
          WHERE c.id=?", [(int)$_GET['id']]);
-    if (!$cmd || ($site_force && (int)$cmd['site_id'] !== $site_force)) { http_response_code(404); echo 'Commande introuvable'; exit; }
-    if (!in_array($cmd['statut'], ['en_cours_livraison', 'recu', 'livre'], true)) {
+    if (!$cmd || !cmd_visible($cmd, $site_force)) { http_response_code(404); echo 'Commande introuvable'; exit; }
+    if (!in_array($cmd['statut'], ['prete_enlevement', 'en_cours_livraison', 'livree_site', 'recu', 'livre'], true)) {
         http_response_code(409); echo "Le bon de livraison n'existe qu'une fois la commande expédiée."; exit;
     }
     _bl_pdf($cmd);
@@ -1524,7 +1716,12 @@ if (isset($_GET['export'], $_GET['id'])) {
 $f_site   = $site_force ?: (int)($_GET['site']   ?? 0);
 $f_statut = trim($_GET['statut'] ?? '');
 $where = ['1=1']; $params = [];
-if ($site_force && $cis_ok) { $where[] = '(c.site_id=? OR c.site_source_id=?)'; $params[] = $site_force; $params[] = $site_force; }
+if ($flux_ok && $is_livreur) { $where[] = 'c.livreur_id=?'; $params[] = (int)$user['id']; }
+elseif ($flux_ok && $is_magasinier) {
+    $where[] = 'EXISTS (SELECT 1 FROM commande_lignes x WHERE x.commande_id=c.id AND x.depot_source_id=?)';
+    $params[] = (int)($user['site_id'] ?? 0);
+}
+elseif ($site_force && $cis_ok) { $where[] = '(c.site_id=? OR c.site_source_id=?)'; $params[] = $site_force; $params[] = $site_force; }
 elseif ($site_force) { $where[] = 'c.site_id=?'; $params[] = $site_force; }
 elseif ($f_site)  { $where[] = 'c.site_id=?'; $params[] = $f_site; }
 if ($f_statut)    { $where[] = 'c.statut=?';  $params[] = $f_statut; }
@@ -1536,11 +1733,15 @@ if ($f_statut)    { $where[] = 'c.statut=?';  $params[] = $f_statut; }
 //  - superviseur et autres : à valider (les nouvelles commandes), à corriger.
 $ordre_statuts = match (true) {
     $role_slug === 'coordinateur_site'
-        => ['en_cours_livraison', 'modification_demandee', 'en_attente', 'en_attente_livraison'],
+        => ['livree_site', 'en_cours_livraison', 'modification_demandee', 'en_attente', 'en_attente_livraison', 'prete_enlevement'],
+    $role_slug === CFLUX_ROLE_LIVREUR
+        => ['prete_enlevement', 'en_cours_livraison', 'livree_site'],
+    $role_slug === CFLUX_ROLE_ENTREPOT
+        => ['en_attente_livraison', 'prete_enlevement', 'en_cours_livraison', 'livree_site'],
     $role_slug === 'gestionnaire_stock_bobines' || ($is_gestionnaire && !in_array($role_slug, ['admin', 'superadmin'], true))
-        => ['en_attente_livraison', 'en_cours_livraison', 'en_attente', 'modification_demandee'],
+        => ['en_attente_livraison', 'prete_enlevement', 'en_cours_livraison', 'livree_site', 'en_attente', 'modification_demandee'],
     default
-        => ['en_attente', 'modification_demandee', 'en_attente_livraison', 'en_cours_livraison'],
+        => ['en_attente', 'modification_demandee', 'en_attente_livraison', 'prete_enlevement', 'en_cours_livraison', 'livree_site'],
 };
 $ordre_statuts = array_merge($ordre_statuts, ['recu', 'livre', 'rejete', 'annule']);
 $ordre_sql = 'CASE c.statut';
@@ -1552,6 +1753,9 @@ $commandes = db_fetch_all(
             " . ($cis_ok ? "src.nom" : "NULL") . " AS site_source_nom,
             " . ($cis_ok ? "co.numero_commande" : "NULL") . " AS origine_numero,
             " . ($cis_ok ? "(SELECT COUNT(*) FROM commandes ch WHERE ch.commande_origine_id = c.id AND ch.site_source_id IS NOT NULL)" : "0") . " AS nb_sorties,
+            " . ($flux_ok ? "(SELECT CONCAT(lv.prenom,' ',lv.nom) FROM users lv WHERE lv.id = c.livreur_id)" : "NULL") . " AS livreur_nom,
+            " . ($flux_ok ? "SUM(CASE WHEN l.statut_ligne='valide' AND l.quantite > 0 THEN 1 ELSE 0 END)" : "0") . " AS nb_a_preparer,
+            " . ($flux_ok ? "SUM(CASE WHEN l.statut_ligne='valide' AND l.quantite > 0 AND l.prepare_at IS NOT NULL THEN 1 ELSE 0 END)" : "0") . " AS nb_prepares,
             COUNT(l.id) AS nb_lignes,
             COALESCE(SUM(l.quantite*l.prix_unitaire),0) AS total_ht,
             SUM(CASE WHEN l.statut_ligne='rejete' THEN 1 ELSE 0 END) AS nb_rejets,
@@ -1725,8 +1929,8 @@ if ($site_force)  { $where_kpi[] = 'c.site_id=?'; $params_kpi[] = $site_force; }
 elseif ($f_site)  { $where_kpi[] = 'c.site_id=?'; $params_kpi[] = $f_site; }
 $kpi_row = db_fetch_one(
     "SELECT SUM(CASE WHEN c.statut='en_attente' THEN 1 ELSE 0 END) AS attente,
-            SUM(CASE WHEN c.statut='en_attente_livraison' THEN 1 ELSE 0 END) AS attente_liv,
-            SUM(CASE WHEN c.statut='en_cours_livraison' THEN 1 ELSE 0 END) AS en_cours,
+            SUM(CASE WHEN c.statut IN ('en_attente_livraison','prete_enlevement') THEN 1 ELSE 0 END) AS attente_liv,
+            SUM(CASE WHEN c.statut IN ('en_cours_livraison','livree_site') THEN 1 ELSE 0 END) AS en_cours,
             SUM(CASE WHEN c.statut='recu' THEN 1 ELSE 0 END) AS recu,
             SUM(CASE WHEN c.statut='modification_demandee' THEN 1 ELSE 0 END) AS a_corriger
      FROM commandes c
@@ -2053,8 +2257,8 @@ function _bl_pdf(array $cmd): void {
     $notes = trim((string)($cmd['notes_livraison'] ?? ''));
     // Commande inter-site : le chauffeur enlève chez le site fournisseur.
     $inter     = !empty($cmd['site_source_id']);
-    $chauffeur = trim((string)($cmd['chauffeur'] ?? ''));
-    $case_transport = $inter && $chauffeur !== ''
+    $chauffeur = trim((string)($cmd['livreur_nom'] ?? '')) ?: trim((string)($cmd['chauffeur'] ?? ''));
+    $case_transport = $chauffeur !== ''
         ? "<div style='font-size:9px;color:#888'>Chauffeur :</div><div style='font-size:12px;font-weight:700;color:#06033A;margin-bottom:8px'>" . $e($chauffeur) . "</div>
            <div style='font-size:9px;color:#888'>Date et heure :</div><div style='border-bottom:1px solid #ccc;height:18px;margin-bottom:8px'></div>
            <div style='font-size:9px;color:#888'>Signature :</div><div style='height:44px'></div>"
@@ -2095,7 +2299,7 @@ function _bl_pdf(array $cmd): void {
           ? $case('Site fournisseur (remise au chauffeur)', $vide)
           : $case('Magasin (expéditeur)', "<div style='text-align:center'>$sig_exp<div style='font-size:11px;font-weight:700;color:#06033A'>"
                 . $e($cmd['expediteur_nom'] ?: '-') . "</div><div style='font-size:10px;color:#888;margin-top:3px'>$date_exp</div></div>"))
-      . $case($inter ? 'Chauffeur' : 'Transporteur', $case_transport)
+      . $case(!empty($cmd['livreur_nom']) ? 'Livreur' : ($inter ? 'Chauffeur' : 'Transporteur'), $case_transport)
       . $case('Site (réceptionnaire)', $vide) . "
     </tr></table>
     </body></html>";
@@ -2304,8 +2508,14 @@ $lbl_prepa   = $is_coord ? 'En préparation' : 'À préparer';
                   // Sortie diverse pas encore acceptée par le site fournisseur.
                   $_a_accepter = $_inter && $cmd['statut'] === 'en_attente_livraison' && empty($cmd['accepte_at']); ?>
             <span class="st-badge st-<?= $cmd['statut'] ?>">
-              <?= ['en_attente'=>'⏳ '.$lbl_attente,'modification_demandee'=>'✏️ À corriger','en_attente_livraison'=>'<i class="ph ph-clipboard-text" aria-hidden="true"></i> '.$lbl_prepa,'en_cours_livraison'=>'<i class="ph ph-truck" aria-hidden="true"></i> En livraison','recu'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Reçu','livre'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Servie','rejete'=>'<i class="ph ph-x-circle" aria-hidden="true"></i> Rejeté','annule'=>'Annulé'][$cmd['statut']] ?? $cmd['statut'] ?>
+              <?= ['en_attente'=>'⏳ '.$lbl_attente,'modification_demandee'=>'✏️ À corriger','en_attente_livraison'=>'<i class="ph ph-clipboard-text" aria-hidden="true"></i> '.$lbl_prepa,'en_cours_livraison'=>'<i class="ph ph-truck" aria-hidden="true"></i> En livraison','prete_enlevement'=>'<i class="ph ph-package" aria-hidden="true"></i> Prête à enlever','livree_site'=>'<i class="ph ph-hand-arrow-down" aria-hidden="true"></i> Livrée','recu'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Reçu','livre'=>'<i class="ph ph-check-circle" aria-hidden="true"></i> Servie','rejete'=>'<i class="ph ph-x-circle" aria-hidden="true"></i> Rejeté','annule'=>'Annulé'][$cmd['statut']] ?? $cmd['statut'] ?>
             </span>
+            <?php if($flux_ok && $cmd['statut']==='en_attente_livraison' && !$_a_accepter && (int)$cmd['nb_a_preparer'] > 0): ?>
+            <div style="font-size:11.5px;margin-top:4px;color:<?= (int)$cmd['nb_prepares'] === (int)$cmd['nb_a_preparer'] ? '#15803d' : '#b45309' ?>">Préparation : <?= (int)$cmd['nb_prepares'] ?> / <?= (int)$cmd['nb_a_preparer'] ?> ligne<?= (int)$cmd['nb_a_preparer'] > 1 ? 's' : '' ?></div>
+            <?php endif; ?>
+            <?php if($flux_ok && in_array($cmd['statut'], ['prete_enlevement','en_cours_livraison','livree_site'], true)): ?>
+            <div style="font-size:11.5px;margin-top:4px;color:<?= $cmd['livreur_nom'] ? '#334155' : '#b45309' ?>;font-weight:600"><?= $cmd['livreur_nom'] ? 'Livreur : ' . h($cmd['livreur_nom']) : 'Livreur à désigner' ?></div>
+            <?php endif; ?>
             <?php if($_a_accepter): ?>
             <div style="font-size:11.5px;margin-top:4px;color:#b45309;font-weight:700">À accepter par <?= h($cmd['site_source_nom'] ?? 'le site fournisseur') ?></div>
             <?php elseif($cmd['statut']==='en_attente_livraison' && (int)$cmd['nb_lignes_bobine'] > 0 && cmdbob_actif()): ?>
@@ -2330,7 +2540,7 @@ $lbl_prepa   = $is_coord ? 'En préparation' : 'À préparer';
               <i class="ph-duotone ph-eye"></i>
             </button>
             <a href="?id=<?= $cmd['id'] ?>&export=1&format=pdf" target="_blank" class="btn btn-secondary btn-sm" title="Imprimer PDF" aria-label="Imprimer le bon de commande en PDF"><i class="ph ph-printer" aria-hidden="true"></i></a>
-            <?php if (!$is_coord && in_array($cmd['statut'], ['en_cours_livraison', 'recu', 'livre'], true)): ?>
+            <?php if (!$is_coord && in_array($cmd['statut'], ['prete_enlevement', 'en_cours_livraison', 'livree_site', 'recu', 'livre'], true)): ?>
             <a href="?id=<?= $cmd['id'] ?>&bl=1" target="_blank" class="btn btn-secondary btn-sm" style="white-space:nowrap" title="Imprimer le bon de livraison" aria-label="Imprimer le bon de livraison en PDF"><i class="ph ph-truck" aria-hidden="true"></i> BL</a>
             <?php endif; ?>
             <?php if(($_cmd_bob || ($_inter && $is_gestionnaire && !$bob_a_choisir)) && $cmd['statut']==='en_attente_livraison' && (int)$cmd['nb_lignes_bobine'] > 0 && cmdbob_actif()): ?>
@@ -2340,7 +2550,30 @@ $lbl_prepa   = $is_coord ? 'En préparation' : 'À préparer';
               <button class="btn btn-success btn-sm" style="white-space:nowrap" onclick="repondreSortie(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>',true)"><i class="ph ph-check" aria-hidden="true"></i> Accepter</button>
               <button class="btn btn-sm" style="background:#FEE2E2;color:#991B1B;border:1.5px solid #FCA5A5;white-space:nowrap" onclick="repondreSortie(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>',false)"><i class="ph ph-x" aria-hidden="true"></i> Refuser</button>
             <?php endif; ?>
-            <?php if($is_gestionnaire && $cmd['statut']==='en_attente_livraison'): ?>
+            <?php if($flux_ok):
+                  // Nouveau circuit : préparer, désigner le livreur, récupérer, livrer.
+                  // Qui prépare : gestionnaire et entrepôt pour une commande au
+                  // dépôt, le site fournisseur pour une sortie diverse acceptée.
+                  $_prep_moi = $cmd['statut']==='en_attente_livraison' && !$_a_accepter
+                      && ((!$_inter && ($is_gestionnaire || $is_magasinier || $est_admin))
+                          || ($_inter && ($_fourn || $est_admin)));
+                  $_mon_livreur = (int)($cmd['livreur_id'] ?? 0) === (int)$user['id']; ?>
+              <?php if($_prep_moi): ?>
+              <button class="btn btn-primary btn-sm" style="white-space:nowrap" onclick="ouvrirPreparation(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>')"><i class="ph ph-clipboard-text" aria-hidden="true"></i> <?= ($is_gestionnaire && !$_inter) ? 'Répartir / préparer' : 'Préparer' ?></button>
+              <?php elseif($is_gestionnaire && $cmd['statut']==='en_attente_livraison' && $_a_accepter): ?>
+              <span class="btn btn-sm" style="background:#F1F5F9;color:#475569;border:1.5px dashed #CBD5E1;cursor:default;white-space:nowrap"><i class="ph ph-hourglass" aria-hidden="true"></i> En attente de <?= h($cmd['site_source_nom'] ?? 'du site') ?></span>
+              <?php endif; ?>
+              <?php if($cmd['statut']==='prete_enlevement' && ($is_gestionnaire || $est_admin)): ?>
+              <button class="btn btn-primary btn-sm" style="white-space:nowrap" onclick="ouvrirAffectation(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>',<?= (int)($cmd['livreur_id'] ?? 0) ?>)"><i class="ph ph-user-gear" aria-hidden="true"></i> <?= $cmd['livreur_id'] ? 'Changer de livreur' : 'Désigner le livreur' ?></button>
+              <button class="btn btn-secondary btn-sm" title="Rouvrir la préparation" aria-label="Rouvrir la préparation" onclick="rouvrirPreparation(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>')"><i class="ph ph-arrow-counter-clockwise" aria-hidden="true"></i></button>
+              <?php endif; ?>
+              <?php if($cmd['statut']==='prete_enlevement' && $cmd['livreur_id'] && ($_mon_livreur || $est_admin)): ?>
+              <button class="btn btn-success btn-sm" style="white-space:nowrap" onclick="recupererCommande(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>')"><i class="ph ph-package" aria-hidden="true"></i> Récupérer</button>
+              <?php endif; ?>
+              <?php if($cmd['statut']==='en_cours_livraison' && $cmd['livreur_id'] && ($_mon_livreur || $est_admin)): ?>
+              <button class="btn btn-success btn-sm" style="white-space:nowrap" onclick="ouvrirLivrer(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>')"><i class="ph ph-hand-arrow-down" aria-hidden="true"></i> Livrer</button>
+              <?php endif; ?>
+            <?php elseif($is_gestionnaire && $cmd['statut']==='en_attente_livraison'): ?>
               <?php if($_a_accepter): ?>
               <span class="btn btn-sm" style="background:#F1F5F9;color:#475569;border:1.5px dashed #CBD5E1;cursor:default;white-space:nowrap" title="Le site fournisseur doit accepter la sortie diverse"><i class="ph ph-hourglass" aria-hidden="true"></i> En attente de <?= h($cmd['site_source_nom'] ?? 'du site') ?></span>
               <?php elseif($bob_a_choisir && $_cmd_bob): /* il choisit lui-même : bouton ci-dessus */ ?>
@@ -2352,7 +2585,7 @@ $lbl_prepa   = $is_coord ? 'En préparation' : 'À préparer';
               <button class="btn btn-primary btn-sm" style="white-space:nowrap" onclick="ouvrirLivraison(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>')"><i class="ph ph-truck" aria-hidden="true"></i> Expédier</button>
               <?php endif; ?>
             <?php endif; ?>
-            <?php if($cmd['statut']==='en_cours_livraison' && $is_coord && !$_fourn): ?>
+            <?php if($is_coord && !$_fourn && ($cmd['statut']==='livree_site' || ($cmd['statut']==='en_cours_livraison' && empty($cmd['livreur_id'])))): ?>
               <button class="btn btn-success btn-sm" onclick="receptionner(<?= $cmd['id'] ?>,'<?= h($cmd['numero_commande']) ?>')"><i class="ph ph-check-circle" aria-hidden="true"></i> Réceptionner</button>
             <?php endif; ?>
             <?php if(($ecarts_ouverts[$cmd['id']] ?? 0) && ($is_gestionnaire || $is_gsb)): ?>
@@ -2579,7 +2812,7 @@ $lbl_prepa   = $is_coord ? 'En préparation' : 'À préparer';
 <?php endif; ?>
 
 <!-- ═══ MODAL BOBINES (GSB) — choix des bobines d'une ligne « bobine » ═══ -->
-<?php if($peut_choisir_bob || ($is_coord && $cis_ok)): ?>
+<?php if($peut_choisir_bob || ($is_coord && $cis_ok) || $is_magasinier): ?>
 <div id="modalBobines" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.55);z-index:1000;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto">
   <div style="background:white;border-radius:18px;padding:26px;width:680px;max-width:96vw;box-shadow:0 20px 60px rgba(0,0,0,.25);margin:auto">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -2601,6 +2834,51 @@ $lbl_prepa   = $is_coord ? 'En préparation' : 'À préparer';
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px">
       <button class="btn btn-secondary" onclick="fermer('Bobines');location.reload()">Fermer</button>
       <button class="btn btn-primary" id="btnValiderBobines" onclick="validerBobines(this)"><i class="ph ph-check-circle" aria-hidden="true"></i> Valider la sélection</button>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+
+<!-- ═══ MODAL PRÉPARATION (gestionnaire, entrepôt, site fournisseur) ═══ -->
+<?php if($flux_ok): ?>
+<div id="modalPreparation" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.55);z-index:1000;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto">
+  <div style="background:white;border-radius:18px;padding:26px;width:780px;max-width:96vw;box-shadow:0 20px 60px rgba(0,0,0,.25);margin:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:17px;font-weight:800;color:var(--navy)" id="titlePreparation">Préparer</h3>
+      <button onclick="fermer('Preparation')" style="background:none;border:none;font-size:22px;cursor:pointer" aria-label="Fermer"><i class="ph ph-x" aria-hidden="true"></i></button>
+    </div>
+    <div style="background:#EFF6FF;border:1px solid #BFDBFE;padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:12.5px;color:#1E3A8A">
+      Indiquez la quantité préparée de chaque ligne qui vous revient (motif si elle diffère de la commande). Rien ne sort du stock ici : le dépôt est débité quand le livreur récupère la commande.
+    </div>
+    <div id="alertPreparation"></div>
+    <div id="lignesPreparation"></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:12px">
+      <button class="btn btn-secondary" onclick="fermer('Preparation')">Fermer</button>
+      <button class="btn btn-primary" id="btnPreparer" onclick="enregistrerPreparation(this)"><i class="ph ph-check-circle" aria-hidden="true"></i> Enregistrer</button>
+    </div>
+  </div>
+</div>
+<div id="modalAffectation" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.55);z-index:1000;align-items:center;justify-content:center;padding:20px">
+  <div style="background:white;border-radius:18px;padding:24px;width:440px;max-width:96vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin-bottom:12px" id="titleAffectation">Désigner le livreur</h3>
+    <label for="selLivreur" style="font-size:12px;font-weight:700;color:var(--navy)">Livreur</label>
+    <select class="form-control" id="selLivreur" style="margin-top:4px"></select>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px">
+      <button class="btn btn-secondary" onclick="fermer('Affectation')">Annuler</button>
+      <button class="btn btn-primary" onclick="confirmerAffectation(this)">Désigner</button>
+    </div>
+  </div>
+</div>
+<div id="modalLivrer" style="display:none;position:fixed;inset:0;background:rgba(6,3,58,.55);z-index:1000;align-items:center;justify-content:center;padding:20px">
+  <div style="background:white;border-radius:18px;padding:24px;width:460px;max-width:96vw;box-shadow:0 20px 60px rgba(0,0,0,.25)">
+    <h3 style="font-family:'Plus Jakarta Sans',sans-serif;font-size:16px;font-weight:800;color:var(--navy);margin-bottom:8px" id="titleLivrer">Livrer</h3>
+    <div style="font-size:13px;color:var(--muted);margin-bottom:12px">Faites signer le bon de livraison par le site, puis prenez-le en photo.</div>
+    <label for="photoLivraison" style="font-size:12px;font-weight:700;color:var(--navy)">Photo du BL signé *</label>
+    <input type="file" class="form-control" id="photoLivraison" accept="image/jpeg,image/png,image/webp,application/pdf" capture="environment" style="margin-top:4px">
+    <div id="alertLivrer" style="margin-top:8px"></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px">
+      <button class="btn btn-secondary" onclick="fermer('Livrer')">Annuler</button>
+      <button class="btn btn-success" onclick="confirmerLivrer(this)"><i class="ph ph-check-circle" aria-hidden="true"></i> Confirmer la livraison</button>
     </div>
   </div>
 </div>
@@ -2769,6 +3047,151 @@ const siteForce      = <?= $site_force ?>;
 const isSuperviseur  = <?= $is_superviseur?'true':'false' ?>;
 const isCoord        = <?= $is_coord?'true':'false' ?>;
 const isGestionnaire = <?= $is_gestionnaire?'true':'false' ?>;
+// ── Préparation (gestionnaire, entrepôt, site fournisseur)
+const livreursData = <?= json_encode($flux_ok ? array_map(fn($u) => ['id' => (int)$u['id'], 'nom' => $u['nom']], cflux_users_role(CFLUX_ROLE_LIVREUR)) : []) ?>;
+const depotsPrepData = <?= json_encode($flux_ok ? array_map(fn($d) => ['id' => (int)$d['id'], 'nom' => $d['nom'], 'type' => $d['type'],
+    'magasinier' => $d['type'] === 'entrepot' && cflux_entrepot_a_magasinier((int)$d['id'])], $depots_list) : []) ?>;
+let lignesPrep = [], prepCmdId = null, prepCmdNum = '';
+async function ouvrirPreparation(cmdId, num){
+  prepCmdId = cmdId; prepCmdNum = num;
+  document.getElementById('titlePreparation').textContent = `📦 Préparer — ${num}`;
+  document.getElementById('alertPreparation').innerHTML = '';
+  const d = await ap({action:'get_lignes', cmd_id:cmdId});
+  lignesPrep = (d.data||[]); lignesCmd = lignesPrep; currentCmdId = cmdId; sourceInter = null;
+  document.getElementById('lignesPreparation').innerHTML = lignesPrep.map((l,i) => blocPrep(l,i)).join('');
+  lignesPrep.forEach((l,i) => majPrepLigne(i));
+  document.getElementById('modalPreparation').style.display = 'flex';
+}
+// Le gestionnaire prépare la ligne si elle ne part pas d'un entrepôt qui a son magasinier.
+function prepParMoi(l, i){
+  if (!l.peut_repartir) return !!l.peut_preparer;
+  const sel = document.querySelector(`.prep-depot[data-idx="${i}"]`);
+  const dep = depotsPrepData.find(x => String(x.id) === (sel ? sel.value : String(l.depot_effectif||'')));
+  return !(dep && dep.magasinier);
+}
+function blocPrep(l, i){
+  const rej = l.statut_ligne === 'rejete';
+  const sorties = (l.sorties||[]).map(s => `<div style="font-size:12px;margin-top:3px;color:#6D28D9">↳ Sortie diverse : <strong>${s.quantite} ${escB(s.unite)}</strong> ${s.reprise?'repris par':'chez'} ${escB(s.site||'')} (${escB(s.numero)}, ${escB(s.etat)})</div>`).join('');
+  const depSel = l.peut_repartir ? `<div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+      <label style="font-size:12px;font-weight:700;color:var(--navy);white-space:nowrap">Sort de *</label>
+      <select class="form-control prep-depot" data-idx="${i}" onchange="majPrepLigne(${i})" style="border-radius:8px;font-size:12.5px;padding:4px 8px;height:auto">
+        ${depotsPrepData.map(d => `<option value="${d.id}" ${String(d.id)===String(l.depot_effectif||'')?'selected':''}>${escB(d.nom)} (${d.type==='magasin'?'magasin':'entrepôt'}${d.magasinier?' — préparé par l\'entrepôt':''})</option>`).join('')}
+      </select></div>` : (l.depot_nom ? `<div style="font-size:12px;color:var(--muted);margin-top:3px">Sort de : <strong>${escB(l.depot_nom)}</strong></div>` : '');
+  const sd = (l.peut_sd) ? `<button type="button" class="btn btn-sm" style="margin-top:6px;background:#F5F3FF;color:#5B21B6;border:1.5px solid #DDD6FE" onclick="ouvrirSortie(${i})"><i class="ph ph-arrows-left-right" aria-hidden="true"></i> Sortie diverse</button>` : '';
+  return `<div style="background:#f8f9fa;border-radius:10px;padding:13px;margin-bottom:8px">
+    <div style="display:grid;grid-template-columns:1fr 240px;gap:12px;align-items:start">
+      <div>
+        <div style="font-size:13.5px;font-weight:700;color:var(--navy)">${escB(l.libelle)}</div>
+        <div style="font-size:12px;color:var(--muted)">${(l.sorties||[]).length?'Reste à servir':'Commandé'} : <strong>${l.quantite}</strong> ${escB(l.unite||'')} · ${escB(l.type_article||'article')}</div>
+        ${depSel}
+        ${(estRouleau(l.type_article)&&(l.bobines||[]).length)?`<div style="font-size:12px;margin-top:3px;color:#075985">Bobines choisies : <strong style="font-family:monospace">${l.bobines.map(b=>escB(b.numero)).join(', ')}</strong></div>`:''}
+        ${sorties}${sd}
+        ${rej?'<span style="background:#FEE2E2;color:#991B1B;padding:2px 7px;border-radius:8px;font-size:10.5px;font-weight:700">❌ Ligne rejetée</span>':''}
+      </div>
+      <div id="prepCell${i}"></div>
+    </div>
+    ${l.peut_sd?`<div id="sdBox${i}" style="display:none;margin-top:10px;background:#F5F3FF;border:1px solid #DDD6FE;border-radius:8px;padding:10px"></div>`:''}
+  </div>`;
+}
+function majPrepLigne(i){
+  const l = lignesPrep[i], cell = document.getElementById(`prepCell${i}`);
+  if (!cell) return;
+  if (l.statut_ligne === 'rejete' || l.quantite <= 0) { cell.innerHTML = `<div style="font-size:12.5px;color:var(--muted)">${l.quantite<=0?'Entièrement en sortie diverse':'Non servie'}</div>`; return; }
+  const fait = l.prepare_at ? `<div style="font-size:12px;color:var(--success-d);font-weight:700;margin-bottom:4px">✅ Préparée : ${l.quantite_livree} ${escB(l.unite||'')}${l.prepare_par_nom?' · '+escB(l.prepare_par_nom):''}</div>` : '';
+  if (!prepParMoi(l, i)) {
+    cell.innerHTML = fait || `<div style="font-size:12.5px;color:#b45309;font-weight:600">À préparer par ${l.preparateur==='site'?'le site fournisseur':(l.preparateur==='entrepot'?"l'entrepôt":'le gestionnaire de stock')}</div>`;
+    return;
+  }
+  if (estRouleau(l.type_article) && !(l.bobines||[]).length) {
+    cell.innerHTML = fait + `<div style="font-size:12.5px;color:#b45309">Choisissez d'abord les bobines (bouton « Choisir les bobines » de la commande).</div>`;
+    return;
+  }
+  const q = l.prepare_at ? l.quantite_livree : (l.qte_bobines ?? l.quantite);
+  cell.innerHTML = fait + `<label style="font-size:12px;font-weight:700;color:var(--navy)">Quantité préparée *</label>
+    <input type="number" class="form-control prep-qte" data-idx="${i}" value="${q}" min="0" max="${l.quantite}" step="1" oninput="majMotifPrep(${i})"
+      style="border-radius:8px;text-align:center;font-weight:800;margin-top:3px" ${l.qte_bobines!==undefined?'readonly title="Quantité issue des bobines choisies"':''}>
+    <input type="text" class="form-control prep-motif" data-idx="${i}" placeholder="Motif de l'écart *" value="${escB(l.motif_ecart||'')}" style="display:none;margin-top:6px;font-size:12px;border-radius:8px;border-color:var(--warning)">`;
+  majMotifPrep(i);
+}
+function majMotifPrep(i){
+  const l = lignesPrep[i], q = document.querySelector(`.prep-qte[data-idx="${i}"]`), m = document.querySelector(`.prep-motif[data-idx="${i}"]`);
+  if (q && m) m.style.display = (parseInt(q.value)||0) !== l.quantite ? '' : 'none';
+}
+async function enregistrerPreparation(btn){
+  const out = [];
+  let manque = 0;
+  lignesPrep.forEach((l,i) => {
+    const o = {ligne_id: l.id};
+    const sel = document.querySelector(`.prep-depot[data-idx="${i}"]`);
+    if (sel) o.depot_id = parseInt(sel.value);
+    const q = document.querySelector(`.prep-qte[data-idx="${i}"]`);
+    if (q) {
+      o.preparer = true; o.quantite = parseInt(q.value)||0;
+      const m = document.querySelector(`.prep-motif[data-idx="${i}"]`);
+      o.motif = m ? m.value.trim() : '';
+      if (o.quantite !== l.quantite && !o.motif) { manque++; if (m) m.style.borderColor = 'var(--danger-d)'; }
+    }
+    if (sel || q) out.push(o);
+  });
+  const al = document.getElementById('alertPreparation');
+  if (manque) { al.innerHTML = `<div class="alert alert-danger">Motif obligatoire pour ${manque} ligne(s) dont la quantité préparée diffère de la commande.</div>`; return; }
+  if (!out.length) { al.innerHTML = '<div class="alert alert-danger">Aucune ligne à préparer pour vous dans cette commande.</div>'; return; }
+  btn.disabled = true;
+  const d = await ap({action:'preparer', cmd_id:prepCmdId, lignes:JSON.stringify(out)});
+  btn.disabled = false;
+  if (!d.success) { al.innerHTML = `<div class="alert alert-danger">${escB(d.message)}</div>`; return; }
+  toast(d.message, 'success');
+  fermer('Preparation');
+  setTimeout(() => location.reload(), 800);
+}
+// ── Livreur
+let affCmdId = null;
+function ouvrirAffectation(cmdId, num, actuel){
+  affCmdId = cmdId;
+  document.getElementById('titleAffectation').textContent = `🚚 Livreur — ${num}`;
+  const sel = document.getElementById('selLivreur');
+  sel.innerHTML = livreursData.length ? livreursData.map(u => `<option value="${u.id}" ${u.id===actuel?'selected':''}>${escB(u.nom)}</option>`).join('')
+                                      : '<option value="">Aucun livreur actif : créez un utilisateur au profil Livreur</option>';
+  document.getElementById('modalAffectation').style.display = 'flex';
+}
+async function confirmerAffectation(btn){
+  const v = document.getElementById('selLivreur').value;
+  if (!v) return;
+  btn.disabled = true;
+  const d = await ap({action:'affecter_livreur', cmd_id:affCmdId, livreur_id:v});
+  btn.disabled = false;
+  if (d.success) { toast(d.message,'success'); fermer('Affectation'); setTimeout(()=>location.reload(),800); } else toast(d.message,'danger');
+}
+async function rouvrirPreparation(id, num){
+  if (!confirm(`Rouvrir la préparation de ${num} ? Toutes ses lignes seront à préparer de nouveau et le livreur désigné est retiré.`)) return;
+  const d = await ap({action:'rouvrir_preparation', cmd_id:id});
+  if (d.success) { toast(d.message,'success'); setTimeout(()=>location.reload(),800); } else toast(d.message,'danger');
+}
+async function recupererCommande(id, num){
+  if (!confirm(`Confirmer que vous avez récupéré la commande ${num} ? Le stock des dépôts sera débité.`)) return;
+  const d = await ap({action:'recuperer', cmd_id:id});
+  if (d.success) { toast(d.message,'success'); setTimeout(()=>location.reload(),800); } else toast(d.message,'danger');
+}
+let livrerCmdId = null;
+function ouvrirLivrer(id, num){
+  livrerCmdId = id;
+  document.getElementById('titleLivrer').textContent = `📦 Livrer — ${num}`;
+  document.getElementById('photoLivraison').value = '';
+  document.getElementById('alertLivrer').innerHTML = '';
+  document.getElementById('modalLivrer').style.display = 'flex';
+}
+async function confirmerLivrer(btn){
+  const f = document.getElementById('photoLivraison').files[0];
+  const al = document.getElementById('alertLivrer');
+  if (!f) { al.innerHTML = '<div class="alert alert-danger">Prenez la photo du bon de livraison signé par le site.</div>'; return; }
+  const fd = new FormData();
+  fd.append('action','livrer'); fd.append('cmd_id', livrerCmdId); fd.append('photo_livraison', f);
+  btn.disabled = true;
+  const d = await fetch(window.location.href, {method:'POST', headers:{'X-Requested-With':'XMLHttpRequest'}, body:fd}).then(r=>r.json()).catch(()=>({success:false,message:'Envoi impossible : vérifiez la connexion.'}));
+  btn.disabled = false;
+  if (!d.success) { al.innerHTML = `<div class="alert alert-danger">${escB(d.message)}</div>`; return; }
+  toast(d.message,'success'); fermer('Livrer'); setTimeout(()=>location.reload(),800);
+}
 
 let lignes = [];
 let currentCmdId = null, lignesCmd = [];
@@ -2827,7 +3250,13 @@ async function voirDetail(id, numero, versEcarts) {
   // Infos
   document.getElementById('detail-site').textContent  = (cmd.site_nom || '—')
     + (cmd.site_source_nom ? ` ← fourni par ${cmd.site_source_nom} (sortie diverse${cmd.origine_numero ? ' de ' + cmd.origine_numero : ''}${cmd.accepte_at ? '' : ', à accepter'}${cmd.chauffeur ? ' · chauffeur ' + cmd.chauffeur : ''})` : '')
-    + (!cmd.site_source_nom && cmd.origine_numero ? ` (reprise de ${cmd.origine_numero})` : '');
+    + (!cmd.site_source_nom && cmd.origine_numero ? ` (reprise de ${cmd.origine_numero})` : '')
+    + (cmd.livreur_nom ? ` · Livreur : ${cmd.livreur_nom}` : '');
+  {
+    const ds = document.getElementById('detail-site');
+    const old = document.getElementById('detail-photo-livraison'); if (old) old.remove();
+    if (cmd.photo_livraison_url) ds.insertAdjacentHTML('afterend', `<a id="detail-photo-livraison" href="${cmd.photo_livraison_url}" target="_blank" rel="noopener" style="font-size:12px;font-weight:700">📷 Photo du BL signé (livreur)</a>`);
+  }
   document.getElementById('detail-date').textContent  = cmd.created_at ? cmd.created_at.substring(0,10).split('-').reverse().join('/') : '—';
   document.getElementById('detail-agent').textContent = cmd.agent || '—';
 
@@ -3555,8 +3984,9 @@ async function creerSortie(i,btn){
   btn.disabled=false;
   if(!d.success){ toast(d.message,'danger'); return; }
   toast(d.message,'success');
-  if(d.message.includes("plus rien à expédier")){ fermer('Livraison'); setTimeout(()=>location.reload(),900); return; }
-  ouvrirLivraison(currentCmdId, document.getElementById('titleLivraison').textContent.replace(/^.*— /,''));
+  if(d.message.includes("plus rien à expédier")){ fermer('Livraison'); if(document.getElementById('modalPreparation')) fermer('Preparation'); setTimeout(()=>location.reload(),900); return; }
+  if (document.getElementById('modalPreparation') && document.getElementById('modalPreparation').style.display === 'flex') ouvrirPreparation(prepCmdId, prepCmdNum);
+  else ouvrirLivraison(currentCmdId, document.getElementById('titleLivraison').textContent.replace(/^.*— /,''));
 }
 // ── Le site fournisseur accepte ou refuse une sortie diverse
 async function repondreSortie(id,num,accepte){

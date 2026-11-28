@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Spécification fonctionnelle et technique — ERP EMUCI</title>
-<meta name="description" content="Spécification fonctionnelle et technique de l'ERP EMUCI, arrêté au commit 246ba2b">
+<meta name="description" content="Spécification fonctionnelle et technique de l'ERP EMUCI, arrêté au commit c3d6594">
 <meta name="author" content="GAYE Emmanuel">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
 <style>
+
 
 
 
@@ -248,6 +249,14 @@ h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
   color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
   border-bottom:2px solid var(--accent)}
 figure .mermaid{background:transparent}
+
+h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
+  border-bottom:2px solid var(--accent)}
+figure .mermaid{background:transparent}
+.contact{margin:.6rem 0 0;font-size:.85rem;color:var(--muted,#4d5876)}
+.contact b{color:inherit;font-weight:700}
+.contact a{color:inherit;text-decoration:none;border-bottom:1px dotted currentColor}
 
 h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
   color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
@@ -2361,9 +2370,19 @@ demande.</p>
 <td>Validée ; choix des bobines par le GSB ou le gestionnaire de stock, puis expédition</td>
 </tr>
 <tr>
+<td><code>prete_enlevement</code></td>
+<td>Prête à enlever</td>
+<td>Toutes les lignes préparées ; le gestionnaire désigne le livreur</td>
+</tr>
+<tr>
 <td><code>en_cours_livraison</code></td>
 <td>En livraison</td>
-<td>Expédiée ; dépôts débités</td>
+<td>Récupérée par le livreur ; dépôts débités</td>
+</tr>
+<tr>
+<td><code>livree_site</code></td>
+<td>Livrée</td>
+<td>Livrée au site, photo du BL signé jointe ; à réceptionner</td>
 </tr>
 <tr>
 <td><code>recu</code></td>
@@ -2389,7 +2408,40 @@ une bobine à 497-499 compte pour 500). Les rouleaux restent à l'entrepôt,
 réservés, jusqu'à la réception ; leurs films sont figés à l'expédition
 (<code>films_expedies</code>). Le gestionnaire peut renvoyer des lignes au GSB tant que
 la commande n'est pas expédiée.</p>
-<p><strong>Expédition.</strong> Chaque ligne article, PMMA ou rivets a son dépôt de sortie
+<p><strong>Préparation et livraison</strong> (<code>includes/commande_flux.php</code>,
+<code>sql/migration_commandes_preparation_livreur.sql</code> : profils
+<code>magasinier_entrepot</code> et <code>livreur</code>, <code>commande_lignes.prepare_par/prepare_at</code>,
+<code>commandes.livreur_id/livreur_affecte_at/livree_at/photo_livraison</code>).</p>
+<ul>
+<li><strong>Répartition</strong> : à la validation, <code>cflux_repartition_defaut()</code> propose le
+  dépôt de chaque ligne à stock (rouleaux, PMMA, rivets à l'entrepôt ;
+  articles au magasin) et prévient le magasinier ; le gestionnaire la change
+  (action <code>preparer</code>, <code>depot_id</code>) tant que la ligne n'est pas préparée.</li>
+<li><strong>Préparateur</strong> (<code>cflux_preparateur()</code>) : le site fournisseur pour une
+  sortie diverse acceptée ; le magasinier de l'entrepôt (<code>users.site_id</code>)
+  pour une ligne de son entrepôt, s'il en a un actif ; sinon le gestionnaire.
+  <code>cflux_peut_preparer()</code> le vérifie côté serveur. Préparer fixe
+  <code>quantite_livree</code> (motif si elle diffère ; rouleaux : bobines choisies
+  obligatoires, quantité issue du choix) ; aucun mouvement de stock. Le
+  magasinier choisit aussi les bobines (<code>cmd_peut_choisir_bob()</code>).</li>
+<li><strong>Prête</strong> : <code>cflux_verifier_prete()</code> passe la commande <code>prete_enlevement</code>
+  quand chaque ligne est préparée, rejetée ou vidée par sortie diverse. Un
+  changement de bobines, une sortie diverse ou un refus remet la ligne à
+  préparer ; <code>rouvrir_preparation</code> remet toute la commande à préparer.</li>
+<li><strong>Livreur</strong> : <code>affecter_livreur</code> (fonction Magasin) ; <code>recuperer</code> (livreur
+  désigné) exécute <code>cflux_enlever()</code> — débit de chaque dépôt (stock central
+  seulement pour un dépôt), bobines tracées, bon de distribution, statut
+  <code>en_cours_livraison</code> ; <code>livrer</code> exige la photo du BL signé (archivée dans
+  <code>fichiers_archives</code>, type <code>bl</code>) et passe <code>livree_site</code>.</li>
+<li><strong>Réception</strong> : depuis <code>livree_site</code> (ou <code>en_cours_livraison</code> pour une
+  commande expédiée sans livreur, ancien circuit) ; le BL PDF n'est exigé
+  que sans photo du livreur.</li>
+<li><strong>Visibilité</strong> : le livreur voit les commandes qu'on lui confie, le
+  magasinier celles dont une ligne part de son entrepôt (<code>cmd_visible()</code>).
+  Sans la migration, l'ancien circuit (expédition en une fois par le
+  gestionnaire, <code>emettre_livraison</code>) reste en place.</li>
+</ul>
+<p><strong>Expédition (ancien circuit).</strong> Chaque ligne article, PMMA ou rivets a son dépôt de sortie
 (<code>commande_lignes.depot_source_id</code>, entrepôt ou magasin), débité à
 l'expédition, bloquant si insuffisant ; une ligne PMMA en CARTON est
 convertie en unités. Quantité livrée bornée entre 0 et la quantité
@@ -3488,7 +3540,7 @@ l'interface au même titre que les cinquante-deux autres (7.1).</p>
 <div class="impr-pied" style="margin-top:10mm;padding-top:4mm;border-top:1px solid #c3ccdf;
      font-size:9pt;color:#4d5876">
   Spécification fonctionnelle et technique — ERP EMUCI — document interne. État du logiciel au commit
-  <code>246ba2b</code>. Toute évolution fonctionnelle rend une section caduque :
+  <code>c3d6594</code>. Toute évolution fonctionnelle rend une section caduque :
   vérifiez la version avant de vous y fier.<br>
   Auteur : GAYE Emmanuel — gayerodrigue@gmail.com — <span style="white-space:nowrap">+225 01 03 55 96 52</span>
 </div>

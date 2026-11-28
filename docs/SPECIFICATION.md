@@ -1311,7 +1311,9 @@ demande.
 | `en_attente` | À valider | Créée par le coordinateur (une seule en attente par site, vérifiée sous verrou) |
 | `modification_demandee` | À corriger | Lignes renvoyées ; seul le coordinateur du site corrige |
 | `en_attente_livraison` | À préparer | Validée ; choix des bobines par le GSB ou le gestionnaire de stock, puis expédition |
-| `en_cours_livraison` | En livraison | Expédiée ; dépôts débités |
+| `prete_enlevement` | Prête à enlever | Toutes les lignes préparées ; le gestionnaire désigne le livreur |
+| `en_cours_livraison` | En livraison | Récupérée par le livreur ; dépôts débités |
+| `livree_site` | Livrée | Livrée au site, photo du BL signé jointe ; à réceptionner |
 | `recu` | Reçu | Réceptionnée par le site |
 | `rejete`, `annule` | Rejeté, Annulé | Annulation avec motif, selon le statut et l'acteur |
 
@@ -1329,7 +1331,40 @@ réservés, jusqu'à la réception ; leurs films sont figés à l'expédition
 (`films_expedies`). Le gestionnaire peut renvoyer des lignes au GSB tant que
 la commande n'est pas expédiée.
 
-**Expédition.** Chaque ligne article, PMMA ou rivets a son dépôt de sortie
+**Préparation et livraison** (`includes/commande_flux.php`,
+`sql/migration_commandes_preparation_livreur.sql` : profils
+`magasinier_entrepot` et `livreur`, `commande_lignes.prepare_par/prepare_at`,
+`commandes.livreur_id/livreur_affecte_at/livree_at/photo_livraison`).
+
+- **Répartition** : à la validation, `cflux_repartition_defaut()` propose le
+  dépôt de chaque ligne à stock (rouleaux, PMMA, rivets à l'entrepôt ;
+  articles au magasin) et prévient le magasinier ; le gestionnaire la change
+  (action `preparer`, `depot_id`) tant que la ligne n'est pas préparée.
+- **Préparateur** (`cflux_preparateur()`) : le site fournisseur pour une
+  sortie diverse acceptée ; le magasinier de l'entrepôt (`users.site_id`)
+  pour une ligne de son entrepôt, s'il en a un actif ; sinon le gestionnaire.
+  `cflux_peut_preparer()` le vérifie côté serveur. Préparer fixe
+  `quantite_livree` (motif si elle diffère ; rouleaux : bobines choisies
+  obligatoires, quantité issue du choix) ; aucun mouvement de stock. Le
+  magasinier choisit aussi les bobines (`cmd_peut_choisir_bob()`).
+- **Prête** : `cflux_verifier_prete()` passe la commande `prete_enlevement`
+  quand chaque ligne est préparée, rejetée ou vidée par sortie diverse. Un
+  changement de bobines, une sortie diverse ou un refus remet la ligne à
+  préparer ; `rouvrir_preparation` remet toute la commande à préparer.
+- **Livreur** : `affecter_livreur` (fonction Magasin) ; `recuperer` (livreur
+  désigné) exécute `cflux_enlever()` — débit de chaque dépôt (stock central
+  seulement pour un dépôt), bobines tracées, bon de distribution, statut
+  `en_cours_livraison` ; `livrer` exige la photo du BL signé (archivée dans
+  `fichiers_archives`, type `bl`) et passe `livree_site`.
+- **Réception** : depuis `livree_site` (ou `en_cours_livraison` pour une
+  commande expédiée sans livreur, ancien circuit) ; le BL PDF n'est exigé
+  que sans photo du livreur.
+- **Visibilité** : le livreur voit les commandes qu'on lui confie, le
+  magasinier celles dont une ligne part de son entrepôt (`cmd_visible()`).
+  Sans la migration, l'ancien circuit (expédition en une fois par le
+  gestionnaire, `emettre_livraison`) reste en place.
+
+**Expédition (ancien circuit).** Chaque ligne article, PMMA ou rivets a son dépôt de sortie
 (`commande_lignes.depot_source_id`, entrepôt ou magasin), débité à
 l'expédition, bloquant si insuffisant ; une ligne PMMA en CARTON est
 convertie en unités. Quantité livrée bornée entre 0 et la quantité

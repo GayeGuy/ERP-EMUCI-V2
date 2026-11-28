@@ -479,7 +479,7 @@ function kpi_commandes(string $du, string $au, string $sf): array {
     return db_fetch_one(
         "SELECT COUNT(*)                                                            AS total,
                 COUNT(*) FILTER (WHERE statut IN ('livre','recu'))                  AS servies,
-                COUNT(*) FILTER (WHERE statut IN ('en_attente','en_attente_livraison','en_cours_livraison')) AS en_cours,
+                COUNT(*) FILTER (WHERE statut IN ('en_attente','en_attente_livraison','prete_enlevement','en_cours_livraison','livree_site')) AS en_cours,
                 COALESCE(AVG(CASE WHEN livraison_at IS NOT NULL
                              THEN EXTRACT(EPOCH FROM (livraison_at - created_at))/86400 END),0) AS delai
            FROM commandes
