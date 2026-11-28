@@ -1365,7 +1365,9 @@ fournisseur), `commande_origine_id` (commande d'origine), `motif_inter_site`,
 `accepte_par` / `accepte_at`, `chauffeur` ; `commande_lignes.ligne_origine_id`.
 
 - **Création** (fonction Magasin, action `sortie_diverse`) : ligne validée,
-  quantité entre 1 et la quantité restante, types cédables (`bobine`,
+  répartition `[{site_source_id, quantite}]` entre un ou plusieurs sites en
+  une transaction — sites distincts, au moins 1 chacun, total au plus égal à
+  la quantité restante de la ligne, types cédables (`bobine`,
   `vignette`, `rivet`, `pmma`, `article` hors équipements,
   `cis_controle_ligne()`), pas de bobines déjà choisies sur la ligne. Une
   commande liée par site fournisseur tant qu'elle n'est pas acceptée (une

@@ -4,12 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Spécification fonctionnelle et technique — ERP EMUCI</title>
-<meta name="description" content="Spécification fonctionnelle et technique de l'ERP EMUCI, arrêté au commit ddbab6f">
+<meta name="description" content="Spécification fonctionnelle et technique de l'ERP EMUCI, arrêté au commit 246ba2b">
 <meta name="author" content="GAYE Emmanuel">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
 <style>
+
 
 
 
@@ -247,6 +248,14 @@ h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
   color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
   border-bottom:2px solid var(--accent)}
 figure .mermaid{background:transparent}
+
+h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
+  border-bottom:2px solid var(--accent)}
+figure .mermaid{background:transparent}
+.contact{margin:.6rem 0 0;font-size:.85rem;color:var(--muted,#4d5876)}
+.contact b{color:inherit;font-weight:700}
+.contact a{color:inherit;text-decoration:none;border-bottom:1px dotted currentColor}
 
 h1.partie{font-size:1.05rem;letter-spacing:.08em;text-transform:uppercase;
   color:var(--accent-ink);margin:2.6rem 0 .4rem;padding-bottom:.35rem;
@@ -2412,7 +2421,9 @@ fournisseur), <code>commande_origine_id</code> (commande d'origine), <code>motif
 <code>accepte_par</code> / <code>accepte_at</code>, <code>chauffeur</code> ; <code>commande_lignes.ligne_origine_id</code>.</p>
 <ul>
 <li><strong>Création</strong> (fonction Magasin, action <code>sortie_diverse</code>) : ligne validée,
-  quantité entre 1 et la quantité restante, types cédables (<code>bobine</code>,
+  répartition <code>[{site_source_id, quantite}]</code> entre un ou plusieurs sites en
+  une transaction — sites distincts, au moins 1 chacun, total au plus égal à
+  la quantité restante de la ligne, types cédables (<code>bobine</code>,
   <code>vignette</code>, <code>rivet</code>, <code>pmma</code>, <code>article</code> hors équipements,
   <code>cis_controle_ligne()</code>), pas de bobines déjà choisies sur la ligne. Une
   commande liée par site fournisseur tant qu'elle n'est pas acceptée (une
@@ -3477,7 +3488,7 @@ l'interface au même titre que les cinquante-deux autres (7.1).</p>
 <div class="impr-pied" style="margin-top:10mm;padding-top:4mm;border-top:1px solid #c3ccdf;
      font-size:9pt;color:#4d5876">
   Spécification fonctionnelle et technique — ERP EMUCI — document interne. État du logiciel au commit
-  <code>ddbab6f</code>. Toute évolution fonctionnelle rend une section caduque :
+  <code>246ba2b</code>. Toute évolution fonctionnelle rend une section caduque :
   vérifiez la version avant de vous y fier.<br>
   Auteur : GAYE Emmanuel — gayerodrigue@gmail.com — <span style="white-space:nowrap">+225 01 03 55 96 52</span>
 </div>

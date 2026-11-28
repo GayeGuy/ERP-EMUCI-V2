@@ -576,9 +576,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
         if (!$is_gestionnaire) json_response(false, 'Accès refusé — Gestionnaire Stock requis.');
         if (!$cis_ok) json_response(false, 'Migration commandes_inter_site non jouée sur cette base.');
         $ligne_id = (int)($_POST['ligne_id'] ?? 0);
-        $src      = (int)($_POST['site_source_id'] ?? 0);
-        $qte      = (int)($_POST['quantite'] ?? 0);
         $note     = trim((string)($_POST['note'] ?? ''));
+        // Répartition entre un ou plusieurs sites, en une fois :
+        // [{site_source_id, quantite}, …] (à défaut, un seul site).
+        $rep = json_decode((string)($_POST['repartition'] ?? ''), true);
+        if (!is_array($rep) || !$rep)
+            $rep = [['site_source_id' => $_POST['site_source_id'] ?? 0, 'quantite' => $_POST['quantite'] ?? 0]];
+        $parts = [];
+        foreach ($rep as $r) {
+            $sid = (int)($r['site_source_id'] ?? 0);
+            $q   = (int)($r['quantite'] ?? 0);
+            if (!$sid && !$q) continue;
+            if ($q < 1) json_response(false, 'Chaque site doit recevoir une quantité d\'au moins 1.');
+            if (isset($parts[$sid])) json_response(false, 'Un même site est choisi deux fois : regroupez sa quantité.');
+            $parts[$sid] = $q;
+        }
+        if (!$parts) json_response(false, 'Indiquez au moins un site et une quantité.');
+        $total = array_sum($parts);
+        $creees = []; $reste = null;
         db_begin();
         try {
             $l = db_fetch_one("SELECT * FROM commande_lignes WHERE id=? FOR UPDATE", [$ligne_id]);
@@ -589,62 +604,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && is_ajax()) {
             if (!empty($cmd['site_source_id'])) throw new Exception('Cette commande est déjà une sortie diverse.');
             if ($l['statut_ligne'] !== 'valide') throw new Exception('Seule une ligne validée peut partir en sortie diverse.');
             if (($err = cis_controle_ligne($l)) !== null) throw new Exception($err);
-            if ($qte < 1 || $qte > (int)$l['quantite'])
-                throw new Exception("Quantité invalide : entre 1 et {$l['quantite']} {$l['unite']}.");
+            if ($total > (int)$l['quantite'])
+                throw new Exception("Les sites totalisent $total {$l['unite']} : la ligne n'en a que {$l['quantite']}.");
             if (cmdbob_est_rouleau($l['type_article']) && cmdbob_actif()
                 && db_fetch_value("SELECT COUNT(*) FROM commande_ligne_bobines WHERE commande_ligne_id=? AND statut='assigne'", [$ligne_id]))
                 throw new Exception("Des bobines sont déjà choisies pour « {$l['libelle']} » : faites d'abord refaire le choix.");
-            if (!cis_est_source_valide($src, (int)$cmd['site_id'])) throw new Exception('Site fournisseur invalide.');
-            $src_nom  = db_fetch_value("SELECT nom FROM sites WHERE id=?", [$src]) ?? '';
             $dest_nom = db_fetch_value("SELECT nom FROM sites WHERE id=?", [$cmd['site_id']]) ?? '';
 
-            // Une commande liée par site fournisseur, tant qu'elle n'est pas acceptée.
-            $enf = db_fetch_one("SELECT * FROM commandes WHERE commande_origine_id=? AND site_source_id=?
-                                 AND statut='en_attente_livraison' AND accepte_at IS NULL ORDER BY id DESC LIMIT 1",
-                                [(int)$cmd['id'], $src]);
-            if ($enf) {
-                $enf_id = (int)$enf['id']; $enf_num = $enf['numero_commande'];
-            } else {
-                $enf_num = ach_numero_commande();
-                db_query("INSERT INTO commandes (numero_commande,site_id,statut,notes,created_by,valide_par,valide_at,
-                                                 site_source_id,motif_inter_site,commande_origine_id)
-                          VALUES (?,?,'en_attente_livraison',?,?,?,NOW(),?,?,?)",
-                    [$enf_num, (int)$cmd['site_id'], "Sortie diverse de la commande {$cmd['numero_commande']}", $user['id'],
-                     $cmd['valide_par'] ?: $user['id'], $src,
-                     "Sortie diverse de {$cmd['numero_commande']}" . ($note !== '' ? " : $note" : ''), (int)$cmd['id']]);
-                $enf_id = (int)db_last_id();
+            foreach ($parts as $src => $qte) {
+                if (!cis_est_source_valide($src, (int)$cmd['site_id'])) throw new Exception('Site fournisseur invalide.');
+                $src_nom = db_fetch_value("SELECT nom FROM sites WHERE id=?", [$src]) ?? '';
+                // Une commande liée par site fournisseur, tant qu'elle n'est pas acceptée.
+                $enf = db_fetch_one("SELECT * FROM commandes WHERE commande_origine_id=? AND site_source_id=?
+                                     AND statut='en_attente_livraison' AND accepte_at IS NULL ORDER BY id DESC LIMIT 1",
+                                    [(int)$cmd['id'], $src]);
+                if ($enf) {
+                    $enf_id = (int)$enf['id']; $enf_num = $enf['numero_commande'];
+                } else {
+                    $enf_num = ach_numero_commande();
+                    db_query("INSERT INTO commandes (numero_commande,site_id,statut,notes,created_by,valide_par,valide_at,
+                                                     site_source_id,motif_inter_site,commande_origine_id)
+                              VALUES (?,?,'en_attente_livraison',?,?,?,NOW(),?,?,?)",
+                        [$enf_num, (int)$cmd['site_id'], "Sortie diverse de la commande {$cmd['numero_commande']}", $user['id'],
+                         $cmd['valide_par'] ?: $user['id'], $src,
+                         "Sortie diverse de {$cmd['numero_commande']}" . ($note !== '' ? " : $note" : ''), (int)$cmd['id']]);
+                    $enf_id = (int)db_last_id();
+                }
+                // Rouleaux comptés en films chez le fournisseur (cis_ligne_en_films).
+                $en = cis_ligne_en_films(['type_article' => $l['type_article'], 'article_id' => $l['article_id'],
+                                          'quantite' => $qte, 'unite' => $l['unite']]);
+                db_query("INSERT INTO commande_lignes (commande_id,type_article,article_id,libelle,quantite,unite,prix_unitaire,statut_ligne,ligne_origine_id)
+                          VALUES (?,?,?,?,?,?,?,'valide',?)",
+                    [$enf_id, $l['type_article'], $l['article_id'], $l['libelle'], (int)$en['quantite'], $en['unite'],
+                     $l['prix_unitaire'] ?? 0, $ligne_id]);
+
+                foreach (cis_coordinateurs($src) as $_uid)
+                    notif_create('info', "📦 Sortie diverse $enf_num à accepter",
+                        "Le gestionnaire de stock demande à votre site de fournir $qte {$l['unite']} de « {$l['libelle']} » pour $dest_nom. Acceptez ou refusez la demande.",
+                        $_uid, '/pages/commandes.php');
+                foreach (cis_coordinateurs((int)$cmd['site_id']) as $_uid)
+                    notif_create('info', "📦 Commande {$cmd['numero_commande']} : sortie diverse",
+                        "$qte {$l['unite']} de « {$l['libelle']} » vous seront fournis par $src_nom (commande $enf_num).",
+                        $_uid, '/pages/commandes.php');
+                audit_log($user['id'], 'UPDATE', 'commandes', (int)$cmd['id'],
+                    "Sortie diverse : $qte {$l['unite']} de « {$l['libelle']} » chez $src_nom → commande $enf_num");
+                audit_log($user['id'], 'CREATE', 'commandes', $enf_id,
+                    "Commande $enf_num : sortie diverse de {$cmd['numero_commande']} chez $src_nom");
+                $creees[] = "$qte chez $src_nom ($enf_num)";
             }
-            // Rouleaux comptés en films chez le fournisseur (cis_ligne_en_films).
-            $en = cis_ligne_en_films(['type_article' => $l['type_article'], 'article_id' => $l['article_id'],
-                                      'quantite' => $qte, 'unite' => $l['unite']]);
-            db_query("INSERT INTO commande_lignes (commande_id,type_article,article_id,libelle,quantite,unite,prix_unitaire,statut_ligne,ligne_origine_id)
-                      VALUES (?,?,?,?,?,?,?,'valide',?)",
-                [$enf_id, $l['type_article'], $l['article_id'], $l['libelle'], (int)$en['quantite'], $en['unite'],
-                 $l['prix_unitaire'] ?? 0, $ligne_id]);
-            db_query("UPDATE commande_lignes SET quantite = quantite - ? WHERE id=?", [$qte, $ligne_id]);
+            db_query("UPDATE commande_lignes SET quantite = quantite - ? WHERE id=?", [$total, $ligne_id]);
 
             // Tout est parti en sorties diverses : la commande d'origine n'a plus rien à expédier.
             $reste = (int)db_fetch_value("SELECT COALESCE(SUM(quantite),0) FROM commande_lignes WHERE commande_id=? AND statut_ligne <> 'rejete'", [(int)$cmd['id']]);
             if ($reste === 0)
                 db_query("UPDATE commandes SET statut='livre', notes_livraison=? WHERE id=?",
                     ["Entièrement servie par sorties diverses", (int)$cmd['id']]);
-
-            foreach (cis_coordinateurs($src) as $_uid)
-                notif_create('info', "📦 Sortie diverse $enf_num à accepter",
-                    "Le gestionnaire de stock demande à votre site de fournir $qte {$l['unite']} de « {$l['libelle']} » pour $dest_nom. Acceptez ou refusez la demande.",
-                    $_uid, '/pages/commandes.php');
-            foreach (cis_coordinateurs((int)$cmd['site_id']) as $_uid)
-                notif_create('info', "📦 Commande {$cmd['numero_commande']} : sortie diverse",
-                    "$qte {$l['unite']} de « {$l['libelle']} » vous seront fournis par $src_nom (commande $enf_num).",
-                    $_uid, '/pages/commandes.php');
-            audit_log($user['id'], 'UPDATE', 'commandes', (int)$cmd['id'],
-                "Sortie diverse : $qte {$l['unite']} de « {$l['libelle']} » chez $src_nom → commande $enf_num");
-            audit_log($user['id'], 'CREATE', 'commandes', $enf_id,
-                "Commande $enf_num : sortie diverse de {$cmd['numero_commande']} chez $src_nom");
             db_commit();
         } catch (Exception $e) { db_rollback(); json_response(false, $e->getMessage()); }
-        json_response(true, "Sortie diverse créée : commande $enf_num, à accepter par $src_nom."
-            . ($reste === 0 ? " La commande d'origine n'a plus rien à expédier." : ''));
+        json_response(true, (count($creees) > 1 ? 'Sorties diverses créées : ' : 'Sortie diverse créée : ') . implode(', ', $creees)
+            . '. Chaque site doit accepter.' . ($reste === 0 ? " La commande d'origine n'a plus rien à expédier." : ''));
     }
 
     // ── Le site fournisseur accepte ou refuse une sortie diverse.
@@ -3436,7 +3454,7 @@ async function ouvrirLivraison(cmdId,numCmd,srcId,srcNom){
       <div style="display:grid;grid-template-columns:1fr 110px 1fr;gap:12px;align-items:end">
         <div>
           <div style="font-size:13.5px;font-weight:700;color:var(--navy)">${l.libelle}</div>
-          <div style="font-size:12px;color:var(--muted)">Commandé : <strong>${l.quantite}</strong> ${l.unite||''} · ${l.type_article||'article'}</div>
+          <div style="font-size:12px;color:var(--muted)">${(l.sorties||[]).length?'Reste à expédier du dépôt':'Commandé'} : <strong>${l.quantite}</strong> ${l.unite||''} · ${l.type_article||'article'}</div>
           ${ligneAvecDepot(l)?`<div style="display:flex;align-items:center;gap:8px;margin-top:6px">
             <label style="font-size:12px;font-weight:700;color:var(--navy);white-space:nowrap">Sortie depuis *</label>
             ${sourceInter
@@ -3487,22 +3505,53 @@ async function ouvrirSortie(i){
   if(!d.success){ box.innerHTML=`<div class="alert alert-danger">${escB(d.message)}</div>`; return; }
   const sites=d.data||[];
   if(!sites.length){ box.innerHTML='<div style="font-size:12.5px;color:var(--danger-d)">Aucun autre site n\'a cette matière en stock.</div>'; return; }
-  box.innerHTML=`<div style="display:grid;grid-template-columns:1fr 140px;gap:8px;align-items:end">
-      <div><label style="font-size:12px;font-weight:700;color:#5B21B6">Site fournisseur</label>
-        <select class="form-control sd-site" style="font-size:12.5px;padding:5px 8px;margin-top:3px">${sites.map(s=>`<option value="${s.id}">${escB(s.nom)} — stock ${s.stock} ${escB(s.unite||'')}</option>`).join('')}</select></div>
-      <div><label style="font-size:12px;font-weight:700;color:#5B21B6">Quantité (${escB(l.unite||'')})</label>
-        <input type="number" class="form-control sd-qte" min="1" max="${l.quantite}" step="1" value="${l.quantite}" style="font-size:12.5px;padding:5px 8px;margin-top:3px"></div>
+  box._sites=sites;
+  box.innerHTML=`<div style="display:grid;grid-template-columns:1fr 140px 32px;gap:8px;font-size:12px;font-weight:700;color:#5B21B6">
+      <div>Site fournisseur</div><div>Quantité (${escB(l.unite||'')})</div><div></div></div>
+    <div class="sd-rows"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px">
+      <button type="button" class="btn btn-sm" style="background:white;color:#5B21B6;border:1.5px dashed #C4B5FD" onclick="ajouterSiteSortie(${i})">+ Ajouter un site</button>
+      <span class="sd-total" style="font-size:12.5px;font-weight:700"></span>
     </div>
-    <input type="text" class="form-control sd-note" maxlength="200" placeholder="Note pour le site (facultatif)" style="font-size:12.5px;padding:5px 8px;margin-top:6px">
-    <div style="font-size:11.5px;color:#6D28D9;margin-top:6px">Le site doit accepter avant de préparer. Ce qui ne part pas en sortie diverse est expédié du dépôt.</div>
-    <div style="display:flex;justify-content:flex-end;margin-top:6px"><button type="button" class="btn btn-sm" style="background:#6D28D9;color:white" onclick="creerSortie(${i},this)">Créer la sortie diverse</button></div>`;
+    <input type="text" class="form-control sd-note" maxlength="200" placeholder="Note pour les sites (facultatif)" style="font-size:12.5px;padding:5px 8px;margin-top:8px">
+    <div style="font-size:11.5px;color:#6D28D9;margin-top:6px">Chaque site doit accepter avant de préparer. Ce qui ne part pas en sortie diverse est expédié du dépôt.</div>
+    <div style="display:flex;justify-content:flex-end;margin-top:6px"><button type="button" class="btn btn-sm sd-creer" style="background:#6D28D9;color:white" onclick="creerSortie(${i},this)">Créer les sorties diverses</button></div>`;
+  ajouterSiteSortie(i);
+}
+// Une ligne « site + quantité » ; un site déjà choisi n'est pas reproposé.
+function ajouterSiteSortie(i){
+  const l=lignesCmd[i], box=document.getElementById(`sdBox${i}`), rows=box.querySelector('.sd-rows');
+  const pris=[...rows.querySelectorAll('.sd-site')].map(s=>s.value);
+  const libres=box._sites.filter(s=>!pris.includes(String(s.id)));
+  if(!libres.length){ toast('Tous les sites qui ont du stock sont déjà choisis.','danger'); return; }
+  const restant=Math.max(0, l.quantite-totalSortie(i));
+  const row=document.createElement('div');
+  row.style.cssText='display:grid;grid-template-columns:1fr 140px 32px;gap:8px;margin-top:6px';
+  row.innerHTML=`<select class="form-control sd-site" style="font-size:12.5px;padding:5px 8px" onchange="majTotalSortie(${i})">${libres.map(s=>`<option value="${s.id}">${escB(s.nom)} — stock ${s.stock} ${escB(s.unite||'')}</option>`).join('')}</select>
+    <input type="number" class="form-control sd-qte" min="1" step="1" value="${restant||1}" style="font-size:12.5px;padding:5px 8px" oninput="majTotalSortie(${i})">
+    <button type="button" title="Retirer ce site" aria-label="Retirer ce site" style="background:#FEE2E2;color:#991B1B;border:none;border-radius:6px;cursor:pointer" onclick="this.parentElement.remove();majTotalSortie(${i})">✕</button>`;
+  rows.appendChild(row);
+  majTotalSortie(i);
+}
+function totalSortie(i){
+  return [...document.querySelectorAll(`#sdBox${i} .sd-qte`)].reduce((t,e)=>t+(parseInt(e.value)||0),0);
+}
+function majTotalSortie(i){
+  const l=lignesCmd[i], box=document.getElementById(`sdBox${i}`), tot=totalSortie(i);
+  const el=box.querySelector('.sd-total'), ok=tot>=1&&tot<=l.quantite;
+  el.style.color=ok?'#5B21B6':'var(--danger-d)';
+  el.textContent=`Total : ${tot} / ${l.quantite} ${l.unite||''}`+(tot>l.quantite?' — trop':'')+(ok?` · reste au dépôt : ${l.quantite-tot}`:'');
+  const b=box.querySelector('.sd-creer'); b.disabled=!ok; b.style.opacity=ok?'1':'.5'; b.style.cursor=ok?'pointer':'not-allowed';
 }
 async function creerSortie(i,btn){
   const l=lignesCmd[i], box=document.getElementById(`sdBox${i}`);
-  const qte=parseInt(box.querySelector('.sd-qte').value)||0;
-  if(qte<1||qte>l.quantite){ toast(`Quantité entre 1 et ${l.quantite}.`,'danger'); return; }
+  const rep=[...box.querySelectorAll('.sd-rows > div')].map(r=>({site_source_id:parseInt(r.querySelector('.sd-site').value),quantite:parseInt(r.querySelector('.sd-qte').value)||0}));
+  if(!rep.length){ toast('Ajoutez au moins un site.','danger'); return; }
+  if(rep.some(r=>r.quantite<1)){ toast('Chaque site doit recevoir au moins 1.','danger'); return; }
+  const tot=rep.reduce((t,r)=>t+r.quantite,0);
+  if(tot>l.quantite){ toast(`Total ${tot} : la ligne n'en a que ${l.quantite}.`,'danger'); return; }
   btn.disabled=true;
-  const d=await ap({action:'sortie_diverse',ligne_id:l.id,site_source_id:box.querySelector('.sd-site').value,quantite:qte,note:box.querySelector('.sd-note').value});
+  const d=await ap({action:'sortie_diverse',ligne_id:l.id,repartition:JSON.stringify(rep),note:box.querySelector('.sd-note').value});
   btn.disabled=false;
   if(!d.success){ toast(d.message,'danger'); return; }
   toast(d.message,'success');

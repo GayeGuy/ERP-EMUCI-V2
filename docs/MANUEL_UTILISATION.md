@@ -536,10 +536,12 @@ site. Le site demandeur commande normalement et ne choisit rien.
 
 1. **Le site commande, le superviseur valide**, comme d'habitude.
 2. **Le gestionnaire de stock**, dans la fenêtre d'expédition, clique sur
-   **Sortie diverse** sous la ligne : il choisit le site (la liste montre le
-   stock de chaque site) et la quantité. La ligne peut être **partagée** (par
-   exemple 600 rivets du dépôt et 400 chez un site) et servie par **plusieurs
-   sites**. Chaque site reçoit une **commande liée**, numérotée à part ; la
+   **Sortie diverse** sous la ligne : il ajoute un ou plusieurs sites (« +
+   Ajouter un site », la liste montre le stock de chaque site) avec la
+   quantité de chacun, puis crée toutes les sorties d'un coup. La ligne peut
+   être **partagée** (par exemple 600 rivets du dépôt, 300 chez un site et
+   100 chez un autre). Le total des sites ne peut pas dépasser la quantité
+   de la ligne : l'écran l'affiche et le serveur le refuse. Chaque site reçoit une **commande liée**, numérotée à part ; la
    ligne d'origine est diminuée d'autant. Les bobines, vignettes, rivets,
    PMMA et articles du catalogue peuvent partir ainsi, pas les équipements.
    Une ligne dont les bobines sont déjà choisies doit d'abord être refaite.
