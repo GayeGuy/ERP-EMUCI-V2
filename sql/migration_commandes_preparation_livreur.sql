@@ -30,6 +30,13 @@ SELECT r.id, 'commandes', 0, 1, 0, 0, 0 FROM roles r
 WHERE r.slug IN ('magasinier_entrepot', 'livreur')
   AND NOT EXISTS (SELECT 1 FROM permissions p WHERE p.role_id = r.id AND p.module = 'commandes');
 
+-- Chaque rôle a une ligne pour la vue exécutive (PDG), ici sans accès
+-- (contrôle « droit Vue exécutive (PDG) pour chaque rôle » de l'installateur).
+INSERT INTO permissions (role_id, module, can_create, can_read, can_update, can_delete, can_export)
+SELECT r.id, 'pdg_overview', 0, 0, 0, 0, 0 FROM roles r
+WHERE r.slug IN ('magasinier_entrepot', 'livreur')
+  AND NOT EXISTS (SELECT 1 FROM permissions p WHERE p.role_id = r.id AND p.module = 'pdg_overview');
+
 ALTER TABLE commande_lignes ADD COLUMN IF NOT EXISTS prepare_par integer   DEFAULT NULL;
 ALTER TABLE commande_lignes ADD COLUMN IF NOT EXISTS prepare_at  timestamp DEFAULT NULL;
 ALTER TABLE commandes ADD COLUMN IF NOT EXISTS livreur_id         integer      DEFAULT NULL;
